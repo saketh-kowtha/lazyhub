@@ -17,6 +17,7 @@ import { render, Box, Text, useInput, useApp, useStdout } from 'ink'
 import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
 import { loadConfig } from './config.js'
 import { AppContext } from './context.js'
+import { logger } from './utils.js'
 import { Sidebar } from './components/Sidebar.jsx'
 import { StatusBar } from './components/StatusBar.jsx'
 import { FooterKeys } from './components/FooterKeys.jsx'
@@ -671,15 +672,20 @@ export function renderApp() {
   process.on('SIGTERM', () => { restoreTerminal(); process.exit(0) })
 
   const initialTheme = readRawThemeCfg()
-  const { unmount } = render(
-    <ThemeProvider initialTheme={initialTheme}>
-      <App repo={repo} />
-    </ThemeProvider>
-  )
+  try {
+    const { unmount } = render(
+      <ThemeProvider initialTheme={initialTheme}>
+        <App repo={repo} />
+      </ThemeProvider>
+    )
 
-  // When Ink exits (useApp().exit() called), also restore terminal
-  // Ink emits its own cleanup; we hook the process 'exit' above which covers it.
-  // Store unmount so bootstrap can use it if needed.
-  process.env._GHUI_UNMOUNT = '1'
-  return unmount
+    // When Ink exits (useApp().exit() called), also restore terminal
+    // Ink emits its own cleanup; we hook the process 'exit' above which covers it.
+    // Store unmount so bootstrap can use it if needed.
+    process.env._GHUI_UNMOUNT = '1'
+    return unmount
+  } catch (err) {
+    logger.error('Fatal App Crash', err)
+    process.exit(1)
+  }
 }

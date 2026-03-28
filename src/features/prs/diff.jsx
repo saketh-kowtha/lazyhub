@@ -321,7 +321,7 @@ function renderThreads(comments, t) {
       elements.push(
         <Box key={`${comment.id}-body-${i}`}>
           <Text color={t.diff.threadBorder}>┃ </Text>
-          <Text wrap="truncate">{bodyLines[i]}</Text>
+          <Text color={t.diff.ctxFg} wrap="truncate">{sanitize(bodyLines[i])}</Text>
         </Box>
       )
     }
@@ -348,7 +348,7 @@ function renderThreads(comments, t) {
         elements.push(
           <Box key={`${reply.id}-body-${i}`}>
             <Text color={t.diff.threadBorder}>┃   </Text>
-            <Text wrap="truncate">{replyLines[i]}</Text>
+            <Text color={t.diff.ctxFg} wrap="truncate">{sanitize(replyLines[i])}</Text>
           </Box>
         )
       }

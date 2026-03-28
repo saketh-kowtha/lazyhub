@@ -1,24 +1,50 @@
+/**
+ * src/utils.js — shared utility functions
+ */
+
 import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
-import { join, isAbsolute } from 'path'
-import { homedir } from 'os'
+import { appendFileSync, readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs'
+import { join, isAbsolute, dirname } from 'path'
+import { homedir, tmpdir } from 'os'
+import chalk from 'chalk'
+import hljs from 'highlight.js'
+import { ThemeProvider, useTheme } from './theme.js'
+
+const LOG_FILE = join(homedir(), '.config', 'lazyhub', 'debug.log')
+
+/**
+ * Global logger for debugging.
+ */
+export const logger = {
+  info:  (msg) => log('INFO', msg),
+  error: (msg, err) => log('ERROR', `${msg}${err ? `\n${err.stack || err}` : ''}`),
+  debug: (msg) => log('DEBUG', msg),
+}
+
+function log(level, msg) {
+  try {
+    const timestamp = new Date().toISOString()
+    const line = `[${timestamp}] [${level}] ${msg}\n`
+    // Ensure dir exists
+    const dir = dirname(LOG_FILE)
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    appendFileSync(LOG_FILE, line, 'utf8')
+  } catch {
+    // ignore logging failures
+  }
+}
 
 /**
  * Resolves paths starting with ~/ or relative paths.
  */
 export function resolvePath(p) {
   if (!p) return p
+  if (typeof p !== 'string') return p
   if (p.startsWith('~/')) return join(homedir(), p.slice(2))
   if (isAbsolute(p)) return p
   return join(process.cwd(), p)
 }
-import { t } from './theme.js'
-import chalk from 'chalk'
-import hljs from 'highlight.js'
-
-/**
- * src/utils.js — shared utility functions
- */
 
 /**
  * Strips ANSI escape codes from a string to prevent Terminal Injection.
@@ -34,41 +60,42 @@ export function stripAnsi(str) {
  * Strips ANSI codes and potentially other dangerous characters.
  */
 export function sanitize(str) {
-  return stripAnsi(str || '')
+  return stripAnsi(String(str || ''))
 }
 
 /**
  * Safely applies a color (hex or keyword) to a chalk instance.
  */
 export function colorChalk(color) {
-  if (!color) return (s) => s
+  if (typeof color !== 'string' || !color) return chalk.reset
   if (color.startsWith('#')) return chalk.hex(color)
   if (typeof chalk[color] === 'function') return chalk[color]
-  return chalk.keyword(color)
+  try { return chalk.keyword(color) } catch { return chalk.reset }
 }
 
 /**
  * Safely applies a background color (hex or keyword) to a chalk instance.
  */
 export function bgColorChalk(color) {
-  if (!color) return (s) => s
+  if (typeof color !== 'string' || !color) return chalk.reset
   if (color.startsWith('#')) return chalk.bgHex(color)
   const bgName = 'bg' + color.charAt(0).toUpperCase() + color.slice(1).replace('grey', 'Gray')
   if (typeof chalk[bgName] === 'function') return chalk[bgName]
-  return chalk.bgKeyword(color)
+  try { return chalk.bgKeyword(color) } catch { return chalk.reset }
 }
 
 /**
  * Safely applies foreground and background colors (hex or keyword) to a string using chalk.
  */
 export function applyThemeStyle(text, fg, bg) {
+  const safeText = String(text ?? '')
   let s = chalk
-  if (fg) {
+  if (typeof fg === 'string' && fg) {
     if (fg.startsWith('#')) s = s.hex(fg)
     else if (typeof s[fg] === 'function') s = s[fg]
     else s = s.keyword(fg)
   }
-  if (bg) {
+  if (typeof bg === 'string' && bg) {
     if (bg.startsWith('#')) s = s.bgHex(bg)
     else {
       const bgName = 'bg' + bg.charAt(0).toUpperCase() + bg.slice(1).replace('grey', 'Gray')
@@ -76,7 +103,7 @@ export function applyThemeStyle(text, fg, bg) {
       else s = s.bgKeyword(bg)
     }
   }
-  return s(text)
+  return s(safeText)
 }
 
 /**
@@ -95,8 +122,9 @@ const themeMap = {
 }
 
 function highlightCode(code, lang) {
+  const safeCode = String(code || '')
   try {
-    const highlighted = lang ? hljs.highlight(code, { language: lang }) : hljs.highlightAuto(code)
+    const highlighted = lang ? hljs.highlight(safeCode, { language: lang }) : hljs.highlightAuto(safeCode)
     // This is a very simplified HTML -> ANSI converter for hljs output
     // In a real app we might want a more robust parser, but for small blocks this works.
     return highlighted.value
@@ -107,11 +135,11 @@ function highlightCode(code, lang) {
       })
       .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
   } catch {
-    return code
+    return safeCode
   }
 }
 
-export function getMarkdownRows(text, maxWidth = 80) {
+export function getMarkdownRows(text, maxWidth = 80, t) {
   const safeText = String(text || '')
   if (!safeText) return []
 
@@ -169,7 +197,7 @@ export function getMarkdownRows(text, maxWidth = 80) {
       rows.push(
         <Box key={`li-${i}`} paddingLeft={2} paddingX={1}>
           <Text color={t.ui.muted}>• </Text>
-          <Text>{renderInline(content)}</Text>
+          <Text>{renderInline(content, t)}</Text>
         </Box>
       )
       return
@@ -186,7 +214,7 @@ export function getMarkdownRows(text, maxWidth = 80) {
     wrappedLines.forEach((wl, j) => {
       rows.push(
         <Box key={`p-${i}-${j}`} paddingX={1}>
-          <Text>{renderInline(wl)}</Text>
+          <Text>{renderInline(wl, t)}</Text>
         </Box>
       )
     })
@@ -214,18 +242,10 @@ function wrapLine(text, width) {
   return lines
 }
 
-function renderInline(text) {
+function renderInline(text, t) {
   const safeText = String(text || '')
   // Simple regex for bold and italic
-  let parts = [safeText]
   
-  // Bold **text**
-  const boldRegex = /\*\*(.*?)\*\*/g
-  // Italic *text*
-  const italicRegex = /\*(.*?)\*/g
-  // Inline code `text`
-  const codeRegex = /`(.*?)`/g
-
   // This is a very basic inline renderer. For a production TUI, 
   // we'd use a real Markdown AST parser.
   return safeText.split(/(`.*?`|\*\*.*?\*\*|\*.*?\*)/g).map((part, i) => {
@@ -246,6 +266,7 @@ function renderInline(text) {
  * A basic text input component with cursor support and common shortcuts.
  */
 export function TextInput({ value = '', onChange, placeholder, focus, mask, onEnter }) {
+  const { t } = useTheme()
   const safeValue = String(value || '')
   const [cursor, setCursor] = useState(safeValue.length)
 

@@ -62,7 +62,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
     // Body
     if (issue.body) {
       rows.push({ id: 'body-hdr', el: <Text key="body-hdr" color={t.ui.muted} bold>Description:</Text> })
-      const mdRows = getMarkdownRows(issue.body, termCols - 4)
+      const mdRows = getMarkdownRows(issue.body, termCols - 4, t)
       mdRows.forEach((row, i) => rows.push({ id: `body-${i}`, el: row }))
     }
 

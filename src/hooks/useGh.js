@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { logger } from '../utils.js'
 
 // In-memory cache: key → { data, timestamp }
 const cache = new Map()
@@ -52,6 +53,7 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
       if (!mountedRef.current) return
       setError(err)
       setData(null)
+      logger.error(`useGh: ${fetchFn.name || 'unnamed'}(${cacheKey}) failed`, err)
     } finally {
       if (mountedRef.current) {
         setLoading(false)

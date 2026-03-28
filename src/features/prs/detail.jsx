@@ -191,7 +191,7 @@ function buildContentRows(pr, checks, protection, cols, t) {
         <Text color={t.ui.dim} bold>Description</Text>
       </Box>
     ))
-    const mdRows = getMarkdownRows(pr.body, cols - 4)
+    const mdRows = getMarkdownRows(pr.body, cols - 4, t)
     mdRows.forEach((row, i) => {
       push(`body-md-${i}`, row)
     })
