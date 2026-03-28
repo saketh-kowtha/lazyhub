@@ -492,7 +492,6 @@ export async function listPRComments(repo, number) {
                   path
                   line
                   originalLine
-                  diffSide
                   author { login }
                   createdAt
                   replyTo { databaseId }
@@ -520,7 +519,7 @@ export async function listPRComments(repo, number) {
       path: c.path,
       line: c.line,
       originalLine: c.originalLine,
-      side: c.diffSide,
+      side: 'RIGHT', // Default to RIGHT as diffSide is missing from schema
       user: { login: c.author?.login },
       createdAt: c.createdAt,
       inReplyToId: c.replyTo?.databaseId || null,
