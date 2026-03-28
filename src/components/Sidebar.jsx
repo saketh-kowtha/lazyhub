@@ -1,27 +1,44 @@
 /**
  * Sidebar.jsx — navigation sidebar.
- * Props: currentPane, onSelect(pane), height, visiblePanes
  *
- * visiblePanes comes from loadConfig().panes so users can hide tabs they
- * don't use via ~/.config/ghui/config.json → { "panes": ["prs","issues"] }
+ * Props:
+ *   currentPane   string
+ *   onSelect      fn(pane)
+ *   height        number
+ *   visiblePanes  string[]   — ordered pane ids from config
+ *   paneLabels    object     — id → label (includes custom panes)
+ *   paneIcons     object     — id → icon  (includes custom panes)
  */
 
 import React from 'react'
 import { Box, Text } from 'ink'
 import { t } from '../theme.js'
 
-const ALL_NAV_ITEMS = [
-  { pane: 'prs',           icon: '⎇', label: 'Pull Requests' },
-  { pane: 'issues',        icon: '○', label: 'Issues' },
-  { pane: 'branches',      icon: '⎇', label: 'Branches' },
-  { pane: 'actions',       icon: '▶', label: 'Actions' },
-  { pane: 'notifications', icon: '●', label: 'Notifs' },
-]
+const BUILTIN_LABELS = {
+  prs:           'Pull Requests',
+  issues:        'Issues',
+  branches:      'Branches',
+  actions:       'Actions',
+  notifications: 'Notifs',
+}
 
-export function Sidebar({ currentPane, onSelect, height, visiblePanes }) {
-  const items = visiblePanes
-    ? ALL_NAV_ITEMS.filter(i => visiblePanes.includes(i.pane))
-    : ALL_NAV_ITEMS
+const BUILTIN_ICONS = {
+  prs:           '⎇',
+  issues:        '○',
+  branches:      '⎇',
+  actions:       '▶',
+  notifications: '●',
+}
+
+export function Sidebar({ currentPane, onSelect, height, visiblePanes, paneLabels, paneIcons }) {
+  const labels = paneLabels || BUILTIN_LABELS
+  const icons  = paneIcons  || BUILTIN_ICONS
+
+  const allItems = (visiblePanes || Object.keys(BUILTIN_LABELS)).map(id => ({
+    pane:  id,
+    icon:  icons[id]  || '◈',
+    label: (labels[id] || id).slice(0, 13),   // truncate to fit sidebar width
+  }))
 
   // Separator width: sidebar inner width minus borders (20 - 2 = 18)
   const separator = '─'.repeat(18)
@@ -38,7 +55,7 @@ export function Sidebar({ currentPane, onSelect, height, visiblePanes }) {
         <Text color={t.ui.selected} bold>ghui</Text>
       </Box>
 
-      {items.map(({ pane, icon, label }) => {
+      {allItems.map(({ pane, icon, label }) => {
         const isActive = pane === currentPane
         return (
           <Box

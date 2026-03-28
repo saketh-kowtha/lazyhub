@@ -37,6 +37,7 @@ import { IssueDetail } from './features/issues/detail.jsx'
 import { BranchList } from './features/branches/index.jsx'
 import { ActionList } from './features/actions/index.jsx'
 import { NotificationList } from './features/notifications/index.jsx'
+import { CustomPane } from './components/CustomPane.jsx'
 
 // ─── AppContext ───────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ export function useAppContext() {
 
 const PANES = _config.panes
 
-const PANE_LABELS = {
+const BUILTIN_PANE_LABELS = {
   prs:           'Pull Requests',
   issues:        'Issues',
   branches:      'Branches',
@@ -58,12 +59,20 @@ const PANE_LABELS = {
   notifications: 'Notifications',
 }
 
-const PANE_ICONS = {
+const BUILTIN_PANE_ICONS = {
   prs:           '⎇',
   issues:        '○',
   branches:      '⎇',
   actions:       '▶',
   notifications: '●',
+}
+
+// Merge built-in + custom so label/icon lookups work uniformly
+const PANE_LABELS = { ...BUILTIN_PANE_LABELS }
+const PANE_ICONS  = { ...BUILTIN_PANE_ICONS }
+for (const [id, def] of Object.entries(_config.customPanes || {})) {
+  PANE_LABELS[id] = def.label
+  PANE_ICONS[id]  = def.icon
 }
 
 // ─── Keyboard reference — shown by ? in every view ───────────────────────────
@@ -555,7 +564,14 @@ export function App({ repo }) {
             setView('list')
           }} />
       )
-      default: return <Box paddingX={1}><Text color={t.ui.muted}>Unknown pane</Text></Box>
+      default: {
+        // Custom user-defined pane
+        const customDef = (_config.customPanes || {})[pane]
+        if (customDef) {
+          return <CustomPane paneDef={customDef} repo={repo} listHeight={listHeight} onPaneState={onPaneState} />
+        }
+        return <Box paddingX={1}><Text color={t.ui.muted}>Unknown pane: {pane}</Text></Box>
+      }
     }
   }
 
@@ -576,6 +592,7 @@ export function App({ repo }) {
         <Box flexDirection="row">
           {showSidebar && (
             <Sidebar currentPane={pane} visiblePanes={PANES}
+              paneLabels={PANE_LABELS} paneIcons={PANE_ICONS}
               onSelect={(p) => { setPane(p); setHoveredItem(null); setSelectedItem(null); setView('list') }}
               height={rows - 2}
             />
@@ -603,5 +620,24 @@ export function App({ repo }) {
 
 export function renderApp() {
   const repo = process.env.GHUI_REPO || ''
-  render(<App repo={repo} />)
+
+  // Enter alternate screen buffer — terminal restores on exit (like lazygit / vim)
+  process.stdout.write('\x1b[?1049h\x1b[H')
+
+  const restoreTerminal = () => {
+    process.stdout.write('\x1b[?1049l')
+  }
+
+  // Restore on any exit path
+  process.on('exit',   restoreTerminal)
+  process.on('SIGINT',  () => { restoreTerminal(); process.exit(0) })
+  process.on('SIGTERM', () => { restoreTerminal(); process.exit(0) })
+
+  const { unmount } = render(<App repo={repo} />)
+
+  // When Ink exits (useApp().exit() called), also restore terminal
+  // Ink emits its own cleanup; we hook the process 'exit' above which covers it.
+  // Store unmount so bootstrap can use it if needed.
+  process.env._GHUI_UNMOUNT = '1'
+  return unmount
 }
