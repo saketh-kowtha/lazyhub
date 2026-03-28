@@ -10,9 +10,10 @@ jobs:
     steps:
       - name: Compute tarball SHA256
         id: sha
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
-          VERSION="${VERSION#v}"
+          VERSION="${TAG_NAME#v}"
           URL="https://registry.npmjs.org/lazyhub/-/lazyhub-${VERSION}.tgz"
           SHA=$(curl -sL "$URL" | sha256sum | awk '{print $1}')
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
@@ -21,12 +22,16 @@ jobs:
 
       - name: Push formula to homebrew-tap
         uses: actions/github-script@v7
+        env:
+          VERSION: ${{ steps.sha.outputs.version }}
+          SHA256:  ${{ steps.sha.outputs.sha }}
+          URL:     ${{ steps.sha.outputs.url }}
         with:
           github-token: ${{ secrets.TAP_TOKEN }}
           script: |
-            const version = '${{ steps.sha.outputs.version }}'
-            const sha256  = '${{ steps.sha.outputs.sha }}'
-            const url     = '${{ steps.sha.outputs.url }}'
+            const version = process.env.VERSION
+            const sha256  = process.env.SHA256
+            const url     = process.env.URL
 
             const formula = `class Lazyhub < Formula
               desc "Lazygit-style GitHub TUI — keyboard-driven terminal UI for GitHub"
