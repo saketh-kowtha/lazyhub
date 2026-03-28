@@ -38,7 +38,7 @@ import { format } from 'timeago.js'
 import { FuzzySearch } from './dialogs/FuzzySearch.jsx'
 import { AppContext } from '../context.js'
 import { t } from '../theme.js'
-import { sanitize } from '../utils.js'
+import { sanitize, resolvePath } from '../utils.js'
 
 // Resolve {repo}, {owner}, {name} placeholders in a command string and return as array for execa
 function resolveCommandArgs(cmd, repo) {
@@ -95,7 +95,21 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
       if (result.exitCode !== 0) {
         throw new Error(result.stderr?.split('\n')[0] || 'Command failed')
       }
-      const data = JSON.parse(result.stdout)
+      
+      let data = JSON.parse(result.stdout)
+      
+      if (paneDef.preProcessor) {
+        try {
+          const scriptPath = resolvePath(paneDef.preProcessor)
+          const { default: processor } = await import(`file://${scriptPath}`)
+          if (typeof processor === 'function') {
+            data = await processor(data, { repo, paneDef })
+          }
+        } catch (procErr) {
+          setError(`Pre-processor error: ${procErr.message}`)
+        }
+      }
+
       setItems(Array.isArray(data) ? data : [])
     } catch (err) {
       setError(err.message || String(err))
@@ -103,7 +117,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
     } finally {
       setLoading(false)
     }
-  }, [paneDef.command, repo])
+  }, [paneDef, repo])
 
   useEffect(() => { fetchItems() }, [fetchItems])
 

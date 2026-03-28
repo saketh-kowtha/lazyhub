@@ -14,10 +14,12 @@ import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
+import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { loadConfig } from '../../config.js'
 import { t } from '../../theme.js'
 import { AppContext } from '../../context.js'
+import { TextInput } from '../../utils.js'
 
 const _diffCfg = loadConfig().diff
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
@@ -402,6 +404,7 @@ const FOOTER_KEYS_UNIFIED = [
   { key: 'j/k',  label: 'scroll' },
   { key: 'gg/G', label: 'top/bottom' },
   { key: ']/[',  label: 'file' },
+  { key: 'f',    label: 'jump to file' },
   { key: ':',    label: 'go to line' },
   { key: 'c',    label: 'comment' },
   { key: 'r/e/d', label: 'reply/edit/delete thread' },
@@ -417,6 +420,7 @@ const FOOTER_KEYS_SPLIT = [
   { key: 'j/k',  label: 'scroll' },
   { key: 'gg/G', label: 'top/bottom' },
   { key: ']/[',  label: 'file' },
+  { key: 'f',    label: 'jump to file' },
   { key: ':',    label: 'go to line' },
   { key: 'c',    label: 'comment' },
   { key: 'r/e/d', label: 'reply/edit/delete thread' },
@@ -567,12 +571,15 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const [gotoActive, setGotoActive] = useState(false)
   const [gotoInput, setGotoInput] = useState('')
 
+  // Feature: file jump fuzzy search
+  const [fileJumpActive, setFileJumpActive] = useState(false)
+
   // Suppress global 1-9 tab key handler when any overlay is active
   const { notifyDialog } = useContext(AppContext)
   useEffect(() => {
-    notifyDialog(!!(gotoActive || findActive || compose || showTree || dialog))
+    notifyDialog(!!(gotoActive || findActive || compose || showTree || dialog || fileJumpActive))
     return () => notifyDialog(false)
-  }, [gotoActive, findActive, compose, showTree, dialog, notifyDialog])
+  }, [gotoActive, findActive, compose, showTree, dialog, fileJumpActive, notifyDialog])
 
   const files = useMemo(() => parseDiff(diffText || ''), [diffText])
   const rows  = useMemo(() => flattenFiles(files), [files])
@@ -663,7 +670,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       return
     }
 
-    // findActive — capture typing
+    // findActive — handled by TextInput, here we only handle exit keys
     if (findActive) {
       if (key.escape) {
         setFindActive(false)
@@ -672,22 +679,13 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       }
       if (key.return) {
         setFindActive(false)
-        // Jump to first match if any
         if (findMatches.length > 0) jumpTo(findMatches[0])
-        return
-      }
-      if (key.backspace || key.delete) {
-        setFindQuery(q => q.slice(0, -1))
-        return
-      }
-      if (input && !key.ctrl && !key.meta) {
-        setFindQuery(q => q + input)
         return
       }
       return
     }
 
-    // gotoActive — `:123` jump-to-line prompt
+    // gotoActive — handled by TextInput
     if (gotoActive) {
       if (key.escape) { setGotoActive(false); setGotoInput(''); return }
       if (key.return) {
@@ -700,10 +698,11 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         setGotoInput('')
         return
       }
-      if (key.backspace || key.delete) { setGotoInput(s => s.slice(0, -1)); return }
-      if (input && /\d/.test(input)) { setGotoInput(s => s + input); return }
       return
     }
+
+    // fileJumpActive — captured by FuzzySearch component (dialog)
+    if (fileJumpActive) return
 
     // showTree — capture j/k/Enter/Esc/t
     if (showTree) {
@@ -816,18 +815,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         setCompose(c => ({ ...c, body: edited }))
         return
       }
-      if (key.backspace || key.delete) {
-        setCompose(c => ({ ...c, body: c.body.slice(0, -1) }))
-        return
-      }
-      if (input && !key.ctrl && !key.meta) {
-        setCompose(c => ({ ...c, body: c.body + input }))
-        return
-      }
       return
     }
 
     if (dialog) return
+
+    if (input === 'f') { setFileJumpActive(true); return }
 
     // gg → jump to top
     if (input === 'g') {
@@ -1043,11 +1036,28 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         </Box>
       )}
 
+      {fileJumpActive && (
+        <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1} marginX={1}>
+          <FuzzySearch
+            items={files.map(f => f.filename)}
+            onSubmit={(filename) => {
+              const fileIdx = fileStartIndices[files.findIndex(f => f.filename === filename)]
+              if (fileIdx != null) jumpTo(fileIdx)
+              setFileJumpActive(false)
+            }}
+            onCancel={() => setFileJumpActive(false)}
+          />
+        </Box>
+      )}
+
       {findActive && (
         <Box borderStyle="round" borderColor={t.ui.selected} paddingX={1} marginX={1}>
           <Text color={t.ui.dim}>/</Text>
-          <Text color={t.ui.selected}>{findQuery}</Text>
-          <Text color={t.ui.dim}>█</Text>
+          <TextInput
+            value={findQuery}
+            onChange={setFindQuery}
+            focus={true}
+          />
           <Text color={t.ui.dim}>  {findMatches.length > 0 ? `${findMatches.indexOf(cursor) + 1 || '?'}/${findMatches.length}` : 'no matches'}  [n/N] jump  [Enter] done  [Esc] clear</Text>
         </Box>
       )}
@@ -1060,7 +1070,11 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       {gotoActive && (
         <Box borderStyle="round" borderColor={t.ui.selected} paddingX={1} marginX={1}>
           <Text color={t.ui.dim}>:</Text>
-          <Text color={t.ui.selected}>{gotoInput || ' '}</Text>
+          <TextInput
+            value={gotoInput}
+            onChange={setGotoInput}
+            focus={true}
+          />
           <Text color={t.ui.dim}>  go to line — [Enter] jump  [Esc] cancel</Text>
         </Box>
       )}
@@ -1082,11 +1096,19 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
             <Box flexDirection="column" borderStyle="round" borderColor={t.diff.threadBorder}
               paddingX={1} marginX={1}>
               <Text color={t.ui.dim}>Reply to thread:</Text>
-              <Box>
-                <Text color={t.ui.selected}>{compose.body}</Text>
-                <Text color={t.ui.dim}>█</Text>
-              </Box>
-              <Text color={t.ui.dim}>[Ctrl+G] send  [e] open editor  [Esc] cancel</Text>
+              <TextInput
+                value={compose.body}
+                onChange={(v) => setCompose(c => ({ ...c, body: v }))}
+                focus={true}
+                onEnter={() => {
+                  if (compose.body.trim()) {
+                    replyToComment(repo, prNumber, compose.rootCommentId, compose.body.trim())
+                      .then(() => { setCompose(null); setCommentStatus('Reply sent'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
+                      .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
+                  }
+                }}
+              />
+              <Text color={t.ui.dim}>[Ctrl+G / Enter] send  [Ctrl+E] open editor  [Esc] cancel</Text>
             </Box>
           )
         }
@@ -1095,11 +1117,19 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
             <Box flexDirection="column" borderStyle="round" borderColor={t.diff.threadBorder}
               paddingX={1} marginX={1}>
               <Text color={t.ui.dim}>Edit comment:</Text>
-              <Box>
-                <Text color={t.ui.selected}>{compose.body}</Text>
-                <Text color={t.ui.dim}>█</Text>
-              </Box>
-              <Text color={t.ui.dim}>[Ctrl+G] save  [e] open editor  [Esc] cancel</Text>
+              <TextInput
+                value={compose.body}
+                onChange={(v) => setCompose(c => ({ ...c, body: v }))}
+                focus={true}
+                onEnter={() => {
+                  if (compose.body.trim()) {
+                    editPRComment(repo, compose.commentId, compose.body.trim())
+                      .then(() => { setCompose(null); setCommentStatus('Comment updated'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
+                      .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
+                  }
+                }}
+              />
+              <Text color={t.ui.dim}>[Ctrl+G / Enter] save  [Ctrl+E] open editor  [Esc] cancel</Text>
             </Box>
           )
         }
@@ -1122,12 +1152,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
                 )
               })}
             </Box>
-            <Box marginTop={0}>
-              <Text color={t.ui.dim}>  </Text>
-              <Text color={t.ui.selected}>{compose.body}</Text>
-              <Text color={t.ui.dim}>█</Text>
-            </Box>
-            <Text color={t.ui.dim}>[←→] type  [Ctrl+G] submit  [e] open editor  [Esc] cancel</Text>
+            <TextInput
+              value={compose.body}
+              onChange={(v) => setCompose(c => ({ ...c, body: v }))}
+              focus={true}
+            />
+            <Text color={t.ui.dim}>[←→] type  [Ctrl+G / Enter] submit  [Ctrl+E] open editor  [Esc] cancel</Text>
           </Box>
         )
       })()}

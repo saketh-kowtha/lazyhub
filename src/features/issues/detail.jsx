@@ -2,14 +2,15 @@
  * src/features/issues/detail.jsx — Issue detail pane
  */
 
-import React, { useState, useContext } from 'react'
-import { Box, Text, useInput } from 'ink'
+import React, { useState, useContext, useMemo, useCallback, useRef } from 'react'
+import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getIssue, addPRComment, listLabels, listCollaborators, addLabels, removeLabels } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { AppContext } from '../../context.js'
 import { t } from '../../theme.js'
+import { sanitize, getMarkdownRows, TextInput } from '../../utils.js'
 
 // Exported so app.jsx can use them if needed
 export const FOOTER_KEYS = [
@@ -21,43 +22,114 @@ export const FOOTER_KEYS = [
 
 export function IssueDetail({ issueNumber, repo, onBack }) {
   const { notifyDialog } = useContext(AppContext)
+  const { stdout } = useStdout()
+  const termRows = stdout?.rows || 24
+  const termCols = stdout?.columns || 80
+
   const { data: issue, loading, error, refetch } = useGh(getIssue, [repo, issueNumber])
-  const [bodyExpanded, setBodyExpanded] = useState(false)
+  const [scrollY, setScrollY] = useState(0)
   const [replyMode, setReplyMode] = useState(false)
   const [replyText, setReplyText] = useState('')
   const [statusMsg, setStatusMsg] = useState(null)
   const [dialog, setDialog] = useState(null)
+  const lastKeyRef   = useRef(null)
+  const lastKeyTimer = useRef(null)
 
-  // Notify App when dialog opens/closes so global keys are suppressed
+  // Notify App when dialog opens/closes
   React.useEffect(() => {
     notifyDialog(!!dialog)
     return () => notifyDialog(false)
   }, [dialog, notifyDialog])
+
+  const contentRows = useMemo(() => {
+    if (!issue) return []
+    const rows = []
+    
+    // Labels
+    if (issue.labels?.length > 0) {
+      rows.push({ id: 'labels', el: (
+        <Box key="labels" marginBottom={1} gap={1}>
+          {issue.labels.map(l => (
+            <Box key={l.name} paddingX={1} borderStyle="round" borderColor={`#${l.color}`}>
+              <Text color={`#${l.color}`}>{sanitize(l.name)}</Text>
+            </Box>
+          ))}
+        </Box>
+      )})
+    }
+
+    // Body
+    if (issue.body) {
+      rows.push({ id: 'body-hdr', el: <Text key="body-hdr" color={t.ui.muted} bold>Description:</Text> })
+      const mdRows = getMarkdownRows(issue.body, termCols - 4)
+      mdRows.forEach((row, i) => rows.push({ id: `body-${i}`, el: row }))
+    }
+
+    // Comments
+    if (issue.comments?.length > 0) {
+      rows.push({ id: 'cmt-hdr', el: (
+        <Box key="cmt-hdr" marginTop={1}>
+          <Text color={t.ui.muted} bold>Comments ({issue.comments.length}):</Text>
+        </Box>
+      )})
+      issue.comments.forEach((c, i) => {
+        rows.push({ id: `cmt-${i}`, el: (
+          <Box key={`cmt-${i}`} flexDirection="column" paddingX={1} marginBottom={1}>
+            <Box gap={1}>
+              <Text color={t.ui.selected}>{c.author?.login}</Text>
+              <Text color={t.ui.dim}>{format(c.updatedAt || c.createdAt)}</Text>
+            </Box>
+            <Text color={t.diff.ctxFg}>{sanitize(c.body)}</Text>
+          </Box>
+        )})
+      })
+    }
+    return rows
+  }, [issue, termCols])
+
+  const visibleHeight = Math.max(3, termRows - 10)
+  const maxScroll = Math.max(0, contentRows.length - visibleHeight)
+  const visibleRows = contentRows.slice(scrollY, scrollY + visibleHeight)
+
+  const doReply = useCallback(() => {
+    addPRComment(repo, issueNumber, replyText)
+      .then(() => { setStatusMsg('Reply sent'); refetch() })
+      .catch(err => setStatusMsg(`Failed: ${err.message}`))
+    setTimeout(() => setStatusMsg(null), 3000)
+    setReplyMode(false)
+    setReplyText('')
+  }, [repo, issueNumber, replyText, refetch])
 
   useInput((input, key) => {
     if (dialog) return
 
     if (replyMode) {
       if (key.escape) { setReplyMode(false); setReplyText(''); return }
-      if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) {
-        addPRComment(repo, issueNumber, replyText)
-          .then(() => { setStatusMsg('Reply sent'); refetch() })
-          .catch(err => setStatusMsg(`Failed: ${err.message}`))
-        setTimeout(() => setStatusMsg(null), 3000)
-        setReplyMode(false)
-        setReplyText('')
-        return
-      }
-      if (key.backspace || key.delete) { setReplyText(r => r.slice(0, -1)); return }
-      if (input && !key.ctrl && !key.meta) { setReplyText(r => r + input); return }
       return
     }
 
-    if (input === 'r' && !replyMode) { setReplyMode(true); return }
+    if (input === 'r') { setReplyMode(true); return }
     if (input === 'l') { setDialog('labels'); return }
     if (input === 'A') { setDialog('assignees'); return }
     if (key.escape || input === 'q') { onBack(); return }
-    if (key.return && !bodyExpanded) { setBodyExpanded(true); return }
+
+    // gg → top
+    if (input === 'g') {
+      if (lastKeyRef.current === 'g') {
+        clearTimeout(lastKeyTimer.current)
+        lastKeyRef.current = null
+        setScrollY(0)
+        return
+      }
+      lastKeyRef.current = 'g'
+      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
+      return
+    }
+    lastKeyRef.current = null
+
+    if (input === 'G') { setScrollY(maxScroll); return }
+    if (input === 'j' || key.downArrow) { setScrollY(s => Math.min(maxScroll, s + 1)); return }
+    if (input === 'k' || key.upArrow)   { setScrollY(s => Math.max(0, s - 1)); return }
   })
 
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading...</Text></Box>
@@ -76,16 +148,14 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
 
   // ── Detail view ────────────────────────────────────────────────────────────
 
-  const bodyLines = (issue.body || '').split('\n')
-  const displayBody = bodyExpanded ? bodyLines : bodyLines.slice(0, 8)
   const stateColor = issue.state === 'OPEN' ? t.issue.open : t.issue.closed
 
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       <Box marginBottom={1} flexDirection="column" borderStyle="single" borderColor={t.ui.border} paddingX={1}>
         <Box gap={1}>
-          <Text color={stateColor}>{issue.state === 'OPEN' ? '○' : '✓'}</Text>
-          <Text bold color={t.ui.selected} wrap="truncate">#{issue.number} {issue.title}</Text>
+          <Text color={stateColor}>{issue.state === 'OPEN' ? '●' : '✗'}</Text>
+          <Text bold color={t.ui.selected} wrap="truncate">#{issue.number} {sanitize(issue.title)}</Text>
         </Box>
         <Box gap={2}>
           <Text color={t.ui.muted}>by {issue.author?.login}</Text>
@@ -103,57 +173,36 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
         </Box>
       </Box>
 
-      {issue.labels?.length > 0 && (
-        <Box marginBottom={1} gap={1}>
-          {issue.labels.map(l => (
-            <Box key={l.name} paddingX={1} borderStyle="round" borderColor={`#${l.color}`}>
-              <Text color={`#${l.color}`}>{l.name}</Text>
-            </Box>
-          ))}
-        </Box>
-      )}
+      {/* ── Scrollable content ── */}
+      <Box flexDirection="column" flexGrow={1} overflow="hidden">
+        {visibleRows.map(row => row.el)}
+      </Box>
 
-      {issue.body && (
-        <Box flexDirection="column" marginBottom={1}>
-          <Text color={t.ui.muted} bold>Description:</Text>
-          <Box flexDirection="column" borderStyle="single" borderColor={t.ui.border} paddingX={1}>
-            {displayBody.map((line, i) => (
-              <Text key={i} color={t.diff.ctxFg} wrap="truncate">{line || ' '}</Text>
-            ))}
-            {!bodyExpanded && bodyLines.length > 8 && (
-              <Text color={t.ui.dim}>[Enter] expand ({bodyLines.length - 8} more lines)</Text>
-            )}
-          </Box>
-        </Box>
-      )}
-
-      {issue.comments?.length > 0 && (
-        <Box flexDirection="column" marginBottom={1}>
-          <Text color={t.ui.muted} bold>Comments ({issue.comments.length}):</Text>
-          {issue.comments.slice(0, 5).map((c, i) => (
-            <Box key={i} flexDirection="column" paddingX={1} marginBottom={1}>
-              <Box gap={1}>
-                <Text color={t.ui.selected}>{c.author?.login}</Text>
-                <Text color={t.ui.dim}>{format(c.updatedAt || c.createdAt)}</Text>
-              </Box>
-              <Text color={t.diff.ctxFg} wrap="truncate">{c.body?.slice(0, 120)}</Text>
-            </Box>
-          ))}
+      {/* ── Scroll info ── */}
+      {maxScroll > 0 && (
+        <Box paddingX={1} marginBottom={1}>
+          <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, contentRows.length)} / {contentRows.length}  [j/k] scroll  [gg/G] top/bottom</Text>
         </Box>
       )}
 
       {replyMode && (
-        <Box flexDirection="column" borderStyle="round" borderColor={t.diff.threadBorder} paddingX={1}>
-          <Text color={t.ui.muted}>Reply:</Text>
-          <Box>
-            <Text color={t.ui.selected}>{replyText}</Text>
-            <Text color={t.ui.dim}>█</Text>
-          </Box>
-          <Text color={t.ui.dim}>[Ctrl+G] send  [Esc] cancel</Text>
+        <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1} marginBottom={1}>
+          <Text color={t.ui.muted} bold>Reply:</Text>
+          <TextInput
+            value={replyText}
+            onChange={setReplyText}
+            focus={true}
+            onEnter={doReply}
+          />
+          <Text color={t.ui.dim}>[Enter] send  [Esc] cancel</Text>
         </Box>
       )}
 
       {statusMsg && <Text color={t.ci.pass}>{statusMsg}</Text>}
+      
+      <Box paddingX={1} gap={2} borderStyle="single" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} borderColor={t.ui.border}>
+        <Text color={t.ui.dim}>[r] reply  [l] labels  [A] assignees  [Esc] back</Text>
+      </Box>
     </Box>
   )
 }
@@ -162,7 +211,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
 
 function IssueLabelDialog({ repo, issue, onClose }) {
   const { data: allLabels, loading } = useGh(listLabels, [repo])
-  if (loading) return <Box><Text color={t.ui.muted}>Loading labels...</Text></Box>
+  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading labels...</Text></Box>
   const items = (allLabels || []).map(l => ({
     id: l.name,
     name: l.name,
@@ -189,7 +238,7 @@ function IssueLabelDialog({ repo, issue, onClose }) {
 
 function IssueAssigneeDialog({ repo, issue, onClose }) {
   const { data: collabs, loading } = useGh(listCollaborators, [repo])
-  if (loading) return <Box><Text color={t.ui.muted}>Loading collaborators...</Text></Box>
+  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators...</Text></Box>
   const items = (collabs || []).map(c => ({
     id: c.login,
     name: c.login,

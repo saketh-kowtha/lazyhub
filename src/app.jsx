@@ -30,6 +30,7 @@ import { IssueList } from './features/issues/list.jsx'
 import { IssueDetail } from './features/issues/detail.jsx'
 import { BranchList } from './features/branches/index.jsx'
 import { ActionList } from './features/actions/index.jsx'
+import { SettingsPane } from './features/settings/index.jsx'
 import { NotificationList } from './features/notifications/index.jsx'
 import { CustomPane } from './components/CustomPane.jsx'
 
@@ -69,6 +70,7 @@ const GLOBAL_KEYS = [
   { key: 'o',               label: 'open current item in browser' },
   { key: '/',               label: 'fuzzy search current list' },
   { key: '?',               label: 'toggle this help overlay' },
+  { key: 'S',               label: 'settings' },
   { key: 'q / Esc',         label: 'back one level / quit at root' },
 ]
 
@@ -431,8 +433,11 @@ export function App({ repo }) {
       return
     }
 
+    if (input === 'S') { setView('settings'); setSelectedItem(null); return }
+
     if (input === 'q' || key.escape) {
       if (showHelp)           { setShowHelp(false); return }
+      if (view === 'settings'){ setView('list'); return }
       if (view === 'comments'){ setView('diff'); return }
       if (view === 'diff')    { setView(selectedItem?._fromList ? 'list' : 'detail'); return }
       if (view === 'detail')  { setSelectedItem(null); setView('list'); return }
@@ -500,6 +505,27 @@ export function App({ repo }) {
           onBack={goBack}
           onJumpToDiff={() => setView('diff')}
         />
+      </AppContext.Provider>
+    )
+  }
+
+  if (view === 'settings') {
+    return (
+      <AppContext.Provider value={appCtx}>
+        <Box flexDirection="column" height={rows}>
+          <Box flexDirection="row" flexGrow={1}>
+            {showSidebar && (
+              <Sidebar currentPane={pane} visiblePanes={PANES}
+                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS}
+                onSelect={(p) => { setPane(p); setSelectedItem(null); setView('list') }}
+                height={rows - 2}
+              />
+            )}
+            <SettingsPane onBack={() => setView('list')} />
+          </Box>
+          <StatusBar repo={repo} pane="settings" />
+          <FooterKeys keys={[{ key: 'Esc', label: 'back' }]} />
+        </Box>
       </AppContext.Provider>
     )
   }

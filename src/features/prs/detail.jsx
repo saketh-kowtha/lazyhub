@@ -16,7 +16,7 @@ import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { AppContext } from '../../context.js'
 import { t } from '../../theme.js'
-import { sanitize } from '../../utils.js'
+import { sanitize, getMarkdownRows } from '../../utils.js'
 
 const MERGE_OPTIONS = [
   { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
@@ -191,32 +191,10 @@ function buildContentRows(pr, checks, protection, cols) {
         <Text color={t.ui.dim} bold>Description</Text>
       </Box>
     ))
-    const bodyWidth = Math.max(20, (cols || 80) - 4)
-    const rawLines = pr.body.split('\n')
-    let lineIdx = 0
-    for (const raw of rawLines) {
-      const cleanRaw = sanitize(raw)
-      if (cleanRaw.length === 0) {
-        push(`body-${lineIdx++}`, <Box key={`body-${lineIdx}`} />)
-        continue
-      }
-      // word-wrap long lines
-      let rem = cleanRaw
-      while (rem.length > bodyWidth) {
-        const chunk = rem.slice(0, bodyWidth)
-        push(`body-${lineIdx++}`, (
-          <Box key={`body-${lineIdx}`} paddingX={1}>
-            <Text color={t.diff.ctxFg}>{chunk}</Text>
-          </Box>
-        ))
-        rem = rem.slice(bodyWidth)
-      }
-      push(`body-${lineIdx++}`, (
-        <Box key={`body-${lineIdx}`} paddingX={1}>
-          <Text color={t.diff.ctxFg}>{rem || ' '}</Text>
-        </Box>
-      ))
-    }
+    const mdRows = getMarkdownRows(pr.body, cols - 4)
+    mdRows.forEach((row, i) => {
+      push(`body-md-${i}`, row)
+    })
   }
 
   return rows
