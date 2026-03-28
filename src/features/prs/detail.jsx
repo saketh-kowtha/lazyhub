@@ -6,8 +6,9 @@ import React, { useState, useContext } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
-import { getPR, listLabels, listCollaborators, addLabels, removeLabels } from '../../executor.js'
+import { getPR, listLabels, listCollaborators, addLabels, removeLabels, getRepoInfo, getPRChecks, getBranchProtection, enableAutoMerge, disableAutoMerge, mergePR } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
+import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { AppContext } from '../../app.jsx'
 import { t } from '../../theme.js'
 
@@ -33,15 +34,28 @@ function prStateBadge(pr) {
 // Exported so app.jsx can use them if needed
 export const FOOTER_KEYS = [
   { key: 'd', label: 'diff' },
+  { key: 'm', label: 'merge' },
+  { key: 'M', label: 'auto-merge' },
+  { key: 'a', label: 'approve' },
   { key: 'l', label: 'labels' },
   { key: 'A', label: 'assignees' },
   { key: 'r', label: 'refresh' },
   { key: 'Esc', label: 'back' },
 ]
 
+const MERGE_OPTIONS = [
+  { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
+  { value: 'squash', label: '--squash', description: 'Squash all commits into one' },
+  { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
+]
+
 export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
   const { notifyDialog } = useContext(AppContext)
   const { data: pr, loading, error, refetch } = useGh(getPR, [repo, prNumber])
+  const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000 })
+  const { data: checks } = useGh(getPRChecks, [repo, prNumber], { ttl: 30_000 })
+  const baseBranch = pr?.baseRefName || ''
+  const { data: protection } = useGh(getBranchProtection, [repo, baseBranch], { ttl: 300_000 })
   const [bodyExpanded, setBodyExpanded] = useState(false)
   const [dialog, setDialog] = useState(null)
 
@@ -57,6 +71,16 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
     if (input === 'd' && pr) { onOpenDiff(pr); return }
     if (input === 'l') { setDialog('labels'); return }
     if (input === 'A') { setDialog('assignees'); return }
+    if (input === 'm' && pr && pr.state === 'OPEN') { setDialog('merge'); return }
+    if (input === 'M' && pr && pr.state === 'OPEN' && !pr.isDraft) {
+      if (pr.autoMergeRequest) {
+        disableAutoMerge(repo, prNumber).then(() => refetch()).catch(() => {})
+      } else {
+        enableAutoMerge(repo, prNumber, repoInfo?.squashMergeAllowed ? 'squash' : 'merge')
+          .then(() => refetch()).catch(() => {})
+      }
+      return
+    }
     if (key.escape || input === 'q') { onBack(); return }
     if (key.return && !bodyExpanded) { setBodyExpanded(true); return }
   })
@@ -82,6 +106,26 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
 
   // ── Dialogs ────────────────────────────────────────────────────────────────
 
+  if (dialog === 'merge') {
+    return (
+      <OptionPicker
+        title={`Merge PR #${pr.number}: ${pr.title}`}
+        options={MERGE_OPTIONS}
+        promptText="Commit message (optional, Enter to skip)"
+        onSubmit={async (val) => {
+          const strategy = typeof val === 'object' ? val.value : val
+          const msg = typeof val === 'object' ? val.text : undefined
+          setDialog(null)
+          try {
+            await mergePR(repo, pr.number, strategy, msg)
+            refetch()
+          } catch { /* ignore */ }
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
   if (dialog === 'labels') {
     return <PRLabelDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} />
   }
@@ -96,11 +140,8 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
   const bodyLines = (pr.body || '').split('\n')
   const displayBody = bodyExpanded ? bodyLines : bodyLines.slice(0, 8)
 
-  // Count checks
-  const checks = pr.statusCheckRollup || []
-  const passing = checks.filter(c => /success/i.test(c.state || c.conclusion || '')).length
-  const failing = checks.filter(c => /failure|error/i.test(c.state || c.conclusion || '')).length
-  const pending = checks.filter(c => /pending|in_progress/i.test(c.state || c.conclusion || '')).length
+  // Checks: prefer fetched checks, fall back to statusCheckRollup
+  const allChecks = (checks && checks.length > 0) ? checks : (pr.statusCheckRollup || [])
 
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
@@ -155,13 +196,62 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
         </Box>
       )}
 
-      {/* CI */}
-      {checks.length > 0 && (
-        <Box marginBottom={1} gap={2}>
-          <Text color={t.ui.muted}>CI:</Text>
-          {passing > 0 && <Text color={t.ci.pass}>✓ {passing}</Text>}
-          {failing > 0 && <Text color={t.ci.fail}>✗ {failing}</Text>}
-          {pending > 0 && <Text color={t.ci.pending}>● {pending}</Text>}
+      {/* CI Checks */}
+      {allChecks.length > 0 && (
+        <Box marginBottom={1} flexDirection="column">
+          <Text color={t.ui.muted} bold>Checks:</Text>
+          {allChecks.slice(0, 8).map((c, i) => {
+            const status = c.conclusion || c.status || c.state || ''
+            let icon, color
+            if (/success/i.test(status)) { icon = '✓'; color = t.ci.pass }
+            else if (/failure|error/i.test(status)) { icon = '✗'; color = t.ci.fail }
+            else if (/pending|in_progress|queued/i.test(status)) { icon = '●'; color = t.ci.pending }
+            else if (/cancelled|skipped/i.test(status)) { icon = '⊘'; color = t.ui.dim }
+            else { icon = '○'; color = t.ui.dim }
+            const name = (c.name || c.context || '').slice(0, 35)
+            return (
+              <Box key={i} gap={1} paddingLeft={1}>
+                <Text color={color}>{icon}</Text>
+                <Text color={t.ui.muted} wrap="truncate">{name}</Text>
+                {c.appName && <Text color={t.ui.dim}>({c.appName})</Text>}
+              </Box>
+            )
+          })}
+          {allChecks.length > 8 && (
+            <Text color={t.ui.dim} paddingLeft={1}>  +{allChecks.length - 8} more checks</Text>
+          )}
+        </Box>
+      )}
+
+      {/* Merge eligibility */}
+      {pr && (
+        <Box marginBottom={1} flexDirection="column">
+          <Text color={t.ui.muted} bold>Merge status:</Text>
+          {pr.isDraft && <Text color={t.pr.draft}>  ⊘ Draft — convert to ready before merging</Text>}
+          {pr.mergeable === 'CONFLICTING' && <Text color={t.ci.fail}>  ✗ Has merge conflicts</Text>}
+          {pr.mergeStateStatus === 'BLOCKED' && <Text color={t.ci.fail}>  ✗ Blocked — required checks/reviews pending</Text>}
+          {pr.mergeStateStatus === 'BEHIND' && <Text color={t.ci.pending}>  ● Branch is behind base — update required</Text>}
+          {pr.mergeStateStatus === 'CLEAN' && <Text color={t.ci.pass}>  ✓ Ready to merge</Text>}
+          {pr.mergeStateStatus === 'UNSTABLE' && <Text color={t.ci.pending}>  ● Unstable — some checks failing</Text>}
+          {pr.mergeStateStatus === 'HAS_HOOKS' && <Text color={t.ci.pass}>  ✓ Ready (merge hooks active)</Text>}
+          {pr.autoMergeRequest && (
+            <Text color={t.ci.pass}>  ✓ Auto-merge enabled ({pr.autoMergeRequest.mergeMethod?.toLowerCase()})</Text>
+          )}
+          {protection && (
+            <Box flexDirection="column" paddingLeft={2}>
+              {protection.requiredReviews > 0 && (
+                <Text color={t.ui.dim}>
+                  Reviews required: {protection.requiredReviews}
+                  {protection.requireCodeOwnerReviews ? ' (+ CODEOWNERS)' : ''}
+                </Text>
+              )}
+              {protection.requireStatusChecks && protection.requiredChecks?.length > 0 && (
+                <Text color={t.ui.dim}>Required checks: {protection.requiredChecks.slice(0, 3).join(', ')}
+                  {protection.requiredChecks.length > 3 ? ` +${protection.requiredChecks.length - 3}` : ''}
+                </Text>
+              )}
+            </Box>
+          )}
         </Box>
       )}
 

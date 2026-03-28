@@ -7,7 +7,7 @@ import { Box, Text, useInput, useStdout } from 'ink'
 import chalk from 'chalk'
 import hljs from 'highlight.js'
 import { useGh } from '../../hooks/useGh.js'
-import { getPRDiff, listPRComments, addPRLineComment } from '../../executor.js'
+import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { t } from '../../theme.js'
@@ -351,6 +351,10 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const { stdout } = useStdout()
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 6)
 
+  const { data: diffStats } = useGh(getPRDiffStats, [repo, prNumber])
+  const isLargeDiff = ((diffStats?.additions || 0) + (diffStats?.deletions || 0)) > 5000
+  const [diffWarningAck, setDiffWarningAck] = useState(false)
+
   const { data: diffText, loading, error, refetch } = useGh(getPRDiff, [repo, prNumber])
   const { data: comments } = useGh(listPRComments, [repo, prNumber])
   const [cursor, setCursor] = useState(0)
@@ -409,6 +413,20 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   }
 
   useInput((input, key) => {
+    // Large diff warning intercept
+    if (isLargeDiff && !diffWarningAck) {
+      if (key.return) { setDiffWarningAck(true); return }
+      if (input === 'o') {
+        import('execa').then(({ execa }) => {
+          const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
+          execa(cmd, [`https://github.com/${repo}/pull/${prNumber}/files`]).catch(() => {})
+        })
+        return
+      }
+      if (key.escape || input === 'q') { onBack(); return }
+      return
+    }
+
     if (dialog) return
 
     // gg → jump to top
@@ -502,6 +520,20 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     )
   }
 
+  if (isLargeDiff && !diffWarningAck) {
+    return (
+      <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
+        <Text color={t.ci.pending} bold>⚠ Large diff: +{diffStats.additions} -{diffStats.deletions} across {diffStats.changedFiles} files</Text>
+        <Text color={t.ui.muted}>This may take a moment to render.</Text>
+        <Box marginTop={1} gap={3}>
+          <Text color={t.ui.selected}>[Enter] Load anyway</Text>
+          <Text color={t.ui.muted}>[o] Open in browser</Text>
+          <Text color={t.ui.dim}>[Esc] Back</Text>
+        </Box>
+      </Box>
+    )
+  }
+
   if (loading) return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       <Text color={t.ui.muted}>Loading diff…</Text>
@@ -514,7 +546,9 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   )
 
   const colWidth = Math.floor(((stdout?.columns || 80) - 2) / 2)
-  const visibleRows = rows.slice(scrollOffset, scrollOffset + visibleHeight)
+  const MAX_ROWS = 2000
+  const displayRows = rows.length > MAX_ROWS ? rows.slice(0, MAX_ROWS) : rows
+  const visibleRows = displayRows.slice(scrollOffset, scrollOffset + visibleHeight)
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -527,7 +561,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
 
       <Box flexDirection="column" flexGrow={1} overflow="hidden">
         {splitView
-          ? renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, colWidth)
+          ? renderSplitView(displayRows, scrollOffset, visibleHeight, cursor, langCache, colWidth)
           : visibleRows.map((row, i) => {
               const idx = scrollOffset + i
               const isSelected = idx === cursor
@@ -553,6 +587,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
             })
         }
       </Box>
+
+      {rows.length > MAX_ROWS && (
+        <Box paddingX={1}>
+          <Text color={t.ci.pending}>⚠ Diff truncated at {MAX_ROWS} rows — [o] open in browser for full diff</Text>
+        </Box>
+      )}
 
       <FooterKeys keys={splitView ? FOOTER_KEYS_SPLIT : FOOTER_KEYS_UNIFIED} />
     </Box>

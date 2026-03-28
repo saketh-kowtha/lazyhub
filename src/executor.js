@@ -494,6 +494,97 @@ export async function createPR(repo, { title, body, head, base, draft = false, l
   return run(args)
 }
 
+// ─── Repo info / branch protection functions ─────────────────────────────────
+
+/**
+ * Get basic repo info including allowed merge methods.
+ */
+export async function getRepoInfo(repo) {
+  const args = [
+    'repo', 'view', getRepo(repo),
+    '--json', 'name,owner,defaultBranchRef,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed,autoMergeAllowed,deleteBranchOnMerge',
+  ]
+  return run(args)
+}
+
+/**
+ * Get check runs / status checks for a PR.
+ */
+export async function getPRChecks(repo, number) {
+  const r = getRepo(repo)
+  // Use the PR view to get the head SHA first, then fetch checks
+  try {
+    const pr = await run([
+      'pr', 'view', String(number),
+      '--repo', r,
+      '--json', 'headRefOid',
+    ])
+    if (!pr?.headRefOid) return []
+    const checkArgs = [
+      'api', `repos/${r}/commits/${pr.headRefOid}/check-runs`,
+      '--jq', '[.check_runs[] | {id: .id, name: .name, status: .status, conclusion: .conclusion, appName: .app.name, url: .html_url}]',
+    ]
+    return run(checkArgs)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Get branch protection rules for a branch.
+ */
+export async function getBranchProtection(repo, branch) {
+  if (!branch) return null
+  const r = getRepo(repo)
+  const args = [
+    'api', `repos/${r}/branches/${encodeURIComponent(branch)}/protection`,
+    '--jq', '{requiredReviews: (.required_pull_request_reviews.required_approving_review_count // 0), requireCodeOwnerReviews: (.required_pull_request_reviews.require_code_owner_reviews // false), requireStatusChecks: (.required_status_checks != null), requiredChecks: ([(.required_status_checks.contexts // []), (.required_status_checks.checks // [] | map(.context))] | add // [])}',
+  ]
+  try {
+    return run(args)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Enable auto-merge on a PR.
+ */
+export async function enableAutoMerge(repo, number, mergeMethod = 'merge') {
+  const args = [
+    'pr', 'merge', String(number),
+    '--repo', getRepo(repo),
+    `--${mergeMethod}`,
+    '--auto',
+  ]
+  return run(args)
+}
+
+/**
+ * Disable auto-merge on a PR.
+ */
+export async function disableAutoMerge(repo, number) {
+  const r = getRepo(repo)
+  const args = [
+    'api', `repos/${r}/pulls/${number}`,
+    '--method', 'PATCH',
+    '-f', 'auto_merge=',
+  ]
+  return run(args)
+}
+
+/**
+ * Get diff stats (additions/deletions/changedFiles) for a PR.
+ */
+export async function getPRDiffStats(repo, number) {
+  const args = [
+    'pr', 'view', String(number),
+    '--repo', getRepo(repo),
+    '--json', 'additions,deletions,changedFiles',
+  ]
+  return run(args)
+}
+
 // ─── Gist functions ───────────────────────────────────────────────────────────
 
 /**

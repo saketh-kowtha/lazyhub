@@ -17,7 +17,7 @@ import { useGh } from '../../hooks/useGh.js'
 import {
   listPRs, listLabels, listCollaborators,
   mergePR, checkoutBranch, addLabels, removeLabels,
-  requestReviewers, reviewPR,
+  requestReviewers, reviewPR, createPR, getRepoInfo,
 } from '../../executor.js'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
@@ -64,7 +64,9 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
 
   // f cycles: open → closed → merged → open
   const [filterState, setFilterState] = useState('open')
-  const { data: prs, loading, error, refetch } = useGh(listPRs, [repo, { state: filterState }])
+  const [scope, setScope] = useState('all')
+  const [limit, setLimit] = useState(100)
+  const { data: prs, loading, error, refetch } = useGh(listPRs, [repo, { state: filterState, scope, limit }])
 
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
@@ -103,9 +105,13 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
       const next = Math.max(0, Math.min(items.length - 1, prev + delta))
       if (next < scrollOffset) setScrollOffset(next)
       if (next >= scrollOffset + height) setScrollOffset(next - height + 1)
+      // Load more when within 10 items of the bottom
+      if (next >= items.length - 10 && !loading) {
+        setLimit(l => l + 100)
+      }
       return next
     })
-  }, [items.length, scrollOffset, height])
+  }, [items.length, scrollOffset, height, loading])
 
   const openDialog = useCallback((name) => setDialog(name), [])
   const closeDialog = useCallback(() => setDialog(null), [])
@@ -149,6 +155,21 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
       setCursor(0); setScrollOffset(0)
       return
     }
+
+    // s — cycle scope
+    if (input === 's') {
+      const SCOPES = ['all', 'own', 'reviewing']
+      setScope(prev => {
+        const next = SCOPES[(SCOPES.indexOf(prev) + 1) % SCOPES.length]
+        showStatus(`Scope: ${next}`)
+        return next
+      })
+      setCursor(0); setScrollOffset(0)
+      return
+    }
+
+    // N — new PR
+    if (input === 'N') { openDialog('new-pr'); return }
 
     if (loading || items.length === 0) return
     const pr = items[cursor]
@@ -268,6 +289,33 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
     )
   }
 
+  if (dialog === 'new-pr') {
+    return (
+      <Box flexDirection="column" flexGrow={1}>
+        <FormCompose
+          title="New Pull Request"
+          fields={[
+            { name: 'title', label: 'Title', type: 'text' },
+            { name: 'head', label: 'Head branch', type: 'text' },
+            { name: 'base', label: 'Base branch', type: 'text' },
+            { name: 'body', label: 'Body', type: 'multiline' },
+          ]}
+          onSubmit={async (values) => {
+            closeDialog()
+            try {
+              await createPR(repo, { title: values.title, head: values.head, base: values.base, body: values.body })
+              showStatus('PR created')
+              refetch()
+            } catch (err) {
+              showStatus(`Failed: ${err.message}`, true)
+            }
+          }}
+          onCancel={closeDialog}
+        />
+      </Box>
+    )
+  }
+
   if (dialog === 'reqchanges-body' && selectedPR) {
     return (
       <FormCompose
@@ -298,7 +346,14 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
         <Text color={filterState === 'open' ? t.pr.open : filterState === 'merged' ? t.pr.merged : t.pr.closed} bold>
           {filterState}
         </Text>
-        <Text color={t.ui.dim}>[f] cycle</Text>
+        <Text color={t.ui.dim}>·</Text>
+        <Text color={scope === 'own' ? t.ui.selected : scope === 'reviewing' ? t.ci.pending : t.ui.muted} bold>
+          {scope === 'own' ? 'my PRs' : scope === 'reviewing' ? 'reviewing' : 'all'}
+        </Text>
+        <Text color={t.ui.dim}>[f] state  [s] scope  [/] search</Text>
+        {items.length >= 100 && (
+          <Text color={t.ui.dim}> ({items.length} loaded)</Text>
+        )}
         {statusMsg && (
           <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}</Text>
         )}
@@ -350,11 +405,14 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
         )
       })}
 
-      {items.length > height && (
-        <Box paddingX={1}>
+      {(items.length > height || items.length >= 100) && (
+        <Box paddingX={1} justifyContent="space-between">
           <Text color={t.ui.dim}>
             {scrollOffset + 1}–{Math.min(scrollOffset + height, items.length)} / {items.length}
           </Text>
+          {items.length >= 100 && !loading && (
+            <Text color={t.ui.dim}>scroll down for more</Text>
+          )}
         </Box>
       )}
     </Box>
