@@ -36,7 +36,7 @@ import React, { useState, useCallback, useEffect, useContext, useRef } from 'rea
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { FuzzySearch } from './dialogs/FuzzySearch.jsx'
-import { AppContext } from '../app.jsx'
+import { AppContext } from '../context.js'
 import { t } from '../theme.js'
 
 // Resolve {repo}, {owner}, {name} placeholders in a command string

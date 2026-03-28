@@ -12,7 +12,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
-import { writeFileSync, readFileSync, unlinkSync } from 'fs'
+import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
@@ -307,14 +307,18 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
 
   const openEditor = useCallback(() => {
     const editor = process.env.EDITOR || process.env.VISUAL || 'vi'
-    const tmp = join(tmpdir(), `lazyhub-pr-body-${Date.now()}.md`)
-    writeFileSync(tmp, form.body || '')
-    spawnSync(editor, [tmp], { stdio: 'inherit' })
+    if (!editor || /[\0\n\r]/.test(editor)) return
+    let tmpDir
     try {
+      tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
+      const tmp = join(tmpDir, 'pr-body.md')
+      writeFileSync(tmp, form.body || '', { mode: 0o600 })
+      spawnSync(editor, [tmp], { stdio: 'inherit' })
       const content = readFileSync(tmp, 'utf8')
       setForm(f => ({ ...f, body: content }))
       unlinkSync(tmp)
     } catch { /* ignore */ }
+    finally { try { if (tmpDir) rmdirSync(tmpDir) } catch {} }
   }, [form.body])
 
   // ── Keyboard ──────────────────────────────────────────────────────────────────

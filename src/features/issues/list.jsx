@@ -11,7 +11,7 @@ import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
-import { AppContext } from '../../app.jsx'
+import { AppContext } from '../../context.js'
 import { loadConfig } from '../../config.js'
 import { t } from '../../theme.js'
 

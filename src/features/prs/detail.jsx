@@ -14,7 +14,7 @@ import {
 } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
-import { AppContext } from '../../app.jsx'
+import { AppContext } from '../../context.js'
 import { t } from '../../theme.js'
 
 const MERGE_OPTIONS = [

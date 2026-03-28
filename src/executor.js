@@ -468,11 +468,60 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
  */
 export async function listPRComments(repo, number) {
   const r = getRepo(repo)
-  const args = [
-    'api', `repos/${r}/pulls/${number}/comments`,
-    '--jq', '[.[] | {id: .id, body: .body, path: .path, line: .line, originalLine: .original_line, side: .side, user: {login: .user.login}, createdAt: .created_at, inReplyToId: .in_reply_to_id, pullRequestReviewId: .pull_request_review_id}]',
-  ]
-  return run(args)
+  const [owner, name] = r.split('/')
+  // Use GraphQL so we can get the ReviewThread node ID (needed for resolveReviewThread mutation)
+  const query = `
+    query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100) {
+            nodes {
+              id
+              isResolved
+              comments(first: 50) {
+                nodes {
+                  databaseId
+                  body
+                  path
+                  line
+                  originalLine
+                  diffSide
+                  author { login }
+                  createdAt
+                  replyTo { databaseId }
+                  pullRequestReview { databaseId }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `
+  const result = await run([
+    'api', 'graphql',
+    '-F', `owner=${owner}`,
+    '-F', `name=${name}`,
+    '-F', `number=${number}`,
+    '-f', `query=${query}`,
+  ])
+  const threads = result?.data?.repository?.pullRequest?.reviewThreads?.nodes || []
+  return threads.flatMap(thread =>
+    thread.comments.nodes.map(c => ({
+      id: c.databaseId,
+      body: c.body,
+      path: c.path,
+      line: c.line,
+      originalLine: c.originalLine,
+      side: c.diffSide,
+      user: { login: c.author?.login },
+      createdAt: c.createdAt,
+      inReplyToId: c.replyTo?.databaseId || null,
+      pullRequestReviewId: c.pullRequestReview?.databaseId || null,
+      threadId: thread.id,
+      threadResolved: thread.isResolved,
+    }))
+  )
 }
 
 /**
@@ -484,7 +533,7 @@ export async function replyToComment(repo, prNumber, commentId, body) {
   const args = [
     'api', `repos/${r}/pulls/${prNumber}/comments/${commentId}/replies`,
     '--method', 'POST',
-    '--field', `body=${body}`,
+    '--raw-field', `body=${body}`,
   ]
   return run(args)
 }
@@ -497,7 +546,7 @@ export async function editPRComment(repo, commentId, body) {
   const args = [
     'api', `repos/${r}/pulls/comments/${commentId}`,
     '--method', 'PATCH',
-    '--field', `body=${body}`,
+    '--raw-field', `body=${body}`,
   ]
   return run(args)
 }

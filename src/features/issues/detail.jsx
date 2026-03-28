@@ -8,7 +8,7 @@ import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getIssue, addPRComment, listLabels, listCollaborators, addLabels, removeLabels } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
-import { AppContext } from '../../app.jsx'
+import { AppContext } from '../../context.js'
 import { t } from '../../theme.js'
 
 // Exported so app.jsx can use them if needed

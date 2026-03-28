@@ -8,7 +8,7 @@ import { useGh } from '../../hooks/useGh.js'
 import { listBranches, deleteBranch, listPRs } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
-import { AppContext } from '../../app.jsx'
+import { AppContext } from '../../context.js'
 import { t } from '../../theme.js'
 
 export function BranchList({ repo, listHeight = 10, onPaneState }) {

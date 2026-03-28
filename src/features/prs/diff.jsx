@@ -13,7 +13,7 @@ import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { loadConfig } from '../../config.js'
 import { t } from '../../theme.js'
-import { AppContext } from '../../app.jsx'
+import { AppContext } from '../../context.js'
 
 const _diffCfg = loadConfig().diff
 
@@ -516,7 +516,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const [diffWarningAck, setDiffWarningAck] = useState(false)
 
   const { data: prMeta } = useGh(getPRMeta, [repo, prNumber], { ttl: 300_000 })
-  const headRefOid = prMeta?.headRefOid || null
+  const headRefOid = /^[0-9a-f]{40}$/i.test(prMeta?.headRefOid) ? prMeta.headRefOid : null
   const { data: diffText, loading, error, refetch } = useGh(getPRDiff, [repo, prNumber])
   const { data: comments } = useGh(listPRComments, [repo, prNumber])
   const [cursor, setCursor] = useState(0)
@@ -583,7 +583,8 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
 
   const commentThreadIndices = useMemo(() =>
     rows.reduce((acc, row, i) => {
-      if (row.filename && row.newLine != null && commentsByLine.has(`${row.filename}:${row.newLine}`))
+      const lineNum = row.newLine ?? row.oldLine
+      if (row.filename && lineNum != null && commentsByLine.has(`${row.filename}:${lineNum}`))
         acc.push(i)
       return acc
     }, [])
@@ -744,6 +745,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         if (compose.mode === 'new') {
           const row = rows[cursor]
           if (body && row) {
+            if (!headRefOid) {
+              setCommentStatus('PR metadata still loading — please retry')
+              setTimeout(() => setCommentStatus(null), 3000)
+              setCompose(null)
+              return
+            }
             addPRLineComment(repo, prNumber, {
               body,
               path: row.filename,
@@ -870,7 +877,8 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     // r/e/d — reply/edit/delete on thread at cursor line
     if (input === 'r' || input === 'e' || input === 'd') {
       const row = rows[cursor]
-      const lineKey = row ? `${row.filename}:${row.newLine}` : null
+      const lineNum = row ? (row.newLine ?? row.oldLine) : null
+      const lineKey = lineNum != null ? `${row.filename}:${lineNum}` : null
       const lineComments = lineKey ? commentsByLine.get(lineKey) : null
       if (lineComments?.length) {
         const sorted = [...lineComments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
@@ -963,8 +971,9 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
                 const isSelected = idx === cursor
                 const isMatch = findQuery ? findMatches.includes(idx) : false
                 const rendered = renderDiffLine(row, isSelected, langCache, isMatch)
-                const lineKey = `${row.filename}:${row.newLine}`
-                const hasComment = row.filename && row.newLine != null &&
+                const lineNum = row.newLine ?? row.oldLine
+                const lineKey = `${row.filename}:${lineNum}`
+                const hasComment = row.filename && lineNum != null &&
                   commentsByLine.has(lineKey)
                 return (
                   <Box key={idx} flexDirection="column">

@@ -6,7 +6,7 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
-import { writeFileSync, readFileSync, unlinkSync } from 'fs'
+import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { format } from 'timeago.js'
@@ -29,6 +29,7 @@ const FOOTER_KEYS = [
 ]
 
 const FILTER_MODES = ['all', 'open', 'resolved']
+const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
 
 export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   const { stdout } = useStdout()
@@ -49,17 +50,19 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   const flatComments = useMemo(() => {
     if (!rawComments) return []
     // Group by thread (root = no inReplyToId)
-    const roots = rawComments.filter(c => !c.inReplyToId)
-    const replies = rawComments.filter(c => c.inReplyToId)
-    const result = []
+    const roots = rawComments.filter(c => Object.hasOwn(c, 'inReplyToId') ? !c.inReplyToId : true)
+    const replies = rawComments.filter(c => Object.hasOwn(c, 'inReplyToId') && c.inReplyToId)
+    const all = []
     for (const root of roots) {
-      result.push({ ...root, _isRoot: true })
+      all.push({ ...root, _isRoot: true })
       for (const reply of replies.filter(r => r.inReplyToId === root.id)) {
-        result.push({ ...reply, _isRoot: false, _rootId: root.id })
+        all.push({ ...reply, _isRoot: false, _rootId: root.id })
       }
     }
-    return result
-  }, [rawComments])
+    if (filterMode === 'resolved')  return all.filter(c => c.threadResolved)
+    if (filterMode === 'open')      return all.filter(c => !c.threadResolved)
+    return all
+  }, [rawComments, filterMode])
 
   const visibleCount = flatComments.length
 
@@ -72,14 +75,18 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   // ── Open $EDITOR for multiline edit ───────────────────────────────────────
   const openEditor = useCallback((initial) => {
     const editor = process.env.EDITOR || process.env.VISUAL || 'vi'
-    const tmp = join(tmpdir(), `lazyhub-comment-${Date.now()}.md`)
-    writeFileSync(tmp, initial || '')
-    spawnSync(editor, [tmp], { stdio: 'inherit' })
+    if (!editor || /[\0\n\r]/.test(editor)) return initial
+    let tmpDir
     try {
+      tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
+      const tmp = join(tmpDir, 'comment.md')
+      writeFileSync(tmp, initial || '', { mode: 0o600 })
+      spawnSync(editor, [tmp], { stdio: 'inherit' })
       const content = readFileSync(tmp, 'utf8')
       unlinkSync(tmp)
       return content
     } catch { return initial }
+    finally { try { if (tmpDir) rmdirSync(tmpDir) } catch {} }
   }, [])
 
   // ── Submit action ──────────────────────────────────────────────────────────
@@ -169,8 +176,10 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       return
     }
     if (input === 'R' && comment) {
-      const rootId = comment._isRoot ? comment.id : comment._rootId
-      resolveThread(rootId)
+      // threadId is the GraphQL ReviewThread node ID (e.g. PRRT_kwDO...)
+      const threadId = comment.threadId
+      if (!threadId) { flash('Thread ID unavailable'); return }
+      resolveThread(threadId)
         .then(() => { flash('Thread resolved'); refetch() })
         .catch(err => flash(`Failed: ${err.message}`))
       return
@@ -184,7 +193,6 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       onJumpToDiff(comment.line)
       return
     }
-    if (input === 'r') { refetch(); return }
   })
 
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading comments…</Text></Box>
@@ -211,7 +219,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
           {action.type === 'delete' && (
             <>
               <Text color={t.ci.fail} bold>Delete comment by @{action.comment.user?.login}?</Text>
-              <Text color={t.ui.dim} wrap="truncate">  "{(action.comment.body || '').slice(0, 60)}"</Text>
+              <Text color={t.ui.dim} wrap="truncate">  "{stripAnsi(action.comment.body || '').slice(0, 60)}"</Text>
               <Text color={t.ui.dim}>[y] confirm  [n / Esc] cancel</Text>
             </>
           )}
@@ -258,7 +266,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
                   <Text color={t.ui.dim}>{format(comment.createdAt)}</Text>
                   {isReply && <Text color={t.ui.dim}>(reply)</Text>}
                 </Box>
-                {(comment.body || '').split('\n').map((line, li) => (
+                {stripAnsi(comment.body || '').split('\n').map((line, li) => (
                   <Box key={li}>
                     <Text color={t.diff.threadBorder}>{isReply ? '    ' : '┃ '}</Text>
                     <Text color={t.diff.ctxFg} wrap="truncate">{line}</Text>

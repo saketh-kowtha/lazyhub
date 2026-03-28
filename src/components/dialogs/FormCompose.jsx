@@ -7,7 +7,7 @@
 import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { spawnSync } from 'child_process'
-import { writeFileSync, readFileSync, unlinkSync } from 'fs'
+import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { t } from '../../theme.js'
@@ -22,16 +22,19 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
 
   const openEditor = useCallback((fieldName) => {
     const editor = process.env.EDITOR || process.env.VISUAL || 'vi'
-    const tmpFile = join(tmpdir(), `lazyhub-compose-${Date.now()}.md`)
-    writeFileSync(tmpFile, values[fieldName] || '')
-    spawnSync(editor, [tmpFile], { stdio: 'inherit' })
+    if (!editor || /[\0\n\r]/.test(editor)) return
+    let tmpDir
     try {
+      tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
+      const tmpFile = join(tmpDir, 'compose.md')
+      writeFileSync(tmpFile, values[fieldName] || '', { mode: 0o600 })
+      spawnSync(editor, [tmpFile], { stdio: 'inherit' })
       const content = readFileSync(tmpFile, 'utf8')
       setValues(prev => ({ ...prev, [fieldName]: content }))
       unlinkSync(tmpFile)
     } catch {
       // ignore
-    }
+    } finally { try { if (tmpDir) rmdirSync(tmpDir) } catch {} }
   }, [values])
 
   useInput((input, key) => {
