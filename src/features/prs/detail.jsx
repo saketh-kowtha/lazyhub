@@ -290,6 +290,8 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
       }
       return
     }
+    // If a search filter is active, Esc clears it first (second Esc exits)
+    if ((key.escape || input === 'q') && searchText) { setSearchText(''); setScrollY(0); return }
     if (key.escape || input === 'q') { onBack(); return }
 
     // gg → top
@@ -395,9 +397,9 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
         <Box paddingX={1} gap={1}>
           <Text color={t.ui.dim}>/</Text>
           <Text color={t.ui.selected}>{searchText}</Text>
-          {searching && <Text color={t.ui.dim}>█</Text>}
+          {searching && <Text color={t.ui.dim}>█  [Enter] apply  [Esc] cancel</Text>}
           {!searching && searchText && (
-            <Text color={t.ui.dim}>  [/] new search  [Esc] clear</Text>
+            <Text color={t.ui.dim}>  [/] edit  [Esc / q] clear filter</Text>
           )}
         </Box>
       )}
