@@ -683,7 +683,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         setCompose(c => ({ ...c, commentType: COMMENT_TYPES[Math.min(COMMENT_TYPES.length - 1, idx + 1)] }))
         return
       }
-      if (key.return && key.ctrl) {
+      if ((key.return && key.ctrl) || (key.ctrl && input === 's')) {
         const row = rows[cursor]
         const body = compose.body.trim()
         if (body && row) {
@@ -934,7 +934,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
               <Text color={t.ui.selected}>{compose.body}</Text>
               <Text color={t.ui.dim}>█</Text>
             </Box>
-            <Text color={t.ui.dim}>[←→] type  [Ctrl+Enter] submit  [Esc] cancel</Text>
+            <Text color={t.ui.dim}>[←→] type  [Ctrl+S] submit  [Esc] cancel</Text>
           </Box>
         )
       })()}

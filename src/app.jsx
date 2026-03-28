@@ -180,7 +180,7 @@ const DIALOG_KEYS = {
     { key: '↑↓ / j k',      label: 'pick merge strategy' },
     { key: 'Enter',          label: 'confirm strategy' },
     { key: 'Tab',            label: 'next field (commit message)' },
-    { key: 'Ctrl+Enter',     label: 'execute merge' },
+    { key: 'Ctrl+S',         label: 'execute merge' },
     { key: 'Esc',            label: 'cancel' },
   ],
   multiselect: [
@@ -197,7 +197,7 @@ const DIALOG_KEYS = {
   compose: [
     { key: 'Tab',            label: 'next field' },
     { key: 'e',              label: 'open $EDITOR for body' },
-    { key: 'Ctrl+Enter',     label: 'submit' },
+    { key: 'Ctrl+S',         label: 'submit' },
     { key: 'Esc',            label: 'cancel' },
   ],
   logs: [
@@ -211,7 +211,7 @@ const DIALOG_KEYS = {
     { key: '←→',             label: 'pick comment type' },
     { key: 'Tab',            label: 'next field' },
     { key: 'e',              label: 'open $EDITOR for body' },
-    { key: 'Ctrl+Enter',     label: 'submit comment' },
+    { key: 'Ctrl+S',         label: 'submit comment' },
     { key: 'Ctrl+R',         label: 'submit + resolve thread' },
     { key: 'Esc',            label: 'cancel' },
   ],

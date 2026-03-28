@@ -39,7 +39,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
 
     if (replyMode) {
       if (key.escape) { setReplyMode(false); setReplyText(''); return }
-      if (key.return && key.ctrl) {
+      if ((key.return && key.ctrl) || (key.ctrl && input === 's')) {
         addPRComment(repo, issueNumber, replyText)
           .then(() => { setStatusMsg('Reply sent'); refetch() })
           .catch(err => setStatusMsg(`Failed: ${err.message}`))
@@ -149,7 +149,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
             <Text color={t.ui.selected}>{replyText}</Text>
             <Text color={t.ui.dim}>█</Text>
           </Box>
-          <Text color={t.ui.dim}>[Ctrl+Enter] send  [Esc] cancel</Text>
+          <Text color={t.ui.dim}>[Ctrl+S] send  [Esc] cancel</Text>
         </Box>
       )}
 
