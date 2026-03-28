@@ -17,6 +17,14 @@ import { t } from '../../theme.js'
 
 const _cfg = loadConfig().issues
 
+function issueStateBadge(issue) {
+  switch (issue.state) {
+    case 'OPEN':   return { icon: '●', color: t.issue.open }
+    case 'CLOSED': return { icon: '✗', color: t.issue.closed }
+    default:       return { icon: '?', color: t.ui.muted }
+  }
+}
+
 export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState }) {
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
@@ -233,14 +241,13 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
         {visibleIssues.map((issue, i) => {
           const idx = scrollOffset + i
           const isSelected = idx === cursor
-          const stateColor = issue.state === 'OPEN' ? t.issue.open : t.issue.closed
-          const stateIcon = issue.state === 'OPEN' ? '○' : '✓'
+          const badge = issueStateBadge(issue)
           const authorLogin = String(issue.author?.login || '').padEnd(12)
           const visibleLabels = (issue.labels || []).slice(0, 2)
           const extraLabels = (issue.labels || []).length - 2
           return (
             <Box key={issue.number} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-              <Text color={stateColor}>{stateIcon} </Text>
+              <Text color={badge.color}>{badge.icon} </Text>
               <Text color={t.ui.dim} bold>#{String(issue.number).padEnd(5)}</Text>
               <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
                 {issue.title}
@@ -258,7 +265,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
         })}
         {!loading && items.length === 0 && (
           <Box paddingX={2} paddingY={1}>
-            <Text color={t.ui.muted}>No issues found. [r] refresh</Text>
+            <Text color={t.ui.muted}>No {filterState} issues found. [f] cycle filter  [n] new issue  [r] refresh</Text>
           </Box>
         )}
       </Box>

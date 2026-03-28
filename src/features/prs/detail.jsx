@@ -16,6 +16,7 @@ import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { AppContext } from '../../app.jsx'
 import { t } from '../../theme.js'
+import { sanitize } from '../../utils.js'
 
 const MERGE_OPTIONS = [
   { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
@@ -65,7 +66,7 @@ function buildContentRows(pr, checks, protection, cols) {
         <Box key="labels" paddingX={1} gap={1}>
           {pr.labels.map(l => (
             <Box key={l.name} paddingX={1} borderStyle="round" borderColor={`#${l.color}`}>
-              <Text color={`#${l.color}`}>{l.name}</Text>
+              <Text color={`#${l.color}`}>{sanitize(l.name)}</Text>
             </Box>
           ))}
         </Box>
@@ -190,12 +191,13 @@ function buildContentRows(pr, checks, protection, cols) {
     const rawLines = pr.body.split('\n')
     let lineIdx = 0
     for (const raw of rawLines) {
-      if (raw.length === 0) {
+      const cleanRaw = sanitize(raw)
+      if (cleanRaw.length === 0) {
         push(`body-${lineIdx++}`, <Box key={`body-${lineIdx}`} />)
         continue
       }
       // word-wrap long lines
-      let rem = raw
+      let rem = cleanRaw
       while (rem.length > bodyWidth) {
         const chunk = rem.slice(0, bodyWidth)
         push(`body-${lineIdx++}`, (
@@ -375,7 +377,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
         <Box gap={1}>
           <Text color={badge.color} bold>{badge.icon}</Text>
           <Text color={t.ui.dim}>#{pr.number}</Text>
-          <Text bold color={t.ui.selected} wrap="truncate">{pr.title}</Text>
+          <Text bold color={t.ui.selected} wrap="truncate">{sanitize(pr.title)}</Text>
         </Box>
         <Box gap={1}>
           <Text color={t.ui.muted}>{pr.author?.login}</Text>

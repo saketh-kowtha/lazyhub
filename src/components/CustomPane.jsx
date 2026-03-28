@@ -38,14 +38,21 @@ import { format } from 'timeago.js'
 import { FuzzySearch } from './dialogs/FuzzySearch.jsx'
 import { AppContext } from '../app.jsx'
 import { t } from '../theme.js'
+import { sanitize } from '../utils.js'
 
-// Resolve {repo}, {owner}, {name} placeholders in a command string
-function resolveCommand(cmd, repo) {
+// Resolve {repo}, {owner}, {name} placeholders in a command string and return as array for execa
+function resolveCommandArgs(cmd, repo) {
   const [owner = '', name = ''] = (repo || '').split('/')
-  return cmd
-    .replace(/\{repo\}/g, repo || '')
-    .replace(/\{owner\}/g, owner)
-    .replace(/\{name\}/g, name)
+  // This is a simple tokenizer that handles some basic shell-like behavior
+  // but prioritize safety by passing args directly to execa.
+  // It splits by whitespace but allows spaces if we had a more complex parser.
+  // For now, we split by space and replace placeholders in each part.
+  return cmd.split(/\s+/).map(part => {
+    return part
+      .replace(/\{repo\}/g, repo || '')
+      .replace(/\{owner\}/g, owner)
+      .replace(/\{name\}/g, name)
+  })
 }
 
 function stateColor(state) {
@@ -81,9 +88,10 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
     setLoading(true)
     setError(null)
     try {
-      const cmd = resolveCommand(paneDef.command, repo)
+      const args = resolveCommandArgs(paneDef.command, repo)
       const { execa } = await import('execa')
-      const result = await execa('sh', ['-c', cmd], { reject: false })
+      const [bin, ...rest] = args
+      const result = await execa(bin, rest, { reject: false })
       if (result.exitCode !== 0) {
         throw new Error(result.stderr?.split('\n')[0] || 'Command failed')
       }
@@ -228,7 +236,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
         <Box paddingX={2} paddingY={1} flexDirection="column">
           <Text color={t.ci.fail}>⚠ Command failed — [r] retry</Text>
           <Text color={t.ui.dim}>{error}</Text>
-          <Text color={t.ui.dim} dimColor>$ {resolveCommand(paneDef.command, repo)}</Text>
+          <Text color={t.ui.dim} dimColor>$ {resolveCommandArgs(paneDef.command, repo).join(' ')}</Text>
         </Box>
       )}
 
@@ -244,8 +252,9 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
         const idx = scrollOffset + i
         const isSelected = idx === cursor
         const numStr  = item.number != null ? String(item.number).padEnd(5) : '     '
-        const state   = item.state || ''
-        const title   = item.title || item.name || item.description || JSON.stringify(item).slice(0, 60)
+        const state   = sanitize(item.state || '')
+        const title   = sanitize(item.title || item.name || item.description || JSON.stringify(item).slice(0, 60))
+        const author  = sanitize(item.author || '')
         const timeStr = item.updatedAt ? format(item.updatedAt) : ''
 
         return (
@@ -255,7 +264,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
             <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
               {title}
             </Text>
-            {item.author && <Text color={t.ui.muted}> {String(item.author).slice(0, 12).padEnd(12)}</Text>}
+            {author && <Text color={t.ui.muted}> {author.slice(0, 12).padEnd(12)}</Text>}
             <Text color={t.ui.dim}> {timeStr}</Text>
           </Box>
         )

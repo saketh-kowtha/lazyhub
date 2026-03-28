@@ -231,53 +231,56 @@ function HelpOverlay({ pane, view, onClose }) {
     : `${view.charAt(0).toUpperCase()}${view.slice(1)} view`
 
   return (
-    <Box flexDirection="column" paddingX={1} paddingY={1}>
+    <Box flexDirection="column" paddingX={2} paddingY={1} borderStyle="round" borderColor={t.ui.selected}>
       {/* ── Header ── */}
-      <Box marginBottom={1} gap={2}>
-        <Text color={t.ui.selected} bold>⌨  Keyboard Reference</Text>
-        <Text color={t.ui.dim}>— {contextLabel}</Text>
-        <Text color={t.ui.dim}> [Esc / ? / Enter] close</Text>
+      <Box marginBottom={1} justifyContent="space-between">
+        <Box gap={1}>
+          <Text color={t.ui.selected} bold>⌨  Keyboard Reference</Text>
+          <Text color={t.ui.dim}>— {contextLabel}</Text>
+        </Box>
+        <Text color={t.ui.dim}>[Esc/Enter/?] close</Text>
       </Box>
 
       <Box flexDirection="row" gap={4}>
         {/* Context-specific keys */}
-        <Box flexDirection="column" minWidth={42}>
-          <Box paddingX={1} marginBottom={0}>
+        <Box flexDirection="column" width={40}>
+          <Box marginBottom={0} borderStyle="single" borderTop={false} borderLeft={false} borderRight={false} borderBottom={true} borderColor={t.ui.dim}>
             <Text color={t.ui.muted} bold>{contextLabel}</Text>
           </Box>
-          {contextKeys.map(k => (
-            <Box key={k.key}>
-              <Text color={t.ui.selected}>{k.key.padEnd(18)}</Text>
-              <Text color={t.ui.muted}>{k.label}</Text>
-            </Box>
-          ))}
+          <Box flexDirection="column" marginTop={1}>
+            {contextKeys.length > 0 ? contextKeys.map(k => (
+              <Box key={k.key} gap={2}>
+                <Text color={t.ui.selected} bold width={18}>{k.key}</Text>
+                <Text color={t.ui.muted}>{k.label}</Text>
+              </Box>
+            )) : <Text color={t.ui.dim}>No specific keys</Text>}
+          </Box>
         </Box>
 
         {/* Global keys */}
-        <Box flexDirection="column" minWidth={38}>
-          <Box paddingX={1} marginBottom={0}>
+        <Box flexDirection="column" width={38}>
+          <Box marginBottom={0} borderStyle="single" borderTop={false} borderLeft={false} borderRight={false} borderBottom={true} borderColor={t.ui.dim}>
             <Text color={t.ui.muted} bold>Global (any view)</Text>
           </Box>
-          {GLOBAL_KEYS.map(k => (
-            <Box key={k.key}>
-              <Text color={t.ui.selected}>{k.key.padEnd(18)}</Text>
-              <Text color={t.ui.muted}>{k.label}</Text>
-            </Box>
-          ))}
+          <Box flexDirection="column" marginTop={1}>
+            {GLOBAL_KEYS.map(k => (
+              <Box key={k.key} gap={2}>
+                <Text color={t.ui.selected} bold width={18}>{k.key}</Text>
+                <Text color={t.ui.muted}>{k.label}</Text>
+              </Box>
+            ))}
+          </Box>
         </Box>
       </Box>
 
       {/* ── Config + docs hint ── */}
-      <Box marginTop={1} flexDirection="column">
+      <Box marginTop={1} flexDirection="column" paddingTop={1} borderStyle="single" borderBottom={false} borderLeft={false} borderRight={false} borderColor={t.ui.border}>
         <Box gap={1}>
           <Text color={t.ui.dim}>Config:</Text>
           <Text color={t.ui.selected}>~/.config/lazyhub/config.json</Text>
-          <Text color={t.ui.dim}>  Docs:</Text>
-          <Text color={t.ui.selected}>https://saketh-kowtha.github.io/lgh/guide.html</Text>
-        </Box>
-        <Box gap={1} marginTop={0}>
-          <Text color={t.ui.dim}>Keybindings ref:</Text>
-          <Text color={t.ui.selected}>https://saketh-kowtha.github.io/lgh/keybindings.html</Text>
+          <Box flexGrow={1} />
+          <Text color={t.ui.dim}>Docs:</Text>
+          <Text color={t.ui.selected}>https://saketh-kowtha.github.io/lgh</Text>
         </Box>
       </Box>
     </Box>
@@ -469,13 +472,10 @@ export function App({ repo }) {
                 height={rows - 2}
               />
             )}
-            <Box flexDirection="column" flexGrow={1} overflow="hidden"
+          <Box flexDirection="column" flexGrow={1} overflow="hidden"
               justifyContent="center" alignItems="center">
-              <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected}
-                paddingX={2} paddingY={1}>
-                <HelpOverlay pane={pane} view={view} onClose={() => setShowHelp(false)} />
-              </Box>
-            </Box>
+            <HelpOverlay pane={pane} view={view} onClose={() => setShowHelp(false)} />
+          </Box>
           </Box>
           <StatusBar repo={repo} pane={pane} count={paneState.count} />
           <FooterKeys keys={[{ key: '? / Esc / Enter', label: 'close help' }]} />

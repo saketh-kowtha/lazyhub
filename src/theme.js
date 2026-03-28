@@ -25,6 +25,7 @@ import githubLight     from './themes/github-light.js'
 import catppuccinMocha from './themes/catppuccin-mocha.js'
 import catppuccinLatte from './themes/catppuccin-latte.js'
 import tokyoNight      from './themes/tokyo-night.js'
+import ansi16          from './themes/ansi-16.js'
 
 export const BUILTIN_THEMES = {
   'github-dark':      githubDark,
@@ -32,6 +33,7 @@ export const BUILTIN_THEMES = {
   'catppuccin-mocha': catppuccinMocha,
   'catppuccin-latte': catppuccinLatte,
   'tokyo-night':      tokyoNight,
+  'ansi-16':          ansi16,
 }
 
 export const THEME_NAMES = Object.keys(BUILTIN_THEMES)

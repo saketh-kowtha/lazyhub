@@ -28,6 +28,7 @@ import { NewPRDialog } from './NewPRDialog.jsx'
 import { AppContext } from '../../app.jsx'
 import { loadConfig } from '../../config.js'
 import { t } from '../../theme.js'
+import { sanitize } from '../../utils.js'
 
 const _cfg = loadConfig().pr
 
@@ -462,7 +463,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
               wrap="truncate"
               flexGrow={1}
             >
-              {pr.title}
+              {sanitize(pr.title)}
             </Text>
             {ci
               ? <Text color={ci.color}> {ci.icon}</Text>

@@ -52,11 +52,11 @@ export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['t
       if (filtered[cursor]) onSubmit(filtered[cursor])
       return
     }
-    if (key.upArrow || (key.ctrl && input === 'k')) {
+    if (key.upArrow || (key.ctrl && input === 'k') || input === 'k') {
       setCursor(c => Math.max(0, c - 1))
       return
     }
-    if (key.downArrow || (key.ctrl && input === 'j')) {
+    if (key.downArrow || (key.ctrl && input === 'j') || input === 'j') {
       setCursor(c => Math.min(filtered.length - 1, c + 1))
       return
     }

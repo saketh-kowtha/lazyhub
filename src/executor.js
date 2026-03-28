@@ -52,14 +52,15 @@ export async function run(args) {
     } else if (result.exitCode === 404 || stderr.includes('not found') || stderr.includes('Could not resolve')) {
       message = 'Resource not found'
     } else if (stderr) {
-      message = stderr.split('\n')[0].trim()
+      // Basic sanitization of stderr to prevent leaking potentially sensitive data in error messages
+      message = stderr.split('\n')[0].trim().replace(/[a-zA-Z0-9_-]{20,}/g, '[REDACTED]')
     }
 
     throw new GhError({
       message,
-      stderr,
+      stderr: stderr.replace(/[a-zA-Z0-9_-]{20,}/g, '[REDACTED]'),
       exitCode: result.exitCode,
-      args,
+      args: args.map(arg => typeof arg === 'string' ? arg.replace(/[a-zA-Z0-9_-]{40,}/g, '[REDACTED]') : arg),
     })
   }
 
@@ -193,7 +194,7 @@ export async function createIssue(repo, { title, body, labels = [], assignees = 
     '--repo', getRepo(repo),
     '--title', title,
   ]
-  if (body) args.push('--body', body)
+  args.push('--body', body || '')
   if (labels.length) args.push('--label', labels.join(','))
   if (assignees.length) args.push('--assignee', assignees.join(','))
   if (milestone) args.push('--milestone', milestone)
@@ -260,7 +261,7 @@ export async function removeLabels(repo, number, labels, type = 'issue') {
 export async function listCollaborators(repo) {
   const r = getRepo(repo)
   const args = [
-    'api', `repos/${r}/collaborators`,
+    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/collaborators`,
     '--jq', '[.[] | {login: .login, name: .name}]',
   ]
   return run(args)
@@ -284,8 +285,9 @@ export async function requestReviewers(repo, number, reviewers) {
  * List branches in a repo.
  */
 export async function listBranches(repo) {
+  const r = getRepo(repo)
   const args = [
-    'api', `repos/${getRepo(repo)}/branches`,
+    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches`,
     '--jq', '[.[] | {name: .name, protected: .protected, commit: {sha: .commit.sha}}]',
   ]
   return run(args)
@@ -305,7 +307,7 @@ export async function checkoutBranch(repo, number) {
 export async function deleteBranch(repo, branchName) {
   const r = getRepo(repo)
   const args = [
-    'api', `repos/${r}/git/refs/heads/${branchName}`,
+    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/git/refs/heads/${encodeURIComponent(branchName)}`,
     '--method', 'DELETE',
   ]
   return run(args)
@@ -400,7 +402,7 @@ export async function listNotifications(filter = {}) {
  */
 export async function markNotificationRead(notificationId) {
   const args = [
-    'api', `notifications/threads/${notificationId}`,
+    'api', `notifications/threads/${encodeURIComponent(notificationId)}`,
     '--method', 'PATCH',
   ]
   return run(args)
@@ -438,7 +440,7 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
   const r = getRepo(repo)
   const payload = JSON.stringify({ body, path, line, side, commit_id: commitId })
   const args = [
-    'api', `repos/${r}/pulls/${number}/comments`,
+    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/${encodeURIComponent(number)}/comments`,
     '--method', 'POST',
     '--input', '-',
   ]
@@ -450,10 +452,10 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
 
   if (result.exitCode !== 0) {
     throw new GhError({
-      message: result.stderr?.split('\n')[0] || 'Failed to add line comment',
-      stderr: result.stderr || '',
+      message: (result.stderr?.split('\n')[0] || 'Failed to add line comment').replace(/[a-zA-Z0-9_-]{20,}/g, '[REDACTED]'),
+      stderr: (result.stderr || '').replace(/[a-zA-Z0-9_-]{20,}/g, '[REDACTED]'),
       exitCode: result.exitCode,
-      args,
+      args: args.map(arg => typeof arg === 'string' ? arg.replace(/[a-zA-Z0-9_-]{40,}/g, '[REDACTED]') : arg),
     })
   }
   try {
@@ -469,7 +471,7 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
 export async function listPRComments(repo, number) {
   const r = getRepo(repo)
   const args = [
-    'api', `repos/${r}/pulls/${number}/comments`,
+    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/${encodeURIComponent(number)}/comments`,
     '--jq', '[.[] | {id: .id, body: .body, path: .path, line: .line, originalLine: .original_line, side: .side, user: {login: .user.login}, createdAt: .created_at, inReplyToId: .in_reply_to_id, pullRequestReviewId: .pull_request_review_id}]',
   ]
   return run(args)
@@ -480,10 +482,11 @@ export async function listPRComments(repo, number) {
  * Uses the GraphQL API via gh api graphql.
  */
 export async function resolveThread(threadId) {
-  const query = `mutation { resolveReviewThread(input: { threadId: "${threadId}" }) { thread { id isResolved } } }`
+  const query = 'mutation($threadId: ID!) { resolveReviewThread(input: { threadId: $threadId }) { thread { id isResolved } } }'
   const args = [
     'api', 'graphql',
     '-f', `query=${query}`,
+    '-f', `threadId=${threadId}`,
   ]
   return run(args)
 }
@@ -494,7 +497,8 @@ export async function resolveThread(threadId) {
 export async function getRemoteBranch(repo, branch) {
   if (!branch) return null
   try {
-    return await run(['api', `repos/${getRepo(repo)}/branches/${encodeURIComponent(branch)}`])
+    const r = getRepo(repo)
+    return await run(['api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches/${encodeURIComponent(branch)}`])
   } catch {
     return null
   }
@@ -507,7 +511,8 @@ export async function getRemoteBranch(repo, branch) {
 export async function compareBranches(repo, base, head) {
   if (!base || !head) return null
   try {
-    return await run(['api', `repos/${getRepo(repo)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`])
+    const r = getRepo(repo)
+    return await run(['api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`])
   } catch {
     return null
   }
@@ -571,8 +576,8 @@ export async function createPR(repo, { title, body, head, base, draft = false, l
     '--title', title,
     '--head', head,
     '--base', base,
+    '--body', body || '',
   ]
-  if (body) args.push('--body', body)
   if (draft) args.push('--draft')
   if (labels.length) args.push('--label', labels.join(','))
   if (assignees.length) args.push('--assignee', assignees.join(','))
@@ -607,7 +612,7 @@ export async function getPRChecks(repo, number) {
     ])
     if (!pr?.headRefOid) return []
     const checkArgs = [
-      'api', `repos/${r}/commits/${pr.headRefOid}/check-runs`,
+      'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/commits/${encodeURIComponent(pr.headRefOid)}/check-runs`,
       '--jq', '[.check_runs[] | {id: .id, name: .name, status: .status, conclusion: .conclusion, appName: .app.name, url: .html_url}]',
     ]
     return run(checkArgs)
@@ -623,7 +628,7 @@ export async function getBranchProtection(repo, branch) {
   if (!branch) return null
   const r = getRepo(repo)
   const args = [
-    'api', `repos/${r}/branches/${encodeURIComponent(branch)}/protection`,
+    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches/${encodeURIComponent(branch)}/protection`,
     '--jq', '{requiredReviews: (.required_pull_request_reviews.required_approving_review_count // 0), requireCodeOwnerReviews: (.required_pull_request_reviews.require_code_owner_reviews // false), requireStatusChecks: (.required_status_checks != null), requiredChecks: ([(.required_status_checks.contexts // []), (.required_status_checks.checks // [] | map(.context))] | add // [])}',
   ]
   try {
@@ -652,7 +657,7 @@ export async function enableAutoMerge(repo, number, mergeMethod = 'merge') {
 export async function disableAutoMerge(repo, number) {
   const r = getRepo(repo)
   const args = [
-    'api', `repos/${r}/pulls/${number}`,
+    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/${encodeURIComponent(number)}`,
     '--method', 'PATCH',
     '-f', 'auto_merge=',
   ]
