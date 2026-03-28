@@ -11,6 +11,24 @@ const GH_HEADERS = {
   'User-Agent': 'lazyhub-claude-review',
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function ghFetch(path) {
+  const res = await fetch(`https://api.github.com/repos/${REPO}${path}`, { headers: GH_HEADERS })
+  if (!res.ok) return null
+  return res.json()
+}
+
+/** Extract the Issues section text from a Claude review body. */
+function extractIssues(body) {
+  const m = body.match(/###\s*Issues\s*\n([\s\S]*?)(?=\n###\s|\n---\s|\*Reviewed by|$)/i)
+  if (!m) return null
+  const text = m[1].trim()
+  // Skip if it's just "None found."
+  if (/^none found\.?$/i.test(text)) return null
+  return text.slice(0, 600) // cap per-PR to keep total context small
+}
+
 // ── 1. Fetch the PR diff ──────────────────────────────────────────────────────
 
 const diffRes = await fetch(
@@ -36,25 +54,46 @@ const diffContent = truncated
   ? diff.slice(0, MAX_DIFF_CHARS) + '\n\n[...diff truncated at 80 000 chars...]'
   : diff
 
-// ── 2. Fetch previous Claude reviews on this PR (for deduplication) ───────────
+// ── 2. Build previous-issues context (current PR + recent merged PRs) ─────────
 
-let previousReviewContext = ''
+const knownIssues = [] // { pr, title, issues }
+
 try {
-  const reviewsRes = await fetch(
-    `https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}/reviews`,
-    { headers: GH_HEADERS }
-  )
-  if (reviewsRes.ok) {
-    const reviews = await reviewsRes.json()
-    const prior = reviews
-      .filter(r => r.body?.includes('Claude Code Review') || r.body?.includes('Claude Sonnet'))
-      .slice(-2) // last two Claude reviews only
-    if (prior.length > 0) {
-      const summaries = prior.map(r => r.body.slice(0, 1500)).join('\n\n---\n\n')
-      previousReviewContext = `\n\n**Previous Claude reviews on this PR (issues already raised — do NOT repeat them):**\n\n${summaries}\n\n---\n\n`
+  // 2a. All Claude reviews on the current PR
+  const currentReviews = await ghFetch(`/pulls/${PR_NUMBER}/reviews`) || []
+  for (const r of currentReviews) {
+    if (!r.body?.includes('Claude Code Review') && !r.body?.includes('Claude Sonnet')) continue
+    const issues = extractIssues(r.body)
+    if (issues) knownIssues.push({ pr: `#${PR_NUMBER} (this PR)`, issues })
+  }
+
+  // 2b. Last 5 merged PRs into main — cross-PR memory
+  const merged = await ghFetch(`/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=8`) || []
+  const recentMerged = merged
+    .filter(p => p.merged_at && String(p.number) !== String(PR_NUMBER))
+    .slice(0, 5)
+
+  for (const pr of recentMerged) {
+    const reviews = await ghFetch(`/pulls/${pr.number}/reviews`) || []
+    for (const r of reviews) {
+      if (!r.body?.includes('Claude Code Review') && !r.body?.includes('Claude Sonnet')) continue
+      const issues = extractIssues(r.body)
+      if (issues) knownIssues.push({ pr: `#${pr.number} "${pr.title}"`, issues })
     }
   }
-} catch { /* non-fatal */ }
+} catch { /* non-fatal — context is best-effort */ }
+
+let previousContext = ''
+if (knownIssues.length > 0) {
+  const lines = knownIssues.map(e => `**PR ${e.pr}:**\n${e.issues}`).join('\n\n')
+  previousContext = `
+**Issues raised in previous Claude reviews — do NOT repeat any of these; if this diff fixes one, note it as resolved:**
+
+${lines}
+
+---
+`
+}
 
 // ── 3. Call Claude ────────────────────────────────────────────────────────────
 
@@ -67,28 +106,28 @@ const PROMPT = `You are a senior software engineer reviewing a pull request for 
 - No GitHub Enterprise, no mouse support (by design — don't suggest adding them)
 
 **Known-safe patterns — do NOT flag these:**
-- \`execa('gh', args)\` or \`execa(bin, argsArray)\` — array args are never shell-expanded. Not injectable. Do not flag.
+- \`execa('gh', args)\` or \`execa(bin, argsArray)\` — array args are never shell-expanded. Not injectable.
 - \`spawnSync(bin, argsArray)\` — same: array call, no shell involved. Not injectable.
 - \`gh api --raw-field key=value\` or \`-F key=value\` — gh CLI handles these as typed arguments, not shell strings.
 - \`useEffect\` cleanup \`return () => fn()\` re-running on dependency changes — correct React behavior, not a bug.
 - Single-thread selection when multiple threads share a line — known UX limitation, not a bug.
 - \`JSON.parse\` on \`gh\` CLI output — \`gh\` is a trusted local process, not a remote attacker.
-- Hard-coded pagination limits (e.g. \`first: 100\`) — acceptable limitations worth a TODO comment at most, never a bug.
+- Hard-coded pagination limits (e.g. \`first: 100\`) — acceptable limitations, not bugs.
 
 **Strict criteria for the Issues section:**
 - Only include **confirmed bugs** with a clear, concrete reproduction path.
 - Do NOT include: speculative edge cases, theoretical race conditions, design limitations, style preferences, or "could hypothetically fail" scenarios.
-- Do NOT include issues that are already fixed within the same diff (e.g., a guard was added — don't also flag the unguarded call).
-- Do NOT repeat issues from previous reviews (see below).
-- If an issue was previously raised and a fix is visible in this diff, explicitly note it as resolved.
-${previousReviewContext}
+- Do NOT include issues already fixed within this diff.
+- Do NOT repeat any issue from the previous reviews listed below.
+- If a previous issue is visibly fixed in this diff, note it as "✓ resolved".
+${previousContext}
 **Your review must include:**
 
 ### Summary
 2–3 sentences on what this PR does.
 
 ### Issues
-Concrete, confirmed bugs only. Always include \`file:line\` references. If none, write "None found."
+Confirmed bugs only. Always include \`file:line\` references. If none, write "None found."
 
 ### Suggestions
 Non-trivial improvements only (architectural, correctness, or notable UX). Skip style nits. If none, write "None."
@@ -159,4 +198,4 @@ if (!reviewRes.ok) {
   process.exit(1)
 }
 
-console.log(`✓ Claude review posted (verdict: ${event})`)
+console.log(`✓ Claude review posted (verdict: ${event}, prior issues fed: ${knownIssues.length})`)

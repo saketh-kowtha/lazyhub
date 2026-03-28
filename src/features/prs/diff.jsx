@@ -920,8 +920,9 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         } else if (input === 'd' && lastComment) {
           setCompose({ mode: 'delete', commentId: lastComment.id, commentBody: lastComment.body || '' })
         }
+        return
       }
-      return
+      // No comments on this line — fall through so 'r' reaches the refetch handler below
     }
   })
 
