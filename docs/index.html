@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ghui — lazygit-style GitHub TUI</title>
+  <meta name="description" content="A keyboard-driven terminal UI over the gh CLI. Every GitHub action — PRs, issues, diffs, Actions logs — without leaving your terminal." />
+  <meta property="og:title" content="ghui — lazygit-style GitHub TUI" />
+  <meta property="og:description" content="Every GitHub action without leaving your terminal." />
+  <meta property="og:url" content="https://saketh-kowtha.github.io/lgh" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --border:   #21262d;
+      --green:    #3fb950;
+      --purple:   #a371f7;
+      --blue:     #58a6ff;
+      --orange:   #d29922;
+      --muted:    #8b949e;
+      --text:     #e6edf3;
+      --dim:      #484f58;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      line-height: 1.6;
+    }
+
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── nav ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 2rem;
+      background: rgba(13,17,23,.92);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .logo { font-weight: 700; font-size: 1.1rem; color: var(--text); }
+    nav .logo span { color: var(--green); }
+    nav ul { list-style: none; display: flex; gap: 1.5rem; }
+    nav ul li a { color: var(--muted); font-size: .9rem; }
+    nav ul li a:hover { color: var(--text); text-decoration: none; }
+    .nav-install {
+      background: var(--green);
+      color: #0d1117 !important;
+      padding: .35rem .9rem;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: .85rem !important;
+    }
+    .nav-install:hover { opacity: .88; text-decoration: none !important; }
+
+    /* ── hero ── */
+    .hero {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 5rem 1.5rem 3rem;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 6vw, 3.5rem);
+      font-weight: 800;
+      letter-spacing: -.02em;
+      line-height: 1.15;
+      margin-bottom: 1.2rem;
+    }
+    .hero h1 em { font-style: normal; color: var(--green); }
+    .hero p {
+      font-size: 1.15rem;
+      color: var(--muted);
+      max-width: 600px;
+      margin: 0 auto 2.5rem;
+    }
+    .badges { display: flex; justify-content: center; gap: .6rem; flex-wrap: wrap; margin-bottom: 2.5rem; }
+    .badges img { height: 20px; }
+
+    .install-block {
+      display: inline-flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: .75rem 1.5rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 1rem;
+    }
+    .install-block .cmd { color: var(--green); }
+    .copy-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      padding: .2rem .6rem;
+      border-radius: 5px;
+      font-size: .75rem;
+      transition: color .15s, border-color .15s;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--muted); }
+
+    /* ── terminal demo ── */
+    .demo-wrap {
+      max-width: 860px;
+      margin: 3rem auto;
+      padding: 0 1.5rem;
+    }
+    .terminal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,.6);
+    }
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .65rem 1rem;
+      background: #1c2128;
+      border-bottom: 1px solid var(--border);
+    }
+    .terminal-bar .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-red    { background: #f85149; }
+    .dot-yellow { background: #d29922; }
+    .dot-green  { background: #3fb950; }
+    .terminal-bar .title { margin-left: auto; margin-right: auto; color: var(--muted); font-size: .8rem; font-family: monospace; }
+    pre.screen {
+      margin: 0;
+      padding: 1.25rem 1.5rem;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: .82rem;
+      line-height: 1.55;
+      overflow-x: auto;
+      white-space: pre;
+      color: #c9d1d9;
+    }
+    .g { color: var(--green); }
+    .p { color: var(--purple); }
+    .b { color: var(--blue); }
+    .o { color: var(--orange); }
+    .m { color: var(--muted); }
+    .d { color: var(--dim); }
+    .w { color: #e6edf3; }
+    .sel { background: #162a3f; }
+
+    /* ── features ── */
+    .section {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 4rem 1.5rem;
+    }
+    .section h2 {
+      font-size: 1.7rem;
+      font-weight: 700;
+      margin-bottom: 2.5rem;
+      text-align: center;
+    }
+    .section h2 span { color: var(--green); }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      transition: border-color .2s;
+    }
+    .feature-card:hover { border-color: var(--blue); }
+    .feature-card .icon { font-size: 1.6rem; margin-bottom: .75rem; }
+    .feature-card h3 { font-size: 1rem; font-weight: 600; margin-bottom: .4rem; }
+    .feature-card p { font-size: .88rem; color: var(--muted); }
+
+    /* ── keybindings ── */
+    .keys-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .keys-group h4 {
+      font-size: .8rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin-bottom: .75rem;
+    }
+    .keys-group ul { list-style: none; }
+    .keys-group li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: .3rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: .85rem;
+    }
+    .keys-group li:last-child { border-bottom: none; }
+    kbd {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: .1rem .4rem;
+      font-family: monospace;
+      font-size: .78rem;
+      color: var(--blue);
+    }
+
+    /* ── install section ── */
+    .install-section {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .install-section .section { padding: 3rem 1.5rem; }
+    .install-tabs { display: flex; gap: .5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .tab-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: .4rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: .85rem;
+      transition: all .15s;
+    }
+    .tab-btn.active, .tab-btn:hover {
+      border-color: var(--blue);
+      color: var(--text);
+      background: #162a3f;
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    code.block {
+      display: block;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      font-family: monospace;
+      font-size: .9rem;
+      color: var(--green);
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    /* ── footer ── */
+    footer {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--dim);
+      font-size: .85rem;
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">gh<span>ui</span></span>
+  <ul>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#install">Install</a></li>
+    <li><a href="#keys">Keybindings</a></li>
+    <li><a href="https://github.com/saketh-kowtha/lgh">GitHub</a></li>
+  </ul>
+  <a href="#install" class="nav-install">Install now</a>
+</nav>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <h1>GitHub in your terminal,<br /><em>the way it should be.</em></h1>
+  <p>A lazygit-style TUI over the <code>gh</code> CLI — PRs, issues, diffs, line comments,
+     Actions logs, and more. Keyboard-driven. Zero context switching.</p>
+
+  <div class="badges">
+    <img src="https://github.com/saketh-kowtha/lgh/actions/workflows/ci.yml/badge.svg" alt="CI" />
+    <img src="https://img.shields.io/npm/v/ghui.svg" alt="npm version" />
+    <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node ≥20" />
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT" />
+  </div>
+
+  <div class="install-block">
+    <span class="cmd">npm install -g ghui</span>
+    <button class="copy-btn" onclick="copyInstall(this)">copy</button>
+  </div>
+</section>
+
+<!-- ── TERMINAL DEMO ── -->
+<div class="demo-wrap">
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="dot dot-red"></span>
+      <span class="dot dot-yellow"></span>
+      <span class="dot dot-green"></span>
+      <span class="title">ghui — saketh-kowtha/lgh</span>
+    </div>
+    <pre class="screen">
+<span class="d">┌── Pull Requests ──────┬── #142 fix: memory leak in cache ─────────────────────┐</span>
+<span class="d">│                       │                                                        │</span>
+<span class="d">│  </span><span class="b">⎇  PRs              </span><span class="d"> │  </span><span class="m">Author  </span> <span class="b">saketh-kowtha</span>   <span class="d">2 hours ago             </span><span class="d">  │</span>
+<span class="d">│  </span><span class="m">○  Issues           </span><span class="d"> │  </span><span class="m">Branch  </span> <span class="w">fix/cache-leak → main</span>                      <span class="d">  │</span>
+<span class="d">│  </span><span class="m">⎇  Branches         </span><span class="d"> │  </span><span class="m">Checks  </span> <span class="g">✓ passing</span>                                 <span class="d">  │</span>
+<span class="d">│  </span><span class="m">▶  Actions          </span><span class="d"> │                                                        │</span>
+<span class="d">│  </span><span class="m">●  Notifications    </span><span class="d"> │  </span><span class="m">Description                                         </span><span class="d">  │</span>
+<span class="d">│                       │  </span><span class="w">Fixes unbounded growth of the in-memory TTL cache    </span><span class="d">  │</span>
+<span class="d">│  ─────────────────    │  </span><span class="w">introduced in #138. Adds a size cap + eviction.      </span><span class="d">  │</span>
+<span class="d">│                       │                                                        │</span>
+<span class="sel"><span class="d">│  </span><span class="g">✓</span><span class="w"> #142 fix: memory…</span> <span class="d">│</span></span>                                                        <span class="d">│</span>
+<span class="d">│  </span><span class="b">⎇</span><span class="m"> #141 feat: log-vi… │  ──────────────────────────────────────────────────── </span> <span class="d">│</span>
+<span class="d">│  </span><span class="o">!</span><span class="m"> #140 feat: branch… │  Files changed  </span><span class="w">3</span>   <span class="g">+47</span>  <span class="o">−12</span>                          <span class="d"> │</span>
+<span class="d">│  </span><span class="g">✓</span><span class="m"> #139 chore: bump…  │                                                        │</span>
+<span class="d">│                       │  [</span><span class="b">d</span><span class="d">] diff  [</span><span class="b">a</span><span class="d">] approve  [</span><span class="b">m</span><span class="d">] merge  [</span><span class="b">l</span><span class="d">] labels         │</span>
+<span class="d">│                       │                                                        │</span>
+<span class="d">└───────────────────────┴────────────────────────────────────────────────────────┘</span>
+<span class="m">  saketh-kowtha/lgh   main   </span><span class="g">✓ 3/3 checks</span><span class="m">   Rate limit: 4823/5000</span>
+<span class="d">  Tab panes  j/k nav  Enter detail  d diff  m merge  q back  ? help</span></pre>
+  </div>
+</div>
+
+<!-- ── FEATURES ── -->
+<section class="section" id="features">
+  <h2>Everything GitHub, <span>zero context switching</span></h2>
+  <div class="features">
+    <div class="feature-card">
+      <div class="icon">⎇</div>
+      <h3>Pull Requests</h3>
+      <p>List, review, approve, merge with strategy picker, edit labels and reviewers.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">±</div>
+      <h3>Diff viewer</h3>
+      <p>Syntax-highlighted unified diff with line numbers, file navigation, and inline thread rendering.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">💬</div>
+      <h3>Line comments</h3>
+      <p>Place comments on any diff line. Reply to threads, resolve, request changes — all from the keyboard.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">○</div>
+      <h3>Issues</h3>
+      <p>List, create, close, filter. Labels, assignees, milestones — the full workflow.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">▶</div>
+      <h3>GitHub Actions</h3>
+      <p>Stream logs, re-run failed jobs, cancel runs, filter by step — without opening the browser.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">/</div>
+      <h3>Fuzzy search</h3>
+      <p>Press <kbd>/</kbd> in any pane to instantly filter by title, number, author, label, or branch name.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">●</div>
+      <h3>Notifications</h3>
+      <p>Browse, open, and mark notifications without a browser tab.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">⚡</div>
+      <h3>Smart cache</h3>
+      <p>30s TTL cache on all gh API calls. Press <kbd>r</kbd> to force-refresh any pane.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── INSTALL ── -->
+<section class="install-section" id="install">
+  <div class="section">
+    <h2>Get started in <span>30 seconds</span></h2>
+
+    <div class="install-tabs">
+      <button class="tab-btn active" onclick="switchTab(this,'npm')">npm</button>
+      <button class="tab-btn" onclick="switchTab(this,'npx')">npx</button>
+      <button class="tab-btn" onclick="switchTab(this,'source')">from source</button>
+    </div>
+
+    <div id="tab-npm" class="tab-panel active">
+      <code class="block">npm install -g ghui
+ghui</code>
+    </div>
+    <div id="tab-npx" class="tab-panel">
+      <code class="block"># No install — runs directly
+npx ghui</code>
+    </div>
+    <div id="tab-source" class="tab-panel">
+      <code class="block">git clone https://github.com/saketh-kowtha/lgh
+cd lgh
+npm install
+npm run build
+node dist/ghui.js</code>
+    </div>
+
+    <p style="margin-top:1.5rem;color:var(--muted);font-size:.9rem;">
+      Requires <a href="https://nodejs.org">Node.js ≥ 20</a> and the
+      <a href="https://cli.github.com">GitHub CLI (<code>gh</code>)</a>.
+      ghui will detect missing dependencies and print platform-specific install instructions.
+    </p>
+  </div>
+</section>
+
+<!-- ── KEYBINDINGS ── -->
+<section class="section" id="keys">
+  <h2>Built for <span>keyboard warriors</span></h2>
+  <div class="keys-grid">
+    <div class="keys-group">
+      <h4>Global</h4>
+      <ul>
+        <li><span>Cycle panes</span><kbd>Tab</kbd></li>
+        <li><span>Navigate</span><kbd>j / k</kbd></li>
+        <li><span>Open detail</span><kbd>Enter</kbd></li>
+        <li><span>Fuzzy search</span><kbd>/</kbd></li>
+        <li><span>Refresh</span><kbd>r</kbd></li>
+        <li><span>Open in browser</span><kbd>o</kbd></li>
+        <li><span>Help overlay</span><kbd>?</kbd></li>
+        <li><span>Back / quit</span><kbd>q</kbd></li>
+      </ul>
+    </div>
+    <div class="keys-group">
+      <h4>Pull Requests</h4>
+      <ul>
+        <li><span>Diff view</span><kbd>d</kbd></li>
+        <li><span>Merge</span><kbd>m</kbd></li>
+        <li><span>Approve</span><kbd>a</kbd></li>
+        <li><span>Checkout branch</span><kbd>c</kbd></li>
+        <li><span>Edit labels</span><kbd>l</kbd></li>
+        <li><span>Edit assignees</span><kbd>A</kbd></li>
+        <li><span>Request reviewers</span><kbd>rv</kbd></li>
+      </ul>
+    </div>
+    <div class="keys-group">
+      <h4>Diff View</h4>
+      <ul>
+        <li><span>Scroll</span><kbd>j / k</kbd></li>
+        <li><span>Prev / next file</span><kbd>[ / ]</kbd></li>
+        <li><span>Comment on line</span><kbd>c</kbd></li>
+        <li><span>Prev / next thread</span><kbd>n / N</kbd></li>
+        <li><span>All comments</span><kbd>v</kbd></li>
+        <li><span>Toggle split</span><kbd>s</kbd></li>
+      </ul>
+    </div>
+    <div class="keys-group">
+      <h4>Actions</h4>
+      <ul>
+        <li><span>View logs</span><kbd>l</kbd></li>
+        <li><span>Re-run failed</span><kbd>R</kbd></li>
+        <li><span>Cancel run</span><kbd>X</kbd></li>
+        <li><span>Scroll logs</span><kbd>j / k</kbd></li>
+        <li><span>Top / bottom</span><kbd>gg / G</kbd></li>
+        <li><span>Filter step</span><kbd>f</kbd></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>
+    Built with <a href="https://github.com/vadimdemedes/ink">Ink</a> + React 18 ·
+    <a href="https://github.com/saketh-kowtha/lgh">GitHub</a> ·
+    <a href="https://github.com/saketh-kowtha/lgh/issues">Issues</a> ·
+    <a href="https://github.com/saketh-kowtha/lgh/blob/main/LICENSE">MIT License</a>
+  </p>
+  <p style="margin-top:.5rem;color:var(--dim);">© 2026 saketh-kowtha</p>
+</footer>
+
+<script>
+  function copyInstall(btn) {
+    navigator.clipboard.writeText('npm install -g ghui').then(() => {
+      btn.textContent = 'copied!';
+      setTimeout(() => btn.textContent = 'copy', 1800);
+    });
+  }
+
+  function switchTab(btn, id) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + id).classList.add('active');
+  }
+</script>
+</body>
+</html>
