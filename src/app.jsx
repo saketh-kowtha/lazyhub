@@ -431,6 +431,17 @@ export function App({ repo }) {
       return
     }
 
+    // 1–9: jump directly to pane by position
+    const numKey = parseInt(input, 10)
+    if (!isNaN(numKey) && numKey >= 1 && numKey <= PANES.length) {
+      const target = PANES[numKey - 1]
+      if (target && target !== pane) {
+        setPane(target)
+        setHoveredItem(null); setSelectedItem(null); setView('list')
+      }
+      return
+    }
+
     if (input === 'q' || key.escape) {
       if (showHelp)           { setShowHelp(false); return }
       if (view === 'comments'){ setView('diff'); return }
@@ -588,8 +599,8 @@ export function App({ repo }) {
 
   return (
     <AppContext.Provider value={appCtx}>
-      <Box flexDirection="column">
-        <Box flexDirection="row">
+      <Box flexDirection="column" height={rows} overflow="hidden">
+        <Box flexDirection="row" flexGrow={1} overflow="hidden">
           {showSidebar && (
             <Sidebar currentPane={pane} visiblePanes={PANES}
               paneLabels={PANE_LABELS} paneIcons={PANE_ICONS}
@@ -598,9 +609,11 @@ export function App({ repo }) {
             />
           )}
 
-          <Box flexDirection="column" flexGrow={1} borderStyle="single" borderColor={t.ui.selected}>
+          <Box flexDirection="column" flexGrow={1} overflow="hidden" borderStyle="single" borderColor={t.ui.selected}>
             <PaneHeader pane={pane} count={paneState.count} loading={paneState.loading} error={paneState.error} />
-            {renderListPane()}
+            <Box flexGrow={1} flexDirection="column" overflow="hidden">
+              {renderListPane()}
+            </Box>
           </Box>
 
           {showDetailPanel && (

@@ -178,9 +178,15 @@ function flattenFiles(files) {
 }
 
 // ─── Diff line renderer ───────────────────────────────────────────────────────
-// Gutter format:  oldLn(4) newLn(4) sign(2) code
+// Gutter: cursor(1) oldLn(4) newLn(4) sign(2) code
+//
+// cursor is a dedicated leading column — always visible regardless of the
+// per-character bg colors already applied to the rest of the line.
+// chalk.bgHex(cursorBg)(fullLine) doesn't work on lines that already carry
+// per-character chalk bg colors, so we use a ▶ prefix instead.
 
 function renderDiffLine(row, isSelected, langCache) {
+  const cur       = isSelected ? chalk.bgHex(t.diff.cursorBg).hex('#ffffff').bold('▶') : ' '
   const gutterOld = row.oldLine != null ? String(row.oldLine).padStart(4) : '    '
   const gutterNew = row.newLine != null ? String(row.newLine).padStart(4) : '    '
 
@@ -190,37 +196,37 @@ function renderDiffLine(row, isSelected, langCache) {
       chalk.hex(t.ci.pass)(`+${row.addCount}`) +
       chalk.hex(t.syntax.default)(' / ') +
       chalk.hex(t.ci.fail)(`-${row.delCount}`)
-    return isSelected ? chalk.bgHex(t.diff.cursorBg)(line) : line
+    return cur + line
   }
 
   if (row.type === 'hunk') {
-    const line = chalk.bgHex(t.diff.hunkBg).hex(t.diff.hunkFg)(
+    return cur + chalk.bgHex(t.diff.hunkBg).hex(t.diff.hunkFg)(
       `${gutterOld}${gutterNew}   ${row.text}`
     )
-    return isSelected ? chalk.bgHex(t.diff.cursorBg)(line) : line
   }
 
   const lang = langCache.get(row.filename)
 
   if (row.type === 'add') {
-    const gutter = chalk.bgHex(t.diff.addBg).hex(t.diff.addSign)(`${gutterOld}${gutterNew} + `)
-    const code   = syntaxHighlight(row.text, lang, t.diff.addBg)
-    const line   = gutter + code
-    return isSelected ? chalk.bgHex(t.diff.cursorBg)(line) : line
+    const signFg = isSelected ? '#ffffff' : t.diff.addSign
+    const sign   = isSelected ? '▶' : '+'
+    const gutter = chalk.bgHex(t.diff.addBg).hex(signFg)(`${gutterOld}${gutterNew} ${sign} `)
+    return cur + gutter + syntaxHighlight(row.text, lang, t.diff.addBg)
   }
 
   if (row.type === 'del') {
-    const gutter = chalk.bgHex(t.diff.delBg).hex(t.diff.delSign)(`${gutterOld}${gutterNew} - `)
-    const code   = syntaxHighlight(row.text, lang, t.diff.delBg)
-    const line   = gutter + code
-    return isSelected ? chalk.bgHex(t.diff.cursorBg)(line) : line
+    const signFg = isSelected ? '#ffffff' : t.diff.delSign
+    const sign   = isSelected ? '▶' : '-'
+    const gutter = chalk.bgHex(t.diff.delBg).hex(signFg)(`${gutterOld}${gutterNew} ${sign} `)
+    return cur + gutter + syntaxHighlight(row.text, lang, t.diff.delBg)
   }
 
-  // ctx — no background, full syntax highlight
-  const gutter = chalk.hex(t.ui.dim)(`${gutterOld}${gutterNew}   `)
-  const code   = syntaxHighlight(row.text, lang, null)
-  const line   = gutter + code
-  return isSelected ? chalk.bgHex(t.diff.cursorBg)(line) : line
+  // ctx — highlight the full gutter+code with cursor bg when selected
+  const bgGutter = isSelected
+    ? chalk.bgHex(t.diff.cursorBg).hex(t.ui.selected)(`${gutterOld}${gutterNew}   `)
+    : chalk.hex(t.ui.dim)(`${gutterOld}${gutterNew}   `)
+  const code = syntaxHighlight(row.text, lang, isSelected ? t.diff.cursorBg : null)
+  return cur + bgGutter + code
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────

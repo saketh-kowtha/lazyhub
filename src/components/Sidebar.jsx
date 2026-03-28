@@ -74,11 +74,8 @@ export function Sidebar({ currentPane, onSelect, height, visiblePanes, paneLabel
       })}
 
       <Box flexGrow={1} />
-      <Box paddingX={1}>
-        <Text color={t.ui.dim}>{separator}</Text>
-      </Box>
-      <Box paddingX={1} paddingBottom={0}>
-        <Text color={t.ui.dim}>[Tab] switch</Text>
+      <Box borderStyle="single" borderColor={t.ui.border} borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} paddingX={1}>
+        <Text color={t.ui.dim}>[Tab]/[1-9]</Text>
       </Box>
     </Box>
   )
