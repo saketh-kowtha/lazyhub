@@ -7,7 +7,7 @@ To install lazyhub via Homebrew, the tap repo `saketh-kowtha/homebrew-tap` must 
 ```ruby
 class Ghui < Formula
   desc "A lazygit-style GitHub TUI — every GitHub action without leaving your terminal"
-  homepage "https://saketh-kowtha.github.io/lgh"
+  homepage "https://saketh-kowtha.github.io/lazyhub"
   url "https://registry.npmjs.org/lazyhub/-/lazyhub-0.1.0.tgz"
   sha256 "REPLACE_WITH_ACTUAL_SHA256"
   license "MIT"

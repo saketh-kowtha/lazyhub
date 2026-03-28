@@ -39,11 +39,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/saketh-kowtha/lgh.git"
+    "url": "git+https://github.com/saketh-kowtha/lazyhub.git"
   },
-  "homepage": "https://saketh-kowtha.github.io/lgh",
+  "homepage": "https://saketh-kowtha.github.io/lazyhub",
   "bugs": {
-    "url": "https://github.com/saketh-kowtha/lgh/issues"
+    "url": "https://github.com/saketh-kowtha/lazyhub/issues"
   },
   "dependencies": {
     "chalk": "^5.3.0",

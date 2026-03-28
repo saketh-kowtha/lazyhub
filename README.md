@@ -2,7 +2,7 @@
 
 > A **lazygit-style** GitHub TUI — every GitHub action available without leaving your terminal.
 
-[![CI](https://github.com/saketh-kowtha/lgh/actions/workflows/ci.yml/badge.svg)](https://github.com/saketh-kowtha/lgh/actions/workflows/ci.yml)
+[![CI](https://github.com/saketh-kowtha/lazyhub/actions/workflows/ci.yml/badge.svg)](https://github.com/saketh-kowtha/lazyhub/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/lazyhub.svg)](https://www.npmjs.com/package/lazyhub)
 [![Node.js ≥20](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -24,7 +24,7 @@
 │  ✓ #139 chore: bump…  │  [d] diff  [a] approve  [m] merge  [l] labels        │
 │                       │                                                       │
 └───────────────────────┴───────────────────────────────────────────────────────┘
-  saketh-kowtha/lgh   main   ✓ 3/3 checks   Rate limit: 4823/5000
+  saketh-kowtha/lazyhub   main   ✓ 3/3 checks   Rate limit: 4823/5000
   Tab panes  j/k nav  Enter detail  d diff  m merge  q back  ? help
 ```
 
@@ -328,8 +328,8 @@ lazyhub/
 ## Development
 
 ```bash
-git clone https://github.com/saketh-kowtha/lgh
-cd lgh
+git clone https://github.com/saketh-kowtha/lazyhub
+cd lazyhub
 npm install
 npm run dev      # watch mode: rebuilds + restarts on save
 npm test         # vitest
@@ -340,7 +340,7 @@ npm run lint     # eslint
 
 ## Roadmap
 
-See the [project board](https://github.com/users/saketh-kowtha/projects) and [open issues](https://github.com/saketh-kowtha/lgh/issues) for what's planned next.
+See the [project board](https://github.com/users/saketh-kowtha/projects) and [open issues](https://github.com/saketh-kowtha/lazyhub/issues) for what's planned next.
 
 Highlights coming up:
 - Homebrew tap
