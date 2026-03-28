@@ -25,7 +25,7 @@ import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { NewPRDialog } from './NewPRDialog.jsx'
-import { AppContext } from '../../app.jsx'
+import { AppContext } from '../../context.js'
 import { loadConfig } from '../../config.js'
 import { t } from '../../theme.js'
 
@@ -352,7 +352,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
     return (
       <FormCompose
         title={`Approve PR #${selectedPR.number}`}
-        fields={[{ name: 'body', label: 'Optional comment (Ctrl+Enter to submit, leave empty to skip)', type: 'text' }]}
+        fields={[{ name: 'body', label: 'Optional comment (Ctrl+G to submit, leave empty to skip)', type: 'text' }]}
         onSubmit={async (values) => {
           closeDialog()
           try {

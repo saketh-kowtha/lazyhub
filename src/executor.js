@@ -111,7 +111,7 @@ export async function getPR(repo, number) {
   const args = [
     'pr', 'view', String(number),
     '--repo', getRepo(repo),
-    '--json', 'number,title,state,author,body,labels,reviewRequests,reviews,statusCheckRollup,updatedAt,isDraft,headRefName,baseRefName,assignees,files,additions,deletions,changedFiles,mergeStateStatus,mergeable,url',
+    '--json', 'number,title,state,author,body,labels,reviewRequests,reviews,statusCheckRollup,updatedAt,isDraft,headRefName,baseRefName,headRefOid,assignees,files,additions,deletions,changedFiles,mergeStateStatus,mergeable,autoMergeRequest,url',
   ]
   return run(args)
 }
@@ -466,11 +466,113 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
 /**
  * List review comments on a PR.
  */
+const REPO_PART_RE = /^[a-zA-Z0-9._-]+$/
+
 export async function listPRComments(repo, number) {
   const r = getRepo(repo)
+  const [owner, name] = r.split('/')
+  if (!REPO_PART_RE.test(owner) || !REPO_PART_RE.test(name)) {
+    throw new GhError({ message: `Invalid repository format: ${r}`, stderr: '', exitCode: 1, args: [] })
+  }
+  // Use GraphQL so we can get the ReviewThread node ID (needed for resolveReviewThread mutation)
+  const query = `
+    query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100) {
+            nodes {
+              id
+              isResolved
+              comments(first: 50) {
+                nodes {
+                  databaseId
+                  body
+                  path
+                  line
+                  originalLine
+                  diffSide
+                  author { login }
+                  createdAt
+                  replyTo { databaseId }
+                  pullRequestReview { databaseId }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `
+  const result = await run([
+    'api', 'graphql',
+    '-F', `owner=${owner}`,
+    '-F', `name=${name}`,
+    '-F', `number=${number}`,
+    '-f', `query=${query}`,
+  ])
+  const threads = result?.data?.repository?.pullRequest?.reviewThreads?.nodes || []
+  return threads.flatMap(thread =>
+    thread.comments.nodes.map(c => ({
+      id: c.databaseId,
+      body: c.body,
+      path: c.path,
+      line: c.line,
+      originalLine: c.originalLine,
+      side: c.diffSide,
+      user: { login: c.author?.login },
+      createdAt: c.createdAt,
+      inReplyToId: c.replyTo?.databaseId || null,
+      pullRequestReviewId: c.pullRequestReview?.databaseId || null,
+      threadId: thread.id,
+      threadResolved: thread.isResolved,
+    }))
+  )
+}
+
+/**
+ * Reply to an existing PR review comment thread.
+ * Uses the dedicated replies endpoint — no path/line/commitId needed.
+ */
+export async function replyToComment(repo, prNumber, commentId, body) {
+  const r = getRepo(repo)
+  if (!Number.isInteger(Number(commentId)) || Number(commentId) <= 0) {
+    throw new Error(`Invalid comment ID: ${commentId}`)
+  }
   const args = [
-    'api', `repos/${r}/pulls/${number}/comments`,
-    '--jq', '[.[] | {id: .id, body: .body, path: .path, line: .line, originalLine: .original_line, side: .side, user: {login: .user.login}, createdAt: .created_at, inReplyToId: .in_reply_to_id, pullRequestReviewId: .pull_request_review_id}]',
+    'api', `repos/${r}/pulls/${prNumber}/comments/${commentId}/replies`,
+    '--method', 'POST',
+    '--raw-field', `body=${body}`,
+  ]
+  return run(args)
+}
+
+/**
+ * Edit (update) a PR review comment body.
+ */
+export async function editPRComment(repo, commentId, body) {
+  const r = getRepo(repo)
+  if (!Number.isInteger(Number(commentId)) || Number(commentId) <= 0) {
+    throw new Error(`Invalid comment ID: ${commentId}`)
+  }
+  const args = [
+    'api', `repos/${r}/pulls/comments/${commentId}`,
+    '--method', 'PATCH',
+    '--raw-field', `body=${body}`,
+  ]
+  return run(args)
+}
+
+/**
+ * Delete a PR review comment.
+ */
+export async function deletePRComment(repo, commentId) {
+  const r = getRepo(repo)
+  if (!Number.isInteger(Number(commentId)) || Number(commentId) <= 0) {
+    throw new Error(`Invalid comment ID: ${commentId}`)
+  }
+  const args = [
+    'api', `repos/${r}/pulls/comments/${commentId}`,
+    '--method', 'DELETE',
   ]
   return run(args)
 }

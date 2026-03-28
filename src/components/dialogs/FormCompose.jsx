@@ -7,7 +7,7 @@
 import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { spawnSync } from 'child_process'
-import { writeFileSync, readFileSync, unlinkSync } from 'fs'
+import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { t } from '../../theme.js'
@@ -21,17 +21,21 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
   })
 
   const openEditor = useCallback((fieldName) => {
-    const editor = process.env.EDITOR || process.env.VISUAL || 'vi'
-    const tmpFile = join(tmpdir(), `lazyhub-compose-${Date.now()}.md`)
-    writeFileSync(tmpFile, values[fieldName] || '')
-    spawnSync(editor, [tmpFile], { stdio: 'inherit' })
+    const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
+    if (!raw || /[\0\n\r]/.test(raw)) return
+    const [editorBin, ...editorArgs] = raw.split(/\s+/).filter(Boolean)
+    let tmpDir
     try {
+      tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
+      const tmpFile = join(tmpDir, 'compose.md')
+      writeFileSync(tmpFile, values[fieldName] || '', { mode: 0o600 })
+      const result = spawnSync(editorBin, [...editorArgs, tmpFile], { stdio: 'inherit' })
+      if (result.status !== 0) return
       const content = readFileSync(tmpFile, 'utf8')
       setValues(prev => ({ ...prev, [fieldName]: content }))
-      unlinkSync(tmpFile)
     } catch {
       // ignore
-    }
+    } finally { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) } catch {} }
   }, [values])
 
   useInput((input, key) => {
@@ -46,7 +50,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
       return
     }
 
-    if (key.return && key.ctrl) {
+    if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) {
       onSubmit(values)
       return
     }
@@ -101,7 +105,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
                       {isActive ? '' : 'Press e to open editor'}
                     </Text>
                   )}
-                  {isActive && <Text color={t.ui.dim}>[e] open editor  [Ctrl+Enter] submit</Text>}
+                  {isActive && <Text color={t.ui.dim}>[e] open editor  [Ctrl+G] submit</Text>}
                 </Box>
               ) : (
                 <Box>
@@ -114,7 +118,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
         )
       })}
       <Box marginTop={1}>
-        <Text color={t.ui.dim}>[Tab] next field  [Ctrl+Enter] submit  [Esc] cancel</Text>
+        <Text color={t.ui.dim}>[Tab] next field  [Ctrl+G] submit  [Esc] cancel</Text>
       </Box>
     </Box>
   )

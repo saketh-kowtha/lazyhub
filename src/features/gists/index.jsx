@@ -15,7 +15,7 @@ import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
-import { AppContext } from '../../app.jsx'
+import { AppContext } from '../../context.js'
 import { t } from '../../theme.js'
 
 // ─── GistList ─────────────────────────────────────────────────────────────────

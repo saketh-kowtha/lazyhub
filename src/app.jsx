@@ -12,10 +12,11 @@
  * Layout (<80 cols):        list only (sidebar replaced by tab header)
  */
 
-import React, { useState, useRef, useCallback, createContext, useContext, useEffect } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { render, Box, Text, useInput, useApp, useStdout } from 'ink'
 import { t } from './theme.js'
 import { loadConfig } from './config.js'
+import { AppContext } from './context.js'
 
 const _config = loadConfig()
 import { Sidebar } from './components/Sidebar.jsx'
@@ -31,14 +32,6 @@ import { BranchList } from './features/branches/index.jsx'
 import { ActionList } from './features/actions/index.jsx'
 import { NotificationList } from './features/notifications/index.jsx'
 import { CustomPane } from './components/CustomPane.jsx'
-
-// ─── AppContext ───────────────────────────────────────────────────────────────
-
-export const AppContext = createContext({ notifyDialog: () => {}, openHelp: () => {} })
-
-export function useAppContext() {
-  return useContext(AppContext)
-}
 
 // ─── Pane registry ───────────────────────────────────────────────────────────
 
@@ -180,7 +173,7 @@ const DIALOG_KEYS = {
     { key: '↑↓ / j k',      label: 'pick merge strategy' },
     { key: 'Enter',          label: 'confirm strategy' },
     { key: 'Tab',            label: 'next field (commit message)' },
-    { key: 'Ctrl+Enter',     label: 'execute merge' },
+    { key: 'Ctrl+G',         label: 'execute merge' },
     { key: 'Esc',            label: 'cancel' },
   ],
   multiselect: [
@@ -197,7 +190,7 @@ const DIALOG_KEYS = {
   compose: [
     { key: 'Tab',            label: 'next field' },
     { key: 'e',              label: 'open $EDITOR for body' },
-    { key: 'Ctrl+Enter',     label: 'submit' },
+    { key: 'Ctrl+G',         label: 'submit' },
     { key: 'Esc',            label: 'cancel' },
   ],
   logs: [
@@ -211,7 +204,7 @@ const DIALOG_KEYS = {
     { key: '←→',             label: 'pick comment type' },
     { key: 'Tab',            label: 'next field' },
     { key: 'e',              label: 'open $EDITOR for body' },
-    { key: 'Ctrl+Enter',     label: 'submit comment' },
+    { key: 'Ctrl+G',         label: 'submit comment' },
     { key: 'Ctrl+R',         label: 'submit + resolve thread' },
     { key: 'Esc',            label: 'cancel' },
   ],

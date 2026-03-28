@@ -12,7 +12,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
-import { writeFileSync, readFileSync, unlinkSync } from 'fs'
+import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
@@ -306,15 +306,20 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
   // ── Open editor ──────────────────────────────────────────────────────────────
 
   const openEditor = useCallback(() => {
-    const editor = process.env.EDITOR || process.env.VISUAL || 'vi'
-    const tmp = join(tmpdir(), `lazyhub-pr-body-${Date.now()}.md`)
-    writeFileSync(tmp, form.body || '')
-    spawnSync(editor, [tmp], { stdio: 'inherit' })
+    const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
+    if (!raw || /[\0\n\r]/.test(raw)) return
+    const [editorBin, ...editorArgs] = raw.split(/\s+/).filter(Boolean)
+    let tmpDir
     try {
+      tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
+      const tmp = join(tmpDir, 'pr-body.md')
+      writeFileSync(tmp, form.body || '', { mode: 0o600 })
+      const result = spawnSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
+      if (result.status !== 0) return
       const content = readFileSync(tmp, 'utf8')
       setForm(f => ({ ...f, body: content }))
-      unlinkSync(tmp)
     } catch { /* ignore */ }
+    finally { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) } catch {} }
   }, [form.body])
 
   // ── Keyboard ──────────────────────────────────────────────────────────────────
@@ -342,7 +347,8 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
     if (key.tab && key.shift) { goPrev(); return }
     if (key.tab)               { goNext(); return }
 
-    if (key.return && key.ctrl) { doSubmit(); return }
+    // Ctrl+Enter OR Ctrl+S — Ctrl+Enter is indistinguishable from Enter on macOS terminals
+    if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) { doSubmit(); return }
 
     // [p] trigger push from form when head has issues
     if (input === 'p' && FIELDS[activeField] === 'head') {
@@ -547,8 +553,8 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
           <Box gap={2}>
             <Text color={t.ui.dim}>[Tab] next  [Shift+Tab] prev</Text>
             {canSubmit
-              ? <Text color={t.ui.selected}>[Ctrl+Enter] Create PR</Text>
-              : <Text color={t.ui.dim}>[Ctrl+Enter] Create PR</Text>
+              ? <Text color={t.ui.selected}>[Ctrl+G] Create PR</Text>
+              : <Text color={t.ui.dim}>[Ctrl+G] Create PR</Text>
             }
           </Box>
           <Text color={t.ui.dim}>[Esc] cancel</Text>

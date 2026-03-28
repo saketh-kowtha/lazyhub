@@ -1,90 +1,165 @@
 /**
  * src/features/prs/comments.jsx — PR comments/threads view
+ * Supports: reply, edit, delete per comment
  */
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
+import { spawnSync } from 'child_process'
+import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
-import { listPRComments, resolveThread, addPRLineComment } from '../../executor.js'
+import {
+  listPRComments, resolveThread,
+  replyToComment, editPRComment, deletePRComment,
+} from '../../executor.js'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { t } from '../../theme.js'
 
 const FOOTER_KEYS = [
-  { key: 'j/k', label: 'nav' },
-  { key: 'r', label: 'reply' },
-  { key: 'R', label: 'resolve' },
-  { key: 'f', label: 'filter' },
-  { key: 'Esc', label: 'back' },
+  { key: 'j/k',   label: 'nav' },
+  { key: 'r',     label: 'reply' },
+  { key: 'e',     label: 'edit' },
+  { key: 'd',     label: 'delete' },
+  { key: 'R',     label: 'resolve' },
+  { key: 'f',     label: 'filter' },
+  { key: 'Esc',   label: 'back' },
 ]
 
 const FILTER_MODES = ['all', 'open', 'resolved']
+const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
 
 export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   const { stdout } = useStdout()
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 8)
 
   const { data: rawComments, loading, error, refetch } = useGh(listPRComments, [repo, prNumber])
-  const [cursor, setCursor] = useState(0)
+  const [cursor, setCursor]         = useState(0)
   const [filterMode, setFilterMode] = useState('all')
-  const [replyTarget, setReplyTarget] = useState(null)
-  const [replyText, setReplyText] = useState('')
-  const [statusMsg, setStatusMsg] = useState(null)
+  const [statusMsg, setStatusMsg]   = useState(null)
   const [scrollOffset, setScrollOffset] = useState(0)
 
-  // Group comments by file+line
-  const threads = useMemo(() => {
+  // action: null | { type: 'reply'|'edit'|'delete', comment }
+  const [action, setAction]     = useState(null)
+  const [actionText, setActionText] = useState('')
+
+  // ── Build flat list: each comment is individually navigable ────────────────
+
+  const flatComments = useMemo(() => {
     if (!rawComments) return []
-    const groups = new Map()
-    for (const c of rawComments) {
-      const key = `${c.path}:${c.line || c.originalLine}`
-      if (!groups.has(key)) groups.set(key, { path: c.path, line: c.line || c.originalLine, comments: [] })
-      groups.get(key).comments.push(c)
+    // Group by thread (root = no inReplyToId)
+    const roots = rawComments.filter(c => Object.hasOwn(c, 'inReplyToId') ? !c.inReplyToId : true)
+    const replies = rawComments.filter(c => Object.hasOwn(c, 'inReplyToId') && c.inReplyToId)
+    const pickComment = (c, extra) => ({
+      id: c.id,
+      body: typeof c.body === 'string' ? c.body : '',
+      path: typeof c.path === 'string' ? c.path : '',
+      line: c.line ?? null,
+      originalLine: c.originalLine ?? null,
+      side: c.side ?? null,
+      user: { login: typeof c.user?.login === 'string' ? c.user.login : '' },
+      createdAt: c.createdAt ?? null,
+      inReplyToId: c.inReplyToId ?? null,
+      pullRequestReviewId: c.pullRequestReviewId ?? null,
+      threadId: typeof c.threadId === 'string' ? c.threadId : null,
+      threadResolved: !!c.threadResolved,
+      ...extra,
+    })
+    const all = []
+    for (const root of roots) {
+      all.push(pickComment(root, { _isRoot: true }))
+      for (const reply of replies.filter(r => r.inReplyToId === root.id)) {
+        all.push(pickComment(reply, { _isRoot: false, _rootId: root.id }))
+      }
     }
-    return Array.from(groups.values())
-  }, [rawComments])
+    if (filterMode === 'resolved')  return all.filter(c => c.threadResolved)
+    if (filterMode === 'open')      return all.filter(c => !c.threadResolved)
+    return all
+  }, [rawComments, filterMode])
 
-  const filteredThreads = useMemo(() => {
-    return threads // All threads shown (no resolved state tracking in this simplified impl)
-  }, [threads])
+  const visibleCount = flatComments.length
 
-  const visibleThreads = filteredThreads.slice(scrollOffset, scrollOffset + visibleHeight)
+  // ── Status helper ──────────────────────────────────────────────────────────
+  const flash = useCallback((msg) => {
+    setStatusMsg(msg)
+    setTimeout(() => setStatusMsg(null), 3000)
+  }, [])
 
+  // ── Open $EDITOR for multiline edit ───────────────────────────────────────
+  const openEditor = useCallback((initial) => {
+    const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
+    if (!raw || /[\0\n\r]/.test(raw)) return initial
+    const [editorBin, ...editorArgs] = raw.split(/\s+/).filter(Boolean)
+    let tmpDir
+    try {
+      tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
+      const tmp = join(tmpDir, 'comment.md')
+      writeFileSync(tmp, initial || '', { mode: 0o600 })
+      const result = spawnSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
+      if (result.status !== 0) return initial
+      const content = readFileSync(tmp, 'utf8')
+      return content
+    } catch { return initial }
+    finally { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) } catch {} }
+  }, [])
+
+  // ── Submit action ──────────────────────────────────────────────────────────
+  const submitAction = useCallback(() => {
+    if (!action) return
+    const { type, comment } = action
+    const body = actionText.trim()
+
+    const done = () => { setAction(null); setActionText('') }
+
+    if (type === 'reply') {
+      if (!body) { done(); return }
+      const rootId = comment._isRoot ? comment.id : comment._rootId
+      if (!rootId) { flash('Cannot determine thread root'); done(); return }
+      replyToComment(repo, prNumber, rootId, body)
+        .then(() => { flash('Reply sent'); done(); refetch() })
+        .catch(err => flash(`Failed: ${err.message}`))
+    } else if (type === 'edit') {
+      if (!body) { done(); return }
+      editPRComment(repo, comment.id, body)
+        .then(() => { flash('Comment updated'); done(); refetch() })
+        .catch(err => flash(`Failed: ${err.message}`))
+    } else if (type === 'delete') {
+      deletePRComment(repo, comment.id)
+        .then(() => { flash('Comment deleted'); done(); refetch() })
+        .catch(err => flash(`Failed: ${err.message}`))
+    }
+  }, [action, actionText, repo, prNumber, flash, refetch])
+
+  // ── Keyboard ──────────────────────────────────────────────────────────────
   useInput((input, key) => {
-    if (replyTarget) {
-      if (key.escape) { setReplyTarget(null); setReplyText(''); return }
-      if (key.return && key.ctrl) {
-        // Submit reply
-        const thread = filteredThreads[cursor]
-        if (thread && replyText) {
-          addPRLineComment(repo, prNumber, {
-            body: replyText,
-            path: thread.path,
-            line: thread.line,
-            side: 'RIGHT',
-          }).then(() => {
-            setStatusMsg('Reply sent')
-            setTimeout(() => setStatusMsg(null), 3000)
-            refetch()
-          }).catch(err => {
-            setStatusMsg(`Failed: ${err.message}`)
-            setTimeout(() => setStatusMsg(null), 3000)
-          })
-        }
-        setReplyTarget(null)
-        setReplyText('')
+    // ── Action mode ──
+    if (action) {
+      if (action.type === 'delete') {
+        if (input === 'y') { submitAction(); return }
+        if (key.escape || input === 'n') { setAction(null); return }
         return
       }
-      if (key.backspace || key.delete) { setReplyText(r => r.slice(0, -1)); return }
-      if (input && !key.ctrl && !key.meta) { setReplyText(r => r + input); return }
+      // reply / edit: text input
+      if (key.escape) { setAction(null); setActionText(''); return }
+      if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) { submitAction(); return }
+      if (input === 'e' && action.type !== 'delete') {
+        const result = openEditor(actionText)
+        setActionText(result)
+        return
+      }
+      if (key.backspace || key.delete) { setActionText(s => s.slice(0, -1)); return }
+      if (input && !key.ctrl && !key.meta) { setActionText(s => s + input); return }
       return
     }
 
-    if (input === 'r') { refetch(); return }
+    // ── Navigation ──
     if (key.escape || input === 'q') { onBack(); return }
+
     if (input === 'j' || key.downArrow) {
       setCursor(c => {
-        const next = Math.min(filteredThreads.length - 1, c + 1)
+        const next = Math.min(visibleCount - 1, c + 1)
         if (next >= scrollOffset + visibleHeight) setScrollOffset(s => s + 1)
         return next
       })
@@ -98,94 +173,136 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       })
       return
     }
+
+    const comment = flatComments[cursor]
+
+    if (input === 'r' && comment) {
+      setAction({ type: 'reply', comment })
+      setActionText('')
+      return
+    }
+    if (input === 'e' && comment) {
+      setAction({ type: 'edit', comment })
+      setActionText(comment.body || '')
+      return
+    }
+    if (input === 'd' && comment) {
+      setAction({ type: 'delete', comment })
+      return
+    }
+    if (input === 'R' && comment) {
+      // threadId is the GraphQL ReviewThread node ID (e.g. PRRT_kwDO...)
+      const threadId = comment.threadId
+      if (!threadId) { flash('Thread ID unavailable'); return }
+      resolveThread(threadId)
+        .then(() => { flash('Thread resolved'); refetch() })
+        .catch(err => flash(`Failed: ${err.message}`))
+      return
+    }
     if (input === 'f') {
       const idx = FILTER_MODES.indexOf(filterMode)
       setFilterMode(FILTER_MODES[(idx + 1) % FILTER_MODES.length])
       return
     }
-    if (input === 'r') {
-      setReplyTarget(filteredThreads[cursor])
-      return
-    }
-    if (input === 'R') {
-      const thread = filteredThreads[cursor]
-      if (thread) {
-        resolveThread(thread.comments[0]?.pullRequestReviewId)
-          .then(() => { setStatusMsg('Thread resolved'); refetch() })
-          .catch(err => setStatusMsg(`Failed: ${err.message}`))
-        setTimeout(() => setStatusMsg(null), 3000)
-      }
-      return
-    }
-    if (input === 'g') {
-      const thread = filteredThreads[cursor]
-      if (thread && onJumpToDiff) onJumpToDiff(thread.line)
+    if (input === 'g' && comment && onJumpToDiff) {
+      onJumpToDiff(comment.line)
       return
     }
   })
 
-  if (loading) {
-    return <Box paddingX={1}><Text color={t.ui.muted}>Loading comments...</Text></Box>
-  }
-  if (error) {
-    return <Box paddingX={1}><Text color={t.ci.fail}>⚠ Failed to load — r to retry</Text></Box>
-  }
+  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading comments…</Text></Box>
+  if (error)   return <Box paddingX={1}><Text color={t.ci.fail}>⚠ Failed to load — r to retry</Text></Box>
+
+  const visibleItems = flatComments.slice(scrollOffset, scrollOffset + visibleHeight)
 
   return (
     <Box flexDirection="column" flexGrow={1}>
+      {/* Header */}
       <Box paddingX={1} justifyContent="space-between">
         <Text color={t.ui.selected} bold>PR #{prNumber} Comments</Text>
         <Box gap={2}>
           {statusMsg && <Text color={t.ci.pass}>{statusMsg}</Text>}
-          <Text color={t.ui.dim}>filter: {filterMode}</Text>
+          <Text color={t.ui.dim}>filter: {filterMode}  {flatComments.length} comments</Text>
         </Box>
       </Box>
 
-      {replyTarget && (
-        <Box paddingX={1} flexDirection="column" borderStyle="round" borderColor={t.diff.threadBorder}>
-          <Text color={t.ui.muted}>Reply to thread:</Text>
-          <Box>
-            <Text color={t.ui.selected}>{replyText}</Text>
-            <Text color={t.ui.dim}>█</Text>
-          </Box>
-          <Text color={t.ui.dim}>[Ctrl+Enter] send  [Esc] cancel</Text>
+      {/* Action box */}
+      {action && (
+        <Box flexDirection="column" borderStyle="round"
+          borderColor={action.type === 'delete' ? t.ci.fail : t.diff.threadBorder}
+          paddingX={1} marginX={1}>
+          {action.type === 'delete' && (
+            <>
+              <Text color={t.ci.fail} bold>Delete comment by @{action.comment.user?.login}?</Text>
+              <Text color={t.ui.dim} wrap="truncate">  "{stripAnsi(action.comment.body || '').slice(0, 60)}"</Text>
+              <Text color={t.ui.dim}>[y] confirm  [n / Esc] cancel</Text>
+            </>
+          )}
+          {(action.type === 'reply' || action.type === 'edit') && (
+            <>
+              <Text color={t.ui.dim}>
+                {action.type === 'reply'
+                  ? `Reply to @${action.comment.user?.login}:`
+                  : `Edit comment:`}
+              </Text>
+              <Box>
+                <Text color={t.ui.selected}>{actionText}</Text>
+                <Text color={t.ui.dim}>█</Text>
+              </Box>
+              <Text color={t.ui.dim}>[Ctrl+G] send  [e] open editor  [Esc] cancel</Text>
+            </>
+          )}
         </Box>
       )}
 
+      {/* Comment list */}
       <Box flexDirection="column" flexGrow={1}>
-        {visibleThreads.map((thread, i) => {
+        {visibleItems.map((comment, i) => {
           const idx = scrollOffset + i
-          const isSelected = idx === cursor
+          const isSelected = idx === cursor && !action
+          const isReply = !comment._isRoot
+
           return (
-            <Box key={`${thread.path}:${thread.line}`} flexDirection="column" marginBottom={1}
+            <Box key={comment.id} flexDirection="column" marginBottom={isReply ? 0 : 1}
               borderStyle={isSelected ? 'round' : undefined}
               borderColor={isSelected ? t.ui.selected : undefined}>
-              <Box paddingX={1} gap={2}>
-                <Text color={t.ui.selected} bold>{thread.path}</Text>
-                <Text color={t.ui.dim}>line {thread.line}</Text>
-              </Box>
-              {thread.comments.map(c => (
-                <Box key={c.id} paddingX={2} gap={1} flexDirection="column">
-                  <Box gap={1}>
-                    <Text color={t.diff.threadBorder}>┃</Text>
-                    <Text color={t.ui.selected}>{c.user?.login}</Text>
-                    <Text color={t.ui.dim}>{format(c.createdAt)}</Text>
-                  </Box>
-                  <Box>
-                    <Text color={t.diff.threadBorder}>┃ </Text>
-                    <Text color={t.diff.ctxFg} wrap="truncate">{c.body}</Text>
-                  </Box>
+              {/* Thread header — show once per root comment */}
+              {comment._isRoot && (
+                <Box paddingX={1} gap={2}>
+                  <Text color={t.ui.selected} bold>{comment.path}</Text>
+                  <Text color={t.ui.dim}>line {comment.line}</Text>
                 </Box>
-              ))}
+              )}
+              {/* Comment body */}
+              <Box paddingX={isReply ? 4 : 2} flexDirection="column">
+                <Box gap={1}>
+                  <Text color={t.diff.threadBorder}>{isReply ? '  ┗' : '┃'}</Text>
+                  <Text color={t.ui.selected} bold>@{comment.user?.login}</Text>
+                  <Text color={t.ui.dim}>{format(comment.createdAt)}</Text>
+                  {isReply && <Text color={t.ui.dim}>(reply)</Text>}
+                </Box>
+                {stripAnsi(comment.body || '').split('\n').map((line, li) => (
+                  <Box key={li}>
+                    <Text color={t.diff.threadBorder}>{isReply ? '    ' : '┃ '}</Text>
+                    <Text color={t.diff.ctxFg} wrap="truncate">{line}</Text>
+                  </Box>
+                ))}
+                {isSelected && (
+                  <Box gap={2} paddingLeft={2}>
+                    <Text color={t.ui.dim}>[r] reply  [e] edit  [d] delete  [R] resolve  [g] jump to diff</Text>
+                  </Box>
+                )}
+              </Box>
             </Box>
           )
         })}
-        {filteredThreads.length === 0 && (
+        {flatComments.length === 0 && (
           <Box paddingX={2} paddingY={1}>
             <Text color={t.ui.muted}>No comment threads found.</Text>
           </Box>
         )}
       </Box>
+
       <FooterKeys keys={FOOTER_KEYS} />
     </Box>
   )

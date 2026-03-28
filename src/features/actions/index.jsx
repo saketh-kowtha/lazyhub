@@ -9,7 +9,7 @@ import { useGh } from '../../hooks/useGh.js'
 import { listRuns, getRunLogs, rerunRun, cancelRun } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
-import { AppContext } from '../../app.jsx'
+import { AppContext } from '../../context.js'
 import { t } from '../../theme.js'
 
 function statusBadge(run) {

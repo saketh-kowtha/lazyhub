@@ -8,7 +8,7 @@ import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getIssue, addPRComment, listLabels, listCollaborators, addLabels, removeLabels } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
-import { AppContext } from '../../app.jsx'
+import { AppContext } from '../../context.js'
 import { t } from '../../theme.js'
 
 // Exported so app.jsx can use them if needed
@@ -39,7 +39,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
 
     if (replyMode) {
       if (key.escape) { setReplyMode(false); setReplyText(''); return }
-      if (key.return && key.ctrl) {
+      if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) {
         addPRComment(repo, issueNumber, replyText)
           .then(() => { setStatusMsg('Reply sent'); refetch() })
           .catch(err => setStatusMsg(`Failed: ${err.message}`))
@@ -149,7 +149,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
             <Text color={t.ui.selected}>{replyText}</Text>
             <Text color={t.ui.dim}>█</Text>
           </Box>
-          <Text color={t.ui.dim}>[Ctrl+Enter] send  [Esc] cancel</Text>
+          <Text color={t.ui.dim}>[Ctrl+G] send  [Esc] cancel</Text>
         </Box>
       )}
 
