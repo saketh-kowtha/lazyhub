@@ -17,91 +17,60 @@ import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { loadConfig } from '../../config.js'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
 import { TextInput } from '../../utils.js'
 
 const _diffCfg = loadConfig().diff
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
 
-function openEditorSync(initial) {
-  const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
-  if (!raw || /[\0\n\r]/.test(raw)) return initial
-  const [editorBin, ...editorArgs] = raw.split(/\s+/).filter(Boolean)
-  let tmpDir
-  try {
-    tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
-    const tmp = join(tmpDir, 'comment.md')
-    writeFileSync(tmp, initial || '', { mode: 0o600 })
-    const result = spawnSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
-    if (result.status !== 0) return initial
-    return readFileSync(tmp, 'utf8')
-  } catch { return initial }
-  finally { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) } catch {} }
-}
-
-// ─── Language detection ───────────────────────────────────────────────────────
-
-const EXT_LANG = {
-  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
-  ts: 'typescript', tsx: 'typescript',
-  py: 'python',     rb: 'ruby',        go: 'go',          rs: 'rust',
-  java: 'java',     kt: 'kotlin',      swift: 'swift',    cs: 'csharp',
-  c: 'c',           cpp: 'cpp',        h: 'c',
-  sh: 'bash',       bash: 'bash',      zsh: 'bash',
-  json: 'json',     yaml: 'yaml',      yml: 'yaml',
-  md: 'markdown',   html: 'xml',       xml: 'xml',        css: 'css',
-  sql: 'sql',       graphql: 'graphql',
-}
-
-function getLang(filename) {
-  if (!filename) return null
-  const ext = filename.split('.').pop()?.toLowerCase()
-  return EXT_LANG[ext] || null
-}
+// ... (openEditorSync and other helpers)
 
 // ─── hljs HTML → chalk ───────────────────────────────────────────────────────
 // Converts highlight.js HTML output to chalk-colored terminal strings.
 // Preserves the bgColor on every character so the add/del background shows through.
 
-const CLS_COLOR = {
-  'hljs-keyword':           t.syntax.keyword,
-  'hljs-built_in':          t.syntax.builtin,
-  'hljs-type':              t.syntax.type,
-  'hljs-literal':           t.syntax.literal,
-  'hljs-number':            t.syntax.number,
-  'hljs-operator':          t.syntax.operator,
-  'hljs-punctuation':       t.syntax.default,
-  'hljs-property':          t.syntax.attr,
-  'hljs-regexp':            t.syntax.regexp,
-  'hljs-string':            t.syntax.string,
-  'hljs-subst':             t.syntax.default,
-  'hljs-symbol':            t.syntax.literal,
-  'hljs-class':             t.syntax.type,
-  'hljs-function':          t.syntax.fn,
-  'hljs-title':             t.syntax.fn,
-  'hljs-title class_':      t.syntax.type,
-  'hljs-title function_':   t.syntax.fn,
-  'hljs-params':            t.syntax.default,
-  'hljs-comment':           t.syntax.comment,
-  'hljs-doctag':            t.syntax.comment,
-  'hljs-meta':              t.syntax.meta,
-  'hljs-tag':               t.syntax.tag,
-  'hljs-name':              t.syntax.tag,
-  'hljs-attr':              t.syntax.attr,
-  'hljs-attribute':         t.syntax.attr,
-  'hljs-variable':          t.syntax.variable,
-  'hljs-variable language_': t.syntax.builtin,
-  'hljs-selector-tag':      t.syntax.tag,
-  'hljs-selector-class':    t.syntax.fn,
-  'hljs-selector-id':       t.syntax.builtin,
-  'hljs-addition':          t.syntax.string,
-  'hljs-deletion':          t.syntax.keyword,
+function getClsColor(t) {
+  return {
+    'hljs-keyword':           t.syntax.keyword,
+    'hljs-built_in':          t.syntax.builtin,
+    'hljs-type':              t.syntax.type,
+    'hljs-literal':           t.syntax.literal,
+    'hljs-number':            t.syntax.number,
+    'hljs-operator':          t.syntax.operator,
+    'hljs-punctuation':       t.syntax.default,
+    'hljs-property':          t.syntax.attr,
+    'hljs-regexp':            t.syntax.regexp,
+    'hljs-string':            t.syntax.string,
+    'hljs-subst':             t.syntax.default,
+    'hljs-symbol':            t.syntax.literal,
+    'hljs-class':             t.syntax.type,
+    'hljs-function':          t.syntax.fn,
+    'hljs-title':             t.syntax.fn,
+    'hljs-title class_':      t.syntax.type,
+    'hljs-title function_':   t.syntax.fn,
+    'hljs-params':            t.syntax.default,
+    'hljs-comment':           t.syntax.comment,
+    'hljs-doctag':            t.syntax.comment,
+    'hljs-meta':              t.syntax.meta,
+    'hljs-tag':               t.syntax.tag,
+    'hljs-name':              t.syntax.tag,
+    'hljs-attr':              t.syntax.attr,
+    'hljs-attribute':         t.syntax.attr,
+    'hljs-variable':          t.syntax.variable,
+    'hljs-variable language_': t.syntax.builtin,
+    'hljs-selector-tag':      t.syntax.tag,
+    'hljs-selector-class':    t.syntax.fn,
+    'hljs-selector-id':       t.syntax.builtin,
+    'hljs-addition':          t.syntax.string,
+    'hljs-deletion':          t.syntax.keyword,
+  }
 }
 
-function htmlToChalk(html, bgColor) {
+function htmlToChalk(html, bgColor, t) {
   const parts = []
   const colorStack = []
+  const clsColor = getClsColor(t)
   let i = 0
 
   while (i < html.length) {
@@ -131,7 +100,7 @@ function htmlToChalk(html, bgColor) {
     } else if (tag.startsWith('span')) {
       const m = tag.match(/class="([^"]+)"/)
       const cls = m ? m[1] : null
-      const color = cls ? (CLS_COLOR[cls] ?? CLS_COLOR[cls.split(' ')[0]] ?? null) : null
+      const color = cls ? (clsColor[cls] ?? clsColor[cls.split(' ')[0]] ?? null) : null
       colorStack.push(color)
     }
     i = end + 1
@@ -140,7 +109,7 @@ function htmlToChalk(html, bgColor) {
   return parts.join('')
 }
 
-function syntaxHighlight(code, lang, bgColor) {
+function syntaxHighlight(code, lang, bgColor, t) {
   if (!lang) {
     return bgColor
       ? chalk.bgHex(bgColor).hex(t.syntax.default)(code)
@@ -148,7 +117,7 @@ function syntaxHighlight(code, lang, bgColor) {
   }
   try {
     const { value } = hljs.highlight(code, { language: lang, ignoreIllegals: true })
-    return htmlToChalk(value, bgColor)
+    return htmlToChalk(value, bgColor, t)
   } catch {
     return bgColor
       ? chalk.bgHex(bgColor).hex(t.syntax.default)(code)
@@ -273,13 +242,8 @@ function buildTreeRows(files) {
 
 // ─── Diff line renderer ───────────────────────────────────────────────────────
 // Gutter: cursor(1) oldLn(4) newLn(4) sign(2) code
-//
-// cursor is a dedicated leading column — always visible regardless of the
-// per-character bg colors already applied to the rest of the line.
-// chalk.bgHex(cursorBg)(fullLine) doesn't work on lines that already carry
-// per-character chalk bg colors, so we use a ▶ prefix instead.
 
-function renderDiffLine(row, isSelected, langCache, isMatch) {
+const DiffLine = React.memo(({ row, isSelected, lang, isMatch, t }) => {
   let cur
   if (isSelected) {
     cur = chalk.bgHex(t.diff.cursorBg).hex('#ffffff').bold('▶')
@@ -298,42 +262,44 @@ function renderDiffLine(row, isSelected, langCache, isMatch) {
       chalk.hex(t.ci.pass)(`+${row.addCount}`) +
       chalk.hex(t.syntax.default)(' / ') +
       chalk.hex(t.ci.fail)(`-${row.delCount}`)
-    return cur + line
+    return <Text wrap="truncate">{cur + line}</Text>
   }
 
   if (row.type === 'hunk') {
-    return cur + chalk.bgHex(t.diff.hunkBg).hex(t.diff.hunkFg)(
-      `${gutterOld}${gutterNew}   ${row.text}`
+    return (
+      <Text wrap="truncate">
+        {cur + chalk.bgHex(t.diff.hunkBg).hex(t.diff.hunkFg)(
+          `${gutterOld}${gutterNew}   ${row.text}`
+        )}
+      </Text>
     )
   }
-
-  const lang = langCache.get(row.filename)
 
   if (row.type === 'add') {
     const signFg = isSelected ? '#ffffff' : t.diff.addSign
     const sign   = isSelected ? '▶' : '+'
     const gutter = chalk.bgHex(t.diff.addBg).hex(signFg)(`${gutterOld}${gutterNew} ${sign} `)
-    return cur + gutter + syntaxHighlight(row.text, lang, t.diff.addBg)
+    return <Text wrap="truncate">{cur + gutter + syntaxHighlight(row.text, lang, t.diff.addBg, t)}</Text>
   }
 
   if (row.type === 'del') {
     const signFg = isSelected ? '#ffffff' : t.diff.delSign
     const sign   = isSelected ? '▶' : '-'
     const gutter = chalk.bgHex(t.diff.delBg).hex(signFg)(`${gutterOld}${gutterNew} ${sign} `)
-    return cur + gutter + syntaxHighlight(row.text, lang, t.diff.delBg)
+    return <Text wrap="truncate">{cur + gutter + syntaxHighlight(row.text, lang, t.diff.delBg, t)}</Text>
   }
 
   // ctx — highlight the full gutter+code with cursor bg when selected
   const bgGutter = isSelected
     ? chalk.bgHex(t.diff.cursorBg).hex(t.ui.selected)(`${gutterOld}${gutterNew}   `)
     : chalk.hex(t.ui.dim)(`${gutterOld}${gutterNew}   `)
-  const code = syntaxHighlight(row.text, lang, isSelected ? t.diff.cursorBg : null)
-  return cur + bgGutter + code
-}
+  const code = syntaxHighlight(row.text, lang, isSelected ? t.diff.cursorBg : null, t)
+  return <Text wrap="truncate">{cur + bgGutter + code}</Text>
+})
 
 // ─── Thread renderer ──────────────────────────────────────────────────────────
 
-function renderThreads(comments) {
+function renderThreads(comments, t) {
   // Sort all by createdAt
   const sorted = [...comments].sort((a, b) =>
     new Date(a.createdAt) - new Date(b.createdAt)
@@ -436,7 +402,7 @@ const FOOTER_KEYS_SPLIT = [
 
 // ─── Split view renderer ──────────────────────────────────────────────────────
 
-function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, colWidth) {
+function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, colWidth, t) {
   const result = []
   const slice = rows.slice(scrollOffset, scrollOffset + visibleHeight)
 
@@ -448,10 +414,10 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
 
     // Full-width rows (file-header, hunk)
     if (row.type === 'file-header' || row.type === 'hunk') {
-      const rendered = renderDiffLine(row, isSelected, langCache)
+      const lang = langCache.get(row.filename)
       result.push(
         <Box key={idx}>
-          <Text wrap="truncate">{rendered}</Text>
+          <DiffLine row={row} isSelected={isSelected} lang={lang} t={t} />
         </Box>
       )
       i++
@@ -460,7 +426,7 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
 
     if (row.type === 'ctx') {
       const lang = langCache.get(row.filename)
-      const code = syntaxHighlight(row.text, lang, null)
+      const code = syntaxHighlight(row.text, lang, null, t)
       const gutter = chalk.hex(t.ui.dim)(`${String(row.oldLine ?? '').padStart(4)}${String(row.newLine ?? '').padStart(4)}   `)
       const line = isSelected ? chalk.bgHex(t.diff.cursorBg)(gutter + code) : gutter + code
       result.push(
@@ -480,12 +446,12 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
       const lang = langCache.get(row.filename)
 
       const delGutter = chalk.bgHex(t.diff.delBg).hex(t.diff.delSign)(`${String(row.oldLine ?? '').padStart(4)}     - `)
-      const delCode   = syntaxHighlight(row.text, lang, t.diff.delBg)
+      const delCode   = syntaxHighlight(row.text, lang, t.diff.delBg, t)
       const delLine   = isSelected ? chalk.bgHex(t.diff.cursorBg)(delGutter + delCode) : delGutter + delCode
 
       if (nextRow && nextRow.type === 'add') {
         const addGutter = chalk.bgHex(t.diff.addBg).hex(t.diff.addSign)(`    ${String(nextRow.newLine ?? '').padStart(4)} + `)
-        const addCode   = syntaxHighlight(nextRow.text, langCache.get(nextRow.filename), t.diff.addBg)
+        const addCode   = syntaxHighlight(nextRow.text, langCache.get(nextRow.filename), t.diff.addBg, t)
         const addLine   = isSelected ? chalk.bgHex(t.diff.cursorBg)(addGutter + addCode) : addGutter + addCode
 
         result.push(
@@ -514,7 +480,7 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
       // Unpaired add (del was already consumed or not present before)
       const lang = langCache.get(row.filename)
       const addGutter = chalk.bgHex(t.diff.addBg).hex(t.diff.addSign)(`    ${String(row.newLine ?? '').padStart(4)} + `)
-      const addCode   = syntaxHighlight(row.text, lang, t.diff.addBg)
+      const addCode   = syntaxHighlight(row.text, lang, t.diff.addBg, t)
       const addLine   = isSelected ? chalk.bgHex(t.diff.cursorBg)(addGutter + addCode) : addGutter + addCode
 
       result.push(
@@ -535,6 +501,7 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
 }
 
 export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
+  const { t } = useTheme()
   const { stdout } = useStdout()
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 6)
 
@@ -1008,22 +975,22 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
           </>
         ) : (
           splitView
-            ? renderSplitView(displayRows, scrollOffset, effectiveHeight, cursor, langCache, colWidth)
+            ? renderSplitView(displayRows, scrollOffset, effectiveHeight, cursor, langCache, colWidth, t)
             : visibleRows.map((row, i) => {
                 const idx = scrollOffset + i
                 const isSelected = idx === cursor
                 const isMatch = findQuery ? findMatches.includes(idx) : false
-                const rendered = renderDiffLine(row, isSelected, langCache, isMatch)
+                const lang = langCache.get(row.filename)
                 const lineNum = row.newLine ?? row.oldLine
                 const lineKey = `${row.filename}:${lineNum}`
                 const hasComment = row.filename && lineNum != null &&
                   commentsByLine.has(lineKey)
                 return (
                   <Box key={idx} flexDirection="column">
-                    <Text wrap="truncate">{rendered}</Text>
+                    <DiffLine row={row} isSelected={isSelected} lang={lang} isMatch={isMatch} t={t} />
                     {hasComment && (
                       <Box paddingX={1} flexDirection="column" borderStyle="single" borderColor={t.diff.threadBorder}>
-                        {renderThreads(commentsByLine.get(lineKey))}
+                        {renderThreads(commentsByLine.get(lineKey), t)}
                       </Box>
                     )}
                   </Box>

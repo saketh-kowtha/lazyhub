@@ -6,37 +6,13 @@
 import React, { useState, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import chalk from 'chalk'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
 
-function highlightMatch(str, query) {
-  if (!query) return str
-  const lowerStr = str.toLowerCase()
-  const lowerQuery = query.toLowerCase()
-  const idx = lowerStr.indexOf(lowerQuery)
-  if (idx === -1) return str
-  const before = str.slice(0, idx)
-  const match = str.slice(idx, idx + query.length)
-  const after = str.slice(idx + query.length)
-  return before + chalk.bold.white(match) + after
-}
-
-function matchesQuery(item, query, searchFields) {
-  if (!query) return true
-  const lq = query.toLowerCase()
-  for (const field of searchFields) {
-    const val = item[field]
-    if (val != null && String(val).toLowerCase().includes(lq)) return true
-  }
-  return false
-}
-
-function getDisplayText(item, searchFields) {
-  const primary = item[searchFields[0]] || item.title || item.name || String(item)
-  return String(primary)
-}
+// ... (highlightMatch and matchesQuery)
 
 export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['title', 'name'] }) {
+  const { t } = useTheme()
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
 

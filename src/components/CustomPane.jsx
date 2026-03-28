@@ -32,12 +32,12 @@
  *   Supports action value: "open" (same as o), "copy" (same as y)
  */
 
-import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
+import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { FuzzySearch } from './dialogs/FuzzySearch.jsx'
 import { AppContext } from '../context.js'
-import { t } from '../theme.js'
+import { useTheme } from '../theme.js'
 import { sanitize, resolvePath } from '../utils.js'
 
 // Resolve {repo}, {owner}, {name} placeholders in a command string and return as array for execa
@@ -55,17 +55,39 @@ function resolveCommandArgs(cmd, repo) {
   })
 }
 
-function stateColor(state) {
-  if (!state) return t.ui.muted
-  const s = String(state).toLowerCase()
-  if (/open|active|success|ok|pass|running/.test(s)) return t.ci.pass
-  if (/fail|error|closed|reject/.test(s))           return t.ci.fail
-  if (/pending|wait|queue|in_progress/.test(s))     return t.ci.pending
-  return t.ui.muted
-}
+const CustomPaneRow = memo(({ item, isSelected, t, stateColor }) => {
+  const numStr  = item.number != null ? String(item.number).padEnd(5) : '     '
+  const state   = sanitize(item.state || '')
+  const title   = sanitize(item.title || item.name || item.description || JSON.stringify(item).slice(0, 60))
+  const author  = sanitize(item.author || '')
+  const timeStr = item.updatedAt ? format(item.updatedAt) : ''
+
+  return (
+    <Box paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
+      <Text color={t.ui.dim} bold>{numStr} </Text>
+      {state ? <Text color={stateColor(state)}>{state.slice(0, 8).padEnd(9)}</Text> : null}
+      <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
+        {title}
+      </Text>
+      {author && <Text color={t.ui.muted}> {author.slice(0, 12).padEnd(12)}</Text>}
+      <Text color={t.ui.dim}> {timeStr}</Text>
+    </Box>
+  )
+})
 
 export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
+  const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
+
+  const stateColor = useCallback((state) => {
+    if (!state) return t.ui.muted
+    const s = String(state).toLowerCase()
+    if (/open|active|success|ok|pass|running/.test(s)) return t.ci.pass
+    if (/fail|error|closed|reject/.test(s))           return t.ci.fail
+    if (/pending|wait|queue|in_progress/.test(s))     return t.ci.pending
+    return t.ui.muted
+  }, [t])
+
   const { stdout } = useStdout()
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
@@ -264,23 +286,14 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
       {/* List rows */}
       {!loading && !error && visibleItems.map((item, i) => {
         const idx = scrollOffset + i
-        const isSelected = idx === cursor
-        const numStr  = item.number != null ? String(item.number).padEnd(5) : '     '
-        const state   = sanitize(item.state || '')
-        const title   = sanitize(item.title || item.name || item.description || JSON.stringify(item).slice(0, 60))
-        const author  = sanitize(item.author || '')
-        const timeStr = item.updatedAt ? format(item.updatedAt) : ''
-
         return (
-          <Box key={idx} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-            <Text color={t.ui.dim} bold>{numStr} </Text>
-            {state ? <Text color={stateColor(state)}>{state.slice(0, 8).padEnd(9)}</Text> : null}
-            <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
-              {title}
-            </Text>
-            {author && <Text color={t.ui.muted}> {author.slice(0, 12).padEnd(12)}</Text>}
-            <Text color={t.ui.dim}> {timeStr}</Text>
-          </Box>
+          <CustomPaneRow
+            key={idx}
+            item={item}
+            isSelected={idx === cursor}
+            t={t}
+            stateColor={stateColor}
+          />
         )
       })}
 

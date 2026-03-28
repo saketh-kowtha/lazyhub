@@ -5,10 +5,11 @@
 
 import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
 
 export function OptionPicker({ options = [], onSubmit, onCancel, title, promptText }) {
+  const { t } = useTheme()
   const [cursor, setCursor] = useState(0)
   const [step, setStep] = useState('pick') // 'pick' | 'text'
   const [pickedValue, setPickedValue] = useState(null)

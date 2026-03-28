@@ -5,9 +5,10 @@
 
 import React, { useState, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
 
 export function MultiSelect({ items = [], onSubmit, onCancel }) {
+  const { t } = useTheme()
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
   const [selected, setSelected] = useState(() => {

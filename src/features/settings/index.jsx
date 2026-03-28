@@ -4,18 +4,19 @@
 
 import React, { useState, useContext } from 'react'
 import { Box, Text, useInput } from 'ink'
-import { t, THEME_NAMES, BUILTIN_THEMES } from '../../theme.js'
+import { THEME_NAMES, BUILTIN_THEMES, useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
 import { loadConfig, saveConfig } from '../../config.js'
 
 export function SettingsPane({ onBack }) {
   const { notifyDialog } = useContext(AppContext)
+  const { t, themeName, setTheme } = useTheme()
   const [config, setConfig] = useState(() => loadConfig())
   const [cursor, setCursor] = useState(0)
   const [dialog, setDialog] = useState(null)
 
   const OPTIONS = [
-    { id: 'theme', label: 'Theme', value: config.theme || 'github-dark' },
+    { id: 'theme', label: 'Theme', value: themeName },
     { id: 'mouse', label: 'Mouse Support', value: config.mouse ? 'Enabled' : 'Disabled' },
     { id: 'pageSize', label: 'Page Size', value: config.pr?.pageSize || 50 },
   ]
@@ -36,8 +37,7 @@ export function SettingsPane({ onBack }) {
     const next = { ...config, ...patch }
     setConfig(next)
     saveConfig(next)
-    // Note: Theme change won't reflect instantly across all components 
-    // unless we use a ThemeProvider, but it will save for next restart.
+    if (patch.theme) setTheme(patch.theme)
   }
 
   if (dialog === 'theme') {

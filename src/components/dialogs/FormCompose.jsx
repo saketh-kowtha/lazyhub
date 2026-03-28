@@ -10,10 +10,11 @@ import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
 
 export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
+  const { t } = useTheme()
   const [activeField, setActiveField] = useState(0)
   const [values, setValues] = useState(() => {
     const v = {}

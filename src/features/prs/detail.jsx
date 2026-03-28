@@ -15,7 +15,7 @@ import {
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { AppContext } from '../../context.js'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
 import { sanitize, getMarkdownRows } from '../../utils.js'
 
 const MERGE_OPTIONS = [
@@ -24,7 +24,7 @@ const MERGE_OPTIONS = [
   { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
 ]
 
-function reviewStatusIcon(state) {
+function reviewStatusIcon(state, t) {
   switch (state) {
     case 'APPROVED':          return { icon: '✓', color: t.ci.pass }
     case 'CHANGES_REQUESTED': return { icon: '✗', color: t.ci.fail }
@@ -33,7 +33,7 @@ function reviewStatusIcon(state) {
   }
 }
 
-function prStateBadge(pr) {
+function prStateBadge(pr, t) {
   if (pr.isDraft) return { icon: '⊘', color: t.pr.draft,  label: 'Draft'  }
   switch (pr.state) {
     case 'OPEN':   return { icon: '●', color: t.pr.open,   label: 'Open'   }
@@ -44,7 +44,7 @@ function prStateBadge(pr) {
 }
 
 // Build flat scrollable row array from PR data
-function buildContentRows(pr, checks, protection, cols) {
+function buildContentRows(pr, checks, protection, cols, t) {
   const rows = []
   const push = (id, el) => rows.push({ id, el })
   const sep  = (id) => push(id, <Box key={id} />)
@@ -93,7 +93,7 @@ function buildContentRows(pr, checks, protection, cols) {
       </Box>
     ))
     allReviewers.forEach(r => {
-      const rs = reviewStatusIcon(r.state)
+      const rs = reviewStatusIcon(r.state, t)
       push(`rev-${r.login}`, (
         <Box key={`rev-${r.login}`} paddingX={2} gap={1}>
           <Text color={rs.color}>{rs.icon}</Text>
@@ -201,6 +201,7 @@ function buildContentRows(pr, checks, protection, cols) {
 }
 
 export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
+  const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const cols    = stdout?.columns || 80
@@ -225,8 +226,8 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
   }, [dialog, notifyDialog])
 
   const contentRows = useMemo(
-    () => pr ? buildContentRows(pr, checks, protection, cols) : [],
-    [pr, checks, protection, cols]
+    () => pr ? buildContentRows(pr, checks, protection, cols, t) : [],
+    [pr, checks, protection, cols, t]
   )
 
   const filteredRows = useMemo(() => {
@@ -347,7 +348,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
 
   // ── Detail view ────────────────────────────────────────────────────────────
 
-  const badge = prStateBadge(pr)
+  const badge = prStateBadge(pr, t)
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -408,6 +409,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
 // ─── Sub-dialogs ──────────────────────────────────────────────────────────────
 
 function PRLabelDialog({ repo, pr, onClose }) {
+  const { t } = useTheme()
   const { data: allLabels, loading } = useGh(listLabels, [repo])
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading labels…</Text></Box>
 
@@ -437,6 +439,7 @@ function PRLabelDialog({ repo, pr, onClose }) {
 }
 
 function PRAssigneeDialog({ repo, pr, onClose }) {
+  const { t } = useTheme()
   const { data: collabs, loading } = useGh(listCollaborators, [repo])
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators…</Text></Box>
 

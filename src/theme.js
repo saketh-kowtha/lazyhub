@@ -1,21 +1,8 @@
 /**
  * theme.js — resolves the active theme from config and exports t.
- *
- * Import { t } from './theme.js' everywhere — never inline hex strings.
- *
- * Config "theme" field can be:
- *   "github-dark"               → built-in theme by name (default)
- *   "github-light"              → built-in theme by name
- *   "catppuccin-mocha"          → built-in theme by name (extra dark)
- *   "catppuccin-latte"          → built-in theme by name (light)
- *   "tokyo-night"               → built-in theme by name (dark)
- *   "/path/to/theme.json"       → load full custom theme from JSON file
- *   "~/..."                     → path resolved relative to home dir
- *   "./relative"                → path resolved relative to ~/.config/lazyhub/
- *   { "name": "tokyo-night", "overrides": { "ui": { "selected": "#ff0" } } }
- *   { "ui": { "selected": "#ff0" } }  → plain overrides on github-dark (legacy)
  */
 
+import React, { createContext, useContext, useState, useMemo, useCallback } from 'react'
 import { readFileSync, existsSync } from 'fs'
 import { join, isAbsolute } from 'path'
 import { homedir } from 'os'
@@ -38,6 +25,39 @@ export const BUILTIN_THEMES = {
 
 export const THEME_NAMES = Object.keys(BUILTIN_THEMES)
 
+const ThemeContext = createContext({
+  t: githubDark,
+  themeName: 'github-dark',
+  setTheme: () => {},
+})
+
+export function useTheme() {
+  return useContext(ThemeContext)
+}
+
+/**
+ * Provide reactive theme to the entire app.
+ */
+export function ThemeProvider({ children, initialTheme }) {
+  const [themeName, setThemeName] = useState(initialTheme || 'github-dark')
+
+  const t = useMemo(() => {
+    return resolveTheme(themeName)
+  }, [themeName])
+
+  const setTheme = useCallback((name) => {
+    setThemeName(name)
+  }, [])
+
+  const value = useMemo(() => ({ t, themeName, setTheme }), [t, themeName, setTheme])
+
+  return (
+    <ThemeContext.Provider value={value}>
+      {children}
+    </ThemeContext.Provider>
+  )
+}
+
 // ─── Deep merge ───────────────────────────────────────────────────────────────
 
 function deepMerge(base, overrides) {
@@ -57,21 +77,22 @@ function deepMerge(base, overrides) {
 // ─── Path resolution ──────────────────────────────────────────────────────────
 
 function resolvePath(p) {
+  if (!p) return null
+  if (typeof p !== 'string') return null
   if (p.startsWith('~/')) return join(homedir(), p.slice(2))
   if (isAbsolute(p)) return p
-  // Relative paths are resolved from ~/.config/lazyhub/
   return join(homedir(), '.config', 'lazyhub', p)
 }
 
 function loadThemeFile(p) {
   const resolved = resolvePath(p)
-  if (!existsSync(resolved)) return null
+  if (!resolved || !existsSync(resolved)) return null
   try { return JSON.parse(readFileSync(resolved, 'utf8')) } catch { return null }
 }
 
 // ─── Theme resolution ─────────────────────────────────────────────────────────
 
-function resolveTheme(cfg) {
+export function resolveTheme(cfg) {
   const fallback = githubDark
 
   if (!cfg) return fallback
@@ -85,21 +106,17 @@ function resolveTheme(cfg) {
 
   // Object forms
   if (typeof cfg === 'object' && !Array.isArray(cfg)) {
-    // { name, overrides } form
     if (typeof cfg.name === 'string') {
       const namedBase = BUILTIN_THEMES[cfg.name] || fallback
       return deepMerge(deepMerge(fallback, namedBase), cfg.overrides || {})
     }
-    // Legacy: plain overrides object applied on top of github-dark
     return deepMerge(fallback, cfg)
   }
 
   return fallback
 }
 
-// ─── Read config synchronously (avoids circular dep with config.js) ───────────
-
-function readRawThemeCfg() {
+export function readRawThemeCfg() {
   try {
     const cfgPath = join(homedir(), '.config', 'lazyhub', 'config.json')
     if (!existsSync(cfgPath)) return null
@@ -107,6 +124,6 @@ function readRawThemeCfg() {
   } catch { return null }
 }
 
-// ─── Exported resolved theme ──────────────────────────────────────────────────
+// ─── Exported resolved theme (legacy/fallback) ────────────────────────────────
 
 export const t = resolveTheme(readRawThemeCfg())

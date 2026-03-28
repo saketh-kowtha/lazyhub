@@ -34,6 +34,7 @@ const FILTER_MODES = ['all', 'open', 'resolved']
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
 
 export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
+  const { t } = useTheme()
   const { stdout } = useStdout()
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 8)
 

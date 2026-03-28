@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
 
 const STEP_HEADER_RE = /^(##\s+|Step \d+|^\d{4}-\d{2}-\d{2}.*\s+(##|step)|\s*\d+\.\d+\s)/i
 
@@ -14,6 +14,7 @@ function isStepHeader(line) {
 }
 
 export function LogViewer({ lines = [], onClose }) {
+  const { t } = useTheme()
   const { stdout } = useStdout()
   const visibleHeight = (stdout?.rows || 24) - 6
   const [scrollOffset, setScrollOffset] = useState(0)

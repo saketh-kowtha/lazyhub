@@ -14,7 +14,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { render, Box, Text, useInput, useApp, useStdout } from 'ink'
-import { t } from './theme.js'
+import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
 import { loadConfig } from './config.js'
 import { AppContext } from './context.js'
 
@@ -215,6 +215,7 @@ const DIALOG_KEYS = {
 // ─── Help overlay — shown on ? from any view ─────────────────────────────────
 
 function HelpOverlay({ pane, view, onClose }) {
+  const { t } = useTheme()
   useInput((input, key) => {
     if (key.escape || key.return || input === '?') onClose()
   })
@@ -285,6 +286,7 @@ function HelpOverlay({ pane, view, onClose }) {
 // ─── PR summary panel (right side) ───────────────────────────────────────────
 
 function PRSummaryPanel({ pr }) {
+  const { t } = useTheme()
   if (!pr) return (
     <Box flexDirection="column" paddingX={1} paddingY={1}>
       <Text color={t.ui.dim}>No PR selected</Text>
@@ -342,6 +344,7 @@ function PRSummaryPanel({ pr }) {
 // ─── Pane header ──────────────────────────────────────────────────────────────
 
 function PaneHeader({ pane, count, loading, error }) {
+  const { t } = useTheme()
   return (
     <Box paddingX={1}>
       <Text color={t.ui.selected} bold>{PANE_ICONS[pane] || '○'} {PANE_LABELS[pane] || pane}</Text>
@@ -355,6 +358,7 @@ function PaneHeader({ pane, count, loading, error }) {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 export function App({ repo }) {
+  const { t } = useTheme()
   const { exit } = useApp()
   const { stdout } = useStdout()
   const columns = stdout?.columns || 80
@@ -666,7 +670,12 @@ export function renderApp() {
   process.on('SIGINT',  () => { restoreTerminal(); process.exit(0) })
   process.on('SIGTERM', () => { restoreTerminal(); process.exit(0) })
 
-  const { unmount } = render(<App repo={repo} />)
+  const initialTheme = readRawThemeCfg()
+  const { unmount } = render(
+    <ThemeProvider initialTheme={initialTheme}>
+      <App repo={repo} />
+    </ThemeProvider>
+  )
 
   // When Ink exits (useApp().exit() called), also restore terminal
   // Ink emits its own cleanup; we hook the process 'exit' above which covers it.

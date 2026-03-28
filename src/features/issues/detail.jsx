@@ -9,7 +9,7 @@ import { useGh } from '../../hooks/useGh.js'
 import { getIssue, addPRComment, listLabels, listCollaborators, addLabels, removeLabels } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { AppContext } from '../../context.js'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
 import { sanitize, getMarkdownRows, TextInput } from '../../utils.js'
 
 // Exported so app.jsx can use them if needed
@@ -21,6 +21,7 @@ export const FOOTER_KEYS = [
 ]
 
 export function IssueDetail({ issueNumber, repo, onBack }) {
+  const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const termRows = stdout?.rows || 24
@@ -237,6 +238,7 @@ function IssueLabelDialog({ repo, issue, onClose }) {
 }
 
 function IssueAssigneeDialog({ repo, issue, onClose }) {
+  const { t } = useTheme()
   const { data: collabs, loading } = useGh(listCollaborators, [repo])
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators...</Text></Box>
   const items = (collabs || []).map(c => ({
