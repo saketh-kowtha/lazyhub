@@ -466,9 +466,14 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
 /**
  * List review comments on a PR.
  */
+const REPO_PART_RE = /^[a-zA-Z0-9._-]+$/
+
 export async function listPRComments(repo, number) {
   const r = getRepo(repo)
   const [owner, name] = r.split('/')
+  if (!REPO_PART_RE.test(owner) || !REPO_PART_RE.test(name)) {
+    throw new GhError({ message: `Invalid repository format: ${r}`, stderr: '', exitCode: 1, args: [] })
+  }
   // Use GraphQL so we can get the ReviewThread node ID (needed for resolveReviewThread mutation)
   const query = `
     query($owner: String!, $name: String!, $number: Int!) {
@@ -530,6 +535,9 @@ export async function listPRComments(repo, number) {
  */
 export async function replyToComment(repo, prNumber, commentId, body) {
   const r = getRepo(repo)
+  if (!Number.isInteger(Number(commentId)) || Number(commentId) <= 0) {
+    throw new Error(`Invalid comment ID: ${commentId}`)
+  }
   const args = [
     'api', `repos/${r}/pulls/${prNumber}/comments/${commentId}/replies`,
     '--method', 'POST',
@@ -543,6 +551,9 @@ export async function replyToComment(repo, prNumber, commentId, body) {
  */
 export async function editPRComment(repo, commentId, body) {
   const r = getRepo(repo)
+  if (!Number.isInteger(Number(commentId)) || Number(commentId) <= 0) {
+    throw new Error(`Invalid comment ID: ${commentId}`)
+  }
   const args = [
     'api', `repos/${r}/pulls/comments/${commentId}`,
     '--method', 'PATCH',
@@ -556,6 +567,9 @@ export async function editPRComment(repo, commentId, body) {
  */
 export async function deletePRComment(repo, commentId) {
   const r = getRepo(repo)
+  if (!Number.isInteger(Number(commentId)) || Number(commentId) <= 0) {
+    throw new Error(`Invalid comment ID: ${commentId}`)
+  }
   const args = [
     'api', `repos/${r}/pulls/comments/${commentId}`,
     '--method', 'DELETE',

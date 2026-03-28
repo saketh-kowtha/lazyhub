@@ -16,6 +16,7 @@ import { t } from '../../theme.js'
 import { AppContext } from '../../context.js'
 
 const _diffCfg = loadConfig().diff
+const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
 
 // ─── Language detection ───────────────────────────────────────────────────────
 
@@ -516,7 +517,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const [diffWarningAck, setDiffWarningAck] = useState(false)
 
   const { data: prMeta } = useGh(getPRMeta, [repo, prNumber], { ttl: 300_000 })
-  const headRefOid = /^[0-9a-f]{40}$/i.test(prMeta?.headRefOid) ? prMeta.headRefOid : null
+  const headRefOid = /^[0-9a-f]{40}$/.test(prMeta?.headRefOid) ? prMeta.headRefOid : null
   const { data: diffText, loading, error, refetch } = useGh(getPRDiff, [repo, prNumber])
   const { data: comments } = useGh(listPRComments, [repo, prNumber])
   const [cursor, setCursor] = useState(0)
@@ -721,6 +722,8 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
           deletePRComment(repo, compose.commentId)
             .then(() => { setCommentStatus('Deleted'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
             .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
+          setCompose(null)
+        } else if (input === 'n') {
           setCompose(null)
         }
         return
@@ -1024,7 +1027,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
             <Box flexDirection="column" borderStyle="round" borderColor={t.ci.fail}
               paddingX={1} marginX={1}>
               <Text color={t.ci.fail} bold>Delete comment?</Text>
-              <Text color={t.ui.dim} wrap="truncate">  "{(compose.commentBody || '').slice(0, 70)}"</Text>
+              <Text color={t.ui.dim} wrap="truncate">  "{stripAnsi(compose.commentBody || '').slice(0, 70)}"</Text>
               <Text color={t.ui.dim}>[y] confirm  [Esc] cancel</Text>
             </Box>
           )

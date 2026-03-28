@@ -12,7 +12,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
-import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmdirSync } from 'fs'
+import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
@@ -306,19 +306,19 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
   // ── Open editor ──────────────────────────────────────────────────────────────
 
   const openEditor = useCallback(() => {
-    const editor = process.env.EDITOR || process.env.VISUAL || 'vi'
-    if (!editor || /[\0\n\r]/.test(editor)) return
+    const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
+    if (!raw || /[\0\n\r]/.test(raw)) return
+    const [editorBin, ...editorArgs] = raw.split(/\s+/).filter(Boolean)
     let tmpDir
     try {
       tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
       const tmp = join(tmpDir, 'pr-body.md')
       writeFileSync(tmp, form.body || '', { mode: 0o600 })
-      spawnSync(editor, [tmp], { stdio: 'inherit' })
+      spawnSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
       const content = readFileSync(tmp, 'utf8')
       setForm(f => ({ ...f, body: content }))
-      unlinkSync(tmp)
     } catch { /* ignore */ }
-    finally { try { if (tmpDir) rmdirSync(tmpDir) } catch {} }
+    finally { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) } catch {} }
   }, [form.body])
 
   // ── Keyboard ──────────────────────────────────────────────────────────────────

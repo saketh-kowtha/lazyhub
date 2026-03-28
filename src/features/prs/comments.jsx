@@ -6,7 +6,7 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
-import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmdirSync } from 'fs'
+import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { format } from 'timeago.js'
@@ -52,11 +52,26 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
     // Group by thread (root = no inReplyToId)
     const roots = rawComments.filter(c => Object.hasOwn(c, 'inReplyToId') ? !c.inReplyToId : true)
     const replies = rawComments.filter(c => Object.hasOwn(c, 'inReplyToId') && c.inReplyToId)
+    const pickComment = (c, extra) => ({
+      id: c.id,
+      body: typeof c.body === 'string' ? c.body : '',
+      path: typeof c.path === 'string' ? c.path : '',
+      line: c.line ?? null,
+      originalLine: c.originalLine ?? null,
+      side: c.side ?? null,
+      user: { login: typeof c.user?.login === 'string' ? c.user.login : '' },
+      createdAt: c.createdAt ?? null,
+      inReplyToId: c.inReplyToId ?? null,
+      pullRequestReviewId: c.pullRequestReviewId ?? null,
+      threadId: typeof c.threadId === 'string' ? c.threadId : null,
+      threadResolved: !!c.threadResolved,
+      ...extra,
+    })
     const all = []
     for (const root of roots) {
-      all.push({ ...root, _isRoot: true })
+      all.push(pickComment(root, { _isRoot: true }))
       for (const reply of replies.filter(r => r.inReplyToId === root.id)) {
-        all.push({ ...reply, _isRoot: false, _rootId: root.id })
+        all.push(pickComment(reply, { _isRoot: false, _rootId: root.id }))
       }
     }
     if (filterMode === 'resolved')  return all.filter(c => c.threadResolved)
@@ -74,19 +89,19 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
 
   // ── Open $EDITOR for multiline edit ───────────────────────────────────────
   const openEditor = useCallback((initial) => {
-    const editor = process.env.EDITOR || process.env.VISUAL || 'vi'
-    if (!editor || /[\0\n\r]/.test(editor)) return initial
+    const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
+    if (!raw || /[\0\n\r]/.test(raw)) return initial
+    const [editorBin, ...editorArgs] = raw.split(/\s+/).filter(Boolean)
     let tmpDir
     try {
       tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
       const tmp = join(tmpDir, 'comment.md')
       writeFileSync(tmp, initial || '', { mode: 0o600 })
-      spawnSync(editor, [tmp], { stdio: 'inherit' })
+      spawnSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
       const content = readFileSync(tmp, 'utf8')
-      unlinkSync(tmp)
       return content
     } catch { return initial }
-    finally { try { if (tmpDir) rmdirSync(tmpDir) } catch {} }
+    finally { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) } catch {} }
   }, [])
 
   // ── Submit action ──────────────────────────────────────────────────────────
@@ -99,6 +114,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       if (!body) { setAction(null); setActionText(''); return }
       // Use root comment id for the reply
       const rootId = comment._isRoot ? comment.id : comment._rootId
+      if (!rootId) { flash('Cannot determine thread root'); setAction(null); setActionText(''); return }
       replyToComment(repo, prNumber, rootId, body)
         .then(() => { flash('Reply sent'); refetch() })
         .catch(err => flash(`Failed: ${err.message}`))
