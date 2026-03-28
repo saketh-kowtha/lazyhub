@@ -4,10 +4,19 @@ on:
   pull_request:
     types: [closed]
     branches: [main]
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'package.json'
+      - 'CHANGELOG.md'
+      - 'README.md'
+      - 'docs/**'
 
 jobs:
   release:
-    if: github.event.pull_request.merged == true
+    if: |
+      (github.event_name == 'push') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -58,7 +67,12 @@ jobs:
             --latest
 
       - name: Publish to npm
-        if: steps.prepare.outputs.version != '' && secrets.NPM_TOKEN != ''
+        if: steps.prepare.outputs.version != ''
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN secret not set — skipping npm publish"
+            exit 0
+          fi
+          npm publish --access public
