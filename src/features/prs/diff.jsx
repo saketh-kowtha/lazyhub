@@ -4,6 +4,10 @@
 
 import React, { useState, useMemo, useRef, useCallback, useContext, useEffect } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
+import { spawnSync } from 'child_process'
+import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import chalk from 'chalk'
 import hljs from 'highlight.js'
 import { format } from 'timeago.js'
@@ -17,6 +21,22 @@ import { AppContext } from '../../context.js'
 
 const _diffCfg = loadConfig().diff
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+
+function openEditorSync(initial) {
+  const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
+  if (!raw || /[\0\n\r]/.test(raw)) return initial
+  const [editorBin, ...editorArgs] = raw.split(/\s+/).filter(Boolean)
+  let tmpDir
+  try {
+    tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
+    const tmp = join(tmpDir, 'comment.md')
+    writeFileSync(tmp, initial || '', { mode: 0o600 })
+    const result = spawnSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
+    if (result.status !== 0) return initial
+    return readFileSync(tmp, 'utf8')
+  } catch { return initial }
+  finally { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) } catch {} }
+}
 
 // ─── Language detection ───────────────────────────────────────────────────────
 
@@ -785,6 +805,11 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         setCompose(null)
         return
       }
+      if (input === 'e' && (compose.mode === 'reply' || compose.mode === 'edit' || compose.mode === 'new')) {
+        const edited = openEditorSync(compose.body)
+        setCompose(c => ({ ...c, body: edited }))
+        return
+      }
       if (key.backspace || key.delete) {
         setCompose(c => ({ ...c, body: c.body.slice(0, -1) }))
         return
@@ -1041,7 +1066,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
                 <Text color={t.ui.selected}>{compose.body}</Text>
                 <Text color={t.ui.dim}>█</Text>
               </Box>
-              <Text color={t.ui.dim}>[Ctrl+G] send  [Esc] cancel</Text>
+              <Text color={t.ui.dim}>[Ctrl+G] send  [e] open editor  [Esc] cancel</Text>
             </Box>
           )
         }
@@ -1054,7 +1079,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
                 <Text color={t.ui.selected}>{compose.body}</Text>
                 <Text color={t.ui.dim}>█</Text>
               </Box>
-              <Text color={t.ui.dim}>[Ctrl+G] save  [Esc] cancel</Text>
+              <Text color={t.ui.dim}>[Ctrl+G] save  [e] open editor  [Esc] cancel</Text>
             </Box>
           )
         }
@@ -1082,7 +1107,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
               <Text color={t.ui.selected}>{compose.body}</Text>
               <Text color={t.ui.dim}>█</Text>
             </Box>
-            <Text color={t.ui.dim}>[←→] type  [Ctrl+G] submit  [Esc] cancel</Text>
+            <Text color={t.ui.dim}>[←→] type  [Ctrl+G] submit  [e] open editor  [Esc] cancel</Text>
           </Box>
         )
       })()}
