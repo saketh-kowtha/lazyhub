@@ -73,7 +73,7 @@ const PROMPT = `You are a security engineer auditing a pull request for **lazyhu
 
 **Real threat model for this codebase:**
 - \`$EDITOR\` / \`$VISUAL\` env var used to spawn a process — could be set to a malicious binary. Check that it's validated.
-- User-controlled strings interpolated into **GraphQL query strings** (not variables) — string interpolation inside a \`query { ... \`${...}\` ... }\` template literal is injectable.
+- User-controlled strings interpolated into **GraphQL query strings** (not variables) — string interpolation inside a template literal query body (e.g. "query { field(arg: \\"${userInput}\\") }") is injectable.
 - Path traversal in temp file creation — if the temp file path includes user-controlled content outside \`tmpdir()\`.
 - Token/credential leakage in logs, UI, or error messages.
 - Dependency vulnerabilities in newly added \`npm\` packages.
