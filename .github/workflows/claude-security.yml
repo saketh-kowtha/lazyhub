@@ -1,0 +1,46 @@
+name: Claude Security Audit
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  security:
+    name: Claude Security Audit
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    permissions:
+      contents: read
+      pull-requests: write    # post comment
+      issues: write           # post comment via issues API
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for API key
+        id: check
+        run: |
+          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "has_key=true"  >> "$GITHUB_OUTPUT"
+            echo "✓ ANTHROPIC_API_KEY present — security audit will run"
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️  ANTHROPIC_API_KEY not set — skipping Claude security audit"
+          fi
+
+      - name: Setup Node.js
+        if: steps.check.outputs.has_key == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Claude security audit
+        if: steps.check.outputs.has_key == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN:      ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER:         ${{ github.event.pull_request.number }}
+          REPO:              ${{ github.repository }}
+        run: node .github/scripts/claude-security.mjs
+        # Exit code 1 from the script = CRITICAL findings → fails the check

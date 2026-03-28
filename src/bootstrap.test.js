@@ -288,13 +288,13 @@ describe('bootstrap() integration', () => {
     // execa calls in order:
     // 1. detectGh: gh --version → success
     // 2. checkAuth: gh auth status → success (exitCode 0)
-    // 3. detectRepo: gh repo view → success
+    // 3. detectRepo: git remote get-url origin → github URL
     execa
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'gh version 2.0.0' })          // detectGh
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'Logged in' })                  // checkAuth
-      .mockResolvedValueOnce({                                                       // detectRepo
+      .mockResolvedValueOnce({                                                       // detectRepo: git remote
         exitCode: 0,
-        stdout: JSON.stringify({ name: 'my-repo', owner: { login: 'me' }, defaultBranchRef: { name: 'main' } }),
+        stdout: 'https://github.com/me/my-repo.git',
       })
 
     const renderApp = vi.fn()
