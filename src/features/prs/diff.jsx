@@ -366,6 +366,9 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
+  const [compose, setCompose] = useState(null)
+  // compose = { commentType: 'comment' | 'suggestion' | 'request-changes', body: '' }
+  const COMMENT_TYPES = ['comment', 'suggestion', 'request-changes']
   const [commentStatus, setCommentStatus] = useState(null)
   const [splitView, setSplitView] = useState(false)
   const lastKeyRef  = useRef(null)
@@ -433,6 +436,50 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       return
     }
 
+    // Inline compose keyboard handling
+    if (compose) {
+      if (key.escape) { setCompose(null); return }
+      if (key.leftArrow) {
+        const idx = COMMENT_TYPES.indexOf(compose.commentType)
+        setCompose(c => ({ ...c, commentType: COMMENT_TYPES[Math.max(0, idx - 1)] }))
+        return
+      }
+      if (key.rightArrow) {
+        const idx = COMMENT_TYPES.indexOf(compose.commentType)
+        setCompose(c => ({ ...c, commentType: COMMENT_TYPES[Math.min(COMMENT_TYPES.length - 1, idx + 1)] }))
+        return
+      }
+      if (key.return && key.ctrl) {
+        const row = rows[cursor]
+        const body = compose.body.trim()
+        if (body && row) {
+          addPRLineComment(repo, prNumber, {
+            body,
+            path: row.filename,
+            line: row.newLine || row.oldLine,
+            side: 'RIGHT',
+          }).then(() => {
+            setCommentStatus('Comment added')
+            setTimeout(() => setCommentStatus(null), 3000)
+          }).catch(err => {
+            setCommentStatus(`Failed: ${err.message}`)
+            setTimeout(() => setCommentStatus(null), 3000)
+          })
+        }
+        setCompose(null)
+        return
+      }
+      if (key.backspace || key.delete) {
+        setCompose(c => ({ ...c, body: c.body.slice(0, -1) }))
+        return
+      }
+      if (input && !key.ctrl && !key.meta) {
+        setCompose(c => ({ ...c, body: c.body + input }))
+        return
+      }
+      return
+    }
+
     if (dialog) return
 
     // gg → jump to top
@@ -480,51 +527,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
 
     if (input === 'c') {
       const row = rows[cursor]
-      if (row && row.type !== 'file-header') setDialog('comment')
+      if (row && row.type !== 'file-header') {
+        setCompose({ commentType: 'comment', body: '' })
+      }
       return
     }
   })
-
-  // ── Comment dialog ──
-  if (dialog === 'comment') {
-    const row = rows[cursor]
-    return (
-      <Box flexDirection="column" flexGrow={1}>
-        <Box marginBottom={1} paddingX={1}>
-          <Text color={t.ui.muted}>Commenting on: </Text>
-          <Text color={t.diff.ctxFg} wrap="truncate">{row?.text}</Text>
-        </Box>
-        <OptionPicker
-          title="Comment type"
-          options={[
-            { value: 'comment',         label: 'Comment',         description: 'Leave a regular comment' },
-            { value: 'suggestion',      label: 'Suggestion',      description: 'Suggest a code change' },
-            { value: 'request-changes', label: 'Request changes', description: 'Request changes on this PR' },
-          ]}
-          promptText="Comment body"
-          onSubmit={async (val) => {
-            const { value: _v, text } = typeof val === 'object' ? val : { value: val, text: '' }
-            if (!text) { setDialog(null); return }
-            try {
-              await addPRLineComment(repo, prNumber, {
-                body: text,
-                path: row.filename,
-                line: row.newLine || row.oldLine,
-                side: 'RIGHT',
-              })
-              setCommentStatus('Comment added')
-              setTimeout(() => setCommentStatus(null), 3000)
-            } catch (err) {
-              setCommentStatus(`Failed: ${err.message}`)
-              setTimeout(() => setCommentStatus(null), 3000)
-            }
-            setDialog(null)
-          }}
-          onCancel={() => setDialog(null)}
-        />
-      </Box>
-    )
-  }
 
   if (isLargeDiff && !diffWarningAck) {
     return (
@@ -554,7 +562,9 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const colWidth = Math.floor(((stdout?.columns || 80) - 2) / 2)
   const MAX_ROWS = 2000
   const displayRows = rows.length > MAX_ROWS ? rows.slice(0, MAX_ROWS) : rows
-  const visibleRows = displayRows.slice(scrollOffset, scrollOffset + visibleHeight)
+  const composeBoxHeight = compose ? 6 : 0
+  const effectiveHeight = Math.max(3, visibleHeight - composeBoxHeight)
+  const visibleRows = displayRows.slice(scrollOffset, scrollOffset + effectiveHeight)
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -567,7 +577,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
 
       <Box flexDirection="column" flexGrow={1} overflow="hidden">
         {splitView
-          ? renderSplitView(displayRows, scrollOffset, visibleHeight, cursor, langCache, colWidth)
+          ? renderSplitView(displayRows, scrollOffset, effectiveHeight, cursor, langCache, colWidth)
           : visibleRows.map((row, i) => {
               const idx = scrollOffset + i
               const isSelected = idx === cursor
@@ -600,6 +610,35 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         </Box>
       )}
 
+      {compose && (() => {
+        const row = rows[cursor]
+        return (
+          <Box flexDirection="column"
+            borderStyle="round" borderColor={t.diff.threadBorder}
+            paddingX={1} marginX={1} marginBottom={0}>
+            <Box gap={1}>
+              <Text color={t.ui.dim}>Line {row?.newLine ?? row?.oldLine}:</Text>
+              <Text color={t.diff.ctxFg} wrap="truncate">{(row?.text || '').slice(0, 60)}</Text>
+            </Box>
+            <Box gap={3} marginTop={0}>
+              {COMMENT_TYPES.map(type => {
+                const isActive = compose.commentType === type
+                return (
+                  <Text key={type} color={isActive ? t.ui.selected : t.ui.dim} bold={isActive}>
+                    {isActive ? '● ' : '○ '}{type}
+                  </Text>
+                )
+              })}
+            </Box>
+            <Box marginTop={0}>
+              <Text color={t.ui.dim}>  </Text>
+              <Text color={t.ui.selected}>{compose.body}</Text>
+              <Text color={t.ui.dim}>█</Text>
+            </Box>
+            <Text color={t.ui.dim}>[←→] type  [Ctrl+Enter] submit  [Esc] cancel</Text>
+          </Box>
+        )
+      })()}
       <FooterKeys keys={splitView ? FOOTER_KEYS_SPLIT : FOOTER_KEYS_UNIFIED} />
     </Box>
   )

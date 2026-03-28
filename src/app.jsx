@@ -467,26 +467,25 @@ export function App({ repo }) {
   if (showHelp) {
     return (
       <AppContext.Provider value={appCtx}>
-        <Box
-          height={rows}
-          flexDirection="column"
-          justifyContent="center"
-          alignItems="center"
-          overflow="hidden"
-        >
-          <Box
-            flexDirection="column"
-            borderStyle="round"
-            borderColor={t.ui.selected}
-            paddingX={2}
-            paddingY={1}
-          >
-            <HelpOverlay
-              pane={pane}
-              view={view}
-              onClose={() => setShowHelp(false)}
-            />
+        <Box flexDirection="column" height={rows} overflow="hidden">
+          <Box flexDirection="row" flexGrow={1} overflow="hidden">
+            {showSidebar && (
+              <Sidebar currentPane={pane} visiblePanes={PANES}
+                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS}
+                onSelect={(p) => { setPane(p); setShowHelp(false); setHoveredItem(null); setSelectedItem(null); setView('list') }}
+                height={rows - 2}
+              />
+            )}
+            <Box flexDirection="column" flexGrow={1} overflow="hidden"
+              justifyContent="center" alignItems="center">
+              <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected}
+                paddingX={2} paddingY={1}>
+                <HelpOverlay pane={pane} view={view} onClose={() => setShowHelp(false)} />
+              </Box>
+            </Box>
           </Box>
+          <StatusBar repo={repo} pane={pane} count={paneState.count} />
+          <FooterKeys keys={[{ key: '? / Esc / Enter', label: 'close help' }]} />
         </Box>
       </AppContext.Provider>
     )
@@ -496,20 +495,12 @@ export function App({ repo }) {
   if (view === 'diff' && selectedItem) {
     return (
       <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column">
-          <PRDiff
-            prNumber={selectedItem.number}
-            repo={repo}
-            onBack={goBack}
-            onViewComments={goToComments}
-          />
-          <FooterKeys keys={[
-            { key: 'j/k', label: 'scroll' }, { key: 'gg/G', label: 'top/btm' },
-            { key: ']/[', label: 'file' },   { key: 'c', label: 'comment' },
-            { key: 'n/N', label: 'thread' }, { key: 'v', label: 'comments' },
-            { key: '?', label: 'help' },     { key: 'Esc', label: 'back' },
-          ]} />
-        </Box>
+        <PRDiff
+          prNumber={selectedItem.number}
+          repo={repo}
+          onBack={goBack}
+          onViewComments={goToComments}
+        />
       </AppContext.Provider>
     )
   }
@@ -517,19 +508,12 @@ export function App({ repo }) {
   if (view === 'comments' && selectedItem) {
     return (
       <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column">
-          <PRComments
-            prNumber={selectedItem.number}
-            repo={repo}
-            onBack={goBack}
-            onJumpToDiff={() => setView('diff')}
-          />
-          <FooterKeys keys={[
-            { key: 'j/k', label: 'nav' },   { key: 'r', label: 'reply' },
-            { key: 'R', label: 'resolve' },  { key: 'g', label: 'jump diff' },
-            { key: '?', label: 'help' },     { key: 'Esc', label: 'back' },
-          ]} />
-        </Box>
+        <PRComments
+          prNumber={selectedItem.number}
+          repo={repo}
+          onBack={goBack}
+          onJumpToDiff={() => setView('diff')}
+        />
       </AppContext.Provider>
     )
   }
