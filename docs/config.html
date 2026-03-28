@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Configuration — ghui</title>
+  <meta name="description" content="ghui configuration reference — customize panes, defaults, and behavior." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --border: #21262d;
+      --green: #3fb950; --blue: #58a6ff; --purple: #a371f7;
+      --orange: #d29922; --muted: #8b949e; --text: #e6edf3; --dim: #484f58;
+    }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.7; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    nav {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: .75rem 2rem; display: flex; align-items: center; gap: 2rem; position: sticky; top: 0; z-index: 10;
+    }
+    nav .brand { font-weight: 700; color: var(--blue); font-size: 1.1rem; }
+    nav a { color: var(--muted); font-size: .9rem; }
+    nav a:hover { color: var(--text); }
+    nav a.active { color: var(--blue); }
+
+    .container { max-width: 860px; margin: 0 auto; padding: 3rem 2rem 6rem; }
+    h1 { font-size: 2rem; font-weight: 700; color: var(--text); margin-bottom: .5rem; }
+    .subtitle { color: var(--muted); margin-bottom: 3rem; font-size: 1.05rem; }
+    h2 { font-size: 1.3rem; font-weight: 700; margin: 2.5rem 0 1rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 .5rem; color: var(--blue); }
+    p { margin-bottom: 1rem; color: var(--muted); }
+    strong { color: var(--text); }
+    ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; color: var(--muted); }
+    li { margin-bottom: .4rem; }
+
+    pre {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 1rem 1.25rem; overflow-x: auto; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: .88rem;
+      margin-bottom: 1.25rem; line-height: 1.6;
+    }
+    code { font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: .88em; background: var(--surface); padding: .1em .35em; border-radius: 4px; color: var(--text); }
+    pre code { background: none; padding: 0; font-size: inherit; }
+
+    .key { color: var(--blue); }
+    .str { color: #a5d6ff; }
+    .bool { color: var(--purple); }
+    .arr { color: var(--orange); }
+    .comment { color: var(--dim); }
+
+    .schema-table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
+    .schema-table th { text-align: left; padding: .5rem 1rem; font-size: .82rem; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); border-bottom: 1px solid var(--border); }
+    .schema-table td { padding: .55rem 1rem; font-size: .88rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .schema-table tr:last-child td { border-bottom: none; }
+    .schema-table td:first-child { font-family: monospace; color: var(--text); white-space: nowrap; }
+    .schema-table td:nth-child(2) { color: var(--purple); white-space: nowrap; }
+    .schema-table td:nth-child(3) { color: var(--muted); }
+    .schema-table td:nth-child(4) { color: var(--green); font-family: monospace; font-size: .82rem; }
+
+    .tip {
+      background: #0d2a17; border-left: 3px solid var(--green);
+      padding: .75rem 1rem; border-radius: 0 6px 6px 0; margin-bottom: 1rem;
+    }
+    .tip strong { color: var(--green); }
+
+    .pane-list { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0 1rem; }
+    .pane-chip {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 4px; padding: .2rem .6rem; font-family: monospace; font-size: .85rem; color: var(--text);
+    }
+
+    footer { text-align: center; padding: 2rem; color: var(--dim); font-size: .85rem; border-top: 1px solid var(--border); margin-top: 4rem; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="brand">ghui</span>
+  <a href="index.html">Home</a>
+  <a href="guide.html">Guide</a>
+  <a href="keybindings.html">Keybindings</a>
+  <a href="config.html" class="active">Config</a>
+</nav>
+
+<div class="container">
+  <h1>Configuration</h1>
+  <p class="subtitle">ghui is zero-config out of the box. Everything here is optional.</p>
+
+  <h2>Config file location</h2>
+
+  <pre><span class="comment"># macOS / Linux</span>
+~/.config/ghui/config.json
+
+<span class="comment"># Windows</span>
+%APPDATA%\ghui\config.json</pre>
+
+  <p>Create the file if it doesn't exist — ghui uses sensible defaults for any missing keys.</p>
+
+  <h2>Full example</h2>
+
+  <pre>{
+  <span class="key">"panes"</span>: [<span class="str">"prs"</span>, <span class="str">"issues"</span>, <span class="str">"branches"</span>, <span class="str">"actions"</span>, <span class="str">"notifications"</span>],
+  <span class="key">"defaultPane"</span>: <span class="str">"prs"</span>
+}</pre>
+
+  <h2>Schema reference</h2>
+
+  <table class="schema-table">
+    <thead>
+      <tr><th>Key</th><th>Type</th><th>Description</th><th>Default</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>panes</td>
+        <td>string[]</td>
+        <td>Which panes to show in the sidebar (and in what order). Omit any pane to hide it completely.</td>
+        <td>all panes</td>
+      </tr>
+      <tr>
+        <td>defaultPane</td>
+        <td>string</td>
+        <td>Which pane to open on startup. Must be one of the values in <code>panes</code>.</td>
+        <td>"prs"</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>panes</h2>
+
+  <p>Controls which panes appear in the sidebar. Valid values:</p>
+
+  <div class="pane-list">
+    <span class="pane-chip">prs</span>
+    <span class="pane-chip">issues</span>
+    <span class="pane-chip">branches</span>
+    <span class="pane-chip">actions</span>
+    <span class="pane-chip">notifications</span>
+  </div>
+
+  <p>The order in the array determines the order in the sidebar and the Tab-cycling order.</p>
+
+  <h3>Show only PRs and Issues</h3>
+  <pre>{
+  <span class="key">"panes"</span>: [<span class="str">"prs"</span>, <span class="str">"issues"</span>]
+}</pre>
+
+  <h3>Show everything except notifications</h3>
+  <pre>{
+  <span class="key">"panes"</span>: [<span class="str">"prs"</span>, <span class="str">"issues"</span>, <span class="str">"branches"</span>, <span class="str">"actions"</span>]
+}</pre>
+
+  <h3>Reorder: start with Issues</h3>
+  <pre>{
+  <span class="key">"panes"</span>: [<span class="str">"issues"</span>, <span class="str">"prs"</span>, <span class="str">"branches"</span>, <span class="str">"actions"</span>, <span class="str">"notifications"</span>],
+  <span class="key">"defaultPane"</span>: <span class="str">"issues"</span>
+}</pre>
+
+  <div class="tip">
+    <strong>Tip:</strong> If <code>panes</code> contains an unrecognized value, ghui silently ignores it. If <code>panes</code> is empty or missing, all panes are shown.
+  </div>
+
+  <h2>defaultPane</h2>
+
+  <p>Sets which pane is active when ghui starts. Must be one of the values in your <code>panes</code> array (or a valid pane name if <code>panes</code> is omitted).</p>
+
+  <pre>{
+  <span class="key">"defaultPane"</span>: <span class="str">"issues"</span>
+}</pre>
+
+  <p>If <code>defaultPane</code> is not in the visible panes list, ghui falls back to the first visible pane.</p>
+
+  <h2>Editing the config live</h2>
+
+  <p>Changes to <code>config.json</code> take effect on the next launch. There is no hot-reload — exit ghui (<kbd>q</kbd>) and re-open.</p>
+
+  <pre><span class="comment"># Quick edit</span>
+$EDITOR ~/.config/ghui/config.json
+
+<span class="comment"># Create the directory if it doesn't exist</span>
+mkdir -p ~/.config/ghui && $EDITOR ~/.config/ghui/config.json</pre>
+
+  <h2>Validation</h2>
+
+  <p>ghui validates the config on startup:</p>
+  <ul>
+    <li>Invalid JSON → prints a parse error, uses defaults, continues</li>
+    <li>Unknown keys → silently ignored (forward-compatible)</li>
+    <li>Invalid pane names → silently ignored</li>
+    <li>Empty <code>panes</code> array → falls back to showing all panes</li>
+  </ul>
+
+  <h2>Future config options</h2>
+
+  <p>These are planned for a future release and are not yet supported:</p>
+  <ul>
+    <li><code>theme</code> — custom color palette</li>
+    <li><code>cache.ttl</code> — override the 30-second data cache TTL</li>
+    <li><code>repo</code> — pin a default repo (instead of auto-detect)</li>
+    <li><code>editor</code> — override <code>$EDITOR</code> for compose views</li>
+  </ul>
+
+  <p><a href="https://github.com/saketh-kowtha/lgh/issues">Open an issue</a> if you want to request a specific config option.</p>
+</div>
+
+<footer>
+  <p>ghui is MIT licensed · <a href="https://github.com/saketh-kowtha/lgh">GitHub</a></p>
+</footer>
+
+</body>
+</html>

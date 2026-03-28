@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Keybindings — ghui</title>
+  <meta name="description" content="Complete keyboard reference for ghui — every key, every pane." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --border: #21262d;
+      --green: #3fb950; --blue: #58a6ff; --purple: #a371f7;
+      --orange: #d29922; --muted: #8b949e; --text: #e6edf3; --dim: #484f58;
+    }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    nav {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: .75rem 2rem; display: flex; align-items: center; gap: 2rem; position: sticky; top: 0; z-index: 10;
+    }
+    nav .brand { font-weight: 700; color: var(--blue); font-size: 1.1rem; }
+    nav a { color: var(--muted); font-size: .9rem; }
+    nav a:hover { color: var(--text); }
+    nav a.active { color: var(--blue); }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 3rem 2rem 6rem; }
+    h1 { font-size: 2rem; font-weight: 700; color: var(--text); margin-bottom: .5rem; }
+    .subtitle { color: var(--muted); margin-bottom: 3rem; font-size: 1.05rem; }
+    h2 { font-size: 1.2rem; font-weight: 700; margin: 2.5rem 0 1rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border); }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: .75rem 1.25rem; border-bottom: 1px solid var(--border);
+      font-weight: 600; font-size: .95rem;
+    }
+    .card-header .icon { margin-right: .5rem; }
+
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: .45rem 1.25rem; font-size: .88rem; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    td:first-child { width: 30%; white-space: nowrap; }
+    td:last-child { color: var(--muted); }
+
+    kbd {
+      display: inline-block; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 4px; padding: .1rem .4rem; font-family: monospace; font-size: .82em;
+      color: var(--text); white-space: nowrap;
+    }
+
+    .search-bar {
+      margin-bottom: 2rem;
+    }
+    .search-bar input {
+      width: 100%; padding: .6rem 1rem; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: .95rem; outline: none;
+    }
+    .search-bar input:focus { border-color: var(--blue); }
+    .search-bar input::placeholder { color: var(--dim); }
+
+    tr.hidden { display: none; }
+
+    footer { text-align: center; padding: 2rem; color: var(--dim); font-size: .85rem; border-top: 1px solid var(--border); margin-top: 4rem; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="brand">ghui</span>
+  <a href="index.html">Home</a>
+  <a href="guide.html">Guide</a>
+  <a href="keybindings.html" class="active">Keybindings</a>
+  <a href="config.html">Config</a>
+</nav>
+
+<div class="container">
+  <h1>Keybindings</h1>
+  <p class="subtitle">Every key in every view. Press <kbd>?</kbd> inside ghui for context-aware help.</p>
+
+  <div class="search-bar">
+    <input type="text" id="search" placeholder="Filter keybindings…" autocomplete="off" />
+  </div>
+
+  <h2>Global — works everywhere</h2>
+  <div class="grid">
+    <div class="card">
+      <table id="tbl-global">
+        <tr><td><kbd>Tab</kbd></td><td>Next pane</td></tr>
+        <tr><td><kbd>Shift+Tab</kbd></td><td>Previous pane</td></tr>
+        <tr><td><kbd>q</kbd></td><td>Back / quit (confirms if unsaved)</td></tr>
+        <tr><td><kbd>?</kbd></td><td>Toggle context-aware help overlay</td></tr>
+        <tr><td><kbd>r</kbd></td><td>Refresh current pane (bypass cache)</td></tr>
+        <tr><td><kbd>o</kbd></td><td>Open current item in browser</td></tr>
+        <tr><td><kbd>/</kbd></td><td>Fuzzy search within current list</td></tr>
+        <tr><td><kbd>j</kbd> / <kbd>↓</kbd></td><td>Move cursor down</td></tr>
+        <tr><td><kbd>k</kbd> / <kbd>↑</kbd></td><td>Move cursor up</td></tr>
+        <tr><td><kbd>gg</kbd></td><td>Jump to top of list</td></tr>
+        <tr><td><kbd>G</kbd></td><td>Jump to bottom of list</td></tr>
+        <tr><td><kbd>y</kbd></td><td>Copy URL of selected item to clipboard</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h2>Pull Requests</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-header"><span class="icon">⎇</span> PR List</div>
+      <table id="tbl-prs">
+        <tr><td><kbd>Enter</kbd></td><td>Open PR detail view</td></tr>
+        <tr><td><kbd>d</kbd></td><td>Open diff view</td></tr>
+        <tr><td><kbd>c</kbd></td><td>Checkout PR branch locally</td></tr>
+        <tr><td><kbd>m</kbd></td><td>Merge (pick merge/squash/rebase)</td></tr>
+        <tr><td><kbd>a</kbd></td><td>Approve PR</td></tr>
+        <tr><td><kbd>x</kbd></td><td>Request changes</td></tr>
+        <tr><td><kbd>l</kbd></td><td>Edit labels (multi-select)</td></tr>
+        <tr><td><kbd>A</kbd></td><td>Edit assignees (multi-select)</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Request reviewers (multi-select)</td></tr>
+        <tr><td><kbd>f</kbd></td><td>Cycle filter: open → closed → merged</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="icon">⎇</span> Diff View</div>
+      <table id="tbl-diff">
+        <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Scroll lines down / up</td></tr>
+        <tr><td><kbd>]</kbd></td><td>Jump to next file</td></tr>
+        <tr><td><kbd>[</kbd></td><td>Jump to previous file</td></tr>
+        <tr><td><kbd>n</kbd></td><td>Next comment thread</td></tr>
+        <tr><td><kbd>N</kbd></td><td>Previous comment thread</td></tr>
+        <tr><td><kbd>c</kbd></td><td>Comment on cursor line</td></tr>
+        <tr><td><kbd>v</kbd></td><td>Switch to comments view</td></tr>
+        <tr><td><kbd>s</kbd></td><td>Toggle split / unified view</td></tr>
+        <tr><td><kbd>gg</kbd></td><td>Jump to top</td></tr>
+        <tr><td><kbd>G</kbd></td><td>Jump to bottom</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Back to PR detail</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="icon">💬</span> Comment Compose</div>
+      <table id="tbl-comment">
+        <tr><td><kbd>Tab</kbd></td><td>Next field</td></tr>
+        <tr><td><kbd>e</kbd></td><td>Open $EDITOR for full body</td></tr>
+        <tr><td><kbd>Ctrl+Enter</kbd></td><td>Submit comment</td></tr>
+        <tr><td><kbd>Ctrl+R</kbd></td><td>Submit and resolve thread</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Cancel</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h2>Issues</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-header"><span class="icon">○</span> Issue List</div>
+      <table id="tbl-issues">
+        <tr><td><kbd>Enter</kbd></td><td>Open issue detail</td></tr>
+        <tr><td><kbd>n</kbd></td><td>New issue (compose form)</td></tr>
+        <tr><td><kbd>x</kbd></td><td>Close issue (confirm dialog)</td></tr>
+        <tr><td><kbd>l</kbd></td><td>Edit labels (multi-select)</td></tr>
+        <tr><td><kbd>A</kbd></td><td>Edit assignees (multi-select)</td></tr>
+        <tr><td><kbd>f</kbd></td><td>Cycle filter: open → closed</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h2>Branches</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-header"><span class="icon">⎇</span> Branch List</div>
+      <table id="tbl-branches">
+        <tr><td><kbd>Space</kbd> / <kbd>Enter</kbd></td><td>Checkout branch</td></tr>
+        <tr><td><kbd>n</kbd></td><td>New branch (prompt for name + base)</td></tr>
+        <tr><td><kbd>D</kbd></td><td>Delete branch (confirm, warns if open PR)</td></tr>
+        <tr><td><kbd>p</kbd></td><td>Push current branch to remote</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h2>Actions</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-header"><span class="icon">▶</span> Actions List</div>
+      <table id="tbl-actions">
+        <tr><td><kbd>Enter</kbd> / <kbd>l</kbd></td><td>View run logs (log viewer)</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Re-run failed jobs</td></tr>
+        <tr><td><kbd>X</kbd></td><td>Cancel run (confirm dialog)</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="icon">📋</span> Log Viewer</div>
+      <table id="tbl-logs">
+        <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Scroll down / up</td></tr>
+        <tr><td><kbd>gg</kbd></td><td>Jump to top</td></tr>
+        <tr><td><kbd>G</kbd></td><td>Jump to bottom</td></tr>
+        <tr><td><kbd>f</kbd></td><td>Filter by step name</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Re-run this workflow</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Back</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h2>Notifications</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-header"><span class="icon">●</span> Notification List</div>
+      <table id="tbl-notifications">
+        <tr><td><kbd>Enter</kbd></td><td>Open item (routes to correct pane)</td></tr>
+        <tr><td><kbd>m</kbd></td><td>Mark current as read</td></tr>
+        <tr><td><kbd>M</kbd></td><td>Mark all as read (confirm)</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <p>ghui is MIT licensed · <a href="https://github.com/saketh-kowtha/lgh">GitHub</a></p>
+</footer>
+
+<script>
+  const input = document.getElementById('search')
+  input.addEventListener('input', () => {
+    const q = input.value.toLowerCase()
+    document.querySelectorAll('table tr').forEach(tr => {
+      if (!q) { tr.classList.remove('hidden'); return }
+      const text = tr.textContent.toLowerCase()
+      tr.classList.toggle('hidden', !text.includes(q))
+    })
+  })
+</script>
+
+</body>
+</html>

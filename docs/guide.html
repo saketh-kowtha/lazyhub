@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Getting Started — ghui</title>
+  <meta name="description" content="Install ghui and learn the keyboard-driven GitHub TUI in minutes." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --border: #21262d;
+      --green: #3fb950; --blue: #58a6ff; --purple: #a371f7;
+      --orange: #d29922; --muted: #8b949e; --text: #e6edf3; --dim: #484f58;
+    }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.7; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    nav {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: .75rem 2rem; display: flex; align-items: center; gap: 2rem; position: sticky; top: 0; z-index: 10;
+    }
+    nav .brand { font-weight: 700; color: var(--blue); font-size: 1.1rem; }
+    nav a { color: var(--muted); font-size: .9rem; }
+    nav a:hover { color: var(--text); }
+    nav a.active { color: var(--blue); }
+
+    .container { max-width: 860px; margin: 0 auto; padding: 3rem 2rem 6rem; }
+    h1 { font-size: 2rem; font-weight: 700; color: var(--text); margin-bottom: .5rem; }
+    .subtitle { color: var(--muted); margin-bottom: 3rem; font-size: 1.05rem; }
+    h2 { font-size: 1.3rem; font-weight: 700; margin: 2.5rem 0 1rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 .5rem; color: var(--blue); }
+    p { margin-bottom: 1rem; color: var(--muted); }
+    strong { color: var(--text); }
+    ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; color: var(--muted); }
+    li { margin-bottom: .3rem; }
+
+    pre {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 1rem 1.25rem; overflow-x: auto; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: .88rem;
+      margin-bottom: 1.25rem; line-height: 1.6;
+    }
+    code { font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: .88em; background: var(--surface); padding: .1em .35em; border-radius: 4px; color: var(--text); }
+    pre code { background: none; padding: 0; font-size: inherit; }
+    .cmd { color: var(--green); }
+    .comment { color: var(--dim); }
+    .flag { color: var(--orange); }
+
+    .step {
+      display: flex; gap: 1.25rem; margin-bottom: 2rem;
+      padding: 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    }
+    .step-num {
+      flex-shrink: 0; width: 2rem; height: 2rem; border-radius: 50%;
+      background: var(--blue); color: #000; font-weight: 700; font-size: .9rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .step-body h3 { margin-top: 0; }
+
+    .tip {
+      background: #0d2a17; border-left: 3px solid var(--green);
+      padding: .75rem 1rem; border-radius: 0 6px 6px 0; margin-bottom: 1rem;
+    }
+    .tip strong { color: var(--green); }
+
+    .warn {
+      background: #2a1d0d; border-left: 3px solid var(--orange);
+      padding: .75rem 1rem; border-radius: 0 6px 6px 0; margin-bottom: 1rem;
+    }
+    .warn strong { color: var(--orange); }
+
+    kbd {
+      display: inline-block; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 4px; padding: .1rem .4rem; font-family: monospace; font-size: .82em;
+      color: var(--text);
+    }
+
+    .workflow {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;
+    }
+    @media (max-width: 600px) { .workflow { grid-template-columns: 1fr; } }
+    .workflow-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 1rem 1.25rem;
+    }
+    .workflow-card h4 { font-size: .9rem; color: var(--blue); margin-bottom: .5rem; }
+    .workflow-card p { font-size: .85rem; margin: 0; }
+
+    footer { text-align: center; padding: 2rem; color: var(--dim); font-size: .85rem; border-top: 1px solid var(--border); margin-top: 4rem; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="brand">ghui</span>
+  <a href="index.html">Home</a>
+  <a href="guide.html" class="active">Guide</a>
+  <a href="keybindings.html">Keybindings</a>
+  <a href="config.html">Config</a>
+</nav>
+
+<div class="container">
+  <h1>Getting Started</h1>
+  <p class="subtitle">Install ghui and go from zero to productive in under 5 minutes.</p>
+
+  <!-- ── Install ──────────────────────────────────────────────────────────── -->
+  <h2>1 · Installation</h2>
+
+  <h3>Prerequisites</h3>
+  <ul>
+    <li><strong>Node.js 20+</strong> — <code>node --version</code></li>
+    <li><strong>gh CLI</strong> — ghui will guide you through install + login if missing</li>
+  </ul>
+
+  <h3>Install ghui</h3>
+  <pre><span class="comment"># one-time global install (recommended)</span>
+<span class="cmd">npm install -g ghui</span>
+
+<span class="comment"># or run without installing</span>
+<span class="cmd">npx ghui</span>
+
+<span class="comment"># or from source</span>
+<span class="cmd">git clone https://github.com/saketh-kowtha/lgh &amp;&amp; cd lgh</span>
+<span class="cmd">npm install &amp;&amp; npm start</span></pre>
+
+  <div class="tip">
+    <strong>Tip:</strong> After global install, run <code>ghui</code> from any directory that contains a Git repo and it auto-detects the GitHub remote.
+  </div>
+
+  <!-- ── First run ─────────────────────────────────────────────────────────── -->
+  <h2>2 · First Run</h2>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <h3>gh detection</h3>
+      <p>ghui checks for the <code>gh</code> CLI. If not found, it prints platform-specific install instructions and exits cleanly — no stack traces.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <h3>Login</h3>
+      <p>If not already authenticated, ghui runs <code>gh auth login --web</code>. On headless systems (no browser), it prompts for a Personal Access Token instead.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <h3>Repo detection</h3>
+      <p>Inside a git repo with a GitHub remote? ghui auto-detects it. Outside a repo, it shows an arrow-key picker of your recent GitHub repos.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <h3>The TUI opens</h3>
+      <p>You're in. Navigate with <kbd>j</kbd>/<kbd>k</kbd>, switch panes with <kbd>Tab</kbd>, press <kbd>?</kbd> any time for context-aware help.</p>
+    </div>
+  </div>
+
+  <!-- ── Layout ───────────────────────────────────────────────────────────── -->
+  <h2>3 · Interface Layout</h2>
+
+  <pre><span class="comment">┌── sidebar 18 ──┬──── list (flex) ────┬── detail 40 ──┐</span>
+<span class="comment">│ ghui           │ ● #42  Fix auth…    │ author        │</span>
+<span class="comment">│                │ ⎇ #41  Add diff…   │ base ← head   │</span>
+<span class="comment">│ ▌ ⎇ Pull Req  │ ● #40  CI: matrix  │ +12 −3 lines  │</span>
+<span class="comment">│   ○ Issues    │                     │               │</span>
+<span class="comment">│   ⎇ Branches  │                     │ Labels …      │</span>
+<span class="comment">│   ▶ Actions   └─────────────────────┴───────────────┘</span>
+<span class="comment">│   ● Notifs    status bar (always visible)            </span>
+<span class="comment">└───────────────  footer keys (always visible)         </span></pre>
+
+  <ul>
+    <li><strong>Sidebar</strong> — pane navigation, configurable via <code>~/.config/ghui/config.json</code></li>
+    <li><strong>List pane</strong> — scrollable list of items for the current pane</li>
+    <li><strong>Detail pane</strong> — auto-updates as you navigate the list</li>
+    <li>Below <strong>100 cols</strong>: detail panel hides, Enter opens full-screen</li>
+    <li>Below <strong>80 cols</strong>: sidebar hides, Tab cycles via header tabs</li>
+  </ul>
+
+  <!-- ── Workflow ──────────────────────────────────────────────────────────── -->
+  <h2>4 · Common Workflows</h2>
+
+  <div class="workflow">
+    <div class="workflow-card">
+      <h4>Review a PR</h4>
+      <p>Navigate to PRs → <kbd>j</kbd>/<kbd>k</kbd> to select → <kbd>Enter</kbd> for detail → <kbd>d</kbd> for diff → <kbd>a</kbd> to approve</p>
+    </div>
+    <div class="workflow-card">
+      <h4>Merge a PR</h4>
+      <p>Select PR → <kbd>m</kbd> → pick merge/squash/rebase → optional commit message → Enter to confirm</p>
+    </div>
+    <div class="workflow-card">
+      <h4>Work on a branch</h4>
+      <p>Navigate to Branches → <kbd>Space</kbd> to checkout, or PRs → <kbd>c</kbd> to checkout PR branch</p>
+    </div>
+    <div class="workflow-card">
+      <h4>Triage issues</h4>
+      <p>Issues pane → <kbd>f</kbd> to toggle open/closed → <kbd>l</kbd> to edit labels → <kbd>A</kbd> to assign</p>
+    </div>
+    <div class="workflow-card">
+      <h4>Watch CI</h4>
+      <p>Actions pane → <kbd>Enter</kbd> to open run → <kbd>l</kbd> for logs → <kbd>R</kbd> to re-run failed</p>
+    </div>
+    <div class="workflow-card">
+      <h4>Clear notifications</h4>
+      <p>Notifications pane → <kbd>Enter</kbd> to open → <kbd>m</kbd> mark read → <kbd>M</kbd> mark all read</p>
+    </div>
+  </div>
+
+  <!-- ── Diff ─────────────────────────────────────────────────────────────── -->
+  <h2>5 · Diff View</h2>
+
+  <p>Press <kbd>d</kbd> on any PR to open the diff view.</p>
+
+  <pre><span class="comment"> 42  43  context line (syntax highlighted)       </span>
+<span style="color:#56d364">+    44  + added line (green bg + green gutter)    </span>
+<span style="color:#ff7b72">- 43      deleted line (red bg + red gutter)       </span>
+<span class="comment">@@ -42,7 +42,8 @@ function example() {             </span></pre>
+
+  <ul>
+    <li>Syntax highlighting adapts to the file language (JS, TS, Python, Go, Rust, …)</li>
+    <li><kbd>c</kbd> on any line — add an inline comment</li>
+    <li><kbd>n</kbd>/<kbd>N</kbd> — jump between comment threads</li>
+    <li><kbd>]</kbd>/<kbd>[</kbd> — next/previous file</li>
+    <li><kbd>s</kbd> — toggle split/unified view</li>
+  </ul>
+
+  <!-- ── Search ───────────────────────────────────────────────────────────── -->
+  <h2>6 · Fuzzy Search</h2>
+
+  <p>Press <kbd>/</kbd> in any list pane to open fuzzy search. Type to filter in real-time:</p>
+
+  <ul>
+    <li><strong>PRs</strong> — title, number, author, labels, branch name</li>
+    <li><strong>Issues</strong> — title, number, author, labels, milestone</li>
+    <li><strong>Branches</strong> — branch name, last commit message</li>
+    <li><strong>Actions</strong> — workflow name, branch, trigger</li>
+    <li><strong>Notifications</strong> — title, repo, reason</li>
+  </ul>
+
+  <p>Matched characters are <strong>highlighted in bold</strong>. <kbd>↑</kbd>/<kbd>↓</kbd> navigate results, <kbd>Enter</kbd> selects, <kbd>Esc</kbd> cancels.</p>
+
+  <!-- ── Tips ─────────────────────────────────────────────────────────────── -->
+  <h2>7 · Tips &amp; Tricks</h2>
+
+  <ul>
+    <li>Press <kbd>?</kbd> in any view for context-aware keybinding help</li>
+    <li><kbd>gg</kbd> jumps to the top of any list, <kbd>G</kbd> jumps to the bottom</li>
+    <li><kbd>r</kbd> force-refreshes the current pane (bypasses 30s cache)</li>
+    <li><kbd>y</kbd> copies the URL of the selected item to clipboard</li>
+    <li><kbd>o</kbd> opens the selected item in your browser</li>
+    <li>Hide panes you don't use via <a href="config.html">config.json</a> — fewer tabs = faster navigation</li>
+    <li>Use <kbd>f</kbd> to cycle between open/closed/merged states in any list</li>
+  </ul>
+
+  <div class="warn">
+    <strong>Heads up:</strong> ghui requires <code>gh auth login</code> with at minimum <code>repo</code> and <code>read:org</code> scopes. Run <code>gh auth status</code> to check.
+  </div>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="keybindings.html">Complete keybinding reference →</a></li>
+    <li><a href="config.html">Configuration reference →</a></li>
+    <li><a href="https://github.com/saketh-kowtha/lgh/issues">Report a bug or request a feature →</a></li>
+  </ul>
+</div>
+
+<footer>
+  <p>ghui is MIT licensed · <a href="https://github.com/saketh-kowtha/lgh">GitHub</a></p>
+</footer>
+
+</body>
+</html>
