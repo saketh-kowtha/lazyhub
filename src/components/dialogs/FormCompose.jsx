@@ -11,6 +11,7 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { t } from '../../theme.js'
+import { TextInput } from '../../utils.js'
 
 export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
   const [activeField, setActiveField] = useState(0)
@@ -54,16 +55,13 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
     const field = fields[activeField]
     if (!field) return
 
-    if (field.type === 'multiline' && input === 'e') {
+    // Use Ctrl+E for editor to avoid 'e' key hijacking
+    if (field.type === 'multiline' && key.ctrl && input === 'e') {
       openEditor(field.name)
       return
     }
 
-    if (field.type === 'text' || field.type === 'multiline') {
-      if (key.return && field.type === 'text') {
-        setActiveField(f => Math.min(fields.length - 1, f + 1))
-        return
-      }
+    if (field.type === 'multiline') {
       if (key.backspace || key.delete) {
         setValues(prev => ({ ...prev, [field.name]: (prev[field.name] || '').slice(0, -1) }))
         return
@@ -98,16 +96,18 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
                     ))
                   ) : (
                     <Text color={t.ui.dim}>
-                      {isActive ? '' : 'Press e to open editor'}
+                      {isActive ? '' : 'Press Ctrl+E to open editor'}
                     </Text>
                   )}
-                  {isActive && <Text color={t.ui.dim}>[e] open editor  [Ctrl+Enter] submit</Text>}
+                  {isActive && <Text color={t.ui.dim}>[Ctrl+E] open editor  [Ctrl+Enter] submit</Text>}
                 </Box>
               ) : (
-                <Box>
-                  <Text wrap="truncate">{val}</Text>
-                  {isActive && <Text color={t.ui.dim}>|</Text>}
-                </Box>
+                <TextInput
+                  value={val}
+                  onChange={(v) => setValues(prev => ({ ...prev, [field.name]: v }))}
+                  focus={isActive}
+                  onEnter={() => setActiveField(f => Math.min(fields.length - 1, f + 1))}
+                />
               )}
             </Box>
           </Box>

@@ -7,6 +7,7 @@ import React, { useState, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import chalk from 'chalk'
 import { t } from '../../theme.js'
+import { TextInput } from '../../utils.js'
 
 function highlightMatch(str, query) {
   if (!query) return str
@@ -52,23 +53,15 @@ export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['t
       if (filtered[cursor]) onSubmit(filtered[cursor])
       return
     }
-    if (key.upArrow || (key.ctrl && input === 'k') || input === 'k') {
+    if (key.upArrow || (key.ctrl && input === 'k')) {
       setCursor(c => Math.max(0, c - 1))
       return
     }
-    if (key.downArrow || (key.ctrl && input === 'j') || input === 'j') {
+    if (key.downArrow || (key.ctrl && input === 'j')) {
       setCursor(c => Math.min(filtered.length - 1, c + 1))
       return
     }
-    if (key.backspace || key.delete) {
-      setQuery(q => q.slice(0, -1))
-      setCursor(0)
-      return
-    }
-    if (input && !key.ctrl && !key.meta) {
-      setQuery(q => q + input)
-      setCursor(0)
-    }
+    // Note: backspace and character input are now handled by TextInput
   })
 
   const visibleItems = filtered.slice(0, 15)
@@ -77,8 +70,11 @@ export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['t
     <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
       <Box marginBottom={1}>
         <Text color={t.ui.muted}>Search: </Text>
-        <Text color={t.ui.selected}>{query}</Text>
-        <Text color={t.ui.dim}>█</Text>
+        <TextInput
+          value={query}
+          onChange={(v) => { setQuery(v); setCursor(0) }}
+          focus={true}
+        />
       </Box>
       {visibleItems.length === 0 && (
         <Text color={t.ui.muted}>  No results</Text>
