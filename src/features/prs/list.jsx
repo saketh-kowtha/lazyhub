@@ -23,6 +23,7 @@ import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
+import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { AppContext } from '../../app.jsx'
 import { t } from '../../theme.js'
 
@@ -159,7 +160,8 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
     if (input === 'l') { openDialog('labels'); return }
     if (input === 'A') { openDialog('assignees'); return }
     if (input === 'R') { openDialog('reviewers'); return }
-    if (input === 'a') { openDialog('approve'); return }
+    if (input === 'a') { openDialog('approve-body'); return }
+    if (input === 'x') { openDialog('reqchanges-body'); return }
 
     if (input === 'c') {
       checkoutBranch(repo, pr.number)
@@ -247,16 +249,35 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
     return <ReviewerDialog repo={repo} pr={selectedPR} onClose={() => { closeDialog(); refetch() }} />
   }
 
-  if (dialog === 'approve' && selectedPR) {
+  if (dialog === 'approve-body' && selectedPR) {
     return (
-      <ConfirmDialog
-        message={`Approve PR #${selectedPR.number}?`}
-        destructive={false}
-        onConfirm={async () => {
+      <FormCompose
+        title={`Approve PR #${selectedPR.number}`}
+        fields={[{ name: 'body', label: 'Optional comment (Ctrl+Enter to submit, leave empty to skip)', type: 'text' }]}
+        onSubmit={async (values) => {
           closeDialog()
           try {
-            await reviewPR(repo, selectedPR.number, 'approve')
+            await reviewPR(repo, selectedPR.number, 'approve', values.body || '')
             showStatus(`✓ Approved PR #${selectedPR.number}`)
+          } catch (err) {
+            showStatus(`✗ ${err.message}`, true)
+          }
+        }}
+        onCancel={closeDialog}
+      />
+    )
+  }
+
+  if (dialog === 'reqchanges-body' && selectedPR) {
+    return (
+      <FormCompose
+        title={`Request changes on PR #${selectedPR.number}`}
+        fields={[{ name: 'body', label: 'Describe the changes needed', type: 'text' }]}
+        onSubmit={async (values) => {
+          closeDialog()
+          try {
+            await reviewPR(repo, selectedPR.number, 'request-changes', values.body)
+            showStatus(`✓ Requested changes on PR #${selectedPR.number}`)
           } catch (err) {
             showStatus(`✗ ${err.message}`, true)
           }

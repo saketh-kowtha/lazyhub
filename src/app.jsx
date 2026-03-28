@@ -12,12 +12,19 @@
  * Layout (<80 cols):        list only (sidebar replaced by tab header)
  */
 
-import React, { useState, useRef, useCallback, createContext, useContext } from 'react'
+import React, { useState, useRef, useCallback, createContext, useContext, useEffect } from 'react'
 import { render, Box, Text, useInput, useApp, useStdout } from 'ink'
-import { t } from './theme.js'
+import { t as _tBase } from './theme.js'
 import { loadConfig } from './config.js'
 
 const _config = loadConfig()
+// Shallow-merge user theme overrides onto base theme
+const t = Object.keys(_tBase).reduce((acc, key) => {
+  acc[key] = (typeof _tBase[key] === 'object' && !Array.isArray(_tBase[key]) && _config.theme?.[key])
+    ? { ..._tBase[key], ..._config.theme[key] }
+    : _tBase[key]
+  return acc
+}, {})
 import { Sidebar } from './components/Sidebar.jsx'
 import { StatusBar } from './components/StatusBar.jsx'
 import { FooterKeys } from './components/FooterKeys.jsx'
@@ -352,6 +359,30 @@ export function App({ repo }) {
   const { stdout } = useStdout()
   const columns = stdout?.columns || 80
   const rows    = stdout?.rows    || 24
+
+  // ─── Mouse support ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (process.env.GHUI_MOUSE !== '1') return
+    // Enable mouse button + scroll tracking (X10 + SGR mode)
+    process.stdout.write('\x1b[?1000h\x1b[?1002h\x1b[?1015h\x1b[?1006h')
+    // Parse mouse events from raw stdin
+    const handleData = (buf) => {
+      const str = buf.toString()
+      // SGR mouse: ESC [ < Cb ; Cx ; Cy M/m
+      const sgr = str.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/)
+      if (sgr) {
+        const btn = parseInt(sgr[1])
+        // Scroll up = btn 64, scroll down = btn 65
+        if (btn === 64) { process.stdin.emit('keypress', null, { name: 'k' }) }
+        if (btn === 65) { process.stdin.emit('keypress', null, { name: 'j' }) }
+      }
+    }
+    process.stdin.on('data', handleData)
+    return () => {
+      process.stdout.write('\x1b[?1000l\x1b[?1002l\x1b[?1015l\x1b[?1006l')
+      process.stdin.off('data', handleData)
+    }
+  }, [])
 
   const [pane, setPane]             = useState(_config.defaultPane)
   const [view, setView]             = useState('list')

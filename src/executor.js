@@ -26,9 +26,14 @@ export class GhError extends Error {
  * If stdout is not JSON (e.g. plain text diff), returns raw stdout string.
  */
 export async function run(args) {
+  // GHE support: prepend --hostname when GH_HOST is set
+  const fullArgs = process.env.GH_HOST
+    ? ['--hostname', process.env.GH_HOST, ...args]
+    : args
+
   let result
   try {
-    result = await execa('gh', args, { reject: false })
+    result = await execa('gh', fullArgs, { reject: false })
   } catch (err) {
     throw new GhError({
       message: err.message,
@@ -487,4 +492,52 @@ export async function createPR(repo, { title, body, head, base, draft = false, l
   if (assignees.length) args.push('--assignee', assignees.join(','))
   if (reviewers.length) args.push('--reviewer', reviewers.join(','))
   return run(args)
+}
+
+// ─── Gist functions ───────────────────────────────────────────────────────────
+
+/**
+ * List the authenticated user's gists.
+ */
+export async function listGists() {
+  return run(['gist', 'list', '--json', 'id,description,public,updatedAt,files', '--limit', '30'])
+}
+
+/**
+ * View raw content of a gist.
+ */
+export async function getGist(id) {
+  return run(['gist', 'view', id, '--raw'])
+}
+
+/**
+ * Create a new gist via the GitHub API.
+ * files: { filename: content }
+ */
+export async function createGist(description, files, isPublic = false) {
+  const payload = { description, public: isPublic, files: {} }
+  Object.entries(files).forEach(([name, content]) => { payload.files[name] = { content } })
+
+  const gheArgs = process.env.GH_HOST ? ['--hostname', process.env.GH_HOST] : []
+  const proc = execa('gh', [...gheArgs, 'api', 'gists', '--method', 'POST', '--input', '-'], { reject: false })
+  proc.stdin.write(JSON.stringify(payload))
+  proc.stdin.end()
+  const result = await proc
+
+  if (result.exitCode !== 0) {
+    throw new GhError({
+      message: result.stderr?.split('\n')[0] || 'gist create failed',
+      stderr: result.stderr || '',
+      exitCode: result.exitCode,
+      args: ['gist', 'create'],
+    })
+  }
+  try { return JSON.parse(result.stdout) } catch { return result.stdout }
+}
+
+/**
+ * Delete a gist by ID.
+ */
+export async function deleteGist(id) {
+  return run(['gist', 'delete', id, '--yes'])
 }

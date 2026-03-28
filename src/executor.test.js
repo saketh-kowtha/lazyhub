@@ -42,6 +42,9 @@ import {
   listPRComments,
   resolveThread,
   createPR,
+  listGists,
+  getGist,
+  deleteGist,
 } from './executor.js'
 
 // Helper: make execa return a successful JSON response
@@ -501,5 +504,117 @@ describe('createPR()', () => {
     const [, args] = execa.mock.calls[0]
     expect(args).toContain('--reviewer')
     expect(args).toContain('alice,bob')
+  })
+})
+
+// ─── GHE / GH_HOST support ───────────────────────────────────────────────────
+
+describe('GH_HOST support', () => {
+  it('passes --hostname flag when GH_HOST is set', async () => {
+    process.env.GH_HOST = 'github.example.com'
+    mockSuccess([])
+    await listPRs('owner/repo')
+    const [_cmd, args] = execa.mock.calls[0]
+    expect(args).toContain('--hostname')
+    expect(args).toContain('github.example.com')
+    delete process.env.GH_HOST
+  })
+
+  it('does not pass --hostname when GH_HOST is not set', async () => {
+    delete process.env.GH_HOST
+    mockSuccess([])
+    await listPRs('owner/repo')
+    const [_cmd, args] = execa.mock.calls[0]
+    expect(args).not.toContain('--hostname')
+  })
+})
+
+// ─── Rate limit detection ─────────────────────────────────────────────────────
+
+describe('rate limit detection', () => {
+  it('throws GhError with rate limit message', async () => {
+    mockFailure('API rate limit exceeded for user', 1)
+    await expect(listPRs('owner/repo')).rejects.toMatchObject({
+      message: 'GitHub API rate limit exceeded',
+    })
+  })
+})
+
+// ─── 404 / not found detection ────────────────────────────────────────────────
+
+describe('404 / not found detection', () => {
+  it('throws GhError with not found message for exit 404', async () => {
+    execa.mockResolvedValue({ exitCode: 404, stdout: '', stderr: '' })
+    await expect(getPR('owner/repo', 999)).rejects.toMatchObject({
+      message: 'Resource not found',
+    })
+  })
+
+  it('throws GhError with not found for stderr "not found"', async () => {
+    mockFailure('Could not resolve to a Repository', 1)
+    await expect(listPRs('owner/repo')).rejects.toMatchObject({
+      message: 'Resource not found',
+    })
+  })
+})
+
+// ─── Raw string return (non-JSON) ─────────────────────────────────────────────
+
+describe('raw string return', () => {
+  it('returns raw string when stdout is not JSON', async () => {
+    const diff = 'diff --git a/foo.js b/foo.js\n+added line'
+    mockSuccess(diff)
+    const result = await getPRDiff('owner/repo', 1)
+    expect(result).toBe(diff)
+  })
+
+  it('returns null for empty stdout', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+    const result = await listLabels('owner/repo')
+    expect(result).toBeNull()
+  })
+})
+
+// ─── GhError fields ───────────────────────────────────────────────────────────
+
+describe('GhError fields', () => {
+  it('captures stderr, exitCode, and args on failure', async () => {
+    execa.mockResolvedValue({ exitCode: 128, stdout: '', stderr: 'authentication required' })
+    try {
+      await listPRs('owner/repo')
+    } catch (err) {
+      expect(err).toBeInstanceOf(GhError)
+      expect(err.exitCode).toBe(128)
+      expect(err.stderr).toBe('authentication required')
+      expect(err.message).toBe('authentication required')
+    }
+  })
+})
+
+// ─── Gist functions ───────────────────────────────────────────────────────────
+
+describe('listGists', () => {
+  it('calls gh gist list', async () => {
+    mockSuccess([{ id: 'abc123', description: 'test gist' }])
+    const result = await listGists()
+    expect(execa).toHaveBeenCalledWith('gh', expect.arrayContaining(['gist', 'list']), expect.anything())
+    expect(result[0].id).toBe('abc123')
+  })
+})
+
+describe('getGist', () => {
+  it('calls gh gist view --raw', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: 'const x = 1', stderr: '' })
+    const result = await getGist('abc123')
+    expect(execa).toHaveBeenCalledWith('gh', expect.arrayContaining(['gist', 'view', 'abc123', '--raw']), expect.anything())
+    expect(result).toBe('const x = 1')
+  })
+})
+
+describe('deleteGist', () => {
+  it('calls gh gist delete', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+    await deleteGist('abc123')
+    expect(execa).toHaveBeenCalledWith('gh', expect.arrayContaining(['gist', 'delete', 'abc123']), expect.anything())
   })
 })

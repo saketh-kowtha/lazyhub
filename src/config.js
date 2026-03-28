@@ -19,6 +19,7 @@ export const CONFIG_PATH = join(homedir(), '.config', 'ghui', 'config.json')
 const DEFAULTS = {
   panes: ALL_PANES,
   defaultPane: 'prs',
+  theme: {},
 }
 
 export function loadConfig() {
@@ -36,7 +37,9 @@ export function loadConfig() {
       ? user.defaultPane
       : panes[0]
 
-    return { panes, defaultPane }
+    const theme = (typeof user.theme === 'object' && !Array.isArray(user.theme)) ? user.theme : {}
+
+    return { panes, defaultPane, theme }
   } catch {
     return { ...DEFAULTS }
   }

@@ -2,7 +2,7 @@
  * src/features/prs/diff.jsx — PR diff view with syntax highlighting + line comments
  */
 
-import React, { useState, useMemo, useRef } from 'react'
+import React, { useState, useMemo, useRef, useCallback } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import chalk from 'chalk'
 import hljs from 'highlight.js'
@@ -225,15 +225,127 @@ function renderDiffLine(row, isSelected, langCache) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-const FOOTER_KEYS = [
+const FOOTER_KEYS_UNIFIED = [
   { key: 'j/k',  label: 'scroll' },
   { key: 'gg/G', label: 'top/bottom' },
   { key: ']/[',  label: 'file' },
   { key: 'c',    label: 'comment' },
   { key: 'n/N',  label: 'thread' },
   { key: 'v',    label: 'comments' },
+  { key: 's',    label: 'split view' },
   { key: 'Esc',  label: 'back' },
 ]
+
+const FOOTER_KEYS_SPLIT = [
+  { key: 'j/k',  label: 'scroll' },
+  { key: 'gg/G', label: 'top/bottom' },
+  { key: ']/[',  label: 'file' },
+  { key: 'c',    label: 'comment' },
+  { key: 'n/N',  label: 'thread' },
+  { key: 'v',    label: 'comments' },
+  { key: 's',    label: 'unified view' },
+  { key: 'Esc',  label: 'back' },
+]
+
+// ─── Split view renderer ──────────────────────────────────────────────────────
+
+function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, colWidth) {
+  const result = []
+  const slice = rows.slice(scrollOffset, scrollOffset + visibleHeight)
+
+  let i = 0
+  while (i < slice.length) {
+    const row = slice[i]
+    const idx = scrollOffset + i
+    const isSelected = idx === cursor
+
+    // Full-width rows (file-header, hunk)
+    if (row.type === 'file-header' || row.type === 'hunk') {
+      const rendered = renderDiffLine(row, isSelected, langCache)
+      result.push(
+        <Box key={idx}>
+          <Text wrap="truncate">{rendered}</Text>
+        </Box>
+      )
+      i++
+      continue
+    }
+
+    if (row.type === 'ctx') {
+      const lang = langCache.get(row.filename)
+      const code = syntaxHighlight(row.text, lang, null)
+      const gutter = chalk.hex(t.ui.dim)(`${String(row.oldLine ?? '').padStart(4)}${String(row.newLine ?? '').padStart(4)}   `)
+      const line = isSelected ? chalk.bgHex(t.diff.cursorBg)(gutter + code) : gutter + code
+      result.push(
+        <Box key={idx}>
+          <Box width={colWidth} overflow="hidden"><Text wrap="truncate">{line}</Text></Box>
+          <Text color={t.ui.dim}>│</Text>
+          <Box width={colWidth} overflow="hidden"><Text wrap="truncate">{line}</Text></Box>
+        </Box>
+      )
+      i++
+      continue
+    }
+
+    // del/add: try to pair them
+    if (row.type === 'del') {
+      const nextRow = slice[i + 1]
+      const lang = langCache.get(row.filename)
+
+      const delGutter = chalk.bgHex(t.diff.delBg).hex(t.diff.delSign)(`${String(row.oldLine ?? '').padStart(4)}     - `)
+      const delCode   = syntaxHighlight(row.text, lang, t.diff.delBg)
+      const delLine   = isSelected ? chalk.bgHex(t.diff.cursorBg)(delGutter + delCode) : delGutter + delCode
+
+      if (nextRow && nextRow.type === 'add') {
+        const addGutter = chalk.bgHex(t.diff.addBg).hex(t.diff.addSign)(`    ${String(nextRow.newLine ?? '').padStart(4)} + `)
+        const addCode   = syntaxHighlight(nextRow.text, langCache.get(nextRow.filename), t.diff.addBg)
+        const addLine   = isSelected ? chalk.bgHex(t.diff.cursorBg)(addGutter + addCode) : addGutter + addCode
+
+        result.push(
+          <Box key={idx}>
+            <Box width={colWidth} overflow="hidden"><Text wrap="truncate">{delLine}</Text></Box>
+            <Text color={t.ui.dim}>│</Text>
+            <Box width={colWidth} overflow="hidden"><Text wrap="truncate">{addLine}</Text></Box>
+          </Box>
+        )
+        i += 2
+      } else {
+        // Unpaired del
+        result.push(
+          <Box key={idx}>
+            <Box width={colWidth} overflow="hidden"><Text wrap="truncate">{delLine}</Text></Box>
+            <Text color={t.ui.dim}>│</Text>
+            <Box width={colWidth} overflow="hidden"><Text> </Text></Box>
+          </Box>
+        )
+        i++
+      }
+      continue
+    }
+
+    if (row.type === 'add') {
+      // Unpaired add (del was already consumed or not present before)
+      const lang = langCache.get(row.filename)
+      const addGutter = chalk.bgHex(t.diff.addBg).hex(t.diff.addSign)(`    ${String(row.newLine ?? '').padStart(4)} + `)
+      const addCode   = syntaxHighlight(row.text, lang, t.diff.addBg)
+      const addLine   = isSelected ? chalk.bgHex(t.diff.cursorBg)(addGutter + addCode) : addGutter + addCode
+
+      result.push(
+        <Box key={idx}>
+          <Box width={colWidth} overflow="hidden"><Text> </Text></Box>
+          <Text color={t.ui.dim}>│</Text>
+          <Box width={colWidth} overflow="hidden"><Text wrap="truncate">{addLine}</Text></Box>
+        </Box>
+      )
+      i++
+      continue
+    }
+
+    i++
+  }
+
+  return result
+}
 
 export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const { stdout } = useStdout()
@@ -245,6 +357,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
   const [commentStatus, setCommentStatus] = useState(null)
+  const [splitView, setSplitView] = useState(false)
   const lastKeyRef  = useRef(null)
   const lastKeyTimer = useRef(null)
 
@@ -339,6 +452,8 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       if (prev != null) jumpTo(prev)
       return
     }
+    if (input === 's') { setSplitView(v => !v); return }
+
     if (input === 'c') {
       const row = rows[cursor]
       if (row && row.type !== 'file-header') setDialog('comment')
@@ -398,6 +513,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     </Box>
   )
 
+  const colWidth = Math.floor(((stdout?.columns || 80) - 2) / 2)
   const visibleRows = rows.slice(scrollOffset, scrollOffset + visibleHeight)
 
   return (
@@ -405,36 +521,40 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       <Box paddingX={1} justifyContent="space-between">
         <Text color={t.ui.selected} bold>PR #{prNumber} Diff</Text>
         {commentStatus && <Text color={t.ci.pass}>{commentStatus}</Text>}
+        {splitView && <Text color={t.ui.muted}>[split]</Text>}
         <Text color={t.ui.dim}>{cursor + 1} / {rows.length}</Text>
       </Box>
 
       <Box flexDirection="column" flexGrow={1} overflow="hidden">
-        {visibleRows.map((row, i) => {
-          const idx = scrollOffset + i
-          const isSelected = idx === cursor
-          const rendered = renderDiffLine(row, isSelected, langCache)
-          const hasComment = row.filename && row.newLine != null &&
-            commentsByLine.has(`${row.filename}:${row.newLine}`)
-          return (
-            <Box key={idx} flexDirection="column">
-              <Text wrap="truncate">{rendered}</Text>
-              {hasComment && (
-                <Box paddingX={2} flexDirection="column" borderStyle="single" borderColor={t.diff.threadBorder}>
-                  {commentsByLine.get(`${row.filename}:${row.newLine}`).map(c => (
-                    <Box key={c.id} gap={1}>
-                      <Text color={t.diff.threadBorder}>┃</Text>
-                      <Text color={t.ui.selected} bold>{c.user?.login}</Text>
-                      <Text color={t.ui.dim}>{c.body?.slice(0, 60)}</Text>
+        {splitView
+          ? renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, colWidth)
+          : visibleRows.map((row, i) => {
+              const idx = scrollOffset + i
+              const isSelected = idx === cursor
+              const rendered = renderDiffLine(row, isSelected, langCache)
+              const hasComment = row.filename && row.newLine != null &&
+                commentsByLine.has(`${row.filename}:${row.newLine}`)
+              return (
+                <Box key={idx} flexDirection="column">
+                  <Text wrap="truncate">{rendered}</Text>
+                  {hasComment && (
+                    <Box paddingX={2} flexDirection="column" borderStyle="single" borderColor={t.diff.threadBorder}>
+                      {commentsByLine.get(`${row.filename}:${row.newLine}`).map(c => (
+                        <Box key={c.id} gap={1}>
+                          <Text color={t.diff.threadBorder}>┃</Text>
+                          <Text color={t.ui.selected} bold>{c.user?.login}</Text>
+                          <Text color={t.ui.dim}>{c.body?.slice(0, 60)}</Text>
+                        </Box>
+                      ))}
                     </Box>
-                  ))}
+                  )}
                 </Box>
-              )}
-            </Box>
-          )
-        })}
+              )
+            })
+        }
       </Box>
 
-      <FooterKeys keys={FOOTER_KEYS} />
+      <FooterKeys keys={splitView ? FOOTER_KEYS_SPLIT : FOOTER_KEYS_UNIFIED} />
     </Box>
   )
 }
