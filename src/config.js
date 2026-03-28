@@ -1,11 +1,35 @@
 /**
  * config.js — loads ~/.config/ghui/config.json
  *
+ * ── Theme field ───────────────────────────────────────────────────────────────
+ * Built-in theme names (use any as a plain string):
+ *   "github-dark"       — default dark theme (GitHub-inspired)
+ *   "github-light"      — light theme (GitHub-inspired)
+ *   "catppuccin-mocha"  — extra dark pastel (Catppuccin Mocha)
+ *   "catppuccin-latte"  — light pastel (Catppuccin Latte)
+ *   "tokyo-night"       — dark blue/purple (Tokyo Night)
+ *
+ * Theme override formats:
+ *   "theme": "github-dark"
+ *     → use a named built-in theme
+ *
+ *   "theme": "/absolute/path/to/theme.json"
+ *   "theme": "~/my-theme.json"
+ *   "theme": "my-theme.json"   (resolved from ~/.config/ghui/)
+ *     → load a full custom theme from a JSON file
+ *
+ *   "theme": { "name": "tokyo-night", "overrides": { "ui": { "selected": "#ff9900" } } }
+ *     → use a named theme with deep per-key overrides
+ *
+ *   "theme": { "ui": { "selected": "#ff9900" } }
+ *     → legacy: plain overrides applied on top of github-dark
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
  * Full example:
  * {
  *   "panes": ["prs", "issues", "branches", "actions", "notifications"],
  *   "defaultPane": "prs",
- *   "theme": { "ui": { "selected": "#ff9900" } },
+ *   "theme": "github-dark",
  *   "customPanes": {
  *     "my-deploys": {
  *       "label": "Deployments",
@@ -94,7 +118,7 @@ const DEFAULT_DIFF = {
 const DEFAULTS = {
   panes:       BUILTIN_PANES,
   defaultPane: 'prs',
-  theme:       {},
+  theme:       'github-dark',
   customPanes: {},
   pr:          DEFAULT_PR,
   issues:      DEFAULT_ISSUES,
@@ -158,8 +182,8 @@ export function loadConfig() {
 
     const defaultPane = panes.includes(user.defaultPane) ? user.defaultPane : panes[0]
 
-    const theme = (typeof user.theme === 'object' && !Array.isArray(user.theme))
-      ? user.theme : {}
+    // Pass theme through as-is — theme.js resolves all formats
+    const theme = user.theme != null ? user.theme : 'github-dark'
 
     return {
       panes,
@@ -198,7 +222,7 @@ export function writeDefaultConfig() {
       },
       actions: { pageSize: 30 },
       diff: { defaultView: 'unified', syntaxHighlight: true, maxLines: 2000 },
-      theme: {},
+      theme: 'github-dark',
       customPanes: {},
     }
     writeFileSync(CONFIG_PATH, JSON.stringify(template, null, 2) + '\n', 'utf8')

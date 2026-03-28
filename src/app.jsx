@@ -14,17 +14,10 @@
 
 import React, { useState, useRef, useCallback, createContext, useContext, useEffect } from 'react'
 import { render, Box, Text, useInput, useApp, useStdout } from 'ink'
-import { t as _tBase } from './theme.js'
+import { t } from './theme.js'
 import { loadConfig } from './config.js'
 
 const _config = loadConfig()
-// Shallow-merge user theme overrides onto base theme
-const t = Object.keys(_tBase).reduce((acc, key) => {
-  acc[key] = (typeof _tBase[key] === 'object' && !Array.isArray(_tBase[key]) && _config.theme?.[key])
-    ? { ..._tBase[key], ..._config.theme[key] }
-    : _tBase[key]
-  return acc
-}, {})
 import { Sidebar } from './components/Sidebar.jsx'
 import { StatusBar } from './components/StatusBar.jsx'
 import { FooterKeys } from './components/FooterKeys.jsx'
