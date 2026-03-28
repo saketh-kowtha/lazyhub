@@ -508,7 +508,7 @@ export async function listPRComments(repo, number) {
     'api', 'graphql',
     '-f', `owner=${owner}`,
     '-f', `name=${name}`,
-    '-F', `number=${number}`,
+    '-f', `number=${number}`,
     '-f', `query=${query}`,
   ])
   const threads = result?.data?.repository?.pullRequest?.reviewThreads?.nodes || []
