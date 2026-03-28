@@ -476,6 +476,45 @@ export async function listPRComments(repo, number) {
 }
 
 /**
+ * Reply to an existing PR review comment thread.
+ * Uses the dedicated replies endpoint — no path/line/commitId needed.
+ */
+export async function replyToComment(repo, prNumber, commentId, body) {
+  const r = getRepo(repo)
+  const args = [
+    'api', `repos/${r}/pulls/${prNumber}/comments/${commentId}/replies`,
+    '--method', 'POST',
+    '--field', `body=${body}`,
+  ]
+  return run(args)
+}
+
+/**
+ * Edit (update) a PR review comment body.
+ */
+export async function editPRComment(repo, commentId, body) {
+  const r = getRepo(repo)
+  const args = [
+    'api', `repos/${r}/pulls/comments/${commentId}`,
+    '--method', 'PATCH',
+    '--field', `body=${body}`,
+  ]
+  return run(args)
+}
+
+/**
+ * Delete a PR review comment.
+ */
+export async function deletePRComment(repo, commentId) {
+  const r = getRepo(repo)
+  const args = [
+    'api', `repos/${r}/pulls/comments/${commentId}`,
+    '--method', 'DELETE',
+  ]
+  return run(args)
+}
+
+/**
  * Resolve (hide as resolved) a PR review thread.
  * Uses the GraphQL API via gh api graphql.
  */

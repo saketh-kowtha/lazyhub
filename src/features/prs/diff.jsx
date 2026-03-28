@@ -8,7 +8,7 @@ import chalk from 'chalk'
 import hljs from 'highlight.js'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
-import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta } from '../../executor.js'
+import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { loadConfig } from '../../config.js'
@@ -382,6 +382,7 @@ const FOOTER_KEYS_UNIFIED = [
   { key: ']/[',  label: 'file' },
   { key: ':',    label: 'go to line' },
   { key: 'c',    label: 'comment' },
+  { key: 'r/e/d', label: 'reply/edit/delete thread' },
   { key: 'n/N',  label: 'next/prev thread or match' },
   { key: 'v',    label: 'comments' },
   { key: 's',    label: 'split view' },
@@ -396,6 +397,7 @@ const FOOTER_KEYS_SPLIT = [
   { key: ']/[',  label: 'file' },
   { key: ':',    label: 'go to line' },
   { key: 'c',    label: 'comment' },
+  { key: 'r/e/d', label: 'reply/edit/delete thread' },
   { key: 'n/N',  label: 'next/prev thread or match' },
   { key: 'v',    label: 'comments' },
   { key: 's',    label: 'unified view' },
@@ -520,7 +522,11 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
   const [compose, setCompose] = useState(null)
-  // compose = { commentType: 'comment' | 'suggestion' | 'request-changes', body: '' }
+  // compose types:
+  //   new comment: { mode: 'new', commentType, body }
+  //   reply:       { mode: 'reply', rootCommentId, body }
+  //   edit:        { mode: 'edit', commentId, body }
+  //   delete:      { mode: 'delete', commentId, commentBody }
   const COMMENT_TYPES = ['comment', 'suggestion', 'request-changes']
   const [commentStatus, setCommentStatus] = useState(null)
   const [splitView, setSplitView] = useState(_diffCfg.defaultView === 'split')
@@ -699,33 +705,64 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     // Inline compose keyboard handling
     if (compose) {
       if (key.escape) { setCompose(null); return }
-      if (key.leftArrow) {
-        const idx = COMMENT_TYPES.indexOf(compose.commentType)
-        setCompose(c => ({ ...c, commentType: COMMENT_TYPES[Math.max(0, idx - 1)] }))
+
+      // delete confirm
+      if (compose.mode === 'delete') {
+        if (input === 'y') {
+          deletePRComment(repo, compose.commentId)
+            .then(() => { setCommentStatus('Deleted'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
+            .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
+          setCompose(null)
+        }
         return
       }
-      if (key.rightArrow) {
-        const idx = COMMENT_TYPES.indexOf(compose.commentType)
-        setCompose(c => ({ ...c, commentType: COMMENT_TYPES[Math.min(COMMENT_TYPES.length - 1, idx + 1)] }))
-        return
+
+      // comment type picker (new comment only)
+      if (compose.mode === 'new') {
+        if (key.leftArrow) {
+          const idx = COMMENT_TYPES.indexOf(compose.commentType)
+          setCompose(c => ({ ...c, commentType: COMMENT_TYPES[Math.max(0, idx - 1)] }))
+          return
+        }
+        if (key.rightArrow) {
+          const idx = COMMENT_TYPES.indexOf(compose.commentType)
+          setCompose(c => ({ ...c, commentType: COMMENT_TYPES[Math.min(COMMENT_TYPES.length - 1, idx + 1)] }))
+          return
+        }
       }
+
       if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) {
-        const row = rows[cursor]
         const body = compose.body.trim()
-        if (body && row) {
-          addPRLineComment(repo, prNumber, {
-            body,
-            path: row.filename,
-            line: row.newLine || row.oldLine,
-            side: row.type === 'del' ? 'LEFT' : 'RIGHT',
-            commitId: headRefOid,
-          }).then(() => {
-            setCommentStatus('Comment added')
-            setTimeout(() => setCommentStatus(null), 3000)
-          }).catch(err => {
-            setCommentStatus(`Failed: ${err.message}`)
-            setTimeout(() => setCommentStatus(null), 3000)
-          })
+        if (compose.mode === 'new') {
+          const row = rows[cursor]
+          if (body && row) {
+            addPRLineComment(repo, prNumber, {
+              body,
+              path: row.filename,
+              line: row.newLine || row.oldLine,
+              side: row.type === 'del' ? 'LEFT' : 'RIGHT',
+              commitId: headRefOid,
+            }).then(() => {
+              setCommentStatus('Comment added')
+              setTimeout(() => setCommentStatus(null), 3000)
+              refetch()
+            }).catch(err => {
+              setCommentStatus(`Failed: ${err.message}`)
+              setTimeout(() => setCommentStatus(null), 3000)
+            })
+          }
+        } else if (compose.mode === 'reply') {
+          if (body) {
+            replyToComment(repo, prNumber, compose.rootCommentId, body)
+              .then(() => { setCommentStatus('Reply sent'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
+              .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
+          }
+        } else if (compose.mode === 'edit') {
+          if (body) {
+            editPRComment(repo, compose.commentId, body)
+              .then(() => { setCommentStatus('Comment updated'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
+              .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
+          }
         }
         setCompose(null)
         return
@@ -817,7 +854,28 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     if (input === 'c') {
       const row = rows[cursor]
       if (row && row.type !== 'file-header') {
-        setCompose({ commentType: 'comment', body: '' })
+        setCompose({ mode: 'new', commentType: 'comment', body: '' })
+      }
+      return
+    }
+
+    // r/e/d — reply/edit/delete on thread at cursor line
+    if (input === 'r' || input === 'e' || input === 'd') {
+      const row = rows[cursor]
+      const lineKey = row ? `${row.filename}:${row.newLine}` : null
+      const lineComments = lineKey ? commentsByLine.get(lineKey) : null
+      if (lineComments?.length) {
+        const sorted = [...lineComments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+        const roots = sorted.filter(c => !c.inReplyToId)
+        const rootId = roots[0]?.id
+        const lastComment = sorted[sorted.length - 1]
+        if (input === 'r' && rootId) {
+          setCompose({ mode: 'reply', rootCommentId: rootId, body: '' })
+        } else if (input === 'e' && lastComment) {
+          setCompose({ mode: 'edit', commentId: lastComment.id, body: lastComment.body || '' })
+        } else if (input === 'd' && lastComment) {
+          setCompose({ mode: 'delete', commentId: lastComment.id, commentBody: lastComment.body || '' })
+        }
       }
       return
     }
@@ -944,6 +1002,43 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
 
       {compose && (() => {
         const row = rows[cursor]
+        if (compose.mode === 'delete') {
+          return (
+            <Box flexDirection="column" borderStyle="round" borderColor={t.ci.fail}
+              paddingX={1} marginX={1}>
+              <Text color={t.ci.fail} bold>Delete comment?</Text>
+              <Text color={t.ui.dim} wrap="truncate">  "{(compose.commentBody || '').slice(0, 70)}"</Text>
+              <Text color={t.ui.dim}>[y] confirm  [Esc] cancel</Text>
+            </Box>
+          )
+        }
+        if (compose.mode === 'reply') {
+          return (
+            <Box flexDirection="column" borderStyle="round" borderColor={t.diff.threadBorder}
+              paddingX={1} marginX={1}>
+              <Text color={t.ui.dim}>Reply to thread:</Text>
+              <Box>
+                <Text color={t.ui.selected}>{compose.body}</Text>
+                <Text color={t.ui.dim}>█</Text>
+              </Box>
+              <Text color={t.ui.dim}>[Ctrl+G] send  [Esc] cancel</Text>
+            </Box>
+          )
+        }
+        if (compose.mode === 'edit') {
+          return (
+            <Box flexDirection="column" borderStyle="round" borderColor={t.diff.threadBorder}
+              paddingX={1} marginX={1}>
+              <Text color={t.ui.dim}>Edit comment:</Text>
+              <Box>
+                <Text color={t.ui.selected}>{compose.body}</Text>
+                <Text color={t.ui.dim}>█</Text>
+              </Box>
+              <Text color={t.ui.dim}>[Ctrl+G] save  [Esc] cancel</Text>
+            </Box>
+          )
+        }
+        // mode === 'new'
         return (
           <Box flexDirection="column"
             borderStyle="round" borderColor={t.diff.threadBorder}
