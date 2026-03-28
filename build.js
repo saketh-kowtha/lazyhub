@@ -18,6 +18,7 @@ const ctx = await esbuild.context({
   outfile: 'dist/ghui.js',
   loader: { '.jsx': 'jsx' },
   packages: 'external',          // leave node_modules as-is
+  banner: { js: '#!/usr/bin/env node' },
   logLevel: 'info',
 })
 

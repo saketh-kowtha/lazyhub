@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 if (process.argv.includes('--mouse')) {
   process.env.GHUI_MOUSE = '1'
 }
