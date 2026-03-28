@@ -547,7 +547,8 @@ export function App({ repo }) {
         { key: 'r', label: 'reply' },
       ]),
       { key: 'l', label: 'labels' }, { key: 'A', label: 'assignees' },
-      { key: 'r', label: 'refresh' }, { key: '?', label: 'help' },
+      { key: 'r', label: 'refresh' }, { key: 'S', label: 'settings' },
+      { key: '?', label: 'help' },
       { key: 'Esc', label: 'back' },
     ]
 

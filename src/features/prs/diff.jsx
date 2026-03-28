@@ -413,6 +413,7 @@ const FOOTER_KEYS_UNIFIED = [
   { key: 's',    label: 'split view' },
   { key: 't',    label: 'file tree' },
   { key: '/',    label: 'find' },
+  { key: 'S',    label: 'settings' },
   { key: 'Esc',  label: 'back' },
 ]
 
@@ -429,6 +430,7 @@ const FOOTER_KEYS_SPLIT = [
   { key: 's',    label: 'unified view' },
   { key: 't',    label: 'file tree' },
   { key: '/',    label: 'find' },
+  { key: 'S',    label: 'settings' },
   { key: 'Esc',  label: 'back' },
 ]
 
