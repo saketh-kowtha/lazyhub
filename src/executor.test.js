@@ -3,7 +3,7 @@
  * Mocks execa to avoid real gh CLI calls.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('execa', () => {
   return {

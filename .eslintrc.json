@@ -10,11 +10,14 @@
       "jsx": true
     }
   },
+  "plugins": ["react-hooks"],
   "rules": {
     "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
     "no-undef": "off",
     "no-constant-condition": "error",
     "no-duplicate-case": "error",
-    "no-unreachable": "error"
+    "no-unreachable": "error",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn"
   }
 }
