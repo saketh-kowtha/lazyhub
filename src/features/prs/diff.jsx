@@ -2,7 +2,7 @@
  * src/features/prs/diff.jsx — PR diff view with syntax highlighting + line comments
  */
 
-import React, { useState, useMemo, useRef, useCallback } from 'react'
+import React, { useState, useMemo, useRef, useCallback, useContext, useEffect } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import chalk from 'chalk'
 import hljs from 'highlight.js'
@@ -13,6 +13,7 @@ import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { loadConfig } from '../../config.js'
 import { t } from '../../theme.js'
+import { AppContext } from '../../app.jsx'
 
 const _diffCfg = loadConfig().diff
 
@@ -544,6 +545,13 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   // Feature: go-to-line
   const [gotoActive, setGotoActive] = useState(false)
   const [gotoInput, setGotoInput] = useState('')
+
+  // Suppress global 1-9 tab key handler when any overlay is active
+  const { notifyDialog } = useContext(AppContext)
+  useEffect(() => {
+    notifyDialog(!!(gotoActive || findActive || compose || showTree || dialog))
+    return () => notifyDialog(false)
+  }, [gotoActive, findActive, compose, showTree, dialog, notifyDialog])
 
   const files = useMemo(() => parseDiff(diffText || ''), [diffText])
   const rows  = useMemo(() => flattenFiles(files), [files])
