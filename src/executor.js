@@ -90,12 +90,17 @@ export async function listPRs(repo, filter = {}) {
     'pr', 'list',
     '--repo', getRepo(repo),
     '--json', 'number,title,state,author,labels,reviewRequests,statusCheckRollup,updatedAt,isDraft,headRefName,assignees,body',
-    '--limit', '50',
+    '--limit', String(filter.limit || 50),
   ]
-  if (filter.state) args.push('--state', filter.state)
-  if (filter.author) args.push('--author', filter.author)
-  if (filter.label) args.push('--label', filter.label)
+  if (filter.state)  args.push('--state',    filter.state)
+  if (filter.author) args.push('--author',   filter.author)
+  if (filter.label)  args.push('--label',    filter.label)
   if (filter.assignee) args.push('--assignee', filter.assignee)
+  // scope: 'own' → @me author, 'reviewing' → review-requested
+  if (!filter.author) {
+    if (filter.scope === 'own')       args.push('--author', '@me')
+    if (filter.scope === 'reviewing') args.push('--reviewer', '@me')
+  }
   return run(args)
 }
 
@@ -157,7 +162,7 @@ export async function listIssues(repo, filter = {}) {
     'issue', 'list',
     '--repo', getRepo(repo),
     '--json', 'number,title,state,author,labels,assignees,updatedAt,body,milestone,comments',
-    '--limit', '50',
+    '--limit', String(filter.limit || 50),
   ]
   if (filter.state) args.push('--state', filter.state)
   if (filter.author) args.push('--author', filter.author)

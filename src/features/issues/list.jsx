@@ -12,15 +12,19 @@ import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { AppContext } from '../../app.jsx'
+import { loadConfig } from '../../config.js'
 import { t } from '../../theme.js'
+
+const _cfg = loadConfig().issues
 
 export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState }) {
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
-  const [filterState, setFilterState] = useState('open')
-  const { data: issues, loading, error, refetch } = useGh(listIssues, [repo, { state: filterState }])
+  const FK = _cfg.keys
+  const [filterState, setFilterState] = useState(_cfg.defaultFilter)
+  const { data: issues, loading, error, refetch } = useGh(listIssues, [repo, { state: filterState, limit: _cfg.pageSize }])
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
@@ -84,11 +88,14 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
     if (input === '/') { setDialog('fuzzy'); return }
     if (input === 'n') { setDialog('new'); return }
 
-    // f — toggle open / closed
+    // Direct filter keys from config (defaults: O=open, C=closed)
+    if (FK.filterOpen   && input === FK.filterOpen   && filterState !== 'open')   { setFilterState('open');   showStatus('▸ open');   setCursor(0); setScrollOffset(0); return }
+    if (FK.filterClosed && input === FK.filterClosed && filterState !== 'closed') { setFilterState('closed'); showStatus('▸ closed'); setCursor(0); setScrollOffset(0); return }
+    // f still cycles as fallback
     if (input === 'f') {
       setFilterState(prev => {
         const next = STATE_CYCLE[(STATE_CYCLE.indexOf(prev) + 1) % STATE_CYCLE.length]
-        showStatus(`Filter: ${next}`)
+        showStatus(`▸ ${next}`)
         return next
       })
       setCursor(0); setScrollOffset(0)
@@ -212,7 +219,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
       <Box paddingX={1} gap={1}>
         <Text color={t.ui.dim}>filter:</Text>
         <Text color={filterState === 'open' ? t.issue.open : t.issue.closed} bold>{filterState}</Text>
-        <Text color={t.ui.dim}>[f] cycle  [n] new  [y] copy url</Text>
+        <Text color={t.ui.dim}>  [{FK.filterOpen}] open  [{FK.filterClosed}] closed  [n] new</Text>
         {statusMsg && (
           <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}</Text>
         )}

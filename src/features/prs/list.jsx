@@ -26,7 +26,10 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { NewPRDialog } from './NewPRDialog.jsx'
 import { AppContext } from '../../app.jsx'
+import { loadConfig } from '../../config.js'
 import { t } from '../../theme.js'
+
+const _cfg = loadConfig().pr
 
 // ─── Badges ──────────────────────────────────────────────────────────────────
 
@@ -63,11 +66,11 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const { stdout } = useStdout()
   const height = listHeight || Math.max(3, (stdout?.rows || 24) - 5)
 
-  // f cycles: open → closed → merged → open
-  const [filterState, setFilterState] = useState('open')
-  const [scope, setScope] = useState('all')
-  const [limit, setLimit] = useState(100)
-  const { data: prs, loading, error, refetch } = useGh(listPRs, [repo, { state: filterState, scope, limit }])
+  const [filterState, setFilterState] = useState(_cfg.defaultFilter)
+  const [scope, setScope] = useState(_cfg.defaultScope)
+  const [authorFilter, setAuthorFilter] = useState('')  // '' = all authors
+  const [limit, setLimit] = useState(_cfg.pageSize)
+  const { data: prs, loading, error, refetch } = useGh(listPRs, [repo, { state: filterState, scope, author: authorFilter || undefined, limit }])
 
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
@@ -79,6 +82,8 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
 
   const items = prs || []
 
+  // Filter keys from config (defaults: O=open, C=closed, M=merged)
+  const FK = _cfg.keys
   const STATE_CYCLE = ['open', 'closed', 'merged']
 
   // Notify parent of loading/error/count
@@ -147,11 +152,15 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
     if (input === 'r') { refetch(); return }
     if (input === '/') { openDialog('fuzzy'); return }
 
-    // f — cycle filter state
+    // Configurable direct filter keys (defaults: O=open, C=closed, M=merged)
+    if (FK.filterOpen   && input === FK.filterOpen   && filterState !== 'open')   { setFilterState('open');   showStatus('▸ open');   setCursor(0); setScrollOffset(0); return }
+    if (FK.filterClosed && input === FK.filterClosed && filterState !== 'closed') { setFilterState('closed'); showStatus('▸ closed'); setCursor(0); setScrollOffset(0); return }
+    if (FK.filterMerged && input === FK.filterMerged && filterState !== 'merged') { setFilterState('merged'); showStatus('▸ merged'); setCursor(0); setScrollOffset(0); return }
+    // f still cycles through all states (kept as fallback)
     if (input === 'f') {
       setFilterState(prev => {
         const next = STATE_CYCLE[(STATE_CYCLE.indexOf(prev) + 1) % STATE_CYCLE.length]
-        showStatus(`Filter: ${next}`)
+        showStatus(`▸ ${next}`)
         return next
       })
       setCursor(0); setScrollOffset(0)
@@ -163,12 +172,15 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
       const SCOPES = ['all', 'own', 'reviewing']
       setScope(prev => {
         const next = SCOPES[(SCOPES.indexOf(prev) + 1) % SCOPES.length]
-        showStatus(`Scope: ${next}`)
+        showStatus(`scope: ${next}`)
         return next
       })
       setCursor(0); setScrollOffset(0)
       return
     }
+
+    // @ — search PRs by author username
+    if (input === '@') { openDialog('author-search'); return }
 
     // N — new PR
     if (input === 'N') { openDialog('new-pr'); return }
@@ -226,6 +238,21 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
             setCursor(idx)
             setScrollOffset(Math.max(0, idx - Math.floor(height / 2)))
           }
+          closeDialog()
+        }}
+        onCancel={closeDialog}
+      />
+    )
+  }
+
+  if (dialog === 'author-search') {
+    return (
+      <AuthorSearchDialog
+        current={authorFilter}
+        onSubmit={(author) => {
+          setAuthorFilter(author)
+          setCursor(0); setScrollOffset(0)
+          showStatus(author ? `author: @${author}` : 'author: all')
           closeDialog()
         }}
         onCancel={closeDialog}
@@ -378,20 +405,26 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   return (
     <Box flexDirection="column" flexGrow={1}>
       <Box paddingX={1} gap={1}>
-        <Text color={t.ui.dim}>filter:</Text>
         <Text color={filterState === 'open' ? t.pr.open : filterState === 'merged' ? t.pr.merged : t.pr.closed} bold>
           {filterState}
         </Text>
         <Text color={t.ui.dim}>·</Text>
         <Text color={scope === 'own' ? t.ui.selected : scope === 'reviewing' ? t.ci.pending : t.ui.muted} bold>
-          {scope === 'own' ? 'my PRs' : scope === 'reviewing' ? 'reviewing' : 'all'}
+          {scope === 'own' ? 'mine' : scope === 'reviewing' ? 'reviewing' : 'all'}
         </Text>
-        <Text color={t.ui.dim}>[f] state  [s] scope  [/] search</Text>
-        {items.length >= 100 && (
-          <Text color={t.ui.dim}> ({items.length} loaded)</Text>
+        {authorFilter && (
+          <>
+            <Text color={t.ui.dim}>·</Text>
+            <Text color={t.ci.pending}>@{authorFilter}</Text>
+            <Text color={t.ui.dim}> [@] change</Text>
+          </>
+        )}
+        <Text color={t.ui.dim}>  [{FK.filterOpen}]open [{FK.filterClosed}]closed [{FK.filterMerged}]merged [s]scope [@]author</Text>
+        {items.length >= _cfg.pageSize && (
+          <Text color={t.ui.dim}> ({items.length})</Text>
         )}
         {statusMsg && (
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}</Text>
+          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>  {statusMsg.msg}</Text>
         )}
       </Box>
 
@@ -513,6 +546,32 @@ function AssigneeDialog({ repo, pr, onClose }) {
       }}
       onCancel={onClose}
     />
+  )
+}
+
+// Simple inline author-search box
+function AuthorSearchDialog({ current, onSubmit, onCancel }) {
+  const [text, setText] = useState(current || '')
+
+  useInput((input, key) => {
+    if (key.escape) { onCancel(); return }
+    if (key.return) { onSubmit(text.trim()); return }
+    if (key.backspace || key.delete) { setText(s => s.slice(0, -1)); return }
+    if (input && !key.ctrl && !key.meta) { setText(s => s + input); return }
+  })
+
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={2} paddingY={1}>
+      <Text color={t.ui.selected} bold>Filter by author</Text>
+      <Box marginTop={1} gap={1}>
+        <Text color={t.ui.dim}>@</Text>
+        <Text color={t.ui.selected}>{text}</Text>
+        <Text color={t.ui.dim}>█</Text>
+      </Box>
+      <Box marginTop={0}>
+        <Text color={t.ui.dim}>[Enter] apply  [Esc] cancel  (empty = show all authors)</Text>
+      </Box>
+    </Box>
   )
 }
 

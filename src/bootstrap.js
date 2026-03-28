@@ -8,6 +8,7 @@
  */
 
 import { execa } from 'execa'
+import { writeDefaultConfig } from './config.js'
 import readline from 'readline'
 
 // ─── Step 1: detect gh ────────────────────────────────────────────────────────
@@ -227,6 +228,9 @@ export async function pickRepoInteractive(repos) {
 // ─── Main bootstrap() ─────────────────────────────────────────────────────────
 
 export async function bootstrap(renderApp) {
+  // Write default config on first run
+  writeDefaultConfig()
+
   // Step 1 — detect gh
   const ghInstalled = await detectGh()
   if (!ghInstalled) {

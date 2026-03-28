@@ -11,7 +11,10 @@ import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
+import { loadConfig } from '../../config.js'
 import { t } from '../../theme.js'
+
+const _diffCfg = loadConfig().diff
 
 // ─── Language detection ───────────────────────────────────────────────────────
 
@@ -516,7 +519,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   // compose = { commentType: 'comment' | 'suggestion' | 'request-changes', body: '' }
   const COMMENT_TYPES = ['comment', 'suggestion', 'request-changes']
   const [commentStatus, setCommentStatus] = useState(null)
-  const [splitView, setSplitView] = useState(false)
+  const [splitView, setSplitView] = useState(_diffCfg.defaultView === 'split')
   const lastKeyRef  = useRef(null)
   const lastKeyTimer = useRef(null)
 
@@ -821,7 +824,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   )
 
   const colWidth = Math.floor(((stdout?.columns || 80) - 2) / 2)
-  const MAX_ROWS = 2000
+  const MAX_ROWS = _diffCfg.maxLines || 2000
   const displayRows = rows.length > MAX_ROWS ? rows.slice(0, MAX_ROWS) : rows
   const composeBoxHeight = compose ? 6 : 0
   const effectiveHeight = Math.max(3, visibleHeight - composeBoxHeight)
