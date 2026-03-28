@@ -27,6 +27,14 @@ export function stripAnsi(str) {
   return str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
 }
 
+/**
+ * Sanitize untrusted text for rendering.
+ * Strips ANSI codes and potentially other dangerous characters.
+ */
+export function sanitize(str) {
+  return stripAnsi(str || '')
+}
+
 import hljs from 'highlight.js'
 import chalk from 'chalk'
 

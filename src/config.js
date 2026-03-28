@@ -200,6 +200,19 @@ export function loadConfig() {
   }
 }
 
+// ─── saveConfig — persists partial or full config to disk ────────────────────
+
+export function saveConfig(patch) {
+  try {
+    const current = existsSync(CONFIG_PATH) ? JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) : {}
+    const next = { ...current, ...patch }
+    mkdirSync(dirname(CONFIG_PATH), { recursive: true })
+    writeFileSync(CONFIG_PATH, JSON.stringify(next, null, 2) + '\n', 'utf8')
+  } catch (err) {
+    console.error('Failed to save config:', err)
+  }
+}
+
 // ─── writeDefaultConfig — creates config file with comments if missing ────────
 
 export function writeDefaultConfig() {
