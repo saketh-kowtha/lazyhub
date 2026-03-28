@@ -6,6 +6,7 @@ import React, { useState, useMemo, useRef, useCallback } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import chalk from 'chalk'
 import hljs from 'highlight.js'
+import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
@@ -177,6 +178,72 @@ function flattenFiles(files) {
   return rows
 }
 
+// ─── File tree builder ────────────────────────────────────────────────────────
+
+function buildTreeRows(files) {
+  // Build tree structure
+  const root = { name: '', isFile: false, addCount: 0, delCount: 0, children: new Map() }
+
+  for (const file of files) {
+    const parts = file.filename.split('/')
+    let node = root
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      const isFile = i === parts.length - 1
+      if (!node.children.has(part)) {
+        node.children.set(part, {
+          name: part,
+          isFile,
+          addCount: 0,
+          delCount: 0,
+          filename: isFile ? file.filename : null,
+          children: new Map(),
+        })
+      }
+      const child = node.children.get(part)
+      if (isFile) {
+        child.addCount = file.addCount
+        child.delCount = file.delCount
+        child.filename = file.filename
+      }
+      node = child
+    }
+  }
+
+  // Flatten via pre-order traversal with prefix computation
+  const rows = []
+
+  function traverse(node, depth, lastFlags) {
+    const children = [...node.children.values()]
+    children.forEach((child, idx) => {
+      const isLast = idx === children.length - 1
+      // Build prefix from parent flags
+      let prefix = ''
+      for (let d = 0; d < depth; d++) {
+        prefix += lastFlags[d] ? '   ' : '│  '
+      }
+      prefix += isLast ? '└──' : '├──'
+
+      rows.push({
+        type: child.isFile ? 'file' : 'dir',
+        name: child.name,
+        depth,
+        prefix,
+        filename: child.filename,
+        addCount: child.addCount,
+        delCount: child.delCount,
+      })
+
+      if (!child.isFile) {
+        traverse(child, depth + 1, [...lastFlags, isLast])
+      }
+    })
+  }
+
+  traverse(root, 0, [])
+  return rows
+}
+
 // ─── Diff line renderer ───────────────────────────────────────────────────────
 // Gutter: cursor(1) oldLn(4) newLn(4) sign(2) code
 //
@@ -185,8 +252,16 @@ function flattenFiles(files) {
 // chalk.bgHex(cursorBg)(fullLine) doesn't work on lines that already carry
 // per-character chalk bg colors, so we use a ▶ prefix instead.
 
-function renderDiffLine(row, isSelected, langCache) {
-  const cur       = isSelected ? chalk.bgHex(t.diff.cursorBg).hex('#ffffff').bold('▶') : ' '
+function renderDiffLine(row, isSelected, langCache, isMatch) {
+  let cur
+  if (isSelected) {
+    cur = chalk.bgHex(t.diff.cursorBg).hex('#ffffff').bold('▶')
+  } else if (isMatch) {
+    cur = chalk.hex('#e3b341')('◆')
+  } else {
+    cur = ' '
+  }
+
   const gutterOld = row.oldLine != null ? String(row.oldLine).padStart(4) : '    '
   const gutterNew = row.newLine != null ? String(row.newLine).padStart(4) : '    '
 
@@ -229,6 +304,73 @@ function renderDiffLine(row, isSelected, langCache) {
   return cur + bgGutter + code
 }
 
+// ─── Thread renderer ──────────────────────────────────────────────────────────
+
+function renderThreads(comments) {
+  // Sort all by createdAt
+  const sorted = [...comments].sort((a, b) =>
+    new Date(a.createdAt) - new Date(b.createdAt)
+  )
+
+  // Separate top-level and replies
+  const topLevel = sorted.filter(c => !c.inReplyToId)
+  const replies = sorted.filter(c => c.inReplyToId)
+
+  const elements = []
+
+  for (const comment of topLevel) {
+    // Header line
+    elements.push(
+      <Box key={`${comment.id}-header`} gap={1}>
+        <Text color={t.diff.threadBorder}>┃</Text>
+        <Text color={t.ui.selected} bold>@{comment.user?.login}</Text>
+        <Text color={t.ui.dim}>·</Text>
+        <Text color={t.ui.dim}>{format(comment.createdAt)}</Text>
+      </Box>
+    )
+    // Body lines
+    const bodyLines = (comment.body || '').split('\n')
+    for (let i = 0; i < bodyLines.length; i++) {
+      elements.push(
+        <Box key={`${comment.id}-body-${i}`}>
+          <Text color={t.diff.threadBorder}>┃ </Text>
+          <Text wrap="truncate">{bodyLines[i]}</Text>
+        </Box>
+      )
+    }
+    // Empty line after top-level comment
+    elements.push(
+      <Box key={`${comment.id}-spacer`}>
+        <Text color={t.diff.threadBorder}>┃</Text>
+      </Box>
+    )
+
+    // Replies to this comment
+    const commentReplies = replies.filter(r => r.inReplyToId === comment.id)
+    for (const reply of commentReplies) {
+      elements.push(
+        <Box key={`${reply.id}-header`} gap={1}>
+          <Text color={t.diff.threadBorder}>┃  </Text>
+          <Text color={t.ui.selected} bold>@{reply.user?.login}</Text>
+          <Text color={t.ui.dim}>·</Text>
+          <Text color={t.ui.dim}>{format(reply.createdAt)}</Text>
+        </Box>
+      )
+      const replyLines = (reply.body || '').split('\n')
+      for (let i = 0; i < replyLines.length; i++) {
+        elements.push(
+          <Box key={`${reply.id}-body-${i}`}>
+            <Text color={t.diff.threadBorder}>┃   </Text>
+            <Text wrap="truncate">{replyLines[i]}</Text>
+          </Box>
+        )
+      }
+    }
+  }
+
+  return elements
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const FOOTER_KEYS_UNIFIED = [
@@ -236,9 +378,11 @@ const FOOTER_KEYS_UNIFIED = [
   { key: 'gg/G', label: 'top/bottom' },
   { key: ']/[',  label: 'file' },
   { key: 'c',    label: 'comment' },
-  { key: 'n/N',  label: 'thread' },
+  { key: 'n/N',  label: 'next/prev thread or match' },
   { key: 'v',    label: 'comments' },
   { key: 's',    label: 'split view' },
+  { key: 't',    label: 'file tree' },
+  { key: '/',    label: 'find' },
   { key: 'Esc',  label: 'back' },
 ]
 
@@ -247,9 +391,11 @@ const FOOTER_KEYS_SPLIT = [
   { key: 'gg/G', label: 'top/bottom' },
   { key: ']/[',  label: 'file' },
   { key: 'c',    label: 'comment' },
-  { key: 'n/N',  label: 'thread' },
+  { key: 'n/N',  label: 'next/prev thread or match' },
   { key: 'v',    label: 'comments' },
   { key: 's',    label: 'unified view' },
+  { key: 't',    label: 'file tree' },
+  { key: '/',    label: 'find' },
   { key: 'Esc',  label: 'back' },
 ]
 
@@ -374,6 +520,14 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const lastKeyRef  = useRef(null)
   const lastKeyTimer = useRef(null)
 
+  // Feature: file tree view
+  const [showTree, setShowTree] = useState(false)
+  const [treeCursor, setTreeCursor] = useState(0)
+
+  // Feature: find/search
+  const [findQuery, setFindQuery] = useState('')
+  const [findActive, setFindActive] = useState(false)
+
   const files = useMemo(() => parseDiff(diffText || ''), [diffText])
   const rows  = useMemo(() => flattenFiles(files), [files])
 
@@ -388,10 +542,14 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     rows.reduce((acc, row, i) => { if (row.type === 'file-header') acc.push(i); return acc }, [])
   , [rows])
 
+  // File tree rows
+  const treeRows = useMemo(() => buildTreeRows(files), [files])
+
   const commentsByLine = useMemo(() => {
     const map = new Map()
     for (const c of (comments || [])) {
-      const key = `${c.path}:${c.line}`
+      const line = c.line || c.originalLine
+      const key = `${c.path}:${line}`
       if (!map.has(key)) map.set(key, [])
       map.get(key).push(c)
     }
@@ -405,6 +563,17 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       return acc
     }, [])
   , [rows, commentsByLine])
+
+  // Find matches
+  const findMatches = useMemo(() => {
+    if (!findQuery) return []
+    const q = findQuery.toLowerCase()
+    return rows.reduce((acc, row, i) => {
+      if (row.type !== 'file-header' && row.type !== 'hunk' && row.text?.toLowerCase().includes(q))
+        acc.push(i)
+      return acc
+    }, [])
+  }, [rows, findQuery])
 
   const moveCursor = (delta) => {
     setCursor(prev => {
@@ -421,6 +590,17 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     setScrollOffset(Math.max(0, n - Math.floor(visibleHeight / 2)))
   }
 
+  const jumpToMatch = (dir) => {
+    if (!findMatches.length) return
+    if (dir === 'next') {
+      const next = findMatches.find(i => i > cursor) ?? findMatches[0]
+      jumpTo(next)
+    } else {
+      const prev = [...findMatches].reverse().find(i => i < cursor) ?? findMatches[findMatches.length - 1]
+      jumpTo(prev)
+    }
+  }
+
   useInput((input, key) => {
     // Large diff warning intercept
     if (isLargeDiff && !diffWarningAck) {
@@ -433,6 +613,57 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         return
       }
       if (key.escape || input === 'q') { onBack(); return }
+      return
+    }
+
+    // findActive — capture typing
+    if (findActive) {
+      if (key.escape) {
+        setFindActive(false)
+        setFindQuery('')
+        return
+      }
+      if (key.return) {
+        setFindActive(false)
+        // Jump to first match if any
+        if (findMatches.length > 0) jumpTo(findMatches[0])
+        return
+      }
+      if (key.backspace || key.delete) {
+        setFindQuery(q => q.slice(0, -1))
+        return
+      }
+      if (input && !key.ctrl && !key.meta) {
+        setFindQuery(q => q + input)
+        return
+      }
+      return
+    }
+
+    // showTree — capture j/k/Enter/Esc/t
+    if (showTree) {
+      if (key.escape || input === 't') {
+        setShowTree(false)
+        return
+      }
+      if (input === 'j' || key.downArrow) {
+        setTreeCursor(prev => Math.min(treeRows.length - 1, prev + 1))
+        return
+      }
+      if (input === 'k' || key.upArrow) {
+        setTreeCursor(prev => Math.max(0, prev - 1))
+        return
+      }
+      if (key.return) {
+        const treeRow = treeRows[treeCursor]
+        if (treeRow && treeRow.type === 'file') {
+          // Jump diff cursor to the file's first row
+          const fileIdx = fileStartIndices[files.findIndex(f => f.filename === treeRow.filename)]
+          setShowTree(false)
+          if (fileIdx != null) jumpTo(fileIdx)
+        }
+        return
+      }
       return
     }
 
@@ -513,17 +744,47 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       if (prev != null) jumpTo(prev)
       return
     }
+
+    // n/N: next/prev thread or match
     if (input === 'n') {
-      const next = commentThreadIndices.find(i => i > cursor)
-      if (next != null) jumpTo(next)
+      if (findQuery && findMatches.length > 0) {
+        jumpToMatch('next')
+      } else {
+        const next = commentThreadIndices.find(i => i > cursor)
+        if (next != null) jumpTo(next)
+      }
       return
     }
     if (input === 'N') {
-      const prev = [...commentThreadIndices].reverse().find(i => i < cursor)
-      if (prev != null) jumpTo(prev)
+      if (findQuery && findMatches.length > 0) {
+        jumpToMatch('prev')
+      } else {
+        const prev = [...commentThreadIndices].reverse().find(i => i < cursor)
+        if (prev != null) jumpTo(prev)
+      }
       return
     }
+
     if (input === 's') { setSplitView(v => !v); return }
+
+    // t: toggle file tree
+    if (input === 't') {
+      setShowTree(v => !v)
+      setTreeCursor(0)
+      return
+    }
+
+    // /: open find (only when not in compose/tree/findActive)
+    if (input === '/') {
+      setFindActive(true)
+      return
+    }
+
+    // Esc: clear find query if active
+    if (key.escape && findQuery) {
+      setFindQuery('')
+      return
+    }
 
     if (input === 'c') {
       const row = rows[cursor]
@@ -576,37 +837,72 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       </Box>
 
       <Box flexDirection="column" flexGrow={1} overflow="hidden">
-        {splitView
-          ? renderSplitView(displayRows, scrollOffset, effectiveHeight, cursor, langCache, colWidth)
-          : visibleRows.map((row, i) => {
-              const idx = scrollOffset + i
-              const isSelected = idx === cursor
-              const rendered = renderDiffLine(row, isSelected, langCache)
-              const hasComment = row.filename && row.newLine != null &&
-                commentsByLine.has(`${row.filename}:${row.newLine}`)
+        {showTree ? (
+          <>
+            <Box paddingX={1} justifyContent="space-between">
+              <Text color={t.ui.selected} bold>PR #{prNumber} — {files.length} files changed</Text>
+              <Text color={t.ui.dim}>[t/Esc] close tree</Text>
+            </Box>
+            {treeRows.map((treeRow, i) => {
+              const isTreeSelected = i === treeCursor
               return (
-                <Box key={idx} flexDirection="column">
-                  <Text wrap="truncate">{rendered}</Text>
-                  {hasComment && (
-                    <Box paddingX={2} flexDirection="column" borderStyle="single" borderColor={t.diff.threadBorder}>
-                      {commentsByLine.get(`${row.filename}:${row.newLine}`).map(c => (
-                        <Box key={c.id} gap={1}>
-                          <Text color={t.diff.threadBorder}>┃</Text>
-                          <Text color={t.ui.selected} bold>{c.user?.login}</Text>
-                          <Text color={t.ui.dim}>{c.body?.slice(0, 60)}</Text>
-                        </Box>
-                      ))}
+                <Box key={i} backgroundColor={isTreeSelected ? t.ui.headerBg : undefined}>
+                  <Text color={isTreeSelected ? t.ui.selected : (treeRow.type === 'dir' ? t.ui.muted : t.diff.ctxFg)}>
+                    {treeRow.prefix}{treeRow.name}
+                  </Text>
+                  {treeRow.type === 'file' && (
+                    <Box marginLeft={1}>
+                      <Text color={t.ci.pass}>+{treeRow.addCount}</Text>
+                      <Text color={t.ui.dim}> </Text>
+                      <Text color={t.ci.fail}>-{treeRow.delCount}</Text>
                     </Box>
                   )}
                 </Box>
               )
-            })
-        }
+            })}
+          </>
+        ) : (
+          splitView
+            ? renderSplitView(displayRows, scrollOffset, effectiveHeight, cursor, langCache, colWidth)
+            : visibleRows.map((row, i) => {
+                const idx = scrollOffset + i
+                const isSelected = idx === cursor
+                const isMatch = findQuery ? findMatches.includes(idx) : false
+                const rendered = renderDiffLine(row, isSelected, langCache, isMatch)
+                const lineKey = `${row.filename}:${row.newLine}`
+                const hasComment = row.filename && row.newLine != null &&
+                  commentsByLine.has(lineKey)
+                return (
+                  <Box key={idx} flexDirection="column">
+                    <Text wrap="truncate">{rendered}</Text>
+                    {hasComment && (
+                      <Box paddingX={1} flexDirection="column" borderStyle="single" borderColor={t.diff.threadBorder}>
+                        {renderThreads(commentsByLine.get(lineKey))}
+                      </Box>
+                    )}
+                  </Box>
+                )
+              })
+        )}
       </Box>
 
       {rows.length > MAX_ROWS && (
         <Box paddingX={1}>
           <Text color={t.ci.pending}>⚠ Diff truncated at {MAX_ROWS} rows — [o] open in browser for full diff</Text>
+        </Box>
+      )}
+
+      {findActive && (
+        <Box borderStyle="round" borderColor={t.ui.selected} paddingX={1} marginX={1}>
+          <Text color={t.ui.dim}>/</Text>
+          <Text color={t.ui.selected}>{findQuery}</Text>
+          <Text color={t.ui.dim}>█</Text>
+          <Text color={t.ui.dim}>  {findMatches.length > 0 ? `${findMatches.indexOf(cursor) + 1 || '?'}/${findMatches.length}` : 'no matches'}  [n/N] jump  [Enter] done  [Esc] clear</Text>
+        </Box>
+      )}
+      {!findActive && findQuery && (
+        <Box paddingX={2}>
+          <Text color={t.ui.dim}>/ {findQuery}  ({findMatches.length} matches)  [n/N] jump  [/] edit  [Esc] clear</Text>
         </Box>
       )}
 
