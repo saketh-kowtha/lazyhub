@@ -53,7 +53,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   useInput((input, key) => {
     if (replyTarget) {
       if (key.escape) { setReplyTarget(null); setReplyText(''); return }
-      if ((key.return && key.ctrl) || (key.ctrl && input === 's')) {
+      if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) {
         // Submit reply
         const thread = filteredThreads[cursor]
         if (thread && replyText) {
@@ -148,7 +148,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
             <Text color={t.ui.selected}>{replyText}</Text>
             <Text color={t.ui.dim}>█</Text>
           </Box>
-          <Text color={t.ui.dim}>[Ctrl+S] send  [Esc] cancel</Text>
+          <Text color={t.ui.dim}>[Ctrl+G] send  [Esc] cancel</Text>
         </Box>
       )}
 

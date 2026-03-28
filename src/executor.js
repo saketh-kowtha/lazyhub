@@ -111,7 +111,7 @@ export async function getPR(repo, number) {
   const args = [
     'pr', 'view', String(number),
     '--repo', getRepo(repo),
-    '--json', 'number,title,state,author,body,labels,reviewRequests,reviews,statusCheckRollup,updatedAt,isDraft,headRefName,baseRefName,assignees,files,additions,deletions,changedFiles,mergeStateStatus,mergeable,url',
+    '--json', 'number,title,state,author,body,labels,reviewRequests,reviews,statusCheckRollup,updatedAt,isDraft,headRefName,baseRefName,headRefOid,assignees,files,additions,deletions,changedFiles,mergeStateStatus,mergeable,autoMergeRequest,url',
   ]
   return run(args)
 }

@@ -8,7 +8,7 @@ import chalk from 'chalk'
 import hljs from 'highlight.js'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
-import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats } from '../../executor.js'
+import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { loadConfig } from '../../config.js'
@@ -380,6 +380,7 @@ const FOOTER_KEYS_UNIFIED = [
   { key: 'j/k',  label: 'scroll' },
   { key: 'gg/G', label: 'top/bottom' },
   { key: ']/[',  label: 'file' },
+  { key: ':',    label: 'go to line' },
   { key: 'c',    label: 'comment' },
   { key: 'n/N',  label: 'next/prev thread or match' },
   { key: 'v',    label: 'comments' },
@@ -393,6 +394,7 @@ const FOOTER_KEYS_SPLIT = [
   { key: 'j/k',  label: 'scroll' },
   { key: 'gg/G', label: 'top/bottom' },
   { key: ']/[',  label: 'file' },
+  { key: ':',    label: 'go to line' },
   { key: 'c',    label: 'comment' },
   { key: 'n/N',  label: 'next/prev thread or match' },
   { key: 'v',    label: 'comments' },
@@ -510,6 +512,8 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const isLargeDiff = ((diffStats?.additions || 0) + (diffStats?.deletions || 0)) > 5000
   const [diffWarningAck, setDiffWarningAck] = useState(false)
 
+  const { data: prMeta } = useGh(getPRMeta, [repo, prNumber], { ttl: 300_000 })
+  const headRefOid = prMeta?.headRefOid || null
   const { data: diffText, loading, error, refetch } = useGh(getPRDiff, [repo, prNumber])
   const { data: comments } = useGh(listPRComments, [repo, prNumber])
   const [cursor, setCursor] = useState(0)
@@ -530,6 +534,10 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   // Feature: find/search
   const [findQuery, setFindQuery] = useState('')
   const [findActive, setFindActive] = useState(false)
+
+  // Feature: go-to-line
+  const [gotoActive, setGotoActive] = useState(false)
+  const [gotoInput, setGotoInput] = useState('')
 
   const files = useMemo(() => parseDiff(diffText || ''), [diffText])
   const rows  = useMemo(() => flattenFiles(files), [files])
@@ -643,6 +651,24 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       return
     }
 
+    // gotoActive — `:123` jump-to-line prompt
+    if (gotoActive) {
+      if (key.escape) { setGotoActive(false); setGotoInput(''); return }
+      if (key.return) {
+        const lineNum = parseInt(gotoInput, 10)
+        if (!isNaN(lineNum)) {
+          const idx = rows.findIndex(r => r.newLine === lineNum || r.oldLine === lineNum)
+          if (idx >= 0) jumpTo(idx)
+        }
+        setGotoActive(false)
+        setGotoInput('')
+        return
+      }
+      if (key.backspace || key.delete) { setGotoInput(s => s.slice(0, -1)); return }
+      if (input && /\d/.test(input)) { setGotoInput(s => s + input); return }
+      return
+    }
+
     // showTree — capture j/k/Enter/Esc/t
     if (showTree) {
       if (key.escape || input === 't') {
@@ -683,7 +709,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         setCompose(c => ({ ...c, commentType: COMMENT_TYPES[Math.min(COMMENT_TYPES.length - 1, idx + 1)] }))
         return
       }
-      if ((key.return && key.ctrl) || (key.ctrl && input === 's')) {
+      if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) {
         const row = rows[cursor]
         const body = compose.body.trim()
         if (body && row) {
@@ -691,7 +717,8 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
             body,
             path: row.filename,
             line: row.newLine || row.oldLine,
-            side: 'RIGHT',
+            side: row.type === 'del' ? 'LEFT' : 'RIGHT',
+            commitId: headRefOid,
           }).then(() => {
             setCommentStatus('Comment added')
             setTimeout(() => setCommentStatus(null), 3000)
@@ -732,6 +759,8 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
 
     if (input === 'G')  { jumpTo(rows.length - 1); return }
     if (input === 'r')  { refetch(); return }
+    // Esc: clear find query first, then go back on second Esc
+    if (key.escape && findQuery) { setFindQuery(''); return }
     if (key.escape || input === 'q') { onBack(); return }
     if (input === 'v')  { onViewComments(); return }
     if (input === 'j' || key.downArrow) { moveCursor(1);  return }
@@ -783,11 +812,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       return
     }
 
-    // Esc: clear find query if active
-    if (key.escape && findQuery) {
-      setFindQuery('')
-      return
-    }
+    if (input === ':') { setGotoActive(true); setGotoInput(''); return }
 
     if (input === 'c') {
       const row = rows[cursor]
@@ -909,6 +934,14 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         </Box>
       )}
 
+      {gotoActive && (
+        <Box borderStyle="round" borderColor={t.ui.selected} paddingX={1} marginX={1}>
+          <Text color={t.ui.dim}>:</Text>
+          <Text color={t.ui.selected}>{gotoInput || ' '}</Text>
+          <Text color={t.ui.dim}>  go to line — [Enter] jump  [Esc] cancel</Text>
+        </Box>
+      )}
+
       {compose && (() => {
         const row = rows[cursor]
         return (
@@ -934,7 +967,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
               <Text color={t.ui.selected}>{compose.body}</Text>
               <Text color={t.ui.dim}>█</Text>
             </Box>
-            <Text color={t.ui.dim}>[←→] type  [Ctrl+S] submit  [Esc] cancel</Text>
+            <Text color={t.ui.dim}>[←→] type  [Ctrl+G] submit  [Esc] cancel</Text>
           </Box>
         )
       })()}

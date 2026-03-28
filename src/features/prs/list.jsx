@@ -352,7 +352,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
     return (
       <FormCompose
         title={`Approve PR #${selectedPR.number}`}
-        fields={[{ name: 'body', label: 'Optional comment (Ctrl+S to submit, leave empty to skip)', type: 'text' }]}
+        fields={[{ name: 'body', label: 'Optional comment (Ctrl+G to submit, leave empty to skip)', type: 'text' }]}
         onSubmit={async (values) => {
           closeDialog()
           try {

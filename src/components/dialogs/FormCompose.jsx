@@ -46,7 +46,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
       return
     }
 
-    if ((key.return && key.ctrl) || (key.ctrl && input === 's')) {
+    if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) {
       onSubmit(values)
       return
     }
@@ -101,7 +101,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
                       {isActive ? '' : 'Press e to open editor'}
                     </Text>
                   )}
-                  {isActive && <Text color={t.ui.dim}>[e] open editor  [Ctrl+S] submit</Text>}
+                  {isActive && <Text color={t.ui.dim}>[e] open editor  [Ctrl+G] submit</Text>}
                 </Box>
               ) : (
                 <Box>
@@ -114,7 +114,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
         )
       })}
       <Box marginTop={1}>
-        <Text color={t.ui.dim}>[Tab] next field  [Ctrl+S] submit  [Esc] cancel</Text>
+        <Text color={t.ui.dim}>[Tab] next field  [Ctrl+G] submit  [Esc] cancel</Text>
       </Box>
     </Box>
   )

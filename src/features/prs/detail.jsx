@@ -75,12 +75,16 @@ function buildContentRows(pr, checks, protection, cols) {
   }
 
   // ── Reviewers ─────────────────────────────────────────────────────────────
-  const allReviewers = [
-    ...(pr.reviews || []).map(r => ({ login: r.author?.login, state: r.state })),
-    ...(pr.reviewRequests || [])
-      .filter(req => !(pr.reviews || []).some(r => r.author?.login === (req.login || req.name)))
-      .map(req => ({ login: req.login || req.name, state: 'PENDING' })),
-  ]
+  // Deduplicate: last non-PENDING state wins per login; pending requests fill gaps
+  const reviewStateMap = new Map()
+  for (const r of (pr.reviews || [])) {
+    if (r.author?.login) reviewStateMap.set(r.author.login, r.state)
+  }
+  for (const req of (pr.reviewRequests || [])) {
+    const login = req.login || req.name
+    if (login && !reviewStateMap.has(login)) reviewStateMap.set(login, 'PENDING')
+  }
+  const allReviewers = [...reviewStateMap.entries()].map(([login, state]) => ({ login, state }))
   if (allReviewers.length > 0) {
     push('rev-hdr', (
       <Box key="rev-hdr" paddingX={1}>

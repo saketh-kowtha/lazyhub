@@ -343,7 +343,7 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
     if (key.tab)               { goNext(); return }
 
     // Ctrl+Enter OR Ctrl+S — Ctrl+Enter is indistinguishable from Enter on macOS terminals
-    if ((key.return && key.ctrl) || (key.ctrl && input === 's')) { doSubmit(); return }
+    if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) { doSubmit(); return }
 
     // [p] trigger push from form when head has issues
     if (input === 'p' && FIELDS[activeField] === 'head') {
@@ -548,8 +548,8 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
           <Box gap={2}>
             <Text color={t.ui.dim}>[Tab] next  [Shift+Tab] prev</Text>
             {canSubmit
-              ? <Text color={t.ui.selected}>[Ctrl+S] Create PR</Text>
-              : <Text color={t.ui.dim}>[Ctrl+S] Create PR</Text>
+              ? <Text color={t.ui.selected}>[Ctrl+G] Create PR</Text>
+              : <Text color={t.ui.dim}>[Ctrl+G] Create PR</Text>
             }
           </Box>
           <Text color={t.ui.dim}>[Esc] cancel</Text>
