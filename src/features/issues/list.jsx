@@ -2,7 +2,7 @@
  * src/features/issues/list.jsx — Issue list pane
  */
 
-import React, { useState, useCallback, useEffect, useContext } from 'react'
+import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
@@ -19,13 +19,17 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
   const { stdout } = useStdout()
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
-  const { data: issues, loading, error, refetch } = useGh(listIssues, [repo])
+  const [filterState, setFilterState] = useState('open')
+  const { data: issues, loading, error, refetch } = useGh(listIssues, [repo, { state: filterState }])
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
+  const lastKeyRef   = useRef(null)
+  const lastKeyTimer = useRef(null)
 
   const items = issues || []
+  const STATE_CYCLE = ['open', 'closed']
 
   useEffect(() => {
     if (onPaneState) onPaneState({ loading, error, count: items.length })
@@ -52,30 +56,78 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
 
   useInput((input, key) => {
     if (dialog) return
-    if (input === 'j' || key.downArrow) { moveCursor(1); return }
-    if (input === 'k' || key.upArrow)  { moveCursor(-1); return }
+
+    // gg → top
+    if (input === 'g') {
+      if (lastKeyRef.current === 'g') {
+        clearTimeout(lastKeyTimer.current)
+        lastKeyRef.current = null
+        setCursor(0); setScrollOffset(0)
+        return
+      }
+      lastKeyRef.current = 'g'
+      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
+      return
+    }
+    lastKeyRef.current = null
+
+    // G → bottom
+    if (input === 'G') {
+      const last = items.length - 1
+      setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
+      return
+    }
+
+    if (input === 'j' || key.downArrow) { moveCursor(1);  return }
+    if (input === 'k' || key.upArrow)   { moveCursor(-1); return }
     if (input === 'r') { refetch(); return }
     if (input === '/') { setDialog('fuzzy'); return }
     if (input === 'n') { setDialog('new'); return }
+
+    // f — toggle open / closed
+    if (input === 'f') {
+      setFilterState(prev => {
+        const next = STATE_CYCLE[(STATE_CYCLE.indexOf(prev) + 1) % STATE_CYCLE.length]
+        showStatus(`Filter: ${next}`)
+        return next
+      })
+      setCursor(0); setScrollOffset(0)
+      return
+    }
+
     if (loading || items.length === 0) return
+    const issue = items[cursor]
 
     if (key.return) {
-      if (items[cursor]) onSelectIssue(items[cursor])
+      if (issue) onSelectIssue(issue)
+      return
+    }
+
+    // y — copy issue URL
+    if (input === 'y' && issue?.url) {
+      import('execa').then(({ execa }) => {
+        const [cmd, args] = process.platform === 'darwin'
+          ? ['pbcopy', []]
+          : ['xclip', ['-selection', 'clipboard']]
+        const proc = execa(cmd, args)
+        proc.stdin?.end(issue.url)
+        proc.then(() => showStatus(`✓ Copied ${issue.url}`)).catch(() => showStatus('✗ Copy failed', true))
+      })
       return
     }
 
     if (input === 'x') {
-      if (items[cursor]) setDialog('close')
+      if (issue) setDialog('close')
       return
     }
 
     if (input === 'l') {
-      if (items[cursor]) setDialog('labels')
+      if (issue) setDialog('labels')
       return
     }
 
     if (input === 'A') {
-      if (items[cursor]) setDialog('assignees')
+      if (issue) setDialog('assignees')
       return
     }
   })
@@ -157,11 +209,14 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {statusMsg && (
-        <Box paddingX={1}>
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}</Text>
-        </Box>
-      )}
+      <Box paddingX={1} gap={1}>
+        <Text color={t.ui.dim}>filter:</Text>
+        <Text color={filterState === 'open' ? t.issue.open : t.issue.closed} bold>{filterState}</Text>
+        <Text color={t.ui.dim}>[f] cycle  [n] new  [y] copy url</Text>
+        {statusMsg && (
+          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}</Text>
+        )}
+      </Box>
       <Box flexDirection="column" flexGrow={1}>
         {visibleIssues.map((issue, i) => {
           const idx = scrollOffset + i

@@ -1,13 +1,16 @@
 /**
  * Sidebar.jsx — navigation sidebar.
- * Props: currentPane, onSelect(pane), height
+ * Props: currentPane, onSelect(pane), height, visiblePanes
+ *
+ * visiblePanes comes from loadConfig().panes so users can hide tabs they
+ * don't use via ~/.config/ghui/config.json → { "panes": ["prs","issues"] }
  */
 
 import React from 'react'
 import { Box, Text } from 'ink'
 import { t } from '../theme.js'
 
-const NAV_ITEMS = [
+const ALL_NAV_ITEMS = [
   { pane: 'prs',           icon: '⎇', label: 'Pull Requests' },
   { pane: 'issues',        icon: '○', label: 'Issues' },
   { pane: 'branches',      icon: '⎇', label: 'Branches' },
@@ -15,7 +18,11 @@ const NAV_ITEMS = [
   { pane: 'notifications', icon: '●', label: 'Notifs' },
 ]
 
-export function Sidebar({ currentPane, onSelect, height }) {
+export function Sidebar({ currentPane, onSelect, height, visiblePanes }) {
+  const items = visiblePanes
+    ? ALL_NAV_ITEMS.filter(i => visiblePanes.includes(i.pane))
+    : ALL_NAV_ITEMS
+
   return (
     <Box
       width={18}
@@ -24,13 +31,11 @@ export function Sidebar({ currentPane, onSelect, height }) {
       borderColor={t.ui.border}
       height={height}
     >
-      {/* App name header */}
-      <Box paddingX={1} paddingY={0} marginBottom={1}>
+      <Box paddingX={1} marginBottom={1}>
         <Text color={t.ui.selected} bold>ghui</Text>
       </Box>
 
-      {/* Nav items */}
-      {NAV_ITEMS.map(({ pane, icon, label }) => {
+      {items.map(({ pane, icon, label }) => {
         const isActive = pane === currentPane
         return (
           <Box key={pane} paddingLeft={1}>
@@ -44,7 +49,6 @@ export function Sidebar({ currentPane, onSelect, height }) {
         )
       })}
 
-      {/* Hint at bottom */}
       <Box flexGrow={1} />
       <Box paddingX={1} paddingBottom={0}>
         <Text color={t.ui.dim}>[Tab] switch</Text>

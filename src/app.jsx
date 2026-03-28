@@ -15,6 +15,9 @@
 import React, { useState, useRef, useCallback, createContext, useContext } from 'react'
 import { render, Box, Text, useInput, useApp, useStdout } from 'ink'
 import { t } from './theme.js'
+import { loadConfig } from './config.js'
+
+const _config = loadConfig()
 import { Sidebar } from './components/Sidebar.jsx'
 import { StatusBar } from './components/StatusBar.jsx'
 import { FooterKeys } from './components/FooterKeys.jsx'
@@ -40,7 +43,8 @@ export function useAppContext() {
 
 // ─── Pane registry ───────────────────────────────────────────────────────────
 
-const PANES = ['prs', 'issues', 'branches', 'actions', 'notifications']
+// Respect user config — allows hiding panes via ~/.config/ghui/config.json
+const PANES = _config.panes
 
 const PANE_LABELS = {
   prs: 'Pull Requests',
@@ -245,7 +249,7 @@ export function App({ repo }) {
   const columns = stdout?.columns || 80
   const rows = stdout?.rows || 24
 
-  const [pane, setPane] = useState('prs')
+  const [pane, setPane] = useState(_config.defaultPane)
   const [view, setView] = useState('list') // 'list'|'detail'|'diff'|'comments'
   const [selectedItem, setSelectedItem] = useState(null)   // item for full-screen views
   const [hoveredItem, setHoveredItem] = useState(null)     // item under cursor → side panel
@@ -495,6 +499,7 @@ export function App({ repo }) {
           {showSidebar && (
             <Sidebar
               currentPane={pane}
+              visiblePanes={PANES}
               onSelect={(p) => {
                 setPane(p)
                 setHoveredItem(null)

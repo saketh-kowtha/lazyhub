@@ -10,7 +10,7 @@
  *   onPaneState  fn({loading, error, count})
  */
 
-import React, { useState, useCallback, useEffect, useContext } from 'react'
+import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
@@ -61,14 +61,20 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const { stdout } = useStdout()
   const height = listHeight || Math.max(3, (stdout?.rows || 24) - 5)
 
-  const { data: prs, loading, error, refetch } = useGh(listPRs, [repo])
+  // f cycles: open → closed → merged → open
+  const [filterState, setFilterState] = useState('open')
+  const { data: prs, loading, error, refetch } = useGh(listPRs, [repo, { state: filterState }])
 
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
+  const lastKeyRef   = useRef(null)
+  const lastKeyTimer = useRef(null)
 
   const items = prs || []
+
+  const STATE_CYCLE = ['open', 'closed', 'merged']
 
   // Notify parent of loading/error/count
   useEffect(() => {
@@ -104,20 +110,45 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const closeDialog = useCallback(() => setDialog(null), [])
 
   useInput((input, key) => {
-    // While a dialog is mounted, let the dialog handle everything
     if (dialog) return
 
-    // Navigation always works (even while loading)
-    if (input === 'j' || key.downArrow) { moveCursor(1); return }
-    if (input === 'k' || key.upArrow)  { moveCursor(-1); return }
+    // gg → top
+    if (input === 'g') {
+      if (lastKeyRef.current === 'g') {
+        clearTimeout(lastKeyTimer.current)
+        lastKeyRef.current = null
+        setCursor(0); setScrollOffset(0)
+        return
+      }
+      lastKeyRef.current = 'g'
+      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
+      return
+    }
+    lastKeyRef.current = null
 
-    // r — refresh
+    // G → bottom
+    if (input === 'G') {
+      const last = items.length - 1
+      setCursor(last); setScrollOffset(Math.max(0, last - height + 1))
+      return
+    }
+
+    if (input === 'j' || key.downArrow) { moveCursor(1);  return }
+    if (input === 'k' || key.upArrow)   { moveCursor(-1); return }
     if (input === 'r') { refetch(); return }
-
-    // / — fuzzy search
     if (input === '/') { openDialog('fuzzy'); return }
 
-    // Keys below only make sense when data is loaded
+    // f — cycle filter state
+    if (input === 'f') {
+      setFilterState(prev => {
+        const next = STATE_CYCLE[(STATE_CYCLE.indexOf(prev) + 1) % STATE_CYCLE.length]
+        showStatus(`Filter: ${next}`)
+        return next
+      })
+      setCursor(0); setScrollOffset(0)
+      return
+    }
+
     if (loading || items.length === 0) return
     const pr = items[cursor]
     if (!pr) return
@@ -127,13 +158,26 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
     if (input === 'm') { openDialog('merge'); return }
     if (input === 'l') { openDialog('labels'); return }
     if (input === 'A') { openDialog('assignees'); return }
-    if (input === 'R') { openDialog('reviewers'); return }  // uppercase R, not 'rv'
+    if (input === 'R') { openDialog('reviewers'); return }
     if (input === 'a') { openDialog('approve'); return }
 
     if (input === 'c') {
       checkoutBranch(repo, pr.number)
         .then(() => showStatus(`✓ Checked out PR #${pr.number}`))
         .catch(err => showStatus(`✗ Checkout: ${err.message}`, true))
+      return
+    }
+
+    // y — copy PR URL to clipboard
+    if (input === 'y' && pr.url) {
+      import('execa').then(({ execa }) => {
+        const [cmd, args] = process.platform === 'darwin'
+          ? ['pbcopy', []]
+          : ['xclip', ['-selection', 'clipboard']]
+        const proc = execa(cmd, args)
+        proc.stdin?.end(pr.url)
+        proc.then(() => showStatus(`✓ Copied ${pr.url}`)).catch(() => showStatus('✗ Copy failed', true))
+      })
       return
     }
 
@@ -228,15 +272,20 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {statusMsg && (
-        <Box paddingX={1}>
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}</Text>
-        </Box>
-      )}
+      <Box paddingX={1} gap={1}>
+        <Text color={t.ui.dim}>filter:</Text>
+        <Text color={filterState === 'open' ? t.pr.open : filterState === 'merged' ? t.pr.merged : t.pr.closed} bold>
+          {filterState}
+        </Text>
+        <Text color={t.ui.dim}>[f] cycle</Text>
+        {statusMsg && (
+          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}</Text>
+        )}
+      </Box>
 
       {!loading && !error && items.length === 0 && (
         <Box paddingX={2} paddingY={1}>
-          <Text color={t.ui.muted}>No pull requests found. [r] refresh</Text>
+          <Text color={t.ui.muted}>No {filterState} pull requests. [f] change filter  [r] refresh</Text>
         </Box>
       )}
 

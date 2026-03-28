@@ -1,15 +1,132 @@
 /**
- * src/features/prs/diff.jsx — PR diff view with line comments
+ * src/features/prs/diff.jsx — PR diff view with syntax highlighting + line comments
  */
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import chalk from 'chalk'
+import hljs from 'highlight.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { t } from '../../theme.js'
+
+// ─── Language detection ───────────────────────────────────────────────────────
+
+const EXT_LANG = {
+  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
+  ts: 'typescript', tsx: 'typescript',
+  py: 'python',     rb: 'ruby',        go: 'go',          rs: 'rust',
+  java: 'java',     kt: 'kotlin',      swift: 'swift',    cs: 'csharp',
+  c: 'c',           cpp: 'cpp',        h: 'c',
+  sh: 'bash',       bash: 'bash',      zsh: 'bash',
+  json: 'json',     yaml: 'yaml',      yml: 'yaml',
+  md: 'markdown',   html: 'xml',       xml: 'xml',        css: 'css',
+  sql: 'sql',       graphql: 'graphql',
+}
+
+function getLang(filename) {
+  if (!filename) return null
+  const ext = filename.split('.').pop()?.toLowerCase()
+  return EXT_LANG[ext] || null
+}
+
+// ─── hljs HTML → chalk ───────────────────────────────────────────────────────
+// Converts highlight.js HTML output to chalk-colored terminal strings.
+// Preserves the bgColor on every character so the add/del background shows through.
+
+const CLS_COLOR = {
+  'hljs-keyword':           t.syntax.keyword,
+  'hljs-built_in':          t.syntax.builtin,
+  'hljs-type':              t.syntax.type,
+  'hljs-literal':           t.syntax.literal,
+  'hljs-number':            t.syntax.number,
+  'hljs-operator':          t.syntax.operator,
+  'hljs-punctuation':       t.syntax.default,
+  'hljs-property':          t.syntax.attr,
+  'hljs-regexp':            t.syntax.regexp,
+  'hljs-string':            t.syntax.string,
+  'hljs-subst':             t.syntax.default,
+  'hljs-symbol':            t.syntax.literal,
+  'hljs-class':             t.syntax.type,
+  'hljs-function':          t.syntax.fn,
+  'hljs-title':             t.syntax.fn,
+  'hljs-title class_':      t.syntax.type,
+  'hljs-title function_':   t.syntax.fn,
+  'hljs-params':            t.syntax.default,
+  'hljs-comment':           t.syntax.comment,
+  'hljs-doctag':            t.syntax.comment,
+  'hljs-meta':              t.syntax.meta,
+  'hljs-tag':               t.syntax.tag,
+  'hljs-name':              t.syntax.tag,
+  'hljs-attr':              t.syntax.attr,
+  'hljs-attribute':         t.syntax.attr,
+  'hljs-variable':          t.syntax.variable,
+  'hljs-variable language_': t.syntax.builtin,
+  'hljs-selector-tag':      t.syntax.tag,
+  'hljs-selector-class':    t.syntax.fn,
+  'hljs-selector-id':       t.syntax.builtin,
+  'hljs-addition':          t.syntax.string,
+  'hljs-deletion':          t.syntax.keyword,
+}
+
+function htmlToChalk(html, bgColor) {
+  const parts = []
+  const colorStack = []
+  let i = 0
+
+  while (i < html.length) {
+    if (html[i] !== '<') {
+      const end = html.indexOf('<', i)
+      const raw = end === -1 ? html.slice(i) : html.slice(i, end)
+      const text = raw
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+      if (text) {
+        const fg = colorStack.filter(Boolean).at(-1) || t.syntax.default
+        parts.push(bgColor ? chalk.bgHex(bgColor).hex(fg)(text) : chalk.hex(fg)(text))
+      }
+      i = end === -1 ? html.length : end
+      continue
+    }
+
+    const end = html.indexOf('>', i)
+    if (end === -1) { i++; continue }
+    const tag = html.slice(i + 1, end)
+
+    if (tag.startsWith('/span')) {
+      colorStack.pop()
+    } else if (tag.startsWith('span')) {
+      const m = tag.match(/class="([^"]+)"/)
+      const cls = m ? m[1] : null
+      const color = cls ? (CLS_COLOR[cls] ?? CLS_COLOR[cls.split(' ')[0]] ?? null) : null
+      colorStack.push(color)
+    }
+    i = end + 1
+  }
+
+  return parts.join('')
+}
+
+function syntaxHighlight(code, lang, bgColor) {
+  if (!lang) {
+    return bgColor
+      ? chalk.bgHex(bgColor).hex(t.syntax.default)(code)
+      : chalk.hex(t.syntax.default)(code)
+  }
+  try {
+    const { value } = hljs.highlight(code, { language: lang, ignoreIllegals: true })
+    return htmlToChalk(value, bgColor)
+  } catch {
+    return bgColor
+      ? chalk.bgHex(bgColor).hex(t.syntax.default)(code)
+      : chalk.hex(t.syntax.default)(code)
+  }
+}
 
 // ─── Diff parser ──────────────────────────────────────────────────────────────
 
@@ -20,23 +137,16 @@ function parseDiff(diffText) {
   let oldLine = 0
   let newLine = 0
 
-  const lines = diffText.split('\n')
-  for (const raw of lines) {
+  for (const raw of diffText.split('\n')) {
     if (raw.startsWith('diff --git')) {
       currentFile = { header: raw, filename: '', addCount: 0, delCount: 0, lines: [] }
       files.push(currentFile)
-      oldLine = 0
-      newLine = 0
-    } else if (raw.startsWith('--- ')) {
-      // ignore
+      oldLine = 0; newLine = 0
     } else if (raw.startsWith('+++ ') && currentFile) {
       currentFile.filename = raw.slice(4).replace(/^b\//, '')
     } else if (raw.startsWith('@@') && currentFile) {
       const m = raw.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
-      if (m) {
-        oldLine = parseInt(m[1], 10)
-        newLine = parseInt(m[2], 10)
-      }
+      if (m) { oldLine = parseInt(m[1], 10); newLine = parseInt(m[2], 10) }
       currentFile.lines.push({ type: 'hunk', text: raw, oldLine: null, newLine: null })
     } else if (currentFile) {
       if (raw.startsWith('+')) {
@@ -46,7 +156,12 @@ function parseDiff(diffText) {
         currentFile.lines.push({ type: 'del', text: raw.slice(1), oldLine: oldLine++, newLine: null })
         currentFile.delCount++
       } else {
-        currentFile.lines.push({ type: 'ctx', text: raw.startsWith(' ') ? raw.slice(1) : raw, oldLine: oldLine++, newLine: newLine++ })
+        currentFile.lines.push({
+          type: 'ctx',
+          text: raw.startsWith(' ') ? raw.slice(1) : raw,
+          oldLine: oldLine++,
+          newLine: newLine++,
+        })
       }
     }
   }
@@ -57,47 +172,67 @@ function flattenFiles(files) {
   const rows = []
   for (const file of files) {
     rows.push({ type: 'file-header', filename: file.filename, addCount: file.addCount, delCount: file.delCount })
-    for (const line of file.lines) {
-      rows.push({ ...line, filename: file.filename })
-    }
+    for (const line of file.lines) rows.push({ ...line, filename: file.filename })
   }
   return rows
 }
 
-function renderDiffLine(row, isSelected) {
+// ─── Diff line renderer ───────────────────────────────────────────────────────
+// Gutter format:  oldLn(4) newLn(4) sign(2) code
+
+function renderDiffLine(row, isSelected, langCache) {
   const gutterOld = row.oldLine != null ? String(row.oldLine).padStart(4) : '    '
   const gutterNew = row.newLine != null ? String(row.newLine).padStart(4) : '    '
-  const gutter = `${gutterOld}${gutterNew} `
 
   if (row.type === 'file-header') {
-    return chalk.hex(t.ui.selected).bold(`━━ ${row.filename}`) +
-      chalk.hex(t.ci.pass)(` +${row.addCount}`) +
-      chalk.hex(t.ci.fail)(` -${row.delCount}`)
-  }
-  if (row.type === 'hunk') {
-    const line = chalk.bgHex(t.diff.hunkBg).hex(t.diff.hunkFg)(row.text.padEnd(80))
+    const line =
+      chalk.hex(t.ui.selected).bold(`━━ ${row.filename} `) +
+      chalk.hex(t.ci.pass)(`+${row.addCount}`) +
+      chalk.hex(t.syntax.default)(' / ') +
+      chalk.hex(t.ci.fail)(`-${row.delCount}`)
     return isSelected ? chalk.bgHex(t.diff.cursorBg)(line) : line
   }
+
+  if (row.type === 'hunk') {
+    const line = chalk.bgHex(t.diff.hunkBg).hex(t.diff.hunkFg)(
+      `${gutterOld}${gutterNew}   ${row.text}`
+    )
+    return isSelected ? chalk.bgHex(t.diff.cursorBg)(line) : line
+  }
+
+  const lang = langCache.get(row.filename)
+
   if (row.type === 'add') {
-    const text = chalk.bgHex(t.diff.addBg).hex(t.diff.addFg)(gutter + row.text)
-    return isSelected ? chalk.bgHex(t.diff.cursorBg)(text) : text
+    const gutter = chalk.bgHex(t.diff.addBg).hex(t.diff.addSign)(`${gutterOld}${gutterNew} + `)
+    const code   = syntaxHighlight(row.text, lang, t.diff.addBg)
+    const line   = gutter + code
+    return isSelected ? chalk.bgHex(t.diff.cursorBg)(line) : line
   }
+
   if (row.type === 'del') {
-    const text = chalk.bgHex(t.diff.delBg).hex(t.diff.delFg)(gutter + row.text)
-    return isSelected ? chalk.bgHex(t.diff.cursorBg)(text) : text
+    const gutter = chalk.bgHex(t.diff.delBg).hex(t.diff.delSign)(`${gutterOld}${gutterNew} - `)
+    const code   = syntaxHighlight(row.text, lang, t.diff.delBg)
+    const line   = gutter + code
+    return isSelected ? chalk.bgHex(t.diff.cursorBg)(line) : line
   }
-  // ctx
-  const text = chalk.hex(t.ui.dim)(gutter) + chalk.hex(t.diff.ctxFg)(row.text)
-  return isSelected ? chalk.bgHex(t.diff.cursorBg)(text + ' ') : text
+
+  // ctx — no background, full syntax highlight
+  const gutter = chalk.hex(t.ui.dim)(`${gutterOld}${gutterNew}   `)
+  const code   = syntaxHighlight(row.text, lang, null)
+  const line   = gutter + code
+  return isSelected ? chalk.bgHex(t.diff.cursorBg)(line) : line
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 const FOOTER_KEYS = [
-  { key: 'j/k', label: 'scroll' },
-  { key: ']/[', label: 'file' },
-  { key: 'c', label: 'comment' },
-  { key: 'n/N', label: 'thread' },
-  { key: 'v', label: 'comments' },
-  { key: 'Esc', label: 'back' },
+  { key: 'j/k',  label: 'scroll' },
+  { key: 'gg/G', label: 'top/bottom' },
+  { key: ']/[',  label: 'file' },
+  { key: 'c',    label: 'comment' },
+  { key: 'n/N',  label: 'thread' },
+  { key: 'v',    label: 'comments' },
+  { key: 'Esc',  label: 'back' },
 ]
 
 export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
@@ -110,16 +245,22 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
   const [commentStatus, setCommentStatus] = useState(null)
+  const lastKeyRef  = useRef(null)
+  const lastKeyTimer = useRef(null)
 
   const files = useMemo(() => parseDiff(diffText || ''), [diffText])
-  const rows = useMemo(() => flattenFiles(files), [files])
+  const rows  = useMemo(() => flattenFiles(files), [files])
 
-  const fileStartIndices = useMemo(() => {
-    return rows.reduce((acc, row, i) => {
-      if (row.type === 'file-header') acc.push(i)
-      return acc
-    }, [])
-  }, [rows])
+  // filename → language, computed once per diff fetch
+  const langCache = useMemo(() => {
+    const map = new Map()
+    for (const f of files) map.set(f.filename, getLang(f.filename))
+    return map
+  }, [files])
+
+  const fileStartIndices = useMemo(() =>
+    rows.reduce((acc, row, i) => { if (row.type === 'file-header') acc.push(i); return acc }, [])
+  , [rows])
 
   const commentsByLine = useMemo(() => {
     const map = new Map()
@@ -131,15 +272,13 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     return map
   }, [comments])
 
-  const commentThreadIndices = useMemo(() => {
-    return rows.reduce((acc, row, i) => {
-      if (row.filename && row.newLine != null) {
-        const key = `${row.filename}:${row.newLine}`
-        if (commentsByLine.has(key)) acc.push(i)
-      }
+  const commentThreadIndices = useMemo(() =>
+    rows.reduce((acc, row, i) => {
+      if (row.filename && row.newLine != null && commentsByLine.has(`${row.filename}:${row.newLine}`))
+        acc.push(i)
       return acc
     }, [])
-  }, [rows, commentsByLine])
+  , [rows, commentsByLine])
 
   const moveCursor = (delta) => {
     setCursor(prev => {
@@ -150,55 +289,66 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     })
   }
 
+  const jumpTo = (idx) => {
+    const n = Math.max(0, Math.min(rows.length - 1, idx))
+    setCursor(n)
+    setScrollOffset(Math.max(0, n - Math.floor(visibleHeight / 2)))
+  }
+
   useInput((input, key) => {
     if (dialog) return
-    if (input === 'r') { refetch(); return }
-    if (key.escape || input === 'q') { onBack(); return }
-    if (input === 'v') { onViewComments(); return }
 
-    if (input === 'j' || key.downArrow) { moveCursor(1); return }
-    if (input === 'k' || key.upArrow) { moveCursor(-1); return }
+    // gg → jump to top
+    if (input === 'g') {
+      if (lastKeyRef.current === 'g') {
+        clearTimeout(lastKeyTimer.current)
+        lastKeyRef.current = null
+        jumpTo(0)
+        return
+      }
+      lastKeyRef.current = 'g'
+      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
+      return
+    }
+    lastKeyRef.current = null
+
+    if (input === 'G')  { jumpTo(rows.length - 1); return }
+    if (input === 'r')  { refetch(); return }
+    if (key.escape || input === 'q') { onBack(); return }
+    if (input === 'v')  { onViewComments(); return }
+    if (input === 'j' || key.downArrow) { moveCursor(1);  return }
+    if (input === 'k' || key.upArrow)   { moveCursor(-1); return }
 
     if (input === ']') {
-      // Next file
-      const nextFile = fileStartIndices.find(i => i > cursor)
-      if (nextFile != null) { setCursor(nextFile); setScrollOffset(Math.max(0, nextFile - 2)) }
+      const next = fileStartIndices.find(i => i > cursor)
+      if (next != null) jumpTo(next)
       return
     }
     if (input === '[') {
-      // Prev file
-      const prevFile = [...fileStartIndices].reverse().find(i => i < cursor)
-      if (prevFile != null) { setCursor(prevFile); setScrollOffset(Math.max(0, prevFile - 2)) }
+      const prev = [...fileStartIndices].reverse().find(i => i < cursor)
+      if (prev != null) jumpTo(prev)
       return
     }
-
     if (input === 'n') {
-      const nextThread = commentThreadIndices.find(i => i > cursor)
-      if (nextThread != null) { setCursor(nextThread); setScrollOffset(Math.max(0, nextThread - 2)) }
+      const next = commentThreadIndices.find(i => i > cursor)
+      if (next != null) jumpTo(next)
       return
     }
     if (input === 'N') {
-      const prevThread = [...commentThreadIndices].reverse().find(i => i < cursor)
-      if (prevThread != null) { setCursor(prevThread); setScrollOffset(Math.max(0, prevThread - 2)) }
+      const prev = [...commentThreadIndices].reverse().find(i => i < cursor)
+      if (prev != null) jumpTo(prev)
       return
     }
-
     if (input === 'c') {
       const row = rows[cursor]
-      if (row && row.type !== 'file-header') {
-        setDialog('comment')
-      }
+      if (row && row.type !== 'file-header') setDialog('comment')
       return
     }
   })
 
+  // ── Comment dialog ──
   if (dialog === 'comment') {
     const row = rows[cursor]
-    const commentOptions = [
-      { value: 'comment', label: 'Comment', description: 'Leave a regular comment' },
-      { value: 'suggestion', label: 'Suggestion', description: 'Suggest a code change' },
-      { value: 'request-changes', label: 'Request changes', description: 'Request changes to this PR' },
-    ]
     return (
       <Box flexDirection="column" flexGrow={1}>
         <Box marginBottom={1} paddingX={1}>
@@ -207,10 +357,14 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         </Box>
         <OptionPicker
           title="Comment type"
-          options={commentOptions}
+          options={[
+            { value: 'comment',         label: 'Comment',         description: 'Leave a regular comment' },
+            { value: 'suggestion',      label: 'Suggestion',      description: 'Suggest a code change' },
+            { value: 'request-changes', label: 'Request changes', description: 'Request changes on this PR' },
+          ]}
           promptText="Comment body"
           onSubmit={async (val) => {
-            const { value, text } = typeof val === 'object' ? val : { value: val, text: '' }
+            const { value: _v, text } = typeof val === 'object' ? val : { value: val, text: '' }
             if (!text) { setDialog(null); return }
             try {
               await addPRLineComment(repo, prNumber, {
@@ -233,21 +387,16 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     )
   }
 
-  if (loading) {
-    return (
-      <Box flexDirection="column" flexGrow={1} paddingX={1}>
-        <Text color={t.ui.muted}>Loading diff...</Text>
-      </Box>
-    )
-  }
-
-  if (error) {
-    return (
-      <Box flexDirection="column" flexGrow={1} paddingX={1}>
-        <Text color={t.ci.fail}>⚠ Failed to load diff — r to retry</Text>
-      </Box>
-    )
-  }
+  if (loading) return (
+    <Box flexDirection="column" flexGrow={1} paddingX={1}>
+      <Text color={t.ui.muted}>Loading diff…</Text>
+    </Box>
+  )
+  if (error) return (
+    <Box flexDirection="column" flexGrow={1} paddingX={1}>
+      <Text color={t.ci.fail}>⚠ Failed to load diff — r to retry</Text>
+    </Box>
+  )
 
   const visibleRows = rows.slice(scrollOffset, scrollOffset + visibleHeight)
 
@@ -256,26 +405,21 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       <Box paddingX={1} justifyContent="space-between">
         <Text color={t.ui.selected} bold>PR #{prNumber} Diff</Text>
         {commentStatus && <Text color={t.ci.pass}>{commentStatus}</Text>}
-        <Text color={t.ui.dim}>{cursor + 1}/{rows.length}</Text>
+        <Text color={t.ui.dim}>{cursor + 1} / {rows.length}</Text>
       </Box>
+
       <Box flexDirection="column" flexGrow={1} overflow="hidden">
         {visibleRows.map((row, i) => {
           const idx = scrollOffset + i
           const isSelected = idx === cursor
-          const rendered = renderDiffLine(row, isSelected)
-          // Check for inline comments
+          const rendered = renderDiffLine(row, isSelected, langCache)
           const hasComment = row.filename && row.newLine != null &&
             commentsByLine.has(`${row.filename}:${row.newLine}`)
           return (
             <Box key={idx} flexDirection="column">
               <Text wrap="truncate">{rendered}</Text>
               {hasComment && (
-                <Box
-                  paddingX={2}
-                  flexDirection="column"
-                  borderStyle="single"
-                  borderColor={t.diff.threadBorder}
-                >
+                <Box paddingX={2} flexDirection="column" borderStyle="single" borderColor={t.diff.threadBorder}>
                   {commentsByLine.get(`${row.filename}:${row.newLine}`).map(c => (
                     <Box key={c.id} gap={1}>
                       <Text color={t.diff.threadBorder}>┃</Text>
@@ -289,6 +433,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
           )
         })}
       </Box>
+
       <FooterKeys keys={FOOTER_KEYS} />
     </Box>
   )
