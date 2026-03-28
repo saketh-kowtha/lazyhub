@@ -121,6 +121,126 @@ describe('run()', () => {
   })
 })
 
+// ─── run() edge cases ───────────────────────────────────────────────────────
+
+describe('run() edge cases', () => {
+  it('detects 404 exit code and sets "Resource not found" message', async () => {
+    execa.mockResolvedValue({ exitCode: 404, stdout: '', stderr: '' })
+    try {
+      await run(['api', 'repos/owner/missing'])
+      expect.fail('should have thrown')
+    } catch (err) {
+      expect(err).toBeInstanceOf(GhError)
+      expect(err.message).toBe('Resource not found')
+      expect(err.exitCode).toBe(404)
+    }
+  })
+
+  it('detects "not found" in stderr and sets "Resource not found" message', async () => {
+    mockFailure('HTTP 404: not found', 1)
+    try {
+      await run(['pr', 'view', '999'])
+      expect.fail('should have thrown')
+    } catch (err) {
+      expect(err).toBeInstanceOf(GhError)
+      expect(err.message).toBe('Resource not found')
+    }
+  })
+
+  it('detects "Could not resolve" in stderr and sets "Resource not found" message', async () => {
+    mockFailure('Could not resolve to a Repository with the name owner/repo', 1)
+    try {
+      await run(['pr', 'list'])
+      expect.fail('should have thrown')
+    } catch (err) {
+      expect(err).toBeInstanceOf(GhError)
+      expect(err.message).toBe('Resource not found')
+    }
+  })
+
+  it('uses first line of stderr as message for generic errors', async () => {
+    mockFailure('something went wrong\nmore details here', 1)
+    try {
+      await run(['pr', 'list'])
+      expect.fail('should have thrown')
+    } catch (err) {
+      expect(err).toBeInstanceOf(GhError)
+      expect(err.message).toBe('something went wrong')
+    }
+  })
+
+  it('falls back to generic message when stderr is empty', async () => {
+    execa.mockResolvedValue({ exitCode: 1, stdout: '', stderr: '' })
+    try {
+      await run(['pr', 'list', '--repo', 'owner/repo'])
+      expect.fail('should have thrown')
+    } catch (err) {
+      expect(err).toBeInstanceOf(GhError)
+      expect(err.message).toContain('failed')
+      expect(err.exitCode).toBe(1)
+    }
+  })
+
+  it('preserves stderr and args on GhError', async () => {
+    mockFailure('access denied', 1)
+    try {
+      await run(['issue', 'create', '--title', 'test'])
+      expect.fail('should have thrown')
+    } catch (err) {
+      expect(err.stderr).toBe('access denied')
+      expect(err.args).toEqual(['issue', 'create', '--title', 'test'])
+    }
+  })
+
+  it('handles execa throwing without stderr property', async () => {
+    const rawError = new Error('command not found')
+    execa.mockRejectedValue(rawError)
+    try {
+      await run(['pr', 'list'])
+      expect.fail('should have thrown')
+    } catch (err) {
+      expect(err).toBeInstanceOf(GhError)
+      expect(err.message).toBe('command not found')
+      expect(err.stderr).toBe('')
+      expect(err.exitCode).toBe(1)
+    }
+  })
+
+  it('returns whitespace-only stdout as null', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: '   \n  ', stderr: '' })
+    const result = await run(['pr', 'merge', '1'])
+    expect(result).toBeNull()
+  })
+})
+
+// ─── GhError edge cases ────────────────────────────────────────────────────
+
+describe('GhError edge cases', () => {
+  it('has correct name property', () => {
+    const err = new GhError({ message: 'fail', stderr: '', exitCode: 2, args: [] })
+    expect(err.name).toBe('GhError')
+  })
+
+  it('inherits from Error prototype chain', () => {
+    const err = new GhError({ message: 'test', stderr: '', exitCode: 1, args: [] })
+    expect(err instanceof Error).toBe(true)
+    expect(err.stack).toBeDefined()
+  })
+
+  it('preserves all constructor fields', () => {
+    const err = new GhError({
+      message: 'rate limit hit',
+      stderr: 'API rate limit exceeded for user',
+      exitCode: 1,
+      args: ['api', 'repos/owner/repo/pulls'],
+    })
+    expect(err.message).toBe('rate limit hit')
+    expect(err.stderr).toBe('API rate limit exceeded for user')
+    expect(err.exitCode).toBe(1)
+    expect(err.args).toEqual(['api', 'repos/owner/repo/pulls'])
+  })
+})
+
 // ─── PR functions ─────────────────────────────────────────────────────────────
 
 describe('listPRs()', () => {
