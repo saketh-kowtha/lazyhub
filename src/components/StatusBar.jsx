@@ -1,18 +1,18 @@
 /**
  * StatusBar.jsx — 1-row status bar at the bottom.
- * Props: repo, pane, count
+ * Props: repo, pane, count, filterState
  */
 
 import React, { useState, useEffect } from 'react'
-import { Box, Text } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import { t } from '../theme.js'
 
-const PANE_LABELS = {
-  prs: 'Pull Requests',
-  issues: 'Issues',
-  branches: 'Branches',
-  actions: 'Actions',
-  notifications: 'Notifications',
+const PANE_META = {
+  prs:           { icon: '⎇', label: 'Pull Requests' },
+  issues:        { icon: '○', label: 'Issues' },
+  branches:      { icon: '⎇', label: 'Branches' },
+  actions:       { icon: '▶', label: 'Actions' },
+  notifications: { icon: '●', label: 'Notifications' },
 }
 
 function formatAge(ms) {
@@ -23,9 +23,11 @@ function formatAge(ms) {
   return `${Math.floor(s / 3600)}h ago`
 }
 
-export function StatusBar({ repo, pane, count }) {
+export function StatusBar({ repo, pane, count, filterState }) {
   const [now, setNow] = useState(Date.now())
   const [mountTime] = useState(Date.now())
+  const { stdout } = useStdout()
+  const termWidth = stdout?.columns || 80
 
   // Tick every 10s to update the "refreshed N ago" display
   useEffect(() => {
@@ -33,22 +35,36 @@ export function StatusBar({ repo, pane, count }) {
     return () => clearInterval(id)
   }, [])
 
-  const paneLabel = PANE_LABELS[pane] || pane || ''
+  const meta = PANE_META[pane] || { icon: '?', label: pane || '' }
+  const separator = <Text color={t.ui.dim}>  |  </Text>
+  const borderLine = '─'.repeat(termWidth)
 
   return (
-    <Box paddingX={1} justifyContent="space-between">
-      <Box gap={1}>
-        <Text color={t.ui.selected} bold>{repo || '—'}</Text>
-        <Text color={t.ui.dim}>·</Text>
-        <Text color={t.ui.muted}>{paneLabel}</Text>
-        {count != null && (
-          <>
-            <Text color={t.ui.dim}>·</Text>
-            <Text color={t.ui.dim}>{count} items</Text>
-          </>
-        )}
+    <Box flexDirection="column">
+      <Box>
+        <Text color={t.ui.dim}>{borderLine}</Text>
       </Box>
-      <Text color={t.ui.dim}>refreshed {formatAge(mountTime)}</Text>
+      <Box paddingX={1} justifyContent="space-between">
+        <Box gap={0}>
+          <Text color={t.ui.selected} bold>{meta.icon} {meta.label}</Text>
+          {separator}
+          <Text color={t.ui.muted}>{repo || '—'}</Text>
+          {count != null && (
+            <>
+              {separator}
+              <Text color={t.ui.muted}>{count} items</Text>
+            </>
+          )}
+          {filterState && (
+            <>
+              {separator}
+              <Text color={t.ui.dim}>filter: </Text>
+              <Text color={t.ui.muted}>{filterState}</Text>
+            </>
+          )}
+        </Box>
+        <Text color={t.ui.dim}>refreshed {formatAge(mountTime)}</Text>
+      </Box>
     </Box>
   )
 }

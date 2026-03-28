@@ -218,22 +218,33 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
         )}
       </Box>
       <Box flexDirection="column" flexGrow={1}>
+        {loading && items.length === 0 && (
+          <Box paddingX={2} paddingY={1}>
+            <Text color={t.ui.muted}>  Loading issues…</Text>
+          </Box>
+        )}
         {visibleIssues.map((issue, i) => {
           const idx = scrollOffset + i
           const isSelected = idx === cursor
           const stateColor = issue.state === 'OPEN' ? t.issue.open : t.issue.closed
           const stateIcon = issue.state === 'OPEN' ? '○' : '✓'
+          const authorLogin = String(issue.author?.login || '').padEnd(12)
+          const visibleLabels = (issue.labels || []).slice(0, 2)
+          const extraLabels = (issue.labels || []).length - 2
           return (
-            <Box key={issue.number} paddingX={1} backgroundColor={isSelected ? '#1c2128' : undefined}>
+            <Box key={issue.number} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
               <Text color={stateColor}>{stateIcon} </Text>
               <Text color={t.ui.dim} bold>#{String(issue.number).padEnd(5)}</Text>
               <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
                 {issue.title}
               </Text>
-              {issue.labels?.slice(0, 2).map(l => (
-                <Text key={l.name} color={`#${l.color}`}> [{l.name}]</Text>
+              {visibleLabels.map(l => (
+                <Text key={l.name} color={`#${l.color}`}> [{l.name.slice(0, 14)}]</Text>
               ))}
-              <Text color={t.ui.muted}> {issue.author?.login}</Text>
+              {extraLabels > 0 && (
+                <Text color={t.ui.muted}> +{extraLabels}</Text>
+              )}
+              <Text color={t.ui.muted}> {authorLogin}</Text>
               <Text color={t.ui.dim}> {format(issue.updatedAt)}</Text>
             </Box>
           )

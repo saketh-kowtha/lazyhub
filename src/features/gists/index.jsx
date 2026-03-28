@@ -237,6 +237,9 @@ export function GistList({ listHeight = 10, onPaneState }) {
         const shortId = (gist.id || '').slice(0, 8)
         const desc = gist.description || '(no description)'
         const timeStr = gist.updatedAt ? format(gist.updatedAt) : ''
+        const fileKeys = gist.files ? Object.keys(gist.files) : []
+        const firstFile = fileKeys[0] || null
+        const fileCount = fileKeys.length
 
         return (
           <Box
@@ -253,6 +256,12 @@ export function GistList({ listHeight = 10, onPaneState }) {
             >
               {desc}
             </Text>
+            {firstFile && (
+              <Text color={t.ui.dim}> {firstFile}</Text>
+            )}
+            {fileCount > 1 && (
+              <Text color={t.ui.muted}> [{fileCount} files]</Text>
+            )}
             <Text color={t.ui.dim}> {timeStr}</Text>
           </Box>
         )

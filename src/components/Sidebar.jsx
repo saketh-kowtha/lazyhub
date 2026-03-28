@@ -23,9 +23,12 @@ export function Sidebar({ currentPane, onSelect, height, visiblePanes }) {
     ? ALL_NAV_ITEMS.filter(i => visiblePanes.includes(i.pane))
     : ALL_NAV_ITEMS
 
+  // Separator width: sidebar inner width minus borders (20 - 2 = 18)
+  const separator = '─'.repeat(18)
+
   return (
     <Box
-      width={18}
+      width={20}
       flexDirection="column"
       borderStyle="single"
       borderColor={t.ui.border}
@@ -38,7 +41,11 @@ export function Sidebar({ currentPane, onSelect, height, visiblePanes }) {
       {items.map(({ pane, icon, label }) => {
         const isActive = pane === currentPane
         return (
-          <Box key={pane} paddingLeft={1}>
+          <Box
+            key={pane}
+            paddingLeft={1}
+            backgroundColor={isActive ? t.ui.headerBg : undefined}
+          >
             <Text color={isActive ? t.ui.selected : t.ui.dim}>
               {isActive ? '▌' : ' '}
             </Text>
@@ -50,6 +57,9 @@ export function Sidebar({ currentPane, onSelect, height, visiblePanes }) {
       })}
 
       <Box flexGrow={1} />
+      <Box paddingX={1}>
+        <Text color={t.ui.dim}>{separator}</Text>
+      </Box>
       <Box paddingX={1} paddingBottom={0}>
         <Text color={t.ui.dim}>[Tab] switch</Text>
       </Box>

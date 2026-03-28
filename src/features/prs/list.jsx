@@ -310,12 +310,18 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
         </Box>
       )}
 
+      {loading && items.length === 0 && (
+        <Box paddingX={2} paddingY={1}>
+          <Text color={t.ui.muted}>  Loading pull requests…</Text>
+        </Box>
+      )}
+
       {visiblePRs.map((pr, i) => {
         const idx = scrollOffset + i
         const isSelected = idx === cursor
         const badge = prStateBadge(pr)
         const ci = ciBadge(pr)
-        const authorLogin = (pr.author?.login || '').slice(0, 12)
+        const authorLogin = String(pr.author?.login || '').slice(0, 12).padEnd(12)
         const timeStr = pr.updatedAt ? format(pr.updatedAt) : ''
 
         return (
@@ -328,6 +334,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
             <Text color={t.ui.dim}> {'#' + String(pr.number).padEnd(5)}</Text>
             <Text
               color={isSelected ? t.ui.selected : undefined}
+              italic={pr.isDraft}
               wrap="truncate"
               flexGrow={1}
             >
@@ -335,7 +342,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
             </Text>
             {ci
               ? <Text color={ci.color}> {ci.icon}</Text>
-              : <Text>   </Text>
+              : <Text>  </Text>
             }
             <Text color={t.ui.muted}> {authorLogin}</Text>
             <Text color={t.ui.dim}> {timeStr}</Text>
