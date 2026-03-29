@@ -2,16 +2,38 @@
  * src/features/branches/index.jsx — Branch list pane
  */
 
-import React, { useState, useCallback, useEffect, useContext } from 'react'
+import React, { useState, useCallback, useEffect, useContext, memo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { useGh } from '../../hooks/useGh.js'
 import { listBranches, deleteBranch, listPRs } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
-import { AppContext } from '../../app.jsx'
-import { t } from '../../theme.js'
+import { AppContext } from '../../context.js'
+import { useTheme } from '../../theme.js'
+
+const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t }) => {
+  return (
+    <Box key={branch.name} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
+      <Text color={isSelected ? t.ui.selected : t.ui.muted}>
+        {isSelected ? '▶ ' : '  '}
+      </Text>
+      {isCurrent && (
+        <Text color={t.pr.open}>► </Text>
+      )}
+      <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
+        {branch.name}
+      </Text>
+      {typeof branch.aheadBy === 'number' && typeof branch.behindBy === 'number' && (
+        <Text color={t.ui.dim}> ↑{branch.aheadBy} ↓{branch.behindBy}</Text>
+      )}
+      {branch.protected && <Text color={t.ci.pending}> 🔒</Text>}
+      {hasPR && <Text color={t.pr.open}> PR</Text>}
+    </Box>
+  )
+})
 
 export function BranchList({ repo, listHeight = 10, onPaneState }) {
+  const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
@@ -177,22 +199,14 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
           const hasPR = (prs || []).some(pr => pr.headRefName === branch.name && pr.state === 'OPEN')
           const isCurrent = currentBranch && branch.name === currentBranch
           return (
-            <Box key={branch.name} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-              <Text color={isSelected ? t.ui.selected : t.ui.muted}>
-                {isSelected ? '▶ ' : '  '}
-              </Text>
-              {isCurrent && (
-                <Text color={t.pr.open}>► </Text>
-              )}
-              <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
-                {branch.name}
-              </Text>
-              {typeof branch.aheadBy === 'number' && typeof branch.behindBy === 'number' && (
-                <Text color={t.ui.dim}> ↑{branch.aheadBy} ↓{branch.behindBy}</Text>
-              )}
-              {branch.protected && <Text color={t.ci.pending}> 🔒</Text>}
-              {hasPR && <Text color={t.pr.open}> PR</Text>}
-            </Box>
+            <BranchRow
+              key={branch.name}
+              branch={branch}
+              isSelected={isSelected}
+              isCurrent={isCurrent}
+              hasPR={hasPR}
+              t={t}
+            />
           )
         })}
         {!loading && items.length === 0 && (

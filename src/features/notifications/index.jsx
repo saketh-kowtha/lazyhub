@@ -9,21 +9,23 @@ import { useGh } from '../../hooks/useGh.js'
 import { listNotifications, markNotificationRead } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
-import { AppContext } from '../../app.jsx'
-import { t } from '../../theme.js'
-
-function notifTypeIcon(type) {
-  switch (type) {
-    case 'PullRequest': return { icon: '⎇', color: t.pr.open }
-    case 'Issue': return { icon: '○', color: t.issue.open }
-    case 'Release': return { icon: '▸', color: t.ui.selected }
-    case 'Discussion': return { icon: '💬', color: t.ui.muted }
-    default: return { icon: '●', color: t.ui.muted }
-  }
-}
+import { AppContext } from '../../context.js'
+import { useTheme } from '../../theme.js'
 
 export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneState }) {
+  const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
+
+  function notifTypeIcon(type) {
+    switch (type) {
+      case 'PullRequest': return { icon: '⎇', color: t.pr.open }
+      case 'Issue': return { icon: '○', color: t.issue.open }
+      case 'Release': return { icon: '▸', color: t.ui.selected }
+      case 'Discussion': return { icon: '💬', color: t.ui.muted }
+      default: return { icon: '●', color: t.ui.muted }
+    }
+  }
+
   const { stdout } = useStdout()
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 

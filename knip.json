@@ -1,0 +1,5 @@
+{
+  "entry": ["bin/lazyhub.js", "src/**/*.test.js"],
+  "project": ["src/**/*.{js,jsx}", "bin/*.js"],
+  "ignoreBinaries": ["sleep", "gh"]
+}

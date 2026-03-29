@@ -69,7 +69,7 @@ npm install -g lazyhub
 npx lazyhub
 ```
 
-### Homebrew (coming soon)
+### Homebrew
 
 ```bash
 brew install saketh-kowtha/tap/lazyhub
@@ -98,6 +98,16 @@ lazyhub
 
 ---
 
+## Features
+
+- **Rich Markdown Rendering:** PR and Issue descriptions feature bold headers, lists, and syntax-highlighted code blocks.
+- **In-App Settings:** Press `S` to change themes and more in real-time.
+- **Advanced Diff Navigation:** Press `f` in the diff view to fuzzy-jump to any changed file.
+- **Custom Pane Scripting:** Use JS `preProcessor` scripts to transform custom command output before rendering.
+- **Bulletproof Input:** Unified text input with cursor support and readline shortcuts (`Ctrl+A`, `Ctrl+E`, `Ctrl+U`, `Ctrl+K`).
+
+---
+
 ## Panes
 
 | Pane | What you can do |
@@ -121,6 +131,7 @@ lazyhub
 | `Enter` | Open detail |
 | `r` | Refresh (force re-fetch) |
 | `o` | Open in browser |
+| `S` | Settings pane |
 | `/` | Fuzzy search |
 | `?` | Help overlay |
 | `q` | Back / quit |
@@ -158,6 +169,7 @@ lazyhub
 |-----|--------|
 | `j` / `k` | Scroll lines |
 | `[` / `]` | Previous / next file |
+| `f` | Jump to file (fuzzy search) |
 | `t` | Toggle file tree |
 | `/` | Find text in diff |
 | `n` / `N` | Next / prev match (or comment thread) |
@@ -236,16 +248,30 @@ Edit this file to customize everything:
 
 ### Custom panes
 
-Add your own panes backed by any `gh api` command:
+Add your own panes backed by any `gh api` command. You can also add a `preProcessor` JS script to transform the data:
 
 ```json
 "customPanes": {
   "my-deploys": {
     "label": "Deployments",
     "icon": "▶",
-    "command": "gh api repos/{repo}/deployments --jq '[.[] | {title:.environment,number:.id,state:.task,updatedAt:.created_at,url:.url}]'",
+    "command": "gh api repos/{repo}/deployments",
+    "preProcessor": "~/.config/lazyhub/processors/deploys.js",
     "actions": { "o": "open" }
   }
+}
+```
+
+The pre-processor should be an ESM module with a default export:
+```js
+export default function(data, { repo }) {
+  return data.map(d => ({
+    title: d.environment,
+    number: d.id,
+    state: d.task,
+    updatedAt: d.created_at,
+    url: d.url
+  }));
 }
 ```
 
@@ -264,6 +290,7 @@ Placeholders: `{repo}`, `{owner}`, `{name}`
 | `catppuccin-mocha` | Extra dark pastel |
 | `catppuccin-latte` | Light pastel |
 | `tokyo-night` | Dark blue/purple |
+| `ansi-16` | Standard 16-color ANSI (maximum compatibility) |
 
 Set in config:
 
@@ -345,7 +372,6 @@ See the [project board](https://github.com/users/saketh-kowtha/projects) and [op
 Highlights coming up:
 - Homebrew tap
 - GitHub Enterprise (`GH_HOST`) support
-- Mouse support (opt-in)
 - Releases pane
 - Gists pane
 

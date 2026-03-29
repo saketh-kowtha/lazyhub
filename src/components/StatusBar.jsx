@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Box, Text, useStdout } from 'ink'
-import { t } from '../theme.js'
+import { useTheme } from '../theme.js'
 
 const PANE_META = {
   prs:           { icon: '⎇', label: 'Pull Requests' },
@@ -24,6 +24,7 @@ function formatAge(ms) {
 }
 
 export function StatusBar({ repo, pane, count, filterState }) {
+  const { t } = useTheme()
   const [now, setNow] = useState(Date.now())
   const [mountTime] = useState(Date.now())
   const { stdout } = useStdout()

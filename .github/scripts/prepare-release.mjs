@@ -1,19 +1,9 @@
 #!/usr/bin/env node
 /**
  * .github/scripts/prepare-release.mjs
- *
- * Determines semver bump, writes release notes, bumps package.json,
- * updates CHANGELOG.md and README.md badge, updates docs version.
- *
- * Works WITH or WITHOUT an ANTHROPIC_API_KEY:
- *   - With key  → Claude Sonnet 4.6 generates polished release notes
- *   - Without   → conventional-commits-style notes generated from git log
- *
- * Outputs to GITHUB_OUTPUT:
- *   version=<new semver>
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'fs'
 import { execSync } from 'child_process'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -28,13 +18,12 @@ function run(cmd, opts = {}) {
 }
 
 function setOutput(name, value) {
-  const ghOutput = process.env.GITHUB_OUTPUT
-  if (ghOutput) {
-    const { appendFileSync } = await import('fs').catch(() => ({ appendFileSync: () => {} }))
-    // sync version
-    execSync(`echo "${name}=${value}" >> $GITHUB_OUTPUT`, { shell: true })
+  const outputFile = process.env.GITHUB_OUTPUT
+  if (outputFile) {
+    appendFileSync(outputFile, `${name}=${value}\n`)
+    console.log(`Setting output: ${name}=${value}`)
   } else {
-    console.log(`::set-output name=${name}::${value}`)
+    console.log(`\nOutput: ${name}=${value}`)
   }
 }
 
@@ -120,7 +109,7 @@ for (const c of commits) {
   }
 }
 
-// ─── Build conventional changelog (no AI needed) ─────────────────────────────
+// ─── Build conventional changelog ─────────────────────────────
 
 function buildConventionalNotes() {
   const repoUrl = `https://github.com/${repo}`
@@ -152,32 +141,22 @@ function buildConventionalNotes() {
   return lines.join('\n')
 }
 
-// ─── Build AI-enhanced notes (with Claude) ────────────────────────────────────
+// ─── AI-enhanced notes ────────────────────────────────────
 
 async function buildAiNotes() {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return null
 
   console.log('Generating release notes with Claude...')
-
   const commitSummary = commits.slice(0, 30).map(c => `- ${c.subject} (${c.hash})`).join('\n')
   const repoUrl = `https://github.com/${repo}`
 
   const prompt = `You are writing release notes for lazyhub v${newVersion} — a lazygit-style GitHub TUI.
-
 PR merged: #${prNumber} — "${prTitle}"
 Bump type: ${bump}
-${prBody ? `\nPR description:\n${prBody}\n` : ''}
-Commits in this release:
+Commits:
 ${commitSummary}
-
-Write release notes in GitHub Markdown. Include:
-1. A 1-2 sentence summary of what changed (exciting, user-focused tone)
-2. Sections: "### What's new", "### Bug fixes" (if any), "### Under the hood" (optional, for chores/refactors)
-3. Each item as a bullet: "- **scope**: description"
-4. At the end: "Full changelog: ${repoUrl}/compare/${lastTag || 'v0.1.0'}...v${newVersion}"
-
-Keep it concise and developer-friendly. No marketing fluff. Start directly with the summary paragraph, no h1/h2 header (that's added separately).`
+Write release notes in GitHub Markdown. Highlight the most important user-facing changes.`
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -193,17 +172,11 @@ Keep it concise and developer-friendly. No marketing fluff. Start directly with 
         messages: [{ role: 'user', content: prompt }],
       }),
     })
-
-    if (!res.ok) {
-      console.warn(`Claude API returned ${res.status}, falling back to conventional notes`)
-      return null
-    }
-
+    if (!res.ok) return null
     const data = await res.json()
     const body = data.content?.[0]?.text || ''
     return `## v${newVersion}\n\n${body}`
-  } catch (err) {
-    console.warn('Claude API error:', err.message, '— falling back to conventional notes')
+  } catch {
     return null
   }
 }
@@ -213,76 +186,30 @@ Keep it concise and developer-friendly. No marketing fluff. Start directly with 
 const aiNotes = await buildAiNotes()
 const releaseNotes = aiNotes || buildConventionalNotes()
 
-console.log('\n--- Release Notes ---')
-console.log(releaseNotes)
-console.log('---------------------\n')
-
-// Write notes to temp file for the workflow step
+// Write notes to temp file
 writeFileSync('/tmp/release-notes.md', releaseNotes)
 
-// ─── Update package.json ──────────────────────────────────────────────────────
-
+// Update package.json
 pkg.version = newVersion
 writeFileSync(join(ROOT, 'package.json'), JSON.stringify(pkg, null, 2) + '\n')
-console.log(`✓ package.json → ${newVersion}`)
 
-// ─── Update CHANGELOG.md ──────────────────────────────────────────────────────
-
+// Update CHANGELOG.md
 const changelogPath = join(ROOT, 'CHANGELOG.md')
-const existingChangelog = existsSync(changelogPath)
-  ? readFileSync(changelogPath, 'utf8')
-  : '# Changelog\n\n'
-
-const header = existingChangelog.startsWith('# Changelog')
-  ? '# Changelog\n\n'
-  : '# Changelog\n\n'
+const existingChangelog = existsSync(changelogPath) ? readFileSync(changelogPath, 'utf8') : '# Changelog\n\n'
+const header = '# Changelog\n\n'
 const rest = existingChangelog.replace(/^# Changelog\s*\n+/, '')
+writeFileSync(changelogPath, `${header}${releaseNotes}\n\n---\n\n${rest}`)
 
-const newChangelog = `${header}${releaseNotes}\n\n---\n\n${rest}`
-writeFileSync(changelogPath, newChangelog)
-console.log('✓ CHANGELOG.md updated')
-
-// ─── Update README.md version badge ──────────────────────────────────────────
-
+// Update README version badge
 const readmePath = join(ROOT, 'README.md')
 if (existsSync(readmePath)) {
   let readme = readFileSync(readmePath, 'utf8')
-  // Update npm version badge
-  readme = readme.replace(
-    /img\.shields\.io\/npm\/v\/lazyhub[^)]+/g,
-    `img.shields.io/npm/v/lazyhub?color=3fb950&label=npm`
-  )
-  // Update any explicit version mention in the install section
-  readme = readme.replace(
-    /lazyhub@\d+\.\d+\.\d+/g,
-    `lazyhub@${newVersion}`
-  )
+  readme = readme.replace(/img\.shields\.io\/npm\/v\/lazyhub[^)]+/g, `img.shields.io/npm/v/lazyhub?color=3fb950&label=npm`)
+  readme = readme.replace(/lazyhub@\d+\.\d+\.\d+/g, `lazyhub@${newVersion}`)
   writeFileSync(readmePath, readme)
-  console.log('✓ README.md badge updated')
 }
 
-// ─── Update docs version references ──────────────────────────────────────────
-
-const docsFiles = ['docs/index.html', 'docs/guide.html', 'docs/keybindings.html', 'docs/config.html']
-for (const docFile of docsFiles) {
-  const docPath = join(ROOT, docFile)
-  if (!existsSync(docPath)) continue
-  let content = readFileSync(docPath, 'utf8')
-  // Replace version strings like "v0.1.0" or "lazyhub@0.1.0"
-  content = content.replace(/lazyhub@\d+\.\d+\.\d+/g, `lazyhub@${newVersion}`)
-  content = content.replace(/data-version="[\d.]+"/, `data-version="${newVersion}"`)
-  writeFileSync(docPath, content)
-  console.log(`✓ ${docFile} version updated`)
-}
-
-// ─── Set GitHub Actions output ────────────────────────────────────────────────
-
-const outputFile = process.env.GITHUB_OUTPUT
-if (outputFile) {
-  const { appendFileSync } = await import('fs')
-  appendFileSync(outputFile, `version=${newVersion}\n`)
-} else {
-  console.log(`\nOutput: version=${newVersion}`)
-}
+// Set GITHUB_OUTPUT
+setOutput('version', newVersion)
 
 console.log(`\n✓ Release v${newVersion} prepared (${bump} bump)`)

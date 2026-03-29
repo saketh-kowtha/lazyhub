@@ -452,12 +452,14 @@ describe('addPRComment()', () => {
 })
 
 describe('listPRComments()', () => {
-  it('calls gh api pulls/{number}/comments', async () => {
-    mockSuccess([])
+  it('calls gh api graphql with reviewThreads query', async () => {
+    mockSuccess({ data: { repository: { pullRequest: { reviewThreads: { nodes: [] } } } } })
     await listPRComments('owner/repo', 5)
     const [, args] = execa.mock.calls[0]
     expect(args).toContain('api')
-    expect(args.some(a => a.includes('pulls/5/comments'))).toBe(true)
+    expect(args).toContain('graphql')
+    expect(args.some(a => a.includes('reviewThreads'))).toBe(true)
+    expect(args.some(a => a === 'owner=owner' || a === 'name=repo' || a === 'number=5')).toBe(true)
   })
 })
 

@@ -12,12 +12,12 @@
  * Layout (<80 cols):        list only (sidebar replaced by tab header)
  */
 
-import React, { useState, useRef, useCallback, createContext, useContext, useEffect } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { render, Box, Text, useInput, useApp, useStdout } from 'ink'
-import { t } from './theme.js'
+import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
 import { loadConfig } from './config.js'
-
-const _config = loadConfig()
+import { AppContext } from './context.js'
+import { logger } from './utils.js'
 import { Sidebar } from './components/Sidebar.jsx'
 import { StatusBar } from './components/StatusBar.jsx'
 import { FooterKeys } from './components/FooterKeys.jsx'
@@ -29,16 +29,13 @@ import { IssueList } from './features/issues/list.jsx'
 import { IssueDetail } from './features/issues/detail.jsx'
 import { BranchList } from './features/branches/index.jsx'
 import { ActionList } from './features/actions/index.jsx'
+import { SettingsPane } from './features/settings/index.jsx'
+import { LogPane } from './features/logs/index.jsx'
 import { NotificationList } from './features/notifications/index.jsx'
 import { CustomPane } from './components/CustomPane.jsx'
+import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 
-// ─── AppContext ───────────────────────────────────────────────────────────────
-
-export const AppContext = createContext({ notifyDialog: () => {}, openHelp: () => {} })
-
-export function useAppContext() {
-  return useContext(AppContext)
-}
+const _config = loadConfig()
 
 // ─── Pane registry ───────────────────────────────────────────────────────────
 
@@ -76,6 +73,8 @@ const GLOBAL_KEYS = [
   { key: 'o',               label: 'open current item in browser' },
   { key: '/',               label: 'fuzzy search current list' },
   { key: '?',               label: 'toggle this help overlay' },
+  { key: 'S',               label: 'settings' },
+  { key: 'L',               label: 'logs' },
   { key: 'q / Esc',         label: 'back one level / quit at root' },
 ]
 
@@ -180,7 +179,7 @@ const DIALOG_KEYS = {
     { key: '↑↓ / j k',      label: 'pick merge strategy' },
     { key: 'Enter',          label: 'confirm strategy' },
     { key: 'Tab',            label: 'next field (commit message)' },
-    { key: 'Ctrl+Enter',     label: 'execute merge' },
+    { key: 'Ctrl+G',         label: 'execute merge' },
     { key: 'Esc',            label: 'cancel' },
   ],
   multiselect: [
@@ -197,7 +196,7 @@ const DIALOG_KEYS = {
   compose: [
     { key: 'Tab',            label: 'next field' },
     { key: 'e',              label: 'open $EDITOR for body' },
-    { key: 'Ctrl+Enter',     label: 'submit' },
+    { key: 'Ctrl+G',         label: 'submit' },
     { key: 'Esc',            label: 'cancel' },
   ],
   logs: [
@@ -211,7 +210,7 @@ const DIALOG_KEYS = {
     { key: '←→',             label: 'pick comment type' },
     { key: 'Tab',            label: 'next field' },
     { key: 'e',              label: 'open $EDITOR for body' },
-    { key: 'Ctrl+Enter',     label: 'submit comment' },
+    { key: 'Ctrl+G',         label: 'submit comment' },
     { key: 'Ctrl+R',         label: 'submit + resolve thread' },
     { key: 'Esc',            label: 'cancel' },
   ],
@@ -220,6 +219,7 @@ const DIALOG_KEYS = {
 // ─── Help overlay — shown on ? from any view ─────────────────────────────────
 
 function HelpOverlay({ pane, view, onClose }) {
+  const { t } = useTheme()
   useInput((input, key) => {
     if (key.escape || key.return || input === '?') onClose()
   })
@@ -231,53 +231,56 @@ function HelpOverlay({ pane, view, onClose }) {
     : `${view.charAt(0).toUpperCase()}${view.slice(1)} view`
 
   return (
-    <Box flexDirection="column" paddingX={1} paddingY={1}>
+    <Box flexDirection="column" paddingX={2} paddingY={1} borderStyle="round" borderColor={t.ui.selected}>
       {/* ── Header ── */}
-      <Box marginBottom={1} gap={2}>
-        <Text color={t.ui.selected} bold>⌨  Keyboard Reference</Text>
-        <Text color={t.ui.dim}>— {contextLabel}</Text>
-        <Text color={t.ui.dim}> [Esc / ? / Enter] close</Text>
+      <Box marginBottom={1} justifyContent="space-between">
+        <Box gap={1}>
+          <Text color={t.ui.selected} bold>⌨  Keyboard Reference</Text>
+          <Text color={t.ui.dim}>— {contextLabel}</Text>
+        </Box>
+        <Text color={t.ui.dim}>[Esc/Enter/?] close</Text>
       </Box>
 
       <Box flexDirection="row" gap={4}>
         {/* Context-specific keys */}
-        <Box flexDirection="column" minWidth={42}>
-          <Box paddingX={1} marginBottom={0}>
+        <Box flexDirection="column" width={40}>
+          <Box marginBottom={0} borderStyle="single" borderTop={false} borderLeft={false} borderRight={false} borderBottom={true} borderColor={t.ui.dim}>
             <Text color={t.ui.muted} bold>{contextLabel}</Text>
           </Box>
-          {contextKeys.map(k => (
-            <Box key={k.key}>
-              <Text color={t.ui.selected}>{k.key.padEnd(18)}</Text>
-              <Text color={t.ui.muted}>{k.label}</Text>
-            </Box>
-          ))}
+          <Box flexDirection="column" marginTop={1}>
+            {contextKeys.length > 0 ? contextKeys.map(k => (
+              <Box key={k.key} gap={2}>
+                <Text color={t.ui.selected} bold width={18}>{k.key}</Text>
+                <Text color={t.ui.muted}>{k.label}</Text>
+              </Box>
+            )) : <Text color={t.ui.dim}>No specific keys</Text>}
+          </Box>
         </Box>
 
         {/* Global keys */}
-        <Box flexDirection="column" minWidth={38}>
-          <Box paddingX={1} marginBottom={0}>
+        <Box flexDirection="column" width={38}>
+          <Box marginBottom={0} borderStyle="single" borderTop={false} borderLeft={false} borderRight={false} borderBottom={true} borderColor={t.ui.dim}>
             <Text color={t.ui.muted} bold>Global (any view)</Text>
           </Box>
-          {GLOBAL_KEYS.map(k => (
-            <Box key={k.key}>
-              <Text color={t.ui.selected}>{k.key.padEnd(18)}</Text>
-              <Text color={t.ui.muted}>{k.label}</Text>
-            </Box>
-          ))}
+          <Box flexDirection="column" marginTop={1}>
+            {GLOBAL_KEYS.map(k => (
+              <Box key={k.key} gap={2}>
+                <Text color={t.ui.selected} bold width={18}>{k.key}</Text>
+                <Text color={t.ui.muted}>{k.label}</Text>
+              </Box>
+            ))}
+          </Box>
         </Box>
       </Box>
 
       {/* ── Config + docs hint ── */}
-      <Box marginTop={1} flexDirection="column">
+      <Box marginTop={1} flexDirection="column" paddingTop={1} borderStyle="single" borderBottom={false} borderLeft={false} borderRight={false} borderColor={t.ui.border}>
         <Box gap={1}>
           <Text color={t.ui.dim}>Config:</Text>
           <Text color={t.ui.selected}>~/.config/lazyhub/config.json</Text>
-          <Text color={t.ui.dim}>  Docs:</Text>
-          <Text color={t.ui.selected}>https://saketh-kowtha.github.io/lgh/guide.html</Text>
-        </Box>
-        <Box gap={1} marginTop={0}>
-          <Text color={t.ui.dim}>Keybindings ref:</Text>
-          <Text color={t.ui.selected}>https://saketh-kowtha.github.io/lgh/keybindings.html</Text>
+          <Box flexGrow={1} />
+          <Text color={t.ui.dim}>Docs:</Text>
+          <Text color={t.ui.selected}>https://saketh-kowtha.github.io/lgh</Text>
         </Box>
       </Box>
     </Box>
@@ -287,6 +290,7 @@ function HelpOverlay({ pane, view, onClose }) {
 // ─── PR summary panel (right side) ───────────────────────────────────────────
 
 function PRSummaryPanel({ pr }) {
+  const { t } = useTheme()
   if (!pr) return (
     <Box flexDirection="column" paddingX={1} paddingY={1}>
       <Text color={t.ui.dim}>No PR selected</Text>
@@ -344,6 +348,7 @@ function PRSummaryPanel({ pr }) {
 // ─── Pane header ──────────────────────────────────────────────────────────────
 
 function PaneHeader({ pane, count, loading, error }) {
+  const { t } = useTheme()
   return (
     <Box paddingX={1}>
       <Text color={t.ui.selected} bold>{PANE_ICONS[pane] || '○'} {PANE_LABELS[pane] || pane}</Text>
@@ -356,35 +361,39 @@ function PaneHeader({ pane, count, loading, error }) {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
-export function App({ repo }) {
+function App({ repo }) {
+  const { t } = useTheme()
   const { exit } = useApp()
   const { stdout } = useStdout()
   const columns = stdout?.columns || 80
   const rows    = stdout?.rows    || 24
 
   // ─── Mouse support ────────────────────────────────────────────────────────
+  const [mouseEnabled, setMouseEnabled] = useState(
+    _config.mouse === true || process.env.LAZYHUB_MOUSE === '1'
+  )
+
   useEffect(() => {
-    if (process.env.LAZYHUB_MOUSE !== '1') return
+    if (!mouseEnabled) return
     // Enable mouse button + scroll tracking (X10 + SGR mode)
     process.stdout.write('\x1b[?1000h\x1b[?1002h\x1b[?1015h\x1b[?1006h')
-    // Parse mouse events from raw stdin
+    // Parse mouse events from raw stdin data — runs before readline/Ink sees the bytes
     const handleData = (buf) => {
       const str = buf.toString()
       // SGR mouse: ESC [ < Cb ; Cx ; Cy M/m
       const sgr = str.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/)
-      if (sgr) {
-        const btn = parseInt(sgr[1])
-        // Scroll up = btn 64, scroll down = btn 65
-        if (btn === 64) { process.stdin.emit('keypress', null, { name: 'k' }) }
-        if (btn === 65) { process.stdin.emit('keypress', null, { name: 'j' }) }
-      }
+      if (!sgr) return
+      const btn = parseInt(sgr[1])
+      // Scroll up = btn 64, scroll down = btn 65
+      if (btn === 64) { process.stdin.emit('keypress', 'k', { name: 'k', sequence: 'k', ctrl: false, meta: false, shift: false }) }
+      if (btn === 65) { process.stdin.emit('keypress', 'j', { name: 'j', sequence: 'j', ctrl: false, meta: false, shift: false }) }
     }
-    process.stdin.on('data', handleData)
+    process.stdin.prependListener('data', handleData)
     return () => {
       process.stdout.write('\x1b[?1000l\x1b[?1002l\x1b[?1015l\x1b[?1006l')
       process.stdin.off('data', handleData)
     }
-  }, [])
+  }, [mouseEnabled])
 
   const [pane, setPane]             = useState(_config.defaultPane)
   const [view, setView]             = useState('list')
@@ -397,7 +406,7 @@ export function App({ repo }) {
   const notifyDialog = useCallback((active) => { dialogActiveRef.current = active }, [])
   const openHelp     = useCallback(() => setShowHelp(true), [])
 
-  const appCtx = { notifyDialog, openHelp }
+  const appCtx = { notifyDialog, openHelp, setMouseEnabled }
 
   // ─── Layout breakpoints ───────────────────────────────────────────────────
   const showSidebar     = columns >= 80
@@ -435,8 +444,13 @@ export function App({ repo }) {
       return
     }
 
+    if (input === 'S') { setView('settings'); setSelectedItem(null); return }
+    if (input === 'L') { setView('logs'); setSelectedItem(null); return }
+
     if (input === 'q' || key.escape) {
       if (showHelp)           { setShowHelp(false); return }
+      if (view === 'settings'){ setView('list'); return }
+      if (view === 'logs')    { setView('list'); return }
       if (view === 'comments'){ setView('diff'); return }
       if (view === 'diff')    { setView(selectedItem?._fromList ? 'list' : 'detail'); return }
       if (view === 'detail')  { setSelectedItem(null); setView('list'); return }
@@ -469,13 +483,10 @@ export function App({ repo }) {
                 height={rows - 2}
               />
             )}
-            <Box flexDirection="column" flexGrow={1} overflow="hidden"
+          <Box flexDirection="column" flexGrow={1} overflow="hidden"
               justifyContent="center" alignItems="center">
-              <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected}
-                paddingX={2} paddingY={1}>
-                <HelpOverlay pane={pane} view={view} onClose={() => setShowHelp(false)} />
-              </Box>
-            </Box>
+            <HelpOverlay pane={pane} view={view} onClose={() => setShowHelp(false)} />
+          </Box>
           </Box>
           <StatusBar repo={repo} pane={pane} count={paneState.count} />
           <FooterKeys keys={[{ key: '? / Esc / Enter', label: 'close help' }]} />
@@ -488,12 +499,14 @@ export function App({ repo }) {
   if (view === 'diff' && selectedItem) {
     return (
       <AppContext.Provider value={appCtx}>
-        <PRDiff
-          prNumber={selectedItem.number}
-          repo={repo}
-          onBack={goBack}
-          onViewComments={goToComments}
-        />
+        <ErrorBoundary>
+          <PRDiff
+            prNumber={selectedItem.number}
+            repo={repo}
+            onBack={goBack}
+            onViewComments={goToComments}
+          />
+        </ErrorBoundary>
       </AppContext.Provider>
     )
   }
@@ -501,38 +514,109 @@ export function App({ repo }) {
   if (view === 'comments' && selectedItem) {
     return (
       <AppContext.Provider value={appCtx}>
-        <PRComments
-          prNumber={selectedItem.number}
-          repo={repo}
-          onBack={goBack}
-          onJumpToDiff={() => setView('diff')}
-        />
+        <ErrorBoundary>
+          <PRComments
+            prNumber={selectedItem.number}
+            repo={repo}
+            onBack={goBack}
+            onJumpToDiff={() => setView('diff')}
+          />
+        </ErrorBoundary>
+      </AppContext.Provider>
+    )
+  }
+
+  if (view === 'logs') {
+    return (
+      <AppContext.Provider value={appCtx}>
+        <Box flexDirection="column" height={rows}>
+          <Box flexDirection="row" flexGrow={1}>
+            {showSidebar && (
+              <Sidebar currentPane={pane} visiblePanes={PANES}
+                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS}
+                onSelect={(p) => { setPane(p); setSelectedItem(null); setView('list') }}
+                height={rows - 2}
+              />
+            )}
+            <ErrorBoundary>
+              <LogPane onBack={() => setView('list')} />
+            </ErrorBoundary>
+          </Box>
+          <StatusBar repo={repo} pane="logs" />
+          <FooterKeys keys={[
+            { key: 'j/k', label: 'navigate' },
+            { key: 'Enter', label: 'detail' },
+            { key: 'f', label: 'level' },
+            { key: '/', label: 'search' },
+            { key: 'Esc', label: 'back' }
+          ]} />
+        </Box>
+      </AppContext.Provider>
+    )
+  }
+
+  if (view === 'settings') {
+    return (
+      <AppContext.Provider value={appCtx}>
+        <Box flexDirection="column" height={rows}>
+          <Box flexDirection="row" flexGrow={1}>
+            {showSidebar && (
+              <Sidebar currentPane={pane} visiblePanes={PANES}
+                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS}
+                onSelect={(p) => { setPane(p); setSelectedItem(null); setView('list') }}
+                height={rows - 2}
+              />
+            )}
+            <ErrorBoundary>
+              <SettingsPane onBack={() => setView('list')} />
+            </ErrorBoundary>
+          </Box>
+          <StatusBar repo={repo} pane="settings" />
+          <FooterKeys keys={[
+            { key: 'j/k', label: 'navigate' },
+            { key: 'Enter', label: 'select' },
+            { key: '?', label: 'help' },
+            { key: 'Esc', label: 'back' }
+          ]} />
+        </Box>
       </AppContext.Provider>
     )
   }
 
   if (view === 'detail' && selectedItem) {
     const DetailPane = pane === 'issues' ? IssueDetail : PRDetail
+    const detailFooter = [
+      { key: 'j/k', label: 'scroll' },
+      { key: 'gg/G', label: 'top/bottom' },
+      ...(pane === 'prs' ? [
+        { key: 'd', label: 'diff' }, { key: 'v', label: 'comments' },
+        { key: 'm', label: 'merge' }, { key: 'a', label: 'approve' },
+      ] : [
+        { key: 'r', label: 'reply' },
+      ]),
+      { key: 'l', label: 'labels' }, { key: 'A', label: 'assignees' },
+      { key: 'r', label: 'refresh' }, { key: 'S', label: 'settings' },
+      { key: '?', label: 'help' },
+      { key: 'Esc', label: 'back' },
+    ]
+
     return (
       <AppContext.Provider value={appCtx}>
         <Box flexDirection="column">
           <Box borderStyle="single" borderColor={t.ui.selected} flexDirection="column" flexGrow={1}>
-            <DetailPane
-              {...(pane === 'issues'
-                ? { issueNumber: selectedItem.number }
-                : { prNumber: selectedItem.number })}
-              repo={repo}
-              onBack={goBack}
-              onOpenDiff={goToDiff}
-            />
+            <ErrorBoundary>
+              <DetailPane
+                {...(pane === 'issues'
+                  ? { issueNumber: selectedItem.number }
+                  : { prNumber: selectedItem.number })}
+                repo={repo}
+                onBack={goBack}
+                onOpenDiff={goToDiff}
+              />
+            </ErrorBoundary>
           </Box>
           <StatusBar repo={repo} pane={pane} count={paneState.count} />
-          <FooterKeys keys={[
-            { key: 'd', label: 'diff' }, { key: 'v', label: 'comments' },
-            { key: 'm', label: 'merge' }, { key: 'a', label: 'approve' },
-            { key: 'r', label: 'refresh' }, { key: '?', label: 'help' },
-            { key: 'Esc', label: 'back' },
-          ]} />
+          <FooterKeys keys={detailFooter} />
         </Box>
       </AppContext.Provider>
     )
@@ -575,11 +659,11 @@ export function App({ repo }) {
   const listFooter = (() => {
     const base = [
       { key: 'j/k', label: 'nav' }, { key: 'Tab', label: 'pane' },
-      { key: 'r', label: 'refresh' }, { key: '/', label: 'search' },
+      { key: 'r', label: 'refresh' }, { key: 'S', label: 'settings' },
       { key: '?', label: 'help' },
     ]
-    if (pane === 'prs')    return [...base, { key: 'Enter', label: 'open' }, { key: 'd', label: 'diff' }, { key: 'f', label: 'filter' }, { key: 'm', label: 'merge' }]
-    if (pane === 'issues') return [...base, { key: 'Enter', label: 'open' }, { key: 'f', label: 'filter' }, { key: 'n', label: 'new' }]
+    if (pane === 'prs')    return [...base, { key: 'Enter', label: 'open' }, { key: 'd', label: 'diff' }, { key: 'f', label: 'filter' }]
+    if (pane === 'issues') return [...base, { key: 'Enter', label: 'open' }, { key: 'n', label: 'new' }]
     return base
   })()
 
@@ -598,7 +682,9 @@ export function App({ repo }) {
           <Box flexDirection="column" flexGrow={1} overflow="hidden" borderStyle="single" borderColor={t.ui.selected}>
             <PaneHeader pane={pane} count={paneState.count} loading={paneState.loading} error={paneState.error} />
             <Box flexGrow={1} flexDirection="column" overflow="hidden">
-              {renderListPane()}
+              <ErrorBoundary>
+                {renderListPane()}
+              </ErrorBoundary>
             </Box>
           </Box>
 
@@ -632,11 +718,21 @@ export function renderApp() {
   process.on('SIGINT',  () => { restoreTerminal(); process.exit(0) })
   process.on('SIGTERM', () => { restoreTerminal(); process.exit(0) })
 
-  const { unmount } = render(<App repo={repo} />)
+  const initialTheme = readRawThemeCfg()
+  try {
+    const { unmount } = render(
+      <ThemeProvider initialTheme={initialTheme}>
+        <App repo={repo} />
+      </ThemeProvider>
+    )
 
-  // When Ink exits (useApp().exit() called), also restore terminal
-  // Ink emits its own cleanup; we hook the process 'exit' above which covers it.
-  // Store unmount so bootstrap can use it if needed.
-  process.env._GHUI_UNMOUNT = '1'
-  return unmount
+    // When Ink exits (useApp().exit() called), also restore terminal
+    // Ink emits its own cleanup; we hook the process 'exit' above which covers it.
+    // Store unmount so bootstrap can use it if needed.
+    process.env._GHUI_UNMOUNT = '1'
+    return unmount
+  } catch (err) {
+    logger.error('Fatal App Crash', err)
+    process.exit(1)
+  }
 }

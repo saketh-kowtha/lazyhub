@@ -7,12 +7,14 @@
 import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { spawnSync } from 'child_process'
-import { writeFileSync, readFileSync, unlinkSync } from 'fs'
+import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
+import { TextInput } from '../../utils.js'
 
 export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
+  const { t } = useTheme()
   const [activeField, setActiveField] = useState(0)
   const [values, setValues] = useState(() => {
     const v = {}
@@ -21,17 +23,21 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
   })
 
   const openEditor = useCallback((fieldName) => {
-    const editor = process.env.EDITOR || process.env.VISUAL || 'vi'
-    const tmpFile = join(tmpdir(), `lazyhub-compose-${Date.now()}.md`)
-    writeFileSync(tmpFile, values[fieldName] || '')
-    spawnSync(editor, [tmpFile], { stdio: 'inherit' })
+    const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
+    if (!raw || /[\0\n\r]/.test(raw)) return
+    const [editorBin, ...editorArgs] = raw.split(/\s+/).filter(Boolean)
+    let tmpDir
     try {
+      tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
+      const tmpFile = join(tmpDir, 'compose.md')
+      writeFileSync(tmpFile, values[fieldName] || '', { mode: 0o600 })
+      const result = spawnSync(editorBin, [...editorArgs, tmpFile], { stdio: 'inherit' })
+      if (result.status !== 0) return
       const content = readFileSync(tmpFile, 'utf8')
       setValues(prev => ({ ...prev, [fieldName]: content }))
-      unlinkSync(tmpFile)
     } catch {
       // ignore
-    }
+    } finally { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) } catch {} }
   }, [values])
 
   useInput((input, key) => {
@@ -46,7 +52,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
       return
     }
 
-    if (key.return && key.ctrl) {
+    if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) {
       onSubmit(values)
       return
     }
@@ -54,16 +60,13 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
     const field = fields[activeField]
     if (!field) return
 
-    if (field.type === 'multiline' && input === 'e') {
+    // Use Ctrl+E for editor to avoid 'e' key hijacking
+    if (field.type === 'multiline' && key.ctrl && input === 'e') {
       openEditor(field.name)
       return
     }
 
-    if (field.type === 'text' || field.type === 'multiline') {
-      if (key.return && field.type === 'text') {
-        setActiveField(f => Math.min(fields.length - 1, f + 1))
-        return
-      }
+    if (field.type === 'multiline') {
       if (key.backspace || key.delete) {
         setValues(prev => ({ ...prev, [field.name]: (prev[field.name] || '').slice(0, -1) }))
         return
@@ -98,23 +101,25 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
                     ))
                   ) : (
                     <Text color={t.ui.dim}>
-                      {isActive ? '' : 'Press e to open editor'}
+                      {isActive ? '' : 'Press Ctrl+E to open editor'}
                     </Text>
                   )}
-                  {isActive && <Text color={t.ui.dim}>[e] open editor  [Ctrl+Enter] submit</Text>}
+                  {isActive && <Text color={t.ui.dim}>[Ctrl+E] open editor  [Ctrl+Enter / Ctrl+G] submit</Text>}
                 </Box>
               ) : (
-                <Box>
-                  <Text wrap="truncate">{val}</Text>
-                  {isActive && <Text color={t.ui.dim}>|</Text>}
-                </Box>
+                <TextInput
+                  value={val}
+                  onChange={(v) => setValues(prev => ({ ...prev, [field.name]: v }))}
+                  focus={isActive}
+                  onEnter={() => setActiveField(f => Math.min(fields.length - 1, f + 1))}
+                />
               )}
             </Box>
           </Box>
         )
       })}
       <Box marginTop={1}>
-        <Text color={t.ui.dim}>[Tab] next field  [Ctrl+Enter] submit  [Esc] cancel</Text>
+        <Text color={t.ui.dim}>[Tab] next field  [Ctrl+Enter / Ctrl+G] submit  [Esc] cancel</Text>
       </Box>
     </Box>
   )

@@ -32,33 +32,62 @@
  *   Supports action value: "open" (same as o), "copy" (same as y)
  */
 
-import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
+import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { FuzzySearch } from './dialogs/FuzzySearch.jsx'
-import { AppContext } from '../app.jsx'
-import { t } from '../theme.js'
+import { AppContext } from '../context.js'
+import { useTheme } from '../theme.js'
+import { sanitize, resolvePath } from '../utils.js'
 
-// Resolve {repo}, {owner}, {name} placeholders in a command string
-function resolveCommand(cmd, repo) {
+// Resolve {repo}, {owner}, {name} placeholders in a command string and return as array for execa
+function resolveCommandArgs(cmd, repo) {
   const [owner = '', name = ''] = (repo || '').split('/')
-  return cmd
-    .replace(/\{repo\}/g, repo || '')
-    .replace(/\{owner\}/g, owner)
-    .replace(/\{name\}/g, name)
+  // This is a simple tokenizer that handles some basic shell-like behavior
+  // but prioritize safety by passing args directly to execa.
+  // It splits by whitespace but allows spaces if we had a more complex parser.
+  // For now, we split by space and replace placeholders in each part.
+  return cmd.split(/\s+/).map(part => {
+    return part
+      .replace(/\{repo\}/g, repo || '')
+      .replace(/\{owner\}/g, owner)
+      .replace(/\{name\}/g, name)
+  })
 }
 
-function stateColor(state) {
-  if (!state) return t.ui.muted
-  const s = String(state).toLowerCase()
-  if (/open|active|success|ok|pass|running/.test(s)) return t.ci.pass
-  if (/fail|error|closed|reject/.test(s))           return t.ci.fail
-  if (/pending|wait|queue|in_progress/.test(s))     return t.ci.pending
-  return t.ui.muted
-}
+const CustomPaneRow = memo(({ item, isSelected, t, stateColor }) => {
+  const numStr  = item.number != null ? String(item.number).padEnd(5) : '     '
+  const state   = sanitize(item.state || '')
+  const title   = sanitize(item.title || item.name || item.description || JSON.stringify(item).slice(0, 60))
+  const author  = sanitize(item.author || '')
+  const timeStr = item.updatedAt ? format(item.updatedAt) : ''
+
+  return (
+    <Box paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
+      <Text color={t.ui.dim} bold>{numStr} </Text>
+      {state ? <Text color={stateColor(state)}>{state.slice(0, 8).padEnd(9)}</Text> : null}
+      <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
+        {title}
+      </Text>
+      {author && <Text color={t.ui.muted}> {author.slice(0, 12).padEnd(12)}</Text>}
+      <Text color={t.ui.dim}> {timeStr}</Text>
+    </Box>
+  )
+})
 
 export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
+  const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
+
+  const stateColor = useCallback((state) => {
+    if (!state) return t.ui.muted
+    const s = String(state).toLowerCase()
+    if (/open|active|success|ok|pass|running/.test(s)) return t.ci.pass
+    if (/fail|error|closed|reject/.test(s))           return t.ci.fail
+    if (/pending|wait|queue|in_progress/.test(s))     return t.ci.pending
+    return t.ui.muted
+  }, [t])
+
   const { stdout } = useStdout()
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
@@ -81,13 +110,28 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
     setLoading(true)
     setError(null)
     try {
-      const cmd = resolveCommand(paneDef.command, repo)
+      const args = resolveCommandArgs(paneDef.command, repo)
       const { execa } = await import('execa')
-      const result = await execa('sh', ['-c', cmd], { reject: false })
+      const [bin, ...rest] = args
+      const result = await execa(bin, rest, { reject: false })
       if (result.exitCode !== 0) {
         throw new Error(result.stderr?.split('\n')[0] || 'Command failed')
       }
-      const data = JSON.parse(result.stdout)
+      
+      let data = JSON.parse(result.stdout)
+      
+      if (paneDef.preProcessor) {
+        try {
+          const scriptPath = resolvePath(paneDef.preProcessor)
+          const { default: processor } = await import(`file://${scriptPath}`)
+          if (typeof processor === 'function') {
+            data = await processor(data, { repo, paneDef })
+          }
+        } catch (procErr) {
+          setError(`Pre-processor error: ${procErr.message}`)
+        }
+      }
+
       setItems(Array.isArray(data) ? data : [])
     } catch (err) {
       setError(err.message || String(err))
@@ -95,7 +139,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
     } finally {
       setLoading(false)
     }
-  }, [paneDef.command, repo])
+  }, [paneDef, repo])
 
   useEffect(() => { fetchItems() }, [fetchItems])
 
@@ -228,7 +272,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
         <Box paddingX={2} paddingY={1} flexDirection="column">
           <Text color={t.ci.fail}>⚠ Command failed — [r] retry</Text>
           <Text color={t.ui.dim}>{error}</Text>
-          <Text color={t.ui.dim} dimColor>$ {resolveCommand(paneDef.command, repo)}</Text>
+          <Text color={t.ui.dim} dimColor>$ {resolveCommandArgs(paneDef.command, repo).join(' ')}</Text>
         </Box>
       )}
 
@@ -242,22 +286,14 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
       {/* List rows */}
       {!loading && !error && visibleItems.map((item, i) => {
         const idx = scrollOffset + i
-        const isSelected = idx === cursor
-        const numStr  = item.number != null ? String(item.number).padEnd(5) : '     '
-        const state   = item.state || ''
-        const title   = item.title || item.name || item.description || JSON.stringify(item).slice(0, 60)
-        const timeStr = item.updatedAt ? format(item.updatedAt) : ''
-
         return (
-          <Box key={idx} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-            <Text color={t.ui.dim} bold>{numStr} </Text>
-            {state ? <Text color={stateColor(state)}>{state.slice(0, 8).padEnd(9)}</Text> : null}
-            <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
-              {title}
-            </Text>
-            {item.author && <Text color={t.ui.muted}> {String(item.author).slice(0, 12).padEnd(12)}</Text>}
-            <Text color={t.ui.dim}> {timeStr}</Text>
-          </Box>
+          <CustomPaneRow
+            key={idx}
+            item={item}
+            isSelected={idx === cursor}
+            t={t}
+            stateColor={stateColor}
+          />
         )
       })}
 
