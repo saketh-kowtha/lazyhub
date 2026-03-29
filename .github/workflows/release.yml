@@ -79,9 +79,7 @@ jobs:
           git diff --cached --quiet && echo "Nothing to commit" || \
             git commit -m "chore: release v${VERSION}"
           git push origin "$BRANCH"
-          BODY="## Release v${VERSION} (${BUMP} bump)
-
-Review CHANGELOG.md for what's included. Merge this PR to create the GitHub Release, publish to npm, and update Homebrew."
+          BODY=$(printf "## Release v%s (%s bump)\n\nReview CHANGELOG.md for what's included. Merge this PR to create the GitHub Release, publish to npm, and update Homebrew." "$VERSION" "$BUMP")
           gh pr create \
             --title "chore: release v${VERSION}" \
             --body "$BODY" \
