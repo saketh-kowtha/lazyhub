@@ -39,27 +39,34 @@ jobs:
           REPO: ${{ github.repository }}
         run: node .github/scripts/prepare-release.mjs
 
-      - name: Commit version bump + changelog
-        if: steps.prepare.outputs.version != ''
-        env:
-          VERSION: ${{ steps.prepare.outputs.version }}
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json CHANGELOG.md README.md docs/
-          git diff --cached --quiet || git commit -m "chore(release): v${VERSION} [skip ci]"
-          git push
-
-      - name: Create GitHub Release
+      - name: Create Release PR and Tag
         if: steps.prepare.outputs.version != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.prepare.outputs.version }}
         run: |
+          # 1. Create a release branch
+          BRANCH="release/v${VERSION}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          
+          # 2. Commit and push the bump to the branch
+          git add package.json CHANGELOG.md README.md docs/
+          git commit -m "chore(release): v${VERSION}"
+          git push origin "$BRANCH" --force
+
+          # 3. Open a PR back to main
+          gh pr create \
+            --title "chore(release): v${VERSION}" \
+            --body "Automated version bump and changelog for v${VERSION}. Merge this to keep main in sync." \
+            --base main \
+            --head "$BRANCH"
+
+          # 4. Create the GitHub Release (this creates the tag vX.Y.Z)
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
-            --notes-file /tmp/release-notes.md \
-            --latest
+            --notes-file /tmp/release-notes.md
 
       - name: Publish to npm
         if: steps.prepare.outputs.version != ''
