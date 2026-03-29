@@ -1,392 +1,124 @@
-# lazyhub
+# 🦥 lazyhub
 
-> A **lazygit-style** GitHub TUI — every GitHub action available without leaving your terminal.
+### The keyboard-driven GitHub tool for power users.
 
 [![CI](https://github.com/saketh-kowtha/lazyhub/actions/workflows/ci.yml/badge.svg)](https://github.com/saketh-kowtha/lazyhub/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/lazyhub?color=3fb950&label=npm)](https://www.npmjs.com/package/lazyhub)
 [![Node.js ≥20](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Built with Ink](https://img.shields.io/badge/built%20with-Ink-blue)](https://github.com/vadimdemedes/ink)
 
-```
-┌── Pull Requests ──────┬── #142 fix: memory leak in cache ────────────────────┐
-│                       │                                                       │
-│  ⎇  PRs               │  Author   saketh-kowtha   2 hours ago                │
-│  ○  Issues            │  Branch   fix/cache-leak → main                      │
-│  ⎇  Branches          │  Checks   ✓ passing                                   │
-│  ▶  Actions           │                                                       │
-│  ●  Notifications     │  Description                                          │
-│                       │  Fixes the unbounded growth of the in-memory TTL      │
-│  ──────────────────── │  cache introduced in #138.                            │
-│                       │                                                       │
-│  ✓ #142 fix: memory…  │  ─────────────────────────────────────────────────── │
-│  ⎇ #141 feat: log-vi… │  Files changed  3   +47  −12                         │
-│  ! #140 feat: branch… │                                                       │
-│  ✓ #139 chore: bump…  │  [d] diff  [a] approve  [m] merge  [l] labels        │
-│                       │                                                       │
-└───────────────────────┴───────────────────────────────────────────────────────┘
-  saketh-kowtha/lazyhub   main   ✓ 3/3 checks   Rate limit: 4823/5000
-  Tab panes  j/k nav  Enter detail  d diff  m merge  q back  ? help
+**lazyhub** is a terminal UI (TUI) that wraps the GitHub CLI (`gh`) into a cohesive, keyboard-driven experience. Inspired by the legendary `lazygit`, it allows you to manage PRs, Issues, Actions, and Notifications without ever switching to your browser.
+
+---
+
+## ⚡️ Why lazyhub?
+
+Context switching is the enemy of flow. If you live in a terminal but find yourself clicking through the GitHub Web UI to review code, check CI logs, or triage issues, **lazyhub** is for you.
+
+- **Zero Context Switching:** Review PRs, reply to comments, and merge code while your editor stays open.
+- **AI-Powered Code Review:** Integrated with Anthropic's Claude to analyze diffs and suggest improvements with a single keystroke.
+- **High-Performance Navigation:** Fuzzy search every list, jump to files in diffs, and navigate via Vim-style bindings.
+- **Responsive Layout:** Automatically scales from a minimal single-column list to a full 3-pane dashboard.
+
+---
+
+## 🏗 Architecture
+
+lazyhub is built on a robust, decoupled architecture designed for speed and reliability. It uses a single-source-of-truth pattern where all GitHub interactions flow through a specialized executor.
+
+```mermaid
+graph TD
+    User([User Input]) --> UI[React / Ink TUI]
+    UI --> Hook[useGh Hook / 30s TTL Cache]
+    Hook --> Executor[executor.js / gh CLI Wrapper]
+    Hook --> AI[ai.js / Anthropic Claude API]
+    Executor --> GH[GitHub CLI / GraphQL & REST]
+    AI --> Claude[Claude 3.5 Sonnet]
+    GH --> API[GitHub API]
 ```
 
 ---
 
-## Why lazyhub?
+## 🚀 Features
 
-Most GitHub workflows force you to context-switch to the browser. `gh` CLI is
-great but its output is flat text — no side-by-side layout, no live diffs, no
-interactive merge strategies.  **lazyhub** brings the full GitHub web UI into your
-terminal as a keyboard-driven TUI, so you never have to leave your editor
-session.
+### 🧠 AI Inline Review (`A` key)
+Don't just look at code; understand it. Press `A` in the diff view to have Claude analyze the changes. It identifies bugs, performance bottlenecks, and style issues, allowing you to post AI suggestions as real GitHub comments instantly.
 
-| Feature | Browser | gh CLI | **lazyhub** |
-|---------|---------|--------|----------|
-| PR list + filters | ✓ | ✓ | ✓ |
-| Inline diff with syntax highlight | ✓ | ✓ | ✓ |
-| Line-level comments + threads | ✓ | ✗ | ✓ |
-| Approve / request-changes | ✓ | ✓ | ✓ |
-| Merge strategy picker | ✓ | ✗ | ✓ |
-| Actions logs streaming | ✓ | ✓ | ✓ |
-| Fuzzy search every list | ✗ | ✗ | ✓ |
-| Find text in diff | ✗ | ✗ | ✓ |
-| File tree navigation in diff | ✗ | ✗ | ✓ |
-| Author filter for PR search | ✓ | ✗ | ✓ |
-| Full config + custom themes | ✗ | ✗ | ✓ |
-| Keyboard-only, no mouse needed | ✗ | ✓ | ✓ |
+### 🔍 Fuzzy Everything
+Stop scrolling. Press `/` in any list (PRs, Issues, Branches) to filter instantly. In the diff view, press `f` to fuzzy-jump directly to any file in the PR.
+
+### 🛠 Custom Panes
+Extend lazyhub with your own data. Add custom panes to your `config.json` backed by any `gh api` command or local script. Use JS pre-processors to transform raw JSON into beautifully rendered TUI rows.
+
+### 🎨 Theming System
+Choose from 6 built-in themes (GitHub Dark/Light, Catppuccin, Tokyo Night) or create your own with a simple JSON override file.
 
 ---
 
-## Install
+## 📦 Installation
 
-### npm (recommended)
-
+### via npm (Recommended)
 ```bash
 npm install -g lazyhub
 ```
 
-### npx (no install)
-
-```bash
-npx lazyhub
-```
-
-### Homebrew
-
+### via Homebrew
 ```bash
 brew install saketh-kowtha/tap/lazyhub
 ```
 
-**Prerequisites:** [Node.js ≥ 20](https://nodejs.org) and the [GitHub CLI (`gh`)](https://cli.github.com).
-`lazyhub` will detect missing tools and print platform-specific install instructions on first run.
+---
+
+## 🎹 Keybindings (The Essentials)
+
+| Key | Action |
+| --- | --- |
+| `Tab` | Cycle Panes |
+| `j / k` | Navigate List |
+| `Enter` | View Detail |
+| `d` | Open Diff View |
+| `a` | Approve PR |
+| `m` | Merge PR (Pick Strategy) |
+| `A` | Trigger AI Review (in Diff) |
+| `/` | Fuzzy Search |
+| `S` | Settings & Themes |
+| `?` | Help Overlay |
 
 ---
 
-## Usage
+## 🛠 Configuration
 
-```bash
-# From any git repo cloned from GitHub
-cd my-project
-lazyhub
-
-# Or pick a repo interactively (works outside any git directory)
-lazyhub
-```
-
-`lazyhub` handles the rest:
-- Detects `gh` — prints install instructions if missing
-- Detects `gh auth` — runs interactive login (browser or PAT) if needed
-- Detects repo context — shows an arrow-key picker if run outside a git directory
-
----
-
-## Features
-
-- **Rich Markdown Rendering:** PR and Issue descriptions feature bold headers, lists, and syntax-highlighted code blocks.
-- **In-App Settings:** Press `S` to change themes and more in real-time.
-- **Advanced Diff Navigation:** Press `f` in the diff view to fuzzy-jump to any changed file.
-- **Custom Pane Scripting:** Use JS `preProcessor` scripts to transform custom command output before rendering.
-- **Bulletproof Input:** Unified text input with cursor support and readline shortcuts (`Ctrl+A`, `Ctrl+E`, `Ctrl+U`, `Ctrl+K`).
-
----
-
-## Panes
-
-| Pane | What you can do |
-|------|-----------------|
-| Pull Requests | list, filter (open/closed/merged), fuzzy search, author filter, detail, diff, line comments, approve, merge, labels, reviewers, create PR |
-| Issues | list, filter (open/closed), create, close, labels, assignees |
-| Branches | list, checkout, create, delete, push |
-| Actions | list runs, view logs, re-run, cancel |
-| Notifications | list, open, mark read / all read |
-
----
-
-## Keybindings
-
-### Global
-| Key | Action |
-|-----|--------|
-| `Tab` / `Shift+Tab` | Cycle panes |
-| `j` / `k` or `↑↓` | Navigate list |
-| `gg` / `G` | Jump to top / bottom |
-| `Enter` | Open detail |
-| `r` | Refresh (force re-fetch) |
-| `o` | Open in browser |
-| `S` | Settings pane |
-| `/` | Fuzzy search |
-| `?` | Help overlay |
-| `q` | Back / quit |
-
-### Pull Requests
-| Key | Action |
-|-----|--------|
-| `O` | Filter: open (configurable) |
-| `C` | Filter: closed (configurable) |
-| `M` | Filter: merged (configurable) |
-| `f` | Cycle filter (fallback) |
-| `s` | Cycle scope (all / own / reviewing) |
-| `@` | Filter by author (any GitHub username) |
-| `d` | Open diff view |
-| `m` | Merge (pick --merge / --squash / --rebase) |
-| `a` | Approve |
-| `x` | Request changes |
-| `c` | Checkout branch |
-| `l` | Edit labels |
-| `A` | Edit assignees |
-| `rv` | Request reviewers |
-| `N` | New PR (with branch validation) |
-| `y` | Copy PR URL |
-
-### PR Detail
-| Key | Action |
-|-----|--------|
-| `j` / `k` | Scroll detail |
-| `/` | Search within detail |
-| `Esc` | Clear search / go back |
-| `d` | Open diff view |
-
-### Diff view
-| Key | Action |
-|-----|--------|
-| `j` / `k` | Scroll lines |
-| `[` / `]` | Previous / next file |
-| `f` | Jump to file (fuzzy search) |
-| `t` | Toggle file tree |
-| `/` | Find text in diff |
-| `n` / `N` | Next / prev match (or comment thread) |
-| `c` | Comment on cursor line (inline compose) |
-| `v` | View all comments |
-| `s` | Toggle split / unified |
-| `Esc` | Back to PR detail |
-
-### Issues
-| Key | Action |
-|-----|--------|
-| `O` | Filter: open (configurable) |
-| `C` | Filter: closed (configurable) |
-| `f` | Cycle filter (fallback) |
-| `n` | New issue |
-| `x` | Close issue |
-| `l` | Edit labels |
-| `A` | Edit assignees |
-| `y` | Copy issue URL |
-
-### Actions
-| Key | Action |
-|-----|--------|
-| `l` | View logs |
-| `R` | Re-run failed jobs |
-| `X` | Cancel run |
-
-### Notifications
-| Key | Action |
-|-----|--------|
-| `Enter` | Open item (routes to correct pane) |
-| `m` | Mark as read |
-| `M` | Mark all as read |
-
----
-
-## Configuration
-
-On first run, `lazyhub` creates `~/.config/lazyhub/config.json` with defaults.
-Edit this file to customize everything:
+On first launch, lazyhub creates `~/.config/lazyhub/config.json`. 
 
 ```json
 {
-  "panes": ["prs", "issues", "branches", "actions", "notifications"],
-  "defaultPane": "prs",
-  "theme": "github-dark",
+  "theme": "tokyo-night",
+  "mouse": false,
+  "anthropicApiKey": "sk-ant-...",
   "pr": {
     "defaultFilter": "open",
-    "defaultScope": "all",
-    "pageSize": 100,
-    "keys": {
-      "filterOpen":   "O",
-      "filterClosed": "C",
-      "filterMerged": "M"
-    }
-  },
-  "issues": {
-    "defaultFilter": "open",
-    "pageSize": 50,
-    "keys": {
-      "filterOpen":   "O",
-      "filterClosed": "C"
-    }
-  },
-  "actions": {
-    "pageSize": 30
-  },
-  "diff": {
-    "defaultView": "unified",
-    "syntaxHighlight": true,
-    "maxLines": 2000
-  },
-  "customPanes": {}
-}
-```
-
-### Custom panes
-
-Add your own panes backed by any `gh api` command. You can also add a `preProcessor` JS script to transform the data:
-
-```json
-"customPanes": {
-  "my-deploys": {
-    "label": "Deployments",
-    "icon": "▶",
-    "command": "gh api repos/{repo}/deployments",
-    "preProcessor": "~/.config/lazyhub/processors/deploys.js",
-    "actions": { "o": "open" }
+    "pageSize": 100
   }
 }
 ```
 
-The pre-processor should be an ESM module with a default export:
-```js
-export default function(data, { repo }) {
-  return data.map(d => ({
-    title: d.environment,
-    number: d.id,
-    state: d.task,
-    updatedAt: d.created_at,
-    url: d.url
-  }));
-}
-```
-
-Placeholders: `{repo}`, `{owner}`, `{name}`
-
 ---
 
-## Themes
+## 🤝 Contributing
 
-### Built-in themes
-
-| Name | Style |
-|------|-------|
-| `github-dark` | Dark (default) — GitHub-inspired |
-| `github-light` | Light — GitHub-inspired |
-| `catppuccin-mocha` | Extra dark pastel |
-| `catppuccin-latte` | Light pastel |
-| `tokyo-night` | Dark blue/purple |
-| `ansi-16` | Standard 16-color ANSI (maximum compatibility) |
-
-Set in config:
-
-```json
-{ "theme": "tokyo-night" }
-```
-
-### Custom themes from file
-
-```json
-{ "theme": "/absolute/path/to/my-theme.json" }
-{ "theme": "~/my-theme.json" }
-{ "theme": "my-theme.json" }
-```
-
-### Override specific colors
-
-```json
-{
-  "theme": {
-    "name": "github-dark",
-    "overrides": {
-      "ui": { "selected": "#ff9900" },
-      "pr":  { "open": "#00ff88" }
-    }
-  }
-}
-```
-
-Theme files use the same shape as built-in themes. All color values are hex strings.
-
----
-
-## Architecture
-
-```
-lazyhub/
-├── bin/lazyhub.js          ← entry: bootstrap() → renderApp()
-├── src/
-│   ├── bootstrap.js     ← gh detect, auth, repo pick (runs before Ink)
-│   ├── executor.js      ← single place all gh CLI calls live
-│   ├── theme.js         ← dynamic theme resolution (named/file/overrides)
-│   ├── config.js        ← loads ~/.config/lazyhub/config.json with defaults
-│   ├── app.jsx          ← root Ink layout + responsive breakpoints
-│   ├── themes/          ← 5 built-in theme definitions
-│   ├── components/      ← Sidebar, StatusBar, FooterKeys, ListPane, DetailPane
-│   │   └── dialogs/     ← 6 reusable primitives (FuzzySearch → LogViewer)
-│   ├── features/        ← prs, issues, branches, actions, notifications…
-│   └── hooks/           ← useGh (cache+TTL), useNav, useDialog
-└── build.js             ← esbuild bundler
-```
-
-**Stack:** Node.js 20+ · [Ink 4](https://github.com/vadimdemedes/ink) · React 18 · [execa](https://github.com/sindresorhus/execa) · [highlight.js](https://highlightjs.org) · [timeago.js](https://timeago.org) · [vitest](https://vitest.dev)
-
-**Responsive layout:**
-- ≥100 cols: sidebar + list + detail panel
-- <100 cols: sidebar + list (Enter for full-screen detail)
-- <80 cols: header tabs + list (no sidebar)
-
----
-
-## Development
+We love PRs! lazyhub is built with **Node.js**, **React**, and **Ink**. Check out [ARCHITECTURE.md](./ARCHITECTURE.md) for a deep dive into the codebase before you start.
 
 ```bash
-git clone https://github.com/saketh-kowtha/lazyhub
-cd lazyhub
 npm install
-npm run dev      # watch mode: rebuilds + restarts on save
-npm test         # vitest
-npm run lint     # eslint
+npm run dev   # Rebuilds on save
+npm test      # Vitest suite
 ```
 
 ---
 
-## Roadmap
+## 📜 License
 
-See the [project board](https://github.com/users/saketh-kowtha/projects) and [open issues](https://github.com/saketh-kowtha/lazyhub/issues) for what's planned next.
-
-Highlights coming up:
-- Homebrew tap
-- GitHub Enterprise (`GH_HOST`) support
-- Releases pane
-- Gists pane
+MIT © [Saketh Kowtha](https://github.com/saketh-kowtha)
 
 ---
-
-## Contributing
-
-PRs welcome! Please open an issue first for large changes.
-
-```bash
-npm test && npm run lint   # must pass before submitting a PR
-```
-
----
-
-## License
-
-[MIT](LICENSE) © saketh-kowtha
