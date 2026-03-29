@@ -54,10 +54,22 @@ jobs:
           REPO: ${{ github.repository }}
         run: node .github/scripts/prepare-release.mjs
 
-      - name: Commit Prep Changes to Release Branch
+      - name: Create Prep PR
+        if: steps.prepare.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.prepare.outputs.version }}
         run: |
+          BRANCH="prep/v${VERSION}"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add ARCHITECTURE.md package.json CHANGELOG.md README.md docs/
-          git diff --cached --quiet || git commit -m "chore: auto-docs and version bump [skip ci]"
-          git push origin release
+          git commit -m "chore: prep v${VERSION} docs and version"
+          git push origin "$BRANCH" --force
+
+          gh pr create \
+            --title "chore: prep v${VERSION} docs and version" \
+            --body "AI-generated documentation and version bump for v${VERSION}. Review and merge this into 'release' to finalize staging." \
+            --base release \
+            --head "$BRANCH"

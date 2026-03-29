@@ -33,3 +33,14 @@ jobs:
             --title "v${VERSION}" \
             --notes "Full release notes available in CHANGELOG.md" \
             --latest
+
+      - name: Sync Main back to Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin release
+          git checkout release
+          git merge main --no-edit
+          git push origin release
