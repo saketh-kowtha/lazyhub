@@ -7,11 +7,18 @@ on:
 
 jobs:
   prep:
-    if: github.event.pull_request.merged == true
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Enforce PR Source (Main only)
+        run: |
+          if [ "${{ github.event.pull_request.head.ref }}" != "main" ]; then
+            echo "ERROR: The 'release' branch only accepts Pull Requests from 'main'."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
         with:
           ref: release

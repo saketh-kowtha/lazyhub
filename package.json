@@ -54,11 +54,6 @@
         "timeago.js": "^4.0.2"
     },
     "devDependencies": {
-<<<<<<< HEAD
-        "esbuild": "^0.27.4",
-        "eslint": "^8.57.0",
-        "eslint-plugin-react-hooks": "^7.0.1",
-=======
         "@google/generative-ai": "^0.24.1",
         "@vitejs/plugin-react": "^6.0.1",
         "esbuild": "^0.27.4",
@@ -67,7 +62,6 @@
         "eslint-plugin-react-hooks": "^7.0.1",
         "ink-testing-library": "^4.0.0",
         "knip": "^6.1.0",
->>>>>>> c189117bb8d5c270269f1117c32337438ca13ace
         "vitest": "^1.4.0"
     }
 }
