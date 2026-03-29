@@ -1,20 +1,28 @@
-name: Auto Docs Update
+name: Release Prep (Docs & Version)
 
 on:
   pull_request:
     types: [closed]
-    branches: [main]
+    branches: [release]
 
 jobs:
-  update-docs:
-    if: github.event.pull_request.merged == true
+  prep:
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Enforce PR Source (Main only)
+        run: |
+          if [ "${{ github.event.pull_request.head.ref }}" != "main" ]; then
+            echo "ERROR: The 'release' branch only accepts Pull Requests from 'main'."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: release
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -24,7 +32,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Update Architecture Doc
+      - name: Update Architecture (AI)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -34,8 +42,22 @@ jobs:
           REPO: ${{ github.repository }}
         run: node .github/scripts/auto-docs.mjs
 
-      - name: Commit and Push
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "docs: auto-update ARCHITECTURE.md from PR #${{ github.event.pull_request.number }}"
-          branch: main
+      - name: Prepare Version & Changelog
+        id: prepare
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/prepare-release.mjs
+
+      - name: Commit Prep Changes to Release Branch
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ARCHITECTURE.md package.json CHANGELOG.md README.md docs/
+          git diff --cached --quiet || git commit -m "chore: auto-docs and version bump [skip ci]"
+          git push origin release
