@@ -3,7 +3,7 @@
 > A **lazygit-style** GitHub TUI — every GitHub action available without leaving your terminal.
 
 [![CI](https://github.com/saketh-kowtha/lazyhub/actions/workflows/ci.yml/badge.svg)](https://github.com/saketh-kowtha/lazyhub/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/lazyhub.svg)](https://www.npmjs.com/package/lazyhub)
+[![npm version](https://img.shields.io/npm/v/lazyhub?color=3fb950&label=npm)](https://www.npmjs.com/package/lazyhub)
 [![Node.js ≥20](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
