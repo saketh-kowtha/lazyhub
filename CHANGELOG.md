@@ -1,5 +1,30 @@
 # Changelog
 
+## v26.3.4
+
+# Release Notes — lazyhub v26.3.4
+
+## 🔧 Bug Fixes & Infrastructure
+
+This is a patch release focused on stabilizing the automated release pipeline. No user-facing functionality has changed.
+
+### What changed
+
+- **Fixed automated releases** — Resolved an issue where new version tags were not being created automatically on merge. The `tag.yml` workflow was not firing because release commits included a `[skip ci]` flag that unintentionally suppressed it.
+- **Cleaned up release workflow** — Removed a broken sync job that was causing noise and potential failures in the CI pipeline.
+
+---
+
+### Why so many patch releases?
+
+You may notice versions `v26.3.2` and `v26.3.3` in the commit history. These were intermediate attempts to fix the release automation — each uncovering the next issue in the chain. `v26.3.4` represents the fully working state of the pipeline going forward.
+
+---
+
+> **No action required.** If you're already on `v26.3.2` or `v26.3.3`, this update brings no functional changes. Upgrading is safe but optional.
+
+---
+
 ## v26.3.3
 
 # lazyhub v26.3.3 Release Notes
