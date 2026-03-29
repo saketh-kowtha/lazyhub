@@ -162,6 +162,9 @@ function validateCustomPane(id, def) {
 
 // ─── loadConfig ───────────────────────────────────────────────────────────────
 
+/**
+ *
+ */
 export function loadConfig() {
   if (!existsSync(CONFIG_PATH)) return { ...DEFAULTS }
   try {
@@ -213,6 +216,10 @@ export function loadConfig() {
 
 // ─── saveConfig — persists partial or full config to disk ────────────────────
 
+/**
+ *
+ * @param patch
+ */
 export function saveConfig(patch) {
   try {
     const current = existsSync(CONFIG_PATH) ? JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) : {}
@@ -226,6 +233,9 @@ export function saveConfig(patch) {
 
 // ─── writeDefaultConfig — creates config file with comments if missing ────────
 
+/**
+ *
+ */
 export function writeDefaultConfig() {
   if (existsSync(CONFIG_PATH)) return
   try {

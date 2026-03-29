@@ -40,7 +40,17 @@ Rules:
 - Keep each comment under 100 characters.
 - If the diff looks correct, return an empty suggestions array with a positive summary.`
 
+/**
+ *
+ */
 export class AIError extends Error {
+  /**
+   *
+   * @param message
+   * @param root0
+   * @param root0.status
+   * @param root0.code
+   */
   constructor(message, { status, code } = {}) {
     super(message)
     this.name = 'AIError'

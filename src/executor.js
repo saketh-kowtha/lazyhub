@@ -7,7 +7,18 @@ import { execa } from 'execa'
 
 // ─── GhError ─────────────────────────────────────────────────────────────────
 
+/**
+ *
+ */
 export class GhError extends Error {
+  /**
+   *
+   * @param root0
+   * @param root0.message
+   * @param root0.stderr
+   * @param root0.exitCode
+   * @param root0.args
+   */
   constructor({ message, stderr, exitCode, args }) {
     super(message)
     this.name = 'GhError'
@@ -24,6 +35,7 @@ export class GhError extends Error {
  * On exit code 0: parses stdout as JSON and returns.
  * On non-zero: throws GhError.
  * If stdout is not JSON (e.g. plain text diff), returns raw stdout string.
+ * @param args
  */
 export async function run(args) {
   // GHE support: prepend --hostname when GH_HOST is set
@@ -85,6 +97,8 @@ function getRepo(overrideRepo) {
 
 /**
  * List pull requests for a repo with optional filters.
+ * @param repo
+ * @param filter
  */
 export async function listPRs(repo, filter = {}) {
   const args = [
@@ -107,6 +121,8 @@ export async function listPRs(repo, filter = {}) {
 
 /**
  * Get a single PR by number.
+ * @param repo
+ * @param number
  */
 export async function getPR(repo, number) {
   const args = [
@@ -120,6 +136,10 @@ export async function getPR(repo, number) {
 /**
  * Merge a PR.
  * strategy: 'merge' | 'squash' | 'rebase'
+ * @param repo
+ * @param number
+ * @param strategy
+ * @param commitMessage
  */
 export async function mergePR(repo, number, strategy = 'merge', commitMessage) {
   const args = [
@@ -133,6 +153,8 @@ export async function mergePR(repo, number, strategy = 'merge', commitMessage) {
 
 /**
  * Close (not merge) a pull request.
+ * @param repo
+ * @param number
  */
 export async function closePR(repo, number) {
   const args = ['pr', 'close', String(number), '--repo', getRepo(repo)]
@@ -141,6 +163,10 @@ export async function closePR(repo, number) {
 
 /**
  * Create a PR review (approve or request-changes).
+ * @param repo
+ * @param number
+ * @param event
+ * @param body
  */
 export async function reviewPR(repo, number, event, body = '') {
   // event: 'approve' | 'request-changes' | 'comment'
@@ -157,6 +183,8 @@ export async function reviewPR(repo, number, event, body = '') {
 
 /**
  * List issues with optional filters.
+ * @param repo
+ * @param filter
  */
 export async function listIssues(repo, filter = {}) {
   const args = [
@@ -175,6 +203,8 @@ export async function listIssues(repo, filter = {}) {
 
 /**
  * Get a single issue by number.
+ * @param repo
+ * @param number
  */
 export async function getIssue(repo, number) {
   const args = [
@@ -187,6 +217,13 @@ export async function getIssue(repo, number) {
 
 /**
  * Create a new issue.
+ * @param repo
+ * @param root0
+ * @param root0.title
+ * @param root0.body
+ * @param root0.labels
+ * @param root0.assignees
+ * @param root0.milestone
  */
 export async function createIssue(repo, { title, body, labels = [], assignees = [], milestone } = {}) {
   const args = [
@@ -203,6 +240,8 @@ export async function createIssue(repo, { title, body, labels = [], assignees = 
 
 /**
  * Close an issue.
+ * @param repo
+ * @param number
  */
 export async function closeIssue(repo, number) {
   const args = [
@@ -216,6 +255,7 @@ export async function closeIssue(repo, number) {
 
 /**
  * List all labels in a repo.
+ * @param repo
  */
 export async function listLabels(repo) {
   const args = [
@@ -229,6 +269,10 @@ export async function listLabels(repo) {
 
 /**
  * Add labels to a PR or issue.
+ * @param repo
+ * @param number
+ * @param labels
+ * @param type
  */
 export async function addLabels(repo, number, labels, type = 'issue') {
   const args = [
@@ -242,6 +286,10 @@ export async function addLabels(repo, number, labels, type = 'issue') {
 
 /**
  * Remove labels from a PR or issue.
+ * @param repo
+ * @param number
+ * @param labels
+ * @param type
  */
 export async function removeLabels(repo, number, labels, type = 'issue') {
   const args = [
@@ -257,6 +305,7 @@ export async function removeLabels(repo, number, labels, type = 'issue') {
 
 /**
  * List collaborators for a repo.
+ * @param repo
  */
 export async function listCollaborators(repo) {
   const r = getRepo(repo)
@@ -269,6 +318,9 @@ export async function listCollaborators(repo) {
 
 /**
  * Request reviewers for a PR.
+ * @param repo
+ * @param number
+ * @param reviewers
  */
 export async function requestReviewers(repo, number, reviewers) {
   const args = [
@@ -283,6 +335,7 @@ export async function requestReviewers(repo, number, reviewers) {
 
 /**
  * List branches in a repo.
+ * @param repo
  */
 export async function listBranches(repo) {
   const r = getRepo(repo)
@@ -295,6 +348,8 @@ export async function listBranches(repo) {
 
 /**
  * Checkout a PR's branch.
+ * @param repo
+ * @param number
  */
 export async function checkoutBranch(repo, number) {
   const args = ['pr', 'checkout', String(number), '--repo', getRepo(repo)]
@@ -303,6 +358,8 @@ export async function checkoutBranch(repo, number) {
 
 /**
  * Delete a branch.
+ * @param repo
+ * @param branchName
  */
 export async function deleteBranch(repo, branchName) {
   const r = getRepo(repo)
@@ -317,6 +374,8 @@ export async function deleteBranch(repo, branchName) {
 
 /**
  * List workflow runs.
+ * @param repo
+ * @param filter
  */
 export async function listRuns(repo, filter = {}) {
   const args = [
@@ -333,6 +392,8 @@ export async function listRuns(repo, filter = {}) {
 
 /**
  * Get logs for a workflow run.
+ * @param repo
+ * @param runId
  */
 export async function getRunLogs(repo, runId) {
   const args = [
@@ -345,6 +406,8 @@ export async function getRunLogs(repo, runId) {
 
 /**
  * Re-run a workflow run (failed jobs only).
+ * @param repo
+ * @param runId
  */
 export async function rerunRun(repo, runId) {
   const args = [
@@ -357,6 +420,8 @@ export async function rerunRun(repo, runId) {
 
 /**
  * Cancel a workflow run.
+ * @param repo
+ * @param runId
  */
 export async function cancelRun(repo, runId) {
   const args = [
@@ -370,6 +435,7 @@ export async function cancelRun(repo, runId) {
 
 /**
  * List releases.
+ * @param repo
  */
 export async function listReleases(repo) {
   const args = [
@@ -385,6 +451,7 @@ export async function listReleases(repo) {
 
 /**
  * List notifications.
+ * @param filter
  */
 export async function listNotifications(filter = {}) {
   const args = [
@@ -399,6 +466,7 @@ export async function listNotifications(filter = {}) {
 
 /**
  * Mark a notification as read.
+ * @param notificationId
  */
 export async function markNotificationRead(notificationId) {
   const args = [
@@ -412,6 +480,8 @@ export async function markNotificationRead(notificationId) {
 
 /**
  * Get the unified diff for a PR.
+ * @param repo
+ * @param number
  */
 export async function getPRDiff(repo, number) {
   const args = [
@@ -423,6 +493,9 @@ export async function getPRDiff(repo, number) {
 
 /**
  * Add a general comment to a PR.
+ * @param repo
+ * @param number
+ * @param body
  */
 export async function addPRComment(repo, number, body) {
   const args = [
@@ -435,6 +508,14 @@ export async function addPRComment(repo, number, body) {
 
 /**
  * Add a line-level review comment to a PR.
+ * @param repo
+ * @param number
+ * @param root0
+ * @param root0.body
+ * @param root0.path
+ * @param root0.line
+ * @param root0.side
+ * @param root0.commitId
  */
 export async function addPRLineComment(repo, number, { body, path, line, side = 'RIGHT', commitId }) {
   const r = getRepo(repo)
@@ -470,6 +551,11 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
  */
 const REPO_PART_RE = /^[a-zA-Z0-9._-]+$/
 
+/**
+ *
+ * @param repo
+ * @param number
+ */
 export async function listPRComments(repo, number) {
   const r = getRepo(repo)
   const [owner, name] = r.split('/')
@@ -533,6 +619,10 @@ export async function listPRComments(repo, number) {
 /**
  * Reply to an existing PR review comment thread.
  * Uses the dedicated replies endpoint — no path/line/commitId needed.
+ * @param repo
+ * @param prNumber
+ * @param commentId
+ * @param body
  */
 export async function replyToComment(repo, prNumber, commentId, body) {
   const r = getRepo(repo)
@@ -549,6 +639,9 @@ export async function replyToComment(repo, prNumber, commentId, body) {
 
 /**
  * Edit (update) a PR review comment body.
+ * @param repo
+ * @param commentId
+ * @param body
  */
 export async function editPRComment(repo, commentId, body) {
   const r = getRepo(repo)
@@ -565,6 +658,8 @@ export async function editPRComment(repo, commentId, body) {
 
 /**
  * Delete a PR review comment.
+ * @param repo
+ * @param commentId
  */
 export async function deletePRComment(repo, commentId) {
   const r = getRepo(repo)
@@ -581,6 +676,7 @@ export async function deletePRComment(repo, commentId) {
 /**
  * Resolve (hide as resolved) a PR review thread.
  * Uses the GraphQL API via gh api graphql.
+ * @param threadId
  */
 export async function resolveThread(threadId) {
   const query = 'mutation($threadId: ID!) { resolveReviewThread(input: { threadId: $threadId }) { thread { id isResolved } } }'
@@ -594,6 +690,8 @@ export async function resolveThread(threadId) {
 
 /**
  * Get a single remote branch (returns null if not found).
+ * @param repo
+ * @param branch
  */
 export async function getRemoteBranch(repo, branch) {
   if (!branch) return null
@@ -608,6 +706,9 @@ export async function getRemoteBranch(repo, branch) {
 /**
  * Compare two refs: how many commits head is ahead/behind base on GitHub.
  * Returns { ahead_by, behind_by, commits: [{sha, commit:{message}}] } or null.
+ * @param repo
+ * @param base
+ * @param head
  */
 export async function compareBranches(repo, base, head) {
   if (!base || !head) return null
@@ -622,6 +723,7 @@ export async function compareBranches(repo, base, head) {
 /**
  * Get local commits on `branch` not yet pushed to origin/branch.
  * Returns array of {sha, message} or null if origin/branch doesn't exist.
+ * @param branch
  */
 export async function getUnpushedCommits(branch) {
   if (!branch) return []
@@ -655,6 +757,7 @@ export async function getCurrentBranch() {
 
 /**
  * Push a branch to origin.
+ * @param branch
  */
 export async function pushBranch(branch) {
   const result = await execa('git', ['push', 'origin', branch], {
@@ -669,6 +772,16 @@ export async function pushBranch(branch) {
 
 /**
  * Create a new PR.
+ * @param repo
+ * @param root0
+ * @param root0.title
+ * @param root0.body
+ * @param root0.head
+ * @param root0.base
+ * @param root0.draft
+ * @param root0.labels
+ * @param root0.assignees
+ * @param root0.reviewers
  */
 export async function createPR(repo, { title, body, head, base, draft = false, labels = [], assignees = [], reviewers = [] } = {}) {
   const args = [
@@ -690,6 +803,7 @@ export async function createPR(repo, { title, body, head, base, draft = false, l
 
 /**
  * Get basic repo info including allowed merge methods.
+ * @param repo
  */
 export async function getRepoInfo(repo) {
   const args = [
@@ -701,6 +815,8 @@ export async function getRepoInfo(repo) {
 
 /**
  * Get check runs / status checks for a PR.
+ * @param repo
+ * @param number
  */
 export async function getPRChecks(repo, number) {
   const r = getRepo(repo)
@@ -724,6 +840,8 @@ export async function getPRChecks(repo, number) {
 
 /**
  * Get branch protection rules for a branch.
+ * @param repo
+ * @param branch
  */
 export async function getBranchProtection(repo, branch) {
   if (!branch) return null
@@ -741,6 +859,9 @@ export async function getBranchProtection(repo, branch) {
 
 /**
  * Enable auto-merge on a PR.
+ * @param repo
+ * @param number
+ * @param mergeMethod
  */
 export async function enableAutoMerge(repo, number, mergeMethod = 'merge') {
   const args = [
@@ -754,6 +875,8 @@ export async function enableAutoMerge(repo, number, mergeMethod = 'merge') {
 
 /**
  * Disable auto-merge on a PR.
+ * @param repo
+ * @param number
  */
 export async function disableAutoMerge(repo, number) {
   const r = getRepo(repo)
@@ -767,6 +890,8 @@ export async function disableAutoMerge(repo, number) {
 
 /**
  * Get diff stats (additions/deletions/changedFiles) for a PR.
+ * @param repo
+ * @param number
  */
 export async function getPRDiffStats(repo, number) {
   const args = [
@@ -788,6 +913,7 @@ export async function listGists() {
 
 /**
  * View raw content of a gist.
+ * @param id
  */
 export async function getGist(id) {
   return run(['gist', 'view', id, '--raw'])
@@ -796,6 +922,9 @@ export async function getGist(id) {
 /**
  * Create a new gist via the GitHub API.
  * files: { filename: content }
+ * @param description
+ * @param files
+ * @param isPublic
  */
 export async function createGist(description, files, isPublic = false) {
   const payload = { description, public: isPublic, files: {} }
@@ -820,6 +949,7 @@ export async function createGist(description, files, isPublic = false) {
 
 /**
  * Delete a gist by ID.
+ * @param id
  */
 export async function deleteGist(id) {
   return run(['gist', 'delete', id, '--yes'])

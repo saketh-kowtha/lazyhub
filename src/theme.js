@@ -2,7 +2,7 @@
  * theme.js — resolves the active theme from config and exports t.
  */
 
-import React, { createContext, useContext, useState, useMemo, useCallback } from 'react'
+import _React, { createContext, useContext, useState, useMemo, useCallback } from 'react'
 import { readFileSync, existsSync } from 'fs'
 import { join, isAbsolute } from 'path'
 import { homedir } from 'os'
@@ -31,12 +31,18 @@ const ThemeContext = createContext({
   setTheme: () => {},
 })
 
+/**
+ *
+ */
 export function useTheme() {
   return useContext(ThemeContext)
 }
 
 /**
  * Provide reactive theme to the entire app.
+ * @param root0
+ * @param root0.children
+ * @param root0.initialTheme
  */
 export function ThemeProvider({ children, initialTheme }) {
   const [themeName, setThemeName] = useState(initialTheme || 'github-dark')
@@ -92,6 +98,10 @@ function loadThemeFile(p) {
 
 // ─── Theme resolution ─────────────────────────────────────────────────────────
 
+/**
+ *
+ * @param cfg
+ */
 export function resolveTheme(cfg) {
   const fallback = githubDark
 
@@ -116,6 +126,9 @@ export function resolveTheme(cfg) {
   return fallback
 }
 
+/**
+ *
+ */
 export function readRawThemeCfg() {
   try {
     const cfgPath = join(homedir(), '.config', 'lazyhub', 'config.json')

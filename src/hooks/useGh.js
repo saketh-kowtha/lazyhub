@@ -17,6 +17,7 @@ const DEFAULT_TTL = 30_000 // 30 seconds
  * @param {Function} fetchFn - async function that returns data
  * @param {Array}    deps    - dependency array, used as cache key
  * @param {Object}   options - { ttl: number (ms) }
+ * @param options.ttl
  * @returns {{ data, loading, error, refetch }}
  */
 export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
@@ -79,6 +80,7 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
 
 /**
  * Invalidate a cache entry by key prefix.
+ * @param keyPrefix
  */
 export function invalidateCache(keyPrefix) {
   for (const key of cache.keys()) {

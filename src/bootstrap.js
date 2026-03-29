@@ -13,6 +13,9 @@ import readline from 'readline'
 
 // ─── Step 1: detect gh ────────────────────────────────────────────────────────
 
+/**
+ *
+ */
 export async function detectGh() {
   try {
     await execa('gh', ['--version'])
@@ -22,6 +25,9 @@ export async function detectGh() {
   }
 }
 
+/**
+ *
+ */
 export async function getArch() {
   try {
     const { stdout } = await execa('uname', ['-m'])
@@ -31,6 +37,10 @@ export async function getArch() {
   }
 }
 
+/**
+ *
+ * @param platform
+ */
 export function printInstallInstructions(platform) {
   console.error('\n  ✗ gh (GitHub CLI) is not installed.\n')
 
@@ -58,6 +68,9 @@ export function printInstallInstructions(platform) {
 
 // ─── Step 2: detect auth ──────────────────────────────────────────────────────
 
+/**
+ *
+ */
 export async function checkAuth() {
   try {
     const result = await execa('gh', ['auth', 'status'], { reject: false })
@@ -67,6 +80,9 @@ export async function checkAuth() {
   }
 }
 
+/**
+ *
+ */
 export function hasBrowser() {
   if (process.platform === 'darwin') return true
   if (process.platform === 'win32') return true
@@ -74,6 +90,10 @@ export function hasBrowser() {
   return false
 }
 
+/**
+ *
+ * @param rl
+ */
 export async function readPATFromStdin(rl) {
   return new Promise((resolve) => {
     if (!rl) {
@@ -95,6 +115,9 @@ export async function readPATFromStdin(rl) {
   })
 }
 
+/**
+ *
+ */
 export async function getLoggedInUser() {
   try {
     const { stdout } = await execa('gh', ['api', 'user', '--jq', '.login'])
@@ -104,6 +127,9 @@ export async function getLoggedInUser() {
   }
 }
 
+/**
+ *
+ */
 export async function runLoginFlow() {
   process.stdout.write('  lazyhub needs GitHub access. Starting login...\n')
 
@@ -137,6 +163,9 @@ export async function runLoginFlow() {
 
 // ─── Step 3: detect repo context ─────────────────────────────────────────────
 
+/**
+ *
+ */
 export async function detectRepo() {
   // 1. Parse git remote origin URL — fast, no network needed
   try {
@@ -161,6 +190,9 @@ export async function detectRepo() {
   return null
 }
 
+/**
+ *
+ */
 export async function listRepos() {
   try {
     const { stdout } = await execa('gh', [
@@ -174,6 +206,10 @@ export async function listRepos() {
   }
 }
 
+/**
+ *
+ * @param repos
+ */
 export async function pickRepoInteractive(repos) {
   return new Promise((resolve) => {
     if (repos.length === 0) {
@@ -227,6 +263,10 @@ export async function pickRepoInteractive(repos) {
 
 // ─── Main bootstrap() ─────────────────────────────────────────────────────────
 
+/**
+ *
+ * @param renderApp
+ */
 export async function bootstrap(renderApp) {
   // Write default config on first run
   writeDefaultConfig()

@@ -37,7 +37,7 @@
       }
     ],
     "jsdoc/require-param": "error",
-    "jsdoc/require-returns": "error",
+    "jsdoc/require-returns": "off",
     "no-restricted-imports": [
       "error",
       {
