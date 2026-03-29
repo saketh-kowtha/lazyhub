@@ -30,16 +30,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Resolve last merged PR (for docs context)
-        id: last_pr
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          JSON=$(gh pr list --base main --state merged --limit 1 --json number,title,body)
-          echo "number=$(echo "$JSON" | jq -r '.[0].number // ""')" >> "$GITHUB_OUTPUT"
-          echo "title=$(echo "$JSON"  | jq -r '.[0].title  // ""')" >> "$GITHUB_OUTPUT"
-          echo "$JSON" | jq -r '.[0].body // ""' > /tmp/pr_body.txt
-
       - name: Prepare Version & Changelog
         id: prepare
         env:
@@ -48,8 +38,7 @@ jobs:
           BUMP_TYPE: ${{ inputs.bump_type }}
           PR_LABELS: '[]'
           REPO: ${{ github.repository }}
-        run: |
-          node .github/scripts/prepare-release.mjs
+        run: node .github/scripts/prepare-release.mjs
 
       - name: Open release PR
         env:
@@ -71,35 +60,3 @@ jobs:
             --body "$BODY" \
             --base main \
             --head "$BRANCH"
-
-  sync:
-    name: Sync Release
-    needs: prepare
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Open sync PR (Release ← Main)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.prepare.outputs.version }}
-        run: |
-          # Open a PR to bring the post-release merge commit back into release.
-          # Direct push is blocked by branch protection; a PR is the correct path.
-          BRANCH="chore/sync-release-v${VERSION}"
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin release
-          git checkout -b "$BRANCH" origin/main
-          git push origin "$BRANCH" --force
-          gh pr create \
-            --title "chore: sync release ← main after v${VERSION}" \
-            --body "Post-release sync: brings the release merge commit from \`main\` back into \`release\`. Safe to merge." \
-            --base release \
-            --head "$BRANCH" 2>/dev/null || echo "Sync PR already open — skipping"
