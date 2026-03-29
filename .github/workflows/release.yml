@@ -34,13 +34,21 @@ jobs:
             --notes "Full release notes available in CHANGELOG.md" \
             --latest
 
-      - name: Sync Main back to Release
+      - name: Open sync PR (Release ← Main)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.pkg.outputs.version }}
         run: |
+          # Open a PR to bring the post-release merge commit back into release.
+          # Direct push is blocked by branch protection; a PR is the correct path.
+          BRANCH="chore/sync-release-v${VERSION}"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin release
-          git checkout release
-          git merge main --no-edit
-          git push origin release
+          git checkout -b "$BRANCH" origin/main
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore: sync release ← main after v${VERSION}" \
+            --body "Post-release sync: brings the release merge commit from \`main\` back into \`release\`. Safe to merge." \
+            --base release \
+            --head "$BRANCH" 2>/dev/null || echo "Sync PR already open — skipping"

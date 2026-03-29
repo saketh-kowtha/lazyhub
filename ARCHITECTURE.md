@@ -484,17 +484,142 @@ Full schema:
 
 ---
 
-## 19. CI/CD — `.github/workflows/release.yml`
+## 19. CI/CD — Full Pipeline
 
-Triggered on: merged PR to `main`.
+### Branch model
 
-### Steps
-1. `prepare-release.mjs` — uses Claude API to decide version bump, writes `package.json` + `CHANGELOG.md` + release notes to `/tmp/release-notes.md`, outputs `version` step output.
-2. Commit version bump + changelog (`[skip ci]`).
-3. `gh release create`.
-4. `npm publish --access public` (skips gracefully if `NPM_TOKEN` not set).
-5. **Compute tarball SHA256** — polls npm CDN for HTTP 200 (18 × 10s = up to 3 minutes) before fetching. Uses `--retry-all-errors` so CDN 404s during propagation trigger retries. Guards against empty SHA before writing to `GITHUB_OUTPUT`.
-6. **Push Homebrew formula** — getContent to read current file SHA (needed for update). Catches only HTTP 404 (file absent = first release). Rethrows 403/500/etc.
+```
+feature/* ──► main  (production / tagged releases live here)
+                │
+                │  PR: main → release  (staging gate)
+                ▼
+             release  (release-candidate / prep branch)
+                │
+                │  PR: release → main  (triggers tag + publish)
+                ▼
+              main  ◄── GitHub Release tag created here
+```
+
+- **`main`** is the final/production branch. Tags and npm publishes are always cut from `main`.
+- **`release`** is a staging branch. It exists solely to run the AI docs/version prep automation before a tag lands on `main`.
+- Feature work is merged directly into `main` via PRs; `release` never receives feature work directly.
+
+---
+
+### Workflow inventory
+
+| File | Trigger | Purpose |
+|---|---|---|
+| `ci.yml` | push / PR → `main`, `release` | Tests (Node 20 + 22), lint, Knip dead-code, build, npm audit |
+| `auto-docs.yml` | PR merged: `main` → `release` | AI updates `ARCHITECTURE.md`, bumps version, opens `prep/vX.Y.Z` PR into `release` |
+| `release.yml` | PR merged: `release` → `main` | Creates GitHub Release tag, opens sync-back PR (`release ← main`) |
+| `publish.yml` | push tag `v*` | `npm publish`, computes SHA256, updates Homebrew formula in `saketh-kowtha/homebrew-tap` |
+| `pages.yml` | push to `main` (docs/** changes) | Deploys `docs/` to GitHub Pages |
+| `growth-engine.yml` | push to `main` (src/README/docs changes) | AI rewrites README/docs, opens `chore/growth-engine-docs` PR |
+| `claude-review.yml` | PR → `main` (label: `ai-review`) | Claude posts code review comment on PR |
+| `claude-security.yml` | PR → `main` (label: `ai-security`) | Claude posts security audit; exits 1 on critical findings |
+
+---
+
+### Full release flow (step by step)
+
+```
+1. Dev opens PR: feature/* → main
+   └─ ci.yml runs (tests + lint + build)
+   └─ claude-review.yml runs if 'ai-review' label present
+   └─ Merged by reviewer
+
+2. Someone opens PR: main → release
+   └─ ci.yml runs (strict=true: branch must be up-to-date with release)
+
+3. PR merged (main → release)
+   └─ auto-docs.yml triggers:
+       a. node .github/scripts/auto-docs.mjs   → updates ARCHITECTURE.md (Gemini)
+       b. node .github/scripts/prepare-release.mjs → bumps package.json, writes CHANGELOG.md (Claude)
+       c. Creates branch prep/vX.Y.Z, opens PR into release
+
+4. prep/vX.Y.Z PR reviewed and merged into release
+
+5. Someone opens PR: release → main
+   └─ ci.yml runs
+
+6. PR merged (release → main)
+   └─ release.yml triggers:
+       a. Reads version from package.json
+       b. gh release create vX.Y.Z --latest
+       c. Opens PR: chore/sync-release-vX.Y.Z → release  (brings merge commit back)
+
+7. Tag push (v*) triggers publish.yml:
+   a. npm publish --access public
+   b. Polls npm CDN until tarball is available (18 × 10s)
+   c. Computes SHA256 of tarball
+   d. Pushes updated Formula/lazyhub.rb to saketh-kowtha/homebrew-tap via TAP_TOKEN
+```
+
+---
+
+### Branch protection (enforced via API + Ruleset)
+
+| Setting | `main` | `release` |
+|---|---|---|
+| Required checks | Test (Node 20/22), Dependency audit | same |
+| strict (up-to-date) | `false` | `true` |
+| Required reviews | 1 approval, dismiss stale, last-push approval | + CODEOWNER review |
+| Linear history | yes | yes |
+| Force push | blocked (Ruleset: `non_fast_forward`) | blocked (Ruleset) |
+| Deletions | blocked (Ruleset) | blocked (Ruleset) |
+| enforce_admins | yes | yes |
+| Conversation resolution | required | required |
+
+> **Ruleset note:** Classic branch protection API does not reliably enforce `allow_force_pushes: false` on this repo. The GitHub Ruleset "Protect main and release — no force push" (id: 14475751) enforces `non_fast_forward` and `deletion` rules on both branches with no bypass actors.
+
+---
+
+### Required secrets
+
+| Secret | Used by | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | `auto-docs.yml`, `claude-review.yml`, `claude-security.yml` | Claude API calls |
+| `GEMINI_API_KEY` | `auto-docs.yml`, `growth-engine.yml` | Gemini API calls |
+| `NPM_TOKEN` | `publish.yml` | `npm publish` |
+| `TAP_TOKEN` | `publish.yml` | Write access to `saketh-kowtha/homebrew-tap` |
+| `GITHUB_TOKEN` | all workflows | Auto-provided by Actions |
+
+---
+
+### auto-docs.yml — prep flow detail
+
+Triggered when a PR from `main` is merged into `release`.
+
+Steps:
+1. Enforce source branch is `main` (fails otherwise).
+2. `auto-docs.mjs` — reads PR diff + metadata, calls Gemini to update `ARCHITECTURE.md`.
+3. `prepare-release.mjs` — calls Claude API to decide semver bump based on PR labels/title, writes `package.json`, `CHANGELOG.md`, `README.md`, `docs/`.
+4. Creates branch `prep/vX.Y.Z`, commits changed files, opens PR into `release`.
+
+---
+
+### publish.yml — SHA256 step (critical)
+
+```bash
+SHA=$(curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors "$URL" | sha256sum | awk '{print $1}')
+[ -z "$SHA" ] && echo "ERROR: SHA256 is empty" && exit 1
+```
+- Polls npm CDN for HTTP 200 (18 × 10s = up to 3 min) before fetching — CDN propagation lag.
+- `--retry-all-errors` is **required**: without it `--retry` only fires on network errors, not HTTP 4xx/5xx. A CDN 404 under `-f` pipes empty bytes to `sha256sum`, producing `e3b0c44…` (SHA256 of empty string) — a silent wrong checksum committed to the tap.
+- Empty SHA guard prevents bad Homebrew formula.
+
+### publish.yml — getContent error handling
+
+```js
+try {
+  const { data } = await github.rest.repos.getContent({ owner, repo, path })
+  sha = data.sha
+} catch (err) {
+  if (err.status !== 404) throw err  // only ignore "file not found" (first release)
+}
+```
+403 (bad TAP_TOKEN) and 500 errors must propagate, not be swallowed.
 
 ### SHA256 step — critical curl flags
 ```bash
