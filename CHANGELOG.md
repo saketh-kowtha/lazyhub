@@ -1,5 +1,32 @@
 # Changelog
 
+## v26.3.3
+
+# lazyhub v26.3.3 Release Notes
+
+## 🔧 Bug Fixes & Maintenance
+
+This is a patch release focused on internal stability improvements to the release pipeline.
+
+### What's Changed
+
+- **Fixed broken release workflow** — Removed a faulty sync job from the CI/CD release workflow that was causing issues with automated releases. This is an internal fix and has no impact on lazyhub's functionality, but ensures future releases are delivered more reliably. ([#38](../../pull/38))
+
+---
+
+### Other Changes
+
+- Updated README and documentation via automated marketing sync ([#33](../../pull/33), [#34](../../pull/34))
+- Merged miscellaneous fixes to main ([#36](../../pull/36))
+
+---
+
+> **Note:** This release contains no user-facing feature changes or bug fixes to lazyhub itself. If you are currently on v26.3.2, upgrading is optional but recommended to stay in sync with the latest release baseline.
+
+**Full Changelog**: [`v26.3.2...v26.3.3`](../../compare/v26.3.2...v26.3.3)
+
+---
+
 ## v26.3.2
 
 # lazyhub v26.3.2
