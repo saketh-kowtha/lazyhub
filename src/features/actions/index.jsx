@@ -2,7 +2,7 @@
  * src/features/actions/index.jsx — Actions / workflow runs pane
  */
 
-import React, { useState, useCallback, useEffect, useContext } from 'react'
+import React, { useState, useCallback, useEffect, useContext, memo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
@@ -10,20 +10,36 @@ import { listRuns, getRunLogs, rerunRun, cancelRun } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { AppContext } from '../../context.js'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
 
-function statusBadge(run) {
+function StatusBadge({ run }) {
+  const { t } = useTheme()
   const status = run.status
   const conclusion = run.conclusion
-  if (conclusion === 'success') return { icon: '✓', color: t.ci.pass }
-  if (conclusion === 'failure' || conclusion === 'timed_out') return { icon: '✗', color: t.ci.fail }
-  if (status === 'in_progress' || status === 'queued') return { icon: '●', color: t.ci.running }
-  if (conclusion === 'cancelled') return { icon: '⊘', color: t.ui.muted }
-  if (conclusion === 'skipped') return { icon: '—', color: t.ui.dim }
-  return { icon: '?', color: t.ui.dim }
+  if (conclusion === 'success') return <Text color={t.ci.pass}>✓</Text>
+  if (conclusion === 'failure' || conclusion === 'timed_out') return <Text color={t.ci.fail}>✗</Text>
+  if (status === 'in_progress' || status === 'queued') return <Text color={t.ci.running}>●</Text>
+  if (conclusion === 'cancelled') return <Text color={t.ui.muted}>⊘</Text>
+  if (conclusion === 'skipped') return <Text color={t.ui.dim}>—</Text>
+  return <Text color={t.ui.dim}>?</Text>
 }
 
+const ActionRow = memo(({ run, isSelected, t }) => {
+  return (
+    <Box key={run.databaseId} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
+      <StatusBadge run={run} />
+      <Text> </Text>
+      <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
+        {run.workflowName}
+      </Text>
+      <Text color={t.ui.muted}> {run.headBranch}</Text>
+      <Text color={t.ui.dim}> {format(run.createdAt)}</Text>
+    </Box>
+  )
+})
+
 export function ActionList({ repo, listHeight = 10, onPaneState }) {
+  const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
@@ -156,16 +172,14 @@ export function ActionList({ repo, listHeight = 10, onPaneState }) {
         {visibleRuns.map((run, i) => {
           const idx = scrollOffset + i
           const isSelected = idx === cursor
-          const badge = statusBadge(run)
+
           return (
-            <Box key={run.databaseId} paddingX={1} backgroundColor={isSelected ? '#1c2128' : undefined}>
-              <Text color={badge.color}>{badge.icon} </Text>
-              <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
-                {run.workflowName}
-              </Text>
-              <Text color={t.ui.muted}> {run.headBranch}</Text>
-              <Text color={t.ui.dim}> {format(run.createdAt)}</Text>
-            </Box>
+            <ActionRow
+              key={run.databaseId}
+              run={run}
+              isSelected={isSelected}
+              t={t}
+            />
           )
         })}
         {!loading && items.length === 0 && (

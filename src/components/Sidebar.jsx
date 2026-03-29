@@ -12,7 +12,7 @@
 
 import React from 'react'
 import { Box, Text } from 'ink'
-import { t } from '../theme.js'
+import { useTheme } from '../theme.js'
 
 const BUILTIN_LABELS = {
   prs:           'Pull Requests',
@@ -31,6 +31,7 @@ const BUILTIN_ICONS = {
 }
 
 export function Sidebar({ currentPane, onSelect, height, visiblePanes, paneLabels, paneIcons }) {
+  const { t } = useTheme()
   const labels = paneLabels || BUILTIN_LABELS
   const icons  = paneIcons  || BUILTIN_ICONS
 

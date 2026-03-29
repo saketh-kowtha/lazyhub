@@ -1,15 +1,21 @@
 # Homebrew Tap
 
-To install lazyhub via Homebrew, the tap repo `saketh-kowtha/homebrew-tap` must exist.
+Lazyhub is available via the `saketh-kowtha/homebrew-tap` tap.
+
+## Installation
+
+```bash
+brew install saketh-kowtha/tap/lazyhub
+```
 
 ## Formula: Formula/lazyhub.rb
 
 ```ruby
-class Ghui < Formula
-  desc "A lazygit-style GitHub TUI — every GitHub action without leaving your terminal"
-  homepage "https://saketh-kowtha.github.io/lazyhub"
-  url "https://registry.npmjs.org/lazyhub/-/lazyhub-0.1.0.tgz"
-  sha256 "REPLACE_WITH_ACTUAL_SHA256"
+class Lazyhub < Formula
+  desc "Lazygit-style GitHub TUI — keyboard-driven terminal UI for GitHub"
+  homepage "https://github.com/saketh-kowtha/lazyhub"
+  url "https://registry.npmjs.org/lazyhub/-/lazyhub-0.2.1.tgz"
+  sha256 "..."
   license "MIT"
 
   depends_on "node"
@@ -25,27 +31,20 @@ class Ghui < Formula
 end
 ```
 
-## Setup steps
-
-1. Create repo `saketh-kowtha/homebrew-tap` on GitHub
-2. Create `Formula/lazyhub.rb` with the above content
-3. Update `url` and `sha256` after each npm release
-4. Users install with: `brew install saketh-kowtha/tap/lazyhub`
-
 ## Auto-updating the formula on release
 
-Add to `.github/workflows/release.yml` after npm publish:
+The formula is automatically updated via the `.github/workflows/release.yml` workflow after a successful npm publish. It uses the `TAP_TOKEN` secret to push changes to the `homebrew-tap` repository.
+
 ```yaml
-- name: Update Homebrew tap
+- name: Push formula to homebrew-tap
   if: steps.prepare.outputs.version != ''
+  uses: actions/github-script@v7
   env:
-    GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-  run: |
-    VERSION="${{ steps.prepare.outputs.version }}"
-    TARBALL="https://registry.npmjs.org/lazyhub/-/lazyhub-${VERSION}.tgz"
-    SHA=$(curl -sL "$TARBALL" | shasum -a 256 | cut -d' ' -f1)
-    gh api repos/saketh-kowtha/homebrew-tap/contents/Formula/lazyhub.rb \
-      --method PUT \
-      -f message="chore: bump lazyhub to v${VERSION}" \
-      -f content="$(ruby -e "puts Base64.encode64(File.read('Formula/lazyhub.rb').gsub(/url .+/, \"url \\\"$TARBALL\\\"\").gsub(/sha256 .+/, \"sha256 \\\"$SHA\\\"\"))")"
+    VERSION: ${{ steps.prepare.outputs.version }}
+    SHA256:  ${{ steps.sha.outputs.sha }}
+    URL:     ${{ steps.sha.outputs.url }}
+  with:
+    github-token: ${{ secrets.TAP_TOKEN }}
+    script: |
+      // ... (see release.yml for full script)
 ```

@@ -6,8 +6,4 @@
 
 import { createContext, useContext } from 'react'
 
-export const AppContext = createContext({ notifyDialog: () => {}, openHelp: () => {} })
-
-export function useAppContext() {
-  return useContext(AppContext)
-}
+export const AppContext = createContext({ notifyDialog: () => {}, openHelp: () => {}, setMouseEnabled: () => {} })

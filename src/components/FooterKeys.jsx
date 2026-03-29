@@ -5,11 +5,12 @@
 
 import React from 'react'
 import { Box, Text, useStdout } from 'ink'
-import { t } from '../theme.js'
+import { useTheme } from '../theme.js'
 
 const GROUP_SIZE = 3
 
 export function FooterKeys({ keys = [] }) {
+  const { t } = useTheme()
   const { stdout } = useStdout()
   const termWidth = stdout?.columns || 80
   const borderLine = '─'.repeat(termWidth)

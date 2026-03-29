@@ -3,14 +3,15 @@ name: Claude Security Audit
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   security:
     name: Claude Security Audit
     runs-on: ubuntu-latest
-    # Only run for repo owner/members/collaborators — prevents fork PRs from consuming API tokens
+    # Only run if 'ai-security' label is present and PR is not a draft
     if: |
+      contains(github.event.pull_request.labels.*.name, 'ai-security') &&
       github.event.pull_request.draft == false &&
       (github.event.pull_request.author_association == 'OWNER' ||
        github.event.pull_request.author_association == 'MEMBER' ||

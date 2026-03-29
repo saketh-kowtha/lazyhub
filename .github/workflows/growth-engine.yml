@@ -1,0 +1,37 @@
+name: Growth Engine
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'README.md'
+      - 'docs/**'
+
+jobs:
+  growth:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Power the Growth Engine
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/growth-engine.mjs
+
+      - name: Commit and Push Stunning Docs
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "marketing: auto-update stunning README and docs [skip ci]"
+          branch: main

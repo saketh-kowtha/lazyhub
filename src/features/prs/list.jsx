@@ -10,7 +10,7 @@
  *   onPaneState  fn({loading, error, count})
  */
 
-import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
+import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
@@ -27,31 +27,60 @@ import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { NewPRDialog } from './NewPRDialog.jsx'
 import { AppContext } from '../../context.js'
 import { loadConfig } from '../../config.js'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
+import { sanitize } from '../../utils.js'
 
 const _cfg = loadConfig().pr
 
 // ─── Badges ──────────────────────────────────────────────────────────────────
 
-function prStateBadge(pr) {
-  if (pr.isDraft) return { icon: '⊘', color: t.pr.draft }
+function PRStateBadge({ pr }) {
+  const { t } = useTheme()
+  if (pr.isDraft) return <Text color={t.pr.draft}>⊘</Text>
   switch (pr.state) {
-    case 'OPEN':   return { icon: '●', color: t.pr.open }
-    case 'MERGED': return { icon: '✓', color: t.pr.merged }
-    case 'CLOSED': return { icon: '✗', color: t.pr.closed }
-    default:       return { icon: '?', color: t.ui.muted }
+    case 'OPEN':   return <Text color={t.pr.open}>●</Text>
+    case 'MERGED': return <Text color={t.pr.merged}>✓</Text>
+    case 'CLOSED': return <Text color={t.pr.closed}>✗</Text>
+    default:       return <Text color={t.ui.muted}>?</Text>
   }
 }
 
-function ciBadge(pr) {
+function CIBadge({ pr }) {
+  const { t } = useTheme()
   const checks = pr.statusCheckRollup
   if (!checks || checks.length === 0) return null
   const states = checks.map(c => c.state || c.conclusion || c.status || '')
-  if (states.some(s => /failure|error/i.test(s)))              return { icon: '✗', color: t.ci.fail }
-  if (states.some(s => /pending|in_progress|queued/i.test(s))) return { icon: '●', color: t.ci.pending }
-  if (states.every(s => /success/i.test(s)))                   return { icon: '✓', color: t.ci.pass }
+  if (states.some(s => /failure|error/i.test(s)))              return <Text color={t.ci.fail}> ✗</Text>
+  if (states.some(s => /pending|in_progress|queued/i.test(s))) return <Text color={t.ci.pending}> ●</Text>
+  if (states.every(s => /success/i.test(s)))                   return <Text color={t.ci.pass}> ✓</Text>
   return null
 }
+
+const PRRow = memo(({ pr, isSelected, t }) => {
+  const authorLogin = String(pr.author?.login || '').slice(0, 12).padEnd(12)
+  const timeStr = pr.updatedAt ? format(pr.updatedAt) : ''
+
+  return (
+    <Box
+      paddingX={1}
+      backgroundColor={isSelected ? t.ui.headerBg : undefined}
+    >
+      <PRStateBadge pr={pr} />
+      <Text color={t.ui.dim}> {'#' + String(pr.number).padEnd(5)}</Text>
+      <Text
+        color={isSelected ? t.ui.selected : undefined}
+        italic={pr.isDraft}
+        wrap="truncate"
+        flexGrow={1}
+      >
+        {sanitize(pr.title)}
+      </Text>
+      <CIBadge pr={pr} />
+      <Text color={t.ui.muted}> {authorLogin}</Text>
+      <Text color={t.ui.dim}> {timeStr}</Text>
+    </Box>
+  )
+})
 
 const MERGE_OPTIONS = [
   { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
@@ -62,6 +91,7 @@ const MERGE_OPTIONS = [
 // ─── PRList ───────────────────────────────────────────────────────────────────
 
 export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff, onPaneState }) {
+  const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const height = listHeight || Math.max(3, (stdout?.rows || 24) - 5)
@@ -443,34 +473,14 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
       {visiblePRs.map((pr, i) => {
         const idx = scrollOffset + i
         const isSelected = idx === cursor
-        const badge = prStateBadge(pr)
-        const ci = ciBadge(pr)
-        const authorLogin = String(pr.author?.login || '').slice(0, 12).padEnd(12)
-        const timeStr = pr.updatedAt ? format(pr.updatedAt) : ''
 
         return (
-          <Box
+          <PRRow
             key={pr.number}
-            paddingX={1}
-            backgroundColor={isSelected ? t.ui.headerBg : undefined}
-          >
-            <Text color={badge.color}>{badge.icon}</Text>
-            <Text color={t.ui.dim}> {'#' + String(pr.number).padEnd(5)}</Text>
-            <Text
-              color={isSelected ? t.ui.selected : undefined}
-              italic={pr.isDraft}
-              wrap="truncate"
-              flexGrow={1}
-            >
-              {pr.title}
-            </Text>
-            {ci
-              ? <Text color={ci.color}> {ci.icon}</Text>
-              : <Text>  </Text>
-            }
-            <Text color={t.ui.muted}> {authorLogin}</Text>
-            <Text color={t.ui.dim}> {timeStr}</Text>
-          </Box>
+            pr={pr}
+            isSelected={isSelected}
+            t={t}
+          />
         )
       })}
 
@@ -491,6 +501,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
 // ─── Sub-dialogs ──────────────────────────────────────────────────────────────
 
 function LabelDialog({ repo, pr, onClose }) {
+  const { t } = useTheme()
   const { data: allLabels, loading } = useGh(listLabels, [repo])
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading labels…</Text></Box>
 
@@ -520,6 +531,7 @@ function LabelDialog({ repo, pr, onClose }) {
 }
 
 function AssigneeDialog({ repo, pr, onClose }) {
+  const { t } = useTheme()
   const { data: collabs, loading } = useGh(listCollaborators, [repo])
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators…</Text></Box>
 
@@ -551,6 +563,7 @@ function AssigneeDialog({ repo, pr, onClose }) {
 
 // Simple inline author-search box
 function AuthorSearchDialog({ current, onSubmit, onCancel }) {
+  const { t } = useTheme()
   const [text, setText] = useState(current || '')
 
   useInput((input, key) => {
@@ -576,6 +589,7 @@ function AuthorSearchDialog({ current, onSubmit, onCancel }) {
 }
 
 function ReviewerDialog({ repo, pr, onClose }) {
+  const { t } = useTheme()
   const { data: collabs, loading } = useGh(listCollaborators, [repo])
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators…</Text></Box>
 

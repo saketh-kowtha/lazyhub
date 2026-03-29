@@ -6,36 +6,28 @@
 import React, { useState, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import chalk from 'chalk'
-import { t } from '../../theme.js'
-
-function highlightMatch(str, query) {
-  if (!query) return str
-  const lowerStr = str.toLowerCase()
-  const lowerQuery = query.toLowerCase()
-  const idx = lowerStr.indexOf(lowerQuery)
-  if (idx === -1) return str
-  const before = str.slice(0, idx)
-  const match = str.slice(idx, idx + query.length)
-  const after = str.slice(idx + query.length)
-  return before + chalk.bold.white(match) + after
-}
+import { useTheme } from '../../theme.js'
+import { TextInput } from '../../utils.js'
 
 function matchesQuery(item, query, searchFields) {
   if (!query) return true
-  const lq = query.toLowerCase()
-  for (const field of searchFields) {
-    const val = item[field]
-    if (val != null && String(val).toLowerCase().includes(lq)) return true
-  }
-  return false
+  const q = query.toLowerCase()
+  return searchFields.some(field => String(item[field] ?? '').toLowerCase().includes(q))
 }
 
 function getDisplayText(item, searchFields) {
-  const primary = item[searchFields[0]] || item.title || item.name || String(item)
-  return String(primary)
+  if (item.title != null) return `${item.number != null ? '#' + item.number + ' ' : ''}${item.title}`
+  if (item.name != null) return item.name
+  return String(item[searchFields[0]] ?? '')
+}
+
+function highlightMatch(display, query) {
+  if (!query) return display
+  return display
 }
 
 export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['title', 'name'] }) {
+  const { t } = useTheme()
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
 
@@ -60,15 +52,7 @@ export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['t
       setCursor(c => Math.min(filtered.length - 1, c + 1))
       return
     }
-    if (key.backspace || key.delete) {
-      setQuery(q => q.slice(0, -1))
-      setCursor(0)
-      return
-    }
-    if (input && !key.ctrl && !key.meta) {
-      setQuery(q => q + input)
-      setCursor(0)
-    }
+    // Note: backspace and character input are now handled by TextInput
   })
 
   const visibleItems = filtered.slice(0, 15)
@@ -77,8 +61,11 @@ export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['t
     <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
       <Box marginBottom={1}>
         <Text color={t.ui.muted}>Search: </Text>
-        <Text color={t.ui.selected}>{query}</Text>
-        <Text color={t.ui.dim}>█</Text>
+        <TextInput
+          value={query}
+          onChange={(v) => { setQuery(v); setCursor(0) }}
+          focus={true}
+        />
       </Box>
       {visibleItems.length === 0 && (
         <Text color={t.ui.muted}>  No results</Text>

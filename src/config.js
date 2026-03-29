@@ -78,10 +78,8 @@ import { join, dirname } from 'path'
 import { homedir } from 'os'
 
 export const BUILTIN_PANES = ['prs', 'issues', 'branches', 'actions', 'notifications']
-/** @deprecated use BUILTIN_PANES */
-export const ALL_PANES = BUILTIN_PANES
 
-export const CONFIG_PATH = join(homedir(), '.config', 'lazyhub', 'config.json')
+const CONFIG_PATH = join(homedir(), '.config', 'lazyhub', 'config.json')
 
 // ─── Section defaults ─────────────────────────────────────────────────────────
 
@@ -133,8 +131,12 @@ function mergeSection(defaults, user) {
   const merged = { ...defaults }
   for (const [k, v] of Object.entries(user)) {
     if (k in defaults) {
-      if (typeof defaults[k] === 'object' && !Array.isArray(defaults[k]) && typeof v === 'object' && !Array.isArray(v)) {
-        merged[k] = { ...defaults[k], ...v }
+      if (Array.isArray(defaults[k])) {
+        if (Array.isArray(v)) merged[k] = v
+      } else if (typeof defaults[k] === 'object' && defaults[k] !== null) {
+        if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+          merged[k] = { ...defaults[k], ...v }
+        }
       } else if (typeof v === typeof defaults[k]) {
         merged[k] = v
       }
@@ -158,6 +160,9 @@ function validateCustomPane(id, def) {
 
 // ─── loadConfig ───────────────────────────────────────────────────────────────
 
+/**
+ *
+ */
 export function loadConfig() {
   if (!existsSync(CONFIG_PATH)) return { ...DEFAULTS }
   try {
@@ -184,24 +189,51 @@ export function loadConfig() {
 
     // Pass theme through as-is — theme.js resolves all formats
     const theme = user.theme != null ? user.theme : 'github-dark'
+    const aiReviewEnabled = user.aiReviewEnabled !== false
 
-    return {
+    const result = {
       panes,
       defaultPane,
       theme,
+      aiReviewEnabled,
       customPanes,
       pr:      mergeSection(DEFAULT_PR,      user.pr),
       issues:  mergeSection(DEFAULT_ISSUES,  user.issues),
       actions: mergeSection(DEFAULT_ACTIONS, user.actions),
       diff:    mergeSection(DEFAULT_DIFF,    user.diff),
     }
+    // Pass through sensitive/optional top-level fields that don't need schema merging
+    if (typeof user.anthropicApiKey === 'string' && user.anthropicApiKey) {
+      result.anthropicApiKey = user.anthropicApiKey
+    }
+    return result
   } catch {
     return { ...DEFAULTS }
   }
 }
 
+// ─── saveConfig — persists partial or full config to disk ────────────────────
+
+/**
+ *
+ * @param patch
+ */
+export function saveConfig(patch) {
+  try {
+    const current = existsSync(CONFIG_PATH) ? JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) : {}
+    const next = { ...current, ...patch }
+    mkdirSync(dirname(CONFIG_PATH), { recursive: true })
+    writeFileSync(CONFIG_PATH, JSON.stringify(next, null, 2) + '\n', 'utf8')
+  } catch (err) {
+    console.error('Failed to save config:', err)
+  }
+}
+
 // ─── writeDefaultConfig — creates config file with comments if missing ────────
 
+/**
+ *
+ */
 export function writeDefaultConfig() {
   if (existsSync(CONFIG_PATH)) return
   try {

@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { logger } from '../utils.js'
 
 // In-memory cache: key → { data, timestamp }
 const cache = new Map()
@@ -16,6 +17,7 @@ const DEFAULT_TTL = 30_000 // 30 seconds
  * @param {Function} fetchFn - async function that returns data
  * @param {Array}    deps    - dependency array, used as cache key
  * @param {Object}   options - { ttl: number (ms) }
+ * @param options.ttl
  * @returns {{ data, loading, error, refetch }}
  */
 export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
@@ -48,10 +50,12 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
       cache.set(cacheKey, { data: result, timestamp: Date.now() })
       setData(result)
       setError(null)
+      logger.info(`gh.${fetchFn.name || 'unnamed'} fetched data`, { cacheKey, component: 'useGh' })
     } catch (err) {
       if (!mountedRef.current) return
       setError(err)
       setData(null)
+      logger.error(`useGh: ${fetchFn.name || 'unnamed'}(${cacheKey}) failed`, err)
     } finally {
       if (mountedRef.current) {
         setLoading(false)
@@ -72,22 +76,4 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
   }, [cacheKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return { data, loading, error, refetch }
-}
-
-/**
- * Invalidate a cache entry by key prefix.
- */
-export function invalidateCache(keyPrefix) {
-  for (const key of cache.keys()) {
-    if (key.startsWith(keyPrefix)) {
-      cache.delete(key)
-    }
-  }
-}
-
-/**
- * Clear all cache entries.
- */
-export function clearCache() {
-  cache.clear()
 }

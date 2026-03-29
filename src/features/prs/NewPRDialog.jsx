@@ -20,6 +20,7 @@ import {
   getCurrentBranch, pushBranch, getRepoInfo, createPR,
 } from '../../executor.js'
 import { t } from '../../theme.js'
+import { TextInput } from '../../utils.js'
 
 const FIELDS = ['title', 'head', 'base', 'body']
 
@@ -358,22 +359,24 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
 
     // Field-level editing
     const fieldName = FIELDS[activeField]
-    if (fieldName === 'body' && input === 'e') { openEditor(); return }
-
-    if (key.return && fieldName !== 'body') { goNext(); return }
-
-    if (key.backspace || key.delete) {
-      setForm(f => ({ ...f, [fieldName]: (f[fieldName] || '').slice(0, -1) }))
-      // Reset head/base status if user is editing the field
-      if (fieldName === 'head') { setHeadStatus(null); lastValidatedHead.current = '' }
-      if (fieldName === 'base') { setBaseStatus(null); lastValidatedBase.current = '' }
+    // Use Ctrl+E for editor to avoid 'e' key hijacking
+    if (fieldName === 'body' && key.ctrl && input === 'e') {
+      openEditor();
       return
     }
 
-    if (input && !key.ctrl && !key.meta) {
-      setForm(f => ({ ...f, [fieldName]: (f[fieldName] || '') + input }))
-      if (fieldName === 'head') { setHeadStatus(null); lastValidatedHead.current = '' }
-      if (fieldName === 'base') { setBaseStatus(null); lastValidatedBase.current = '' }
+    if (key.return && fieldName !== 'body') { goNext(); return }
+
+    // Text editing is now handled by TextInput components for title, head, base
+    // For body (multiline), we still do basic appending if not using editor
+    if (fieldName === 'body') {
+      if (key.backspace || key.delete) {
+        setForm(f => ({ ...f, body: (f.body || '').slice(0, -1) }))
+        return
+      }
+      if (input && !key.ctrl && !key.meta) {
+        setForm(f => ({ ...f, body: (f.body || '') + input }))
+      }
     }
   })
 
@@ -446,13 +449,19 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
         borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} />
 
       {/* Title field */}
-      {renderField({
-        label: 'Title',
-        name: 'title',
-        value: form.title,
-        isActive: FIELDS[activeField] === 'title',
-        maxWidth,
-      })}
+      <Box flexDirection="column" marginBottom={1} paddingX={1}>
+        <Text color={FIELDS[activeField] === 'title' ? t.ui.selected : t.ui.muted} bold={FIELDS[activeField] === 'title'}>Title:</Text>
+        <Box borderStyle={FIELDS[activeField] === 'title' ? 'round' : 'single'}
+          borderColor={FIELDS[activeField] === 'title' ? t.ui.selected : t.ui.border}
+          paddingX={1} width={maxWidth}>
+          <TextInput
+            value={form.title}
+            onChange={(v) => setForm(f => ({ ...f, title: v }))}
+            focus={FIELDS[activeField] === 'title'}
+            onEnter={goNext}
+          />
+        </Box>
+      </Box>
 
       {/* Head branch field */}
       <Box flexDirection="column" marginBottom={1} paddingX={1}>
@@ -483,8 +492,16 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
             : t.ui.border
           }
           paddingX={1} width={maxWidth}>
-          <Text wrap="truncate">{form.head}</Text>
-          {isHeadField && <Text color={t.ui.dim}>|</Text>}
+          <TextInput
+            value={form.head}
+            onChange={(v) => {
+              setForm(f => ({ ...f, head: v }))
+              setHeadStatus(null)
+              lastValidatedHead.current = ''
+            }}
+            focus={isHeadField}
+            onEnter={goNext}
+          />
         </Box>
       </Box>
 
@@ -504,8 +521,16 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
             : t.ui.border
           }
           paddingX={1} width={maxWidth}>
-          <Text wrap="truncate">{form.base}</Text>
-          {isBaseField && <Text color={t.ui.dim}>|</Text>}
+          <TextInput
+            value={form.base}
+            onChange={(v) => {
+              setForm(f => ({ ...f, base: v }))
+              setBaseStatus(null)
+              lastValidatedBase.current = ''
+            }}
+            focus={isBaseField}
+            onEnter={goNext}
+          />
         </Box>
         {baseStatus === 'not-found' && (
           <Text color={t.ci.fail} paddingX={1}>
@@ -518,7 +543,7 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
       <Box flexDirection="column" marginBottom={1} paddingX={1}>
         <Text color={FIELDS[activeField] === 'body' ? t.ui.selected : t.ui.muted}
           bold={FIELDS[activeField] === 'body'}>
-          Body: {FIELDS[activeField] === 'body' && <Text color={t.ui.dim}>[e] open $EDITOR</Text>}
+          Body: {FIELDS[activeField] === 'body' && <Text color={t.ui.dim}>[Ctrl+E] open $EDITOR</Text>}
         </Text>
         <Box borderStyle={FIELDS[activeField] === 'body' ? 'round' : 'single'}
           borderColor={FIELDS[activeField] === 'body' ? t.ui.selected : t.ui.border}
@@ -531,9 +556,10 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
               {form.body.split('\n').length > 3 && (
                 <Text color={t.ui.dim}>… {form.body.split('\n').length - 3} more lines</Text>
               )}
+              {FIELDS[activeField] === 'body' && <Text color={t.ui.dim}>|</Text>}
             </Box>
           ) : (
-            <Text color={t.ui.dim}>optional — press [e] to open editor</Text>
+            <Text color={t.ui.dim}>optional — press [Ctrl+E] to open editor</Text>
           )}
         </Box>
       </Box>
@@ -559,22 +585,6 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
           </Box>
           <Text color={t.ui.dim}>[Esc] cancel</Text>
         </Box>
-      </Box>
-    </Box>
-  )
-}
-
-// ─── Tiny field renderer (used for simple text fields) ────────────────────────
-
-function renderField({ label, name, value, isActive, maxWidth }) {
-  return (
-    <Box key={name} flexDirection="column" marginBottom={1} paddingX={1}>
-      <Text color={isActive ? t.ui.selected : t.ui.muted} bold={isActive}>{label}:</Text>
-      <Box borderStyle={isActive ? 'round' : 'single'}
-        borderColor={isActive ? t.ui.selected : t.ui.border}
-        paddingX={1} width={maxWidth}>
-        <Text wrap="truncate">{value}</Text>
-        {isActive && <Text color={t.ui.dim}>|</Text>}
       </Box>
     </Box>
   )

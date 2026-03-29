@@ -16,7 +16,7 @@ const ctx = await esbuild.context({
   platform: 'node',
   format: 'esm',
   outfile: 'dist/lazyhub.js',
-  loader: { '.jsx': 'jsx' },
+  loader: { '.js': 'jsx', '.jsx': 'jsx' },
   packages: 'external',          // leave node_modules as-is
   banner: { js: '#!/usr/bin/env node' },
   logLevel: 'info',

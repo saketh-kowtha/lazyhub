@@ -5,9 +5,10 @@
 
 import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
 
 export function ConfirmDialog({ message, destructive = false, onConfirm, onCancel, requireText }) {
+  const { t } = useTheme()
   const [cursor, setCursor] = useState(1) // 0 = Yes, 1 = No (default No for safety)
   const [typed, setTyped] = useState('')
 

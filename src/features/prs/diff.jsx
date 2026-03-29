@@ -14,13 +14,37 @@ import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
+import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
+import { AIReviewPane } from '../../components/AIReviewPane.jsx'
+import { getAICodeReview, AIError } from '../../ai.js'
 import { loadConfig } from '../../config.js'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
+import { TextInput, colorChalk, bgColorChalk, applyThemeStyle, sanitize } from '../../utils.js'
 
 const _diffCfg = loadConfig().diff
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+
+function getLang(filename) {
+  if (!filename) return null
+  const ext = (filename.split('.').pop() || '').toLowerCase()
+  const map = {
+    js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
+    ts: 'typescript', tsx: 'typescript',
+    py: 'python', rb: 'ruby', go: 'go', rs: 'rust',
+    java: 'java', kt: 'kotlin', swift: 'swift',
+    cpp: 'cpp', cc: 'cpp', cxx: 'cpp', c: 'c', h: 'c',
+    cs: 'csharp', php: 'php',
+    sh: 'bash', bash: 'bash', zsh: 'bash',
+    json: 'json', yaml: 'yaml', yml: 'yaml',
+    xml: 'xml', html: 'html', htm: 'html',
+    css: 'css', scss: 'scss', less: 'less',
+    md: 'markdown', sql: 'sql',
+    graphql: 'graphql', gql: 'graphql',
+  }
+  return map[ext] || null
+}
 
 function openEditorSync(initial) {
   const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
@@ -38,68 +62,51 @@ function openEditorSync(initial) {
   finally { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) } catch {} }
 }
 
-// ─── Language detection ───────────────────────────────────────────────────────
-
-const EXT_LANG = {
-  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
-  ts: 'typescript', tsx: 'typescript',
-  py: 'python',     rb: 'ruby',        go: 'go',          rs: 'rust',
-  java: 'java',     kt: 'kotlin',      swift: 'swift',    cs: 'csharp',
-  c: 'c',           cpp: 'cpp',        h: 'c',
-  sh: 'bash',       bash: 'bash',      zsh: 'bash',
-  json: 'json',     yaml: 'yaml',      yml: 'yaml',
-  md: 'markdown',   html: 'xml',       xml: 'xml',        css: 'css',
-  sql: 'sql',       graphql: 'graphql',
-}
-
-function getLang(filename) {
-  if (!filename) return null
-  const ext = filename.split('.').pop()?.toLowerCase()
-  return EXT_LANG[ext] || null
-}
-
 // ─── hljs HTML → chalk ───────────────────────────────────────────────────────
 // Converts highlight.js HTML output to chalk-colored terminal strings.
 // Preserves the bgColor on every character so the add/del background shows through.
 
-const CLS_COLOR = {
-  'hljs-keyword':           t.syntax.keyword,
-  'hljs-built_in':          t.syntax.builtin,
-  'hljs-type':              t.syntax.type,
-  'hljs-literal':           t.syntax.literal,
-  'hljs-number':            t.syntax.number,
-  'hljs-operator':          t.syntax.operator,
-  'hljs-punctuation':       t.syntax.default,
-  'hljs-property':          t.syntax.attr,
-  'hljs-regexp':            t.syntax.regexp,
-  'hljs-string':            t.syntax.string,
-  'hljs-subst':             t.syntax.default,
-  'hljs-symbol':            t.syntax.literal,
-  'hljs-class':             t.syntax.type,
-  'hljs-function':          t.syntax.fn,
-  'hljs-title':             t.syntax.fn,
-  'hljs-title class_':      t.syntax.type,
-  'hljs-title function_':   t.syntax.fn,
-  'hljs-params':            t.syntax.default,
-  'hljs-comment':           t.syntax.comment,
-  'hljs-doctag':            t.syntax.comment,
-  'hljs-meta':              t.syntax.meta,
-  'hljs-tag':               t.syntax.tag,
-  'hljs-name':              t.syntax.tag,
-  'hljs-attr':              t.syntax.attr,
-  'hljs-attribute':         t.syntax.attr,
-  'hljs-variable':          t.syntax.variable,
-  'hljs-variable language_': t.syntax.builtin,
-  'hljs-selector-tag':      t.syntax.tag,
-  'hljs-selector-class':    t.syntax.fn,
-  'hljs-selector-id':       t.syntax.builtin,
-  'hljs-addition':          t.syntax.string,
-  'hljs-deletion':          t.syntax.keyword,
+function getClsColor(t) {
+  return {
+    'hljs-keyword':           t.syntax.keyword,
+    'hljs-built_in':          t.syntax.builtin,
+    'hljs-type':              t.syntax.type,
+    'hljs-literal':           t.syntax.literal,
+    'hljs-number':            t.syntax.number,
+    'hljs-operator':          t.syntax.operator,
+    'hljs-punctuation':       t.syntax.default,
+    'hljs-property':          t.syntax.attr,
+    'hljs-regexp':            t.syntax.regexp,
+    'hljs-string':            t.syntax.string,
+    'hljs-subst':             t.syntax.default,
+    'hljs-symbol':            t.syntax.literal,
+    'hljs-class':             t.syntax.type,
+    'hljs-function':          t.syntax.fn,
+    'hljs-title':             t.syntax.fn,
+    'hljs-title class_':      t.syntax.type,
+    'hljs-title function_':   t.syntax.fn,
+    'hljs-params':            t.syntax.default,
+    'hljs-comment':           t.syntax.comment,
+    'hljs-doctag':            t.syntax.comment,
+    'hljs-meta':              t.syntax.meta,
+    'hljs-tag':               t.syntax.tag,
+    'hljs-name':              t.syntax.tag,
+    'hljs-attr':              t.syntax.attr,
+    'hljs-attribute':         t.syntax.attr,
+    'hljs-variable':          t.syntax.variable,
+    'hljs-variable language_': t.syntax.builtin,
+    'hljs-selector-tag':      t.syntax.tag,
+    'hljs-selector-class':    t.syntax.fn,
+    'hljs-selector-id':       t.syntax.builtin,
+    'hljs-addition':          t.syntax.string,
+    'hljs-deletion':          t.syntax.keyword,
+  }
 }
 
-function htmlToChalk(html, bgColor) {
+function htmlToChalk(html, bgColor, t) {
   const parts = []
   const colorStack = []
+  const clsColor = getClsColor(t)
   let i = 0
 
   while (i < html.length) {
@@ -114,7 +121,7 @@ function htmlToChalk(html, bgColor) {
         .replace(/&#39;/g, "'")
       if (text) {
         const fg = colorStack.filter(Boolean).at(-1) || t.syntax.default
-        parts.push(bgColor ? chalk.bgHex(bgColor).hex(fg)(text) : chalk.hex(fg)(text))
+        parts.push(applyThemeStyle(text, fg, bgColor))
       }
       i = end === -1 ? html.length : end
       continue
@@ -129,7 +136,7 @@ function htmlToChalk(html, bgColor) {
     } else if (tag.startsWith('span')) {
       const m = tag.match(/class="([^"]+)"/)
       const cls = m ? m[1] : null
-      const color = cls ? (CLS_COLOR[cls] ?? CLS_COLOR[cls.split(' ')[0]] ?? null) : null
+      const color = cls ? (clsColor[cls] ?? clsColor[cls.split(' ')[0]] ?? null) : null
       colorStack.push(color)
     }
     i = end + 1
@@ -138,19 +145,15 @@ function htmlToChalk(html, bgColor) {
   return parts.join('')
 }
 
-function syntaxHighlight(code, lang, bgColor) {
+function syntaxHighlight(code, lang, bgColor, t) {
   if (!lang) {
-    return bgColor
-      ? chalk.bgHex(bgColor).hex(t.syntax.default)(code)
-      : chalk.hex(t.syntax.default)(code)
+    return applyThemeStyle(code, t.syntax.default, bgColor)
   }
   try {
     const { value } = hljs.highlight(code, { language: lang, ignoreIllegals: true })
-    return htmlToChalk(value, bgColor)
+    return htmlToChalk(value, bgColor, t)
   } catch {
-    return bgColor
-      ? chalk.bgHex(bgColor).hex(t.syntax.default)(code)
-      : chalk.hex(t.syntax.default)(code)
+    return applyThemeStyle(code, t.syntax.default, bgColor)
   }
 }
 
@@ -271,18 +274,13 @@ function buildTreeRows(files) {
 
 // ─── Diff line renderer ───────────────────────────────────────────────────────
 // Gutter: cursor(1) oldLn(4) newLn(4) sign(2) code
-//
-// cursor is a dedicated leading column — always visible regardless of the
-// per-character bg colors already applied to the rest of the line.
-// chalk.bgHex(cursorBg)(fullLine) doesn't work on lines that already carry
-// per-character chalk bg colors, so we use a ▶ prefix instead.
 
-function renderDiffLine(row, isSelected, langCache, isMatch) {
+const DiffLine = React.memo(({ row, isSelected, lang, isMatch, t }) => {
   let cur
   if (isSelected) {
-    cur = chalk.bgHex(t.diff.cursorBg).hex('#ffffff').bold('▶')
+    cur = applyThemeStyle('▶', '#ffffff', t.diff.cursorBg)
   } else if (isMatch) {
-    cur = chalk.hex('#e3b341')('◆')
+    cur = colorChalk('#e3b341')('◆')
   } else {
     cur = ' '
   }
@@ -292,46 +290,46 @@ function renderDiffLine(row, isSelected, langCache, isMatch) {
 
   if (row.type === 'file-header') {
     const line =
-      chalk.hex(t.ui.selected).bold(`━━ ${row.filename} `) +
-      chalk.hex(t.ci.pass)(`+${row.addCount}`) +
-      chalk.hex(t.syntax.default)(' / ') +
-      chalk.hex(t.ci.fail)(`-${row.delCount}`)
-    return cur + line
+      colorChalk(t.ui.selected).bold(`━━ ${row.filename} `) +
+      colorChalk(t.ci.pass)(`+${row.addCount}`) +
+      colorChalk(t.syntax.default)(' / ') +
+      colorChalk(t.ci.fail)(`-${row.delCount}`)
+    return <Text wrap="truncate">{cur + line}</Text>
   }
 
   if (row.type === 'hunk') {
-    return cur + chalk.bgHex(t.diff.hunkBg).hex(t.diff.hunkFg)(
-      `${gutterOld}${gutterNew}   ${row.text}`
+    return (
+      <Text wrap="truncate">
+        {cur + applyThemeStyle(`${gutterOld}${gutterNew}   ${row.text}`, t.diff.hunkFg, t.diff.hunkBg)}
+      </Text>
     )
   }
-
-  const lang = langCache.get(row.filename)
 
   if (row.type === 'add') {
     const signFg = isSelected ? '#ffffff' : t.diff.addSign
     const sign   = isSelected ? '▶' : '+'
-    const gutter = chalk.bgHex(t.diff.addBg).hex(signFg)(`${gutterOld}${gutterNew} ${sign} `)
-    return cur + gutter + syntaxHighlight(row.text, lang, t.diff.addBg)
+    const gutter = applyThemeStyle(`${gutterOld}${gutterNew} ${sign} `, signFg, t.diff.addBg)
+    return <Text wrap="truncate">{cur + gutter + syntaxHighlight(row.text, lang, t.diff.addBg, t)}</Text>
   }
 
   if (row.type === 'del') {
     const signFg = isSelected ? '#ffffff' : t.diff.delSign
     const sign   = isSelected ? '▶' : '-'
-    const gutter = chalk.bgHex(t.diff.delBg).hex(signFg)(`${gutterOld}${gutterNew} ${sign} `)
-    return cur + gutter + syntaxHighlight(row.text, lang, t.diff.delBg)
+    const gutter = applyThemeStyle(`${gutterOld}${gutterNew} ${sign} `, signFg, t.diff.delBg)
+    return <Text wrap="truncate">{cur + gutter + syntaxHighlight(row.text, lang, t.diff.delBg, t)}</Text>
   }
 
   // ctx — highlight the full gutter+code with cursor bg when selected
   const bgGutter = isSelected
-    ? chalk.bgHex(t.diff.cursorBg).hex(t.ui.selected)(`${gutterOld}${gutterNew}   `)
-    : chalk.hex(t.ui.dim)(`${gutterOld}${gutterNew}   `)
-  const code = syntaxHighlight(row.text, lang, isSelected ? t.diff.cursorBg : null)
-  return cur + bgGutter + code
-}
+    ? applyThemeStyle(`${gutterOld}${gutterNew}   `, t.ui.selected, t.diff.cursorBg)
+    : colorChalk(t.ui.dim)(`${gutterOld}${gutterNew}   `)
+  const code = syntaxHighlight(row.text, lang, isSelected ? t.diff.cursorBg : null, t)
+  return <Text wrap="truncate">{cur + bgGutter + code}</Text>
+})
 
 // ─── Thread renderer ──────────────────────────────────────────────────────────
 
-function renderThreads(comments) {
+function renderThreads(comments, t) {
   // Sort all by createdAt
   const sorted = [...comments].sort((a, b) =>
     new Date(a.createdAt) - new Date(b.createdAt)
@@ -359,7 +357,7 @@ function renderThreads(comments) {
       elements.push(
         <Box key={`${comment.id}-body-${i}`}>
           <Text color={t.diff.threadBorder}>┃ </Text>
-          <Text wrap="truncate">{bodyLines[i]}</Text>
+          <Text color={t.diff.ctxFg} wrap="truncate">{sanitize(bodyLines[i])}</Text>
         </Box>
       )
     }
@@ -386,7 +384,7 @@ function renderThreads(comments) {
         elements.push(
           <Box key={`${reply.id}-body-${i}`}>
             <Text color={t.diff.threadBorder}>┃   </Text>
-            <Text wrap="truncate">{replyLines[i]}</Text>
+            <Text color={t.diff.ctxFg} wrap="truncate">{sanitize(replyLines[i])}</Text>
           </Box>
         )
       }
@@ -402,14 +400,17 @@ const FOOTER_KEYS_UNIFIED = [
   { key: 'j/k',  label: 'scroll' },
   { key: 'gg/G', label: 'top/bottom' },
   { key: ']/[',  label: 'file' },
+  { key: 'f',    label: 'jump to file' },
   { key: ':',    label: 'go to line' },
   { key: 'c',    label: 'comment' },
   { key: 'r/e/d', label: 'reply/edit/delete thread' },
   { key: 'n/N',  label: 'next/prev thread or match' },
+  { key: 'A',    label: 'AI review' },
   { key: 'v',    label: 'comments' },
   { key: 's',    label: 'split view' },
   { key: 't',    label: 'file tree' },
   { key: '/',    label: 'find' },
+  { key: 'S',    label: 'settings' },
   { key: 'Esc',  label: 'back' },
 ]
 
@@ -417,20 +418,23 @@ const FOOTER_KEYS_SPLIT = [
   { key: 'j/k',  label: 'scroll' },
   { key: 'gg/G', label: 'top/bottom' },
   { key: ']/[',  label: 'file' },
+  { key: 'f',    label: 'jump to file' },
   { key: ':',    label: 'go to line' },
   { key: 'c',    label: 'comment' },
   { key: 'r/e/d', label: 'reply/edit/delete thread' },
   { key: 'n/N',  label: 'next/prev thread or match' },
+  { key: 'A',    label: 'AI review' },
   { key: 'v',    label: 'comments' },
   { key: 's',    label: 'unified view' },
   { key: 't',    label: 'file tree' },
   { key: '/',    label: 'find' },
+  { key: 'S',    label: 'settings' },
   { key: 'Esc',  label: 'back' },
 ]
 
 // ─── Split view renderer ──────────────────────────────────────────────────────
 
-function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, colWidth) {
+function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, colWidth, t) {
   const result = []
   const slice = rows.slice(scrollOffset, scrollOffset + visibleHeight)
 
@@ -442,10 +446,10 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
 
     // Full-width rows (file-header, hunk)
     if (row.type === 'file-header' || row.type === 'hunk') {
-      const rendered = renderDiffLine(row, isSelected, langCache)
+      const lang = langCache.get(row.filename)
       result.push(
         <Box key={idx}>
-          <Text wrap="truncate">{rendered}</Text>
+          <DiffLine row={row} isSelected={isSelected} lang={lang} t={t} />
         </Box>
       )
       i++
@@ -454,9 +458,9 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
 
     if (row.type === 'ctx') {
       const lang = langCache.get(row.filename)
-      const code = syntaxHighlight(row.text, lang, null)
-      const gutter = chalk.hex(t.ui.dim)(`${String(row.oldLine ?? '').padStart(4)}${String(row.newLine ?? '').padStart(4)}   `)
-      const line = isSelected ? chalk.bgHex(t.diff.cursorBg)(gutter + code) : gutter + code
+      const code = syntaxHighlight(row.text, lang, null, t)
+      const gutter = colorChalk(t.ui.dim)(`${String(row.oldLine ?? '').padStart(4)}${String(row.newLine ?? '').padStart(4)}   `)
+      const line = isSelected ? applyThemeStyle(gutter + code, null, t.diff.cursorBg) : gutter + code
       result.push(
         <Box key={idx}>
           <Box width={colWidth} overflow="hidden"><Text wrap="truncate">{line}</Text></Box>
@@ -473,14 +477,14 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
       const nextRow = slice[i + 1]
       const lang = langCache.get(row.filename)
 
-      const delGutter = chalk.bgHex(t.diff.delBg).hex(t.diff.delSign)(`${String(row.oldLine ?? '').padStart(4)}     - `)
-      const delCode   = syntaxHighlight(row.text, lang, t.diff.delBg)
-      const delLine   = isSelected ? chalk.bgHex(t.diff.cursorBg)(delGutter + delCode) : delGutter + delCode
+      const delGutter = applyThemeStyle(`${String(row.oldLine ?? '').padStart(4)}     - `, t.diff.delSign, t.diff.delBg)
+      const delCode   = syntaxHighlight(row.text, lang, t.diff.delBg, t)
+      const delLine   = isSelected ? applyThemeStyle(delGutter + delCode, null, t.diff.cursorBg) : delGutter + delCode
 
       if (nextRow && nextRow.type === 'add') {
-        const addGutter = chalk.bgHex(t.diff.addBg).hex(t.diff.addSign)(`    ${String(nextRow.newLine ?? '').padStart(4)} + `)
-        const addCode   = syntaxHighlight(nextRow.text, langCache.get(nextRow.filename), t.diff.addBg)
-        const addLine   = isSelected ? chalk.bgHex(t.diff.cursorBg)(addGutter + addCode) : addGutter + addCode
+        const addGutter = applyThemeStyle(`    ${String(nextRow.newLine ?? '').padStart(4)} + `, t.diff.addSign, t.diff.addBg)
+        const addCode   = syntaxHighlight(nextRow.text, langCache.get(nextRow.filename), t.diff.addBg, t)
+        const addLine   = isSelected ? applyThemeStyle(addGutter + addCode, null, t.diff.cursorBg) : addGutter + addCode
 
         result.push(
           <Box key={idx}>
@@ -507,9 +511,9 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
     if (row.type === 'add') {
       // Unpaired add (del was already consumed or not present before)
       const lang = langCache.get(row.filename)
-      const addGutter = chalk.bgHex(t.diff.addBg).hex(t.diff.addSign)(`    ${String(row.newLine ?? '').padStart(4)} + `)
-      const addCode   = syntaxHighlight(row.text, lang, t.diff.addBg)
-      const addLine   = isSelected ? chalk.bgHex(t.diff.cursorBg)(addGutter + addCode) : addGutter + addCode
+      const addGutter = applyThemeStyle(`    ${String(row.newLine ?? '').padStart(4)} + `, t.diff.addSign, t.diff.addBg)
+      const addCode   = syntaxHighlight(row.text, lang, t.diff.addBg, t)
+      const addLine   = isSelected ? applyThemeStyle(addGutter + addCode, null, t.diff.cursorBg) : addGutter + addCode
 
       result.push(
         <Box key={idx}>
@@ -529,6 +533,7 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
 }
 
 export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
+  const { t } = useTheme()
   const { stdout } = useStdout()
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 6)
 
@@ -567,12 +572,21 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const [gotoActive, setGotoActive] = useState(false)
   const [gotoInput, setGotoInput] = useState('')
 
+  // Feature: file jump fuzzy search
+  const [fileJumpActive, setFileJumpActive] = useState(false)
+
+  // Feature: AI inline code review
+  const [aiReview, setAiReview]               = useState(null)
+  const [aiReviewLoading, setAiReviewLoading] = useState(false)
+  const [aiReviewError, setAiReviewError]     = useState(null)
+  const [aiPostStatus, setAiPostStatus]       = useState(null)
+
   // Suppress global 1-9 tab key handler when any overlay is active
   const { notifyDialog } = useContext(AppContext)
   useEffect(() => {
-    notifyDialog(!!(gotoActive || findActive || compose || showTree || dialog))
+    notifyDialog(!!(gotoActive || findActive || compose || showTree || dialog || fileJumpActive || aiReview || aiReviewLoading))
     return () => notifyDialog(false)
-  }, [gotoActive, findActive, compose, showTree, dialog, notifyDialog])
+  }, [gotoActive, findActive, compose, showTree, dialog, fileJumpActive, aiReview, aiReviewLoading, notifyDialog])
 
   const files = useMemo(() => parseDiff(diffText || ''), [diffText])
   const rows  = useMemo(() => flattenFiles(files), [files])
@@ -663,7 +677,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       return
     }
 
-    // findActive — capture typing
+    // findActive — handled by TextInput, here we only handle exit keys
     if (findActive) {
       if (key.escape) {
         setFindActive(false)
@@ -672,22 +686,13 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       }
       if (key.return) {
         setFindActive(false)
-        // Jump to first match if any
         if (findMatches.length > 0) jumpTo(findMatches[0])
-        return
-      }
-      if (key.backspace || key.delete) {
-        setFindQuery(q => q.slice(0, -1))
-        return
-      }
-      if (input && !key.ctrl && !key.meta) {
-        setFindQuery(q => q + input)
         return
       }
       return
     }
 
-    // gotoActive — `:123` jump-to-line prompt
+    // gotoActive — handled by TextInput
     if (gotoActive) {
       if (key.escape) { setGotoActive(false); setGotoInput(''); return }
       if (key.return) {
@@ -700,10 +705,14 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         setGotoInput('')
         return
       }
-      if (key.backspace || key.delete) { setGotoInput(s => s.slice(0, -1)); return }
-      if (input && /\d/.test(input)) { setGotoInput(s => s + input); return }
       return
     }
+
+    // fileJumpActive — captured by FuzzySearch component (dialog)
+    if (fileJumpActive) return
+
+    // aiReview overlay — captured by AIReviewPane component
+    if (aiReview) return
 
     // showTree — capture j/k/Enter/Esc/t
     if (showTree) {
@@ -816,18 +825,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         setCompose(c => ({ ...c, body: edited }))
         return
       }
-      if (key.backspace || key.delete) {
-        setCompose(c => ({ ...c, body: c.body.slice(0, -1) }))
-        return
-      }
-      if (input && !key.ctrl && !key.meta) {
-        setCompose(c => ({ ...c, body: c.body + input }))
-        return
-      }
       return
     }
 
     if (dialog) return
+
+    if (input === 'f') { setFileJumpActive(true); return }
 
     // gg → jump to top
     if (input === 'g') {
@@ -943,7 +946,77 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       }
       return
     }
+
+    // A — trigger AI code review
+    if (input === 'A') {
+      if (aiReviewLoading) return
+      const config = loadConfig()
+      if (config.aiReviewEnabled === false) {
+        setAiReviewError('AI Code Review is disabled in Settings (s)')
+        setTimeout(() => setAiReviewError(null), 3000)
+        return
+      }
+      const apiKey = config.anthropicApiKey
+      if (!apiKey) {
+        setAiReviewError('No API key — set Anthropic API key in Settings (s)')
+        setTimeout(() => setAiReviewError(null), 4000)
+        return
+      }
+      setAiReviewLoading(true)
+      setAiReviewError(null)
+      getAICodeReview({
+        diff:     diffText || '',
+        prTitle:  sanitize(prMeta?.title || `PR #${prNumber}`),
+        prBody:   sanitize((prMeta?.body || '').slice(0, 500)),
+        apiKey,
+      })
+        .then(result => { setAiReview(result) })
+        .catch(err => {
+          setAiReviewError(err instanceof AIError ? err.message : 'AI review failed')
+          setTimeout(() => setAiReviewError(null), 5000)
+        })
+        .finally(() => setAiReviewLoading(false))
+      return
+    }
   })
+
+  const handleAiJumpTo = (file, line) => {
+    if (!file) return
+    const idx = line != null
+      ? rows.findIndex(r => r.filename === file && (r.newLine === line || r.oldLine === line))
+      : rows.findIndex(r => r.filename === file)
+    if (idx >= 0) jumpTo(idx)
+  }
+
+  const handleAiPost = (suggestion) => {
+    if (!headRefOid) {
+      setAiPostStatus('error: PR metadata not loaded')
+      setTimeout(() => setAiPostStatus(null), 4000)
+      return
+    }
+    if (!suggestion?.line) {
+      setAiPostStatus('error: no line number for this suggestion')
+      setTimeout(() => setAiPostStatus(null), 3000)
+      return
+    }
+    setAiPostStatus('posting...')
+    addPRLineComment(repo, prNumber, {
+      body:     suggestion.comment,
+      path:     suggestion.file,
+      line:     suggestion.line,
+      side:     'RIGHT',
+      commitId: headRefOid,
+    })
+      .then(() => {
+        setAiPostStatus('posted')
+        refetch()
+        setTimeout(() => setAiPostStatus(null), 3000)
+      })
+      .catch(err => {
+        setAiPostStatus(`error: ${err.message}`)
+        setTimeout(() => setAiPostStatus(null), 5000)
+      })
+  }
 
   if (isLargeDiff && !diffWarningAck) {
     return (
@@ -1013,22 +1086,22 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
           </>
         ) : (
           splitView
-            ? renderSplitView(displayRows, scrollOffset, effectiveHeight, cursor, langCache, colWidth)
+            ? renderSplitView(displayRows, scrollOffset, effectiveHeight, cursor, langCache, colWidth, t)
             : visibleRows.map((row, i) => {
                 const idx = scrollOffset + i
                 const isSelected = idx === cursor
                 const isMatch = findQuery ? findMatches.includes(idx) : false
-                const rendered = renderDiffLine(row, isSelected, langCache, isMatch)
+                const lang = langCache.get(row.filename)
                 const lineNum = row.newLine ?? row.oldLine
                 const lineKey = `${row.filename}:${lineNum}`
                 const hasComment = row.filename && lineNum != null &&
                   commentsByLine.has(lineKey)
                 return (
                   <Box key={idx} flexDirection="column">
-                    <Text wrap="truncate">{rendered}</Text>
+                    <DiffLine row={row} isSelected={isSelected} lang={lang} isMatch={isMatch} t={t} />
                     {hasComment && (
                       <Box paddingX={1} flexDirection="column" borderStyle="single" borderColor={t.diff.threadBorder}>
-                        {renderThreads(commentsByLine.get(lineKey))}
+                        {renderThreads(commentsByLine.get(lineKey), t)}
                       </Box>
                     )}
                   </Box>
@@ -1043,11 +1116,52 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         </Box>
       )}
 
+      {fileJumpActive && (
+        <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1} marginX={1}>
+          <FuzzySearch
+            items={files.map(f => ({ name: f.filename }))}
+            searchFields={['name']}
+            onSubmit={(item) => {
+              const fileIdx = fileStartIndices[files.findIndex(f => f.filename === item.name)]
+              if (fileIdx != null) jumpTo(fileIdx)
+              setFileJumpActive(false)
+            }}
+            onCancel={() => setFileJumpActive(false)}
+          />
+        </Box>
+      )}
+
+      {aiReviewLoading && (
+        <Box borderStyle="round" borderColor={t.ui.selected} paddingX={2} marginX={1}>
+          <Text color={t.ui.muted}>Analyzing diff with Claude…</Text>
+        </Box>
+      )}
+
+      {aiReviewError && (
+        <Box borderStyle="round" borderColor={t.ci.fail} paddingX={2} marginX={1}>
+          <Text color={t.ci.fail}>{aiReviewError}</Text>
+        </Box>
+      )}
+
+      {aiReview && (
+        <AIReviewPane
+          suggestions={aiReview.suggestions}
+          summary={aiReview.summary}
+          onJumpTo={(file, line) => { handleAiJumpTo(file, line); setAiReview(null) }}
+          onPost={handleAiPost}
+          onClose={() => { setAiReview(null); setAiReviewError(null) }}
+          postStatus={aiPostStatus}
+        />
+      )}
+
       {findActive && (
         <Box borderStyle="round" borderColor={t.ui.selected} paddingX={1} marginX={1}>
           <Text color={t.ui.dim}>/</Text>
-          <Text color={t.ui.selected}>{findQuery}</Text>
-          <Text color={t.ui.dim}>█</Text>
+          <TextInput
+            value={findQuery}
+            onChange={setFindQuery}
+            focus={true}
+          />
           <Text color={t.ui.dim}>  {findMatches.length > 0 ? `${findMatches.indexOf(cursor) + 1 || '?'}/${findMatches.length}` : 'no matches'}  [n/N] jump  [Enter] done  [Esc] clear</Text>
         </Box>
       )}
@@ -1060,7 +1174,11 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       {gotoActive && (
         <Box borderStyle="round" borderColor={t.ui.selected} paddingX={1} marginX={1}>
           <Text color={t.ui.dim}>:</Text>
-          <Text color={t.ui.selected}>{gotoInput || ' '}</Text>
+          <TextInput
+            value={gotoInput}
+            onChange={setGotoInput}
+            focus={true}
+          />
           <Text color={t.ui.dim}>  go to line — [Enter] jump  [Esc] cancel</Text>
         </Box>
       )}
@@ -1082,11 +1200,19 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
             <Box flexDirection="column" borderStyle="round" borderColor={t.diff.threadBorder}
               paddingX={1} marginX={1}>
               <Text color={t.ui.dim}>Reply to thread:</Text>
-              <Box>
-                <Text color={t.ui.selected}>{compose.body}</Text>
-                <Text color={t.ui.dim}>█</Text>
-              </Box>
-              <Text color={t.ui.dim}>[Ctrl+G] send  [e] open editor  [Esc] cancel</Text>
+              <TextInput
+                value={compose.body}
+                onChange={(v) => setCompose(c => ({ ...c, body: v }))}
+                focus={true}
+                onEnter={() => {
+                  if (compose.body.trim()) {
+                    replyToComment(repo, prNumber, compose.rootCommentId, compose.body.trim())
+                      .then(() => { setCompose(null); setCommentStatus('Reply sent'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
+                      .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
+                  }
+                }}
+              />
+              <Text color={t.ui.dim}>[Ctrl+G / Enter] send  [Ctrl+E] open editor  [Esc] cancel</Text>
             </Box>
           )
         }
@@ -1095,11 +1221,19 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
             <Box flexDirection="column" borderStyle="round" borderColor={t.diff.threadBorder}
               paddingX={1} marginX={1}>
               <Text color={t.ui.dim}>Edit comment:</Text>
-              <Box>
-                <Text color={t.ui.selected}>{compose.body}</Text>
-                <Text color={t.ui.dim}>█</Text>
-              </Box>
-              <Text color={t.ui.dim}>[Ctrl+G] save  [e] open editor  [Esc] cancel</Text>
+              <TextInput
+                value={compose.body}
+                onChange={(v) => setCompose(c => ({ ...c, body: v }))}
+                focus={true}
+                onEnter={() => {
+                  if (compose.body.trim()) {
+                    editPRComment(repo, compose.commentId, compose.body.trim())
+                      .then(() => { setCompose(null); setCommentStatus('Comment updated'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
+                      .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
+                  }
+                }}
+              />
+              <Text color={t.ui.dim}>[Ctrl+G / Enter] save  [Ctrl+E] open editor  [Esc] cancel</Text>
             </Box>
           )
         }
@@ -1122,12 +1256,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
                 )
               })}
             </Box>
-            <Box marginTop={0}>
-              <Text color={t.ui.dim}>  </Text>
-              <Text color={t.ui.selected}>{compose.body}</Text>
-              <Text color={t.ui.dim}>█</Text>
-            </Box>
-            <Text color={t.ui.dim}>[←→] type  [Ctrl+G] submit  [e] open editor  [Esc] cancel</Text>
+            <TextInput
+              value={compose.body}
+              onChange={(v) => setCompose(c => ({ ...c, body: v }))}
+              focus={true}
+            />
+            <Text color={t.ui.dim}>[←→] type  [Ctrl+G / Enter] submit  [Ctrl+E] open editor  [Esc] cancel</Text>
           </Box>
         )
       })()}

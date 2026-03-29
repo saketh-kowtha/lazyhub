@@ -5,9 +5,11 @@
 
 import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
+import { TextInput } from '../../utils.js'
 
 export function OptionPicker({ options = [], onSubmit, onCancel, title, promptText }) {
+  const { t } = useTheme()
   const [cursor, setCursor] = useState(0)
   const [step, setStep] = useState('pick') // 'pick' | 'text'
   const [pickedValue, setPickedValue] = useState(null)
@@ -36,17 +38,6 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
       }
     } else if (step === 'text') {
       if (key.escape) { onCancel(); return }
-      if (key.return) {
-        onSubmit({ value: pickedValue, text: textInput })
-        return
-      }
-      if (key.backspace || key.delete) {
-        setTextInput(t => t.slice(0, -1))
-        return
-      }
-      if (input && !key.ctrl && !key.meta) {
-        setTextInput(t => t + input)
-      }
     }
   })
 
@@ -59,8 +50,12 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
         </Box>
         <Box>
           <Text color={t.ui.muted}>{promptText}: </Text>
-          <Text color={t.ui.selected}>{textInput}</Text>
-          <Text color={t.ui.dim}>█</Text>
+          <TextInput
+            value={textInput}
+            onChange={setTextInput}
+            focus={true}
+            onEnter={() => onSubmit({ value: pickedValue, text: textInput })}
+          />
         </Box>
         <Box marginTop={1}>
           <Text color={t.ui.dim}>[Enter] confirm  [Esc] cancel</Text>

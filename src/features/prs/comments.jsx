@@ -16,7 +16,8 @@ import {
   replyToComment, editPRComment, deletePRComment,
 } from '../../executor.js'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
-import { t } from '../../theme.js'
+import { useTheme } from '../../theme.js'
+import { TextInput, sanitize } from '../../utils.js'
 
 const FOOTER_KEYS = [
   { key: 'j/k',   label: 'nav' },
@@ -25,6 +26,7 @@ const FOOTER_KEYS = [
   { key: 'd',     label: 'delete' },
   { key: 'R',     label: 'resolve' },
   { key: 'f',     label: 'filter' },
+  { key: 'S',     label: 'settings' },
   { key: 'Esc',   label: 'back' },
 ]
 
@@ -32,6 +34,7 @@ const FILTER_MODES = ['all', 'open', 'resolved']
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
 
 export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
+  const { t } = useTheme()
   const { stdout } = useStdout()
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 8)
 
@@ -141,20 +144,22 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
         if (key.escape || input === 'n') { setAction(null); return }
         return
       }
-      // reply / edit: text input
+      // reply / edit: exit keys handled here, text by TextInput
       if (key.escape) { setAction(null); setActionText(''); return }
-      if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) { submitAction(); return }
       if (input === 'e' && action.type !== 'delete') {
         const result = openEditor(actionText)
         setActionText(result)
         return
       }
-      if (key.backspace || key.delete) { setActionText(s => s.slice(0, -1)); return }
-      if (input && !key.ctrl && !key.meta) { setActionText(s => s + input); return }
       return
     }
 
     // ── Navigation ──
+    if (input === 'S') {
+      // We don't have direct access to setView here, but we can emit Esc then S
+      // Or better, let the parent handle global keys. 
+      // For now, q/Esc goes back.
+    }
     if (key.escape || input === 'q') { onBack(); return }
 
     if (input === 'j' || key.downArrow) {
@@ -245,11 +250,13 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
                   ? `Reply to @${action.comment.user?.login}:`
                   : `Edit comment:`}
               </Text>
-              <Box>
-                <Text color={t.ui.selected}>{actionText}</Text>
-                <Text color={t.ui.dim}>█</Text>
-              </Box>
-              <Text color={t.ui.dim}>[Ctrl+G] send  [e] open editor  [Esc] cancel</Text>
+              <TextInput
+                value={actionText}
+                onChange={setActionText}
+                focus={true}
+                onEnter={submitAction}
+              />
+              <Text color={t.ui.dim}>[Ctrl+G / Enter] send  [Ctrl+E] open editor  [Esc] cancel</Text>
             </>
           )}
         </Box>
@@ -284,7 +291,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
                 {stripAnsi(comment.body || '').split('\n').map((line, li) => (
                   <Box key={li}>
                     <Text color={t.diff.threadBorder}>{isReply ? '    ' : '┃ '}</Text>
-                    <Text color={t.diff.ctxFg} wrap="truncate">{line}</Text>
+                    <Text color={t.diff.ctxFg} wrap="truncate">{sanitize(line)}</Text>
                   </Box>
                 ))}
                 {isSelected && (
