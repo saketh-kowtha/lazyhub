@@ -1,5 +1,36 @@
 # Changelog
 
+## v26.3.2
+
+# lazyhub v26.3.2
+
+## What's Changed
+
+This is a patch release containing internal maintenance and documentation updates.
+
+### 📝 Documentation
+- Automated README and docs updates to keep project documentation in sync with the latest changes (#33, #34)
+
+### 🔧 Bug Fixes
+- Merged a set of fixes into main (#36)
+
+---
+
+## Installation
+
+Update via your package manager or grab the latest binary from the [releases page](../../releases).
+
+```sh
+# Example: direct binary update
+lazyhub update
+```
+
+---
+
+**Full Changelog**: [`v26.3.1...v26.3.2`](../../compare/v26.3.1...v26.3.2)
+
+---
+
 ## v26.3.1
 
 # Release Notes — lazyhub v26.3.1
