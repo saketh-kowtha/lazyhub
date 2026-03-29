@@ -39,6 +39,9 @@ let labels = []
 try { labels = JSON.parse(labelsRaw) } catch {}
 
 function determineBump() {
+  // Explicit override from workflow_dispatch input
+  if (process.env.BUMP_TYPE) return process.env.BUMP_TYPE
+
   // Label-based (highest priority)
   if (labels.some(l => /^(breaking|major|semver:major)$/i.test(l))) return 'major'
   if (labels.some(l => /^(feature|minor|semver:minor|enhancement)$/i.test(l))) return 'minor'
