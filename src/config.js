@@ -189,7 +189,7 @@ export function loadConfig() {
     // Pass theme through as-is — theme.js resolves all formats
     const theme = user.theme != null ? user.theme : 'github-dark'
 
-    return {
+    const result = {
       panes,
       defaultPane,
       theme,
@@ -199,6 +199,11 @@ export function loadConfig() {
       actions: mergeSection(DEFAULT_ACTIONS, user.actions),
       diff:    mergeSection(DEFAULT_DIFF,    user.diff),
     }
+    // Pass through sensitive/optional top-level fields that don't need schema merging
+    if (typeof user.anthropicApiKey === 'string' && user.anthropicApiKey) {
+      result.anthropicApiKey = user.anthropicApiKey
+    }
+    return result
   } catch {
     return { ...DEFAULTS }
   }

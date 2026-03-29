@@ -10,7 +10,7 @@
       "jsx": true
     }
   },
-  "plugins": ["react-hooks"],
+  "plugins": ["react-hooks", "jsdoc"],
   "rules": {
     "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
     "no-undef": "off",
@@ -18,6 +18,51 @@
     "no-duplicate-case": "error",
     "no-unreachable": "error",
     "react-hooks/rules-of-hooks": "error",
-    "react-hooks/exhaustive-deps": "warn"
-  }
+    "react-hooks/exhaustive-deps": "warn",
+    "jsdoc/require-jsdoc": [
+      "error",
+      {
+        "publicOnly": true,
+        "require": {
+          "FunctionDeclaration": true,
+          "MethodDefinition": true,
+          "ClassDeclaration": true,
+          "ArrowFunctionExpression": true,
+          "FunctionExpression": true
+        },
+        "contexts": [
+          "ExportNamedDeclaration > VariableDeclaration > VariableDeclarator > ArrowFunctionExpression",
+          "ExportNamedDeclaration > FunctionDeclaration"
+        ]
+      }
+    ],
+    "jsdoc/require-param": "error",
+    "jsdoc/require-returns": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "execa",
+            "message": "Use src/executor.js for all gh CLI calls to ensure consistent error handling and redacting."
+          }
+        ],
+        "patterns": [
+          {
+            "group": ["**/executor.js"],
+            "importNames": ["execa"],
+            "message": "Direct execa use is only allowed inside executor.js and bootstrap.js."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/executor.js", "src/bootstrap.js", "src/**/*.test.js", "build.js", "bin/*.js"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
 }

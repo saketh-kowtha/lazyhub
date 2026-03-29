@@ -16,6 +16,8 @@ import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as g
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
+import { AIReviewPane } from '../../components/AIReviewPane.jsx'
+import { getAICodeReview, AIError } from '../../ai.js'
 import { loadConfig } from '../../config.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
@@ -403,6 +405,7 @@ const FOOTER_KEYS_UNIFIED = [
   { key: 'c',    label: 'comment' },
   { key: 'r/e/d', label: 'reply/edit/delete thread' },
   { key: 'n/N',  label: 'next/prev thread or match' },
+  { key: 'A',    label: 'AI review' },
   { key: 'v',    label: 'comments' },
   { key: 's',    label: 'split view' },
   { key: 't',    label: 'file tree' },
@@ -420,6 +423,7 @@ const FOOTER_KEYS_SPLIT = [
   { key: 'c',    label: 'comment' },
   { key: 'r/e/d', label: 'reply/edit/delete thread' },
   { key: 'n/N',  label: 'next/prev thread or match' },
+  { key: 'A',    label: 'AI review' },
   { key: 'v',    label: 'comments' },
   { key: 's',    label: 'unified view' },
   { key: 't',    label: 'file tree' },
@@ -571,12 +575,18 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   // Feature: file jump fuzzy search
   const [fileJumpActive, setFileJumpActive] = useState(false)
 
+  // Feature: AI inline code review
+  const [aiReview, setAiReview]               = useState(null)
+  const [aiReviewLoading, setAiReviewLoading] = useState(false)
+  const [aiReviewError, setAiReviewError]     = useState(null)
+  const [aiPostStatus, setAiPostStatus]       = useState(null)
+
   // Suppress global 1-9 tab key handler when any overlay is active
   const { notifyDialog } = useContext(AppContext)
   useEffect(() => {
-    notifyDialog(!!(gotoActive || findActive || compose || showTree || dialog || fileJumpActive))
+    notifyDialog(!!(gotoActive || findActive || compose || showTree || dialog || fileJumpActive || aiReview || aiReviewLoading))
     return () => notifyDialog(false)
-  }, [gotoActive, findActive, compose, showTree, dialog, fileJumpActive, notifyDialog])
+  }, [gotoActive, findActive, compose, showTree, dialog, fileJumpActive, aiReview, aiReviewLoading, notifyDialog])
 
   const files = useMemo(() => parseDiff(diffText || ''), [diffText])
   const rows  = useMemo(() => flattenFiles(files), [files])
@@ -700,6 +710,9 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
 
     // fileJumpActive — captured by FuzzySearch component (dialog)
     if (fileJumpActive) return
+
+    // aiReview overlay — captured by AIReviewPane component
+    if (aiReview) return
 
     // showTree — capture j/k/Enter/Esc/t
     if (showTree) {
@@ -933,7 +946,71 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       }
       return
     }
+
+    // A — trigger AI code review
+    if (input === 'A') {
+      if (aiReviewLoading) return
+      const apiKey = loadConfig().anthropicApiKey
+      if (!apiKey) {
+        setAiReviewError('No API key — set Anthropic API key in Settings (s)')
+        setTimeout(() => setAiReviewError(null), 4000)
+        return
+      }
+      setAiReviewLoading(true)
+      setAiReviewError(null)
+      getAICodeReview({
+        diff:     diffText || '',
+        prTitle:  sanitize(prMeta?.title || `PR #${prNumber}`),
+        prBody:   sanitize((prMeta?.body || '').slice(0, 500)),
+        apiKey,
+      })
+        .then(result => { setAiReview(result) })
+        .catch(err => {
+          setAiReviewError(err instanceof AIError ? err.message : 'AI review failed')
+          setTimeout(() => setAiReviewError(null), 5000)
+        })
+        .finally(() => setAiReviewLoading(false))
+      return
+    }
   })
+
+  const handleAiJumpTo = (file, line) => {
+    if (!file) return
+    const idx = line != null
+      ? rows.findIndex(r => r.filename === file && (r.newLine === line || r.oldLine === line))
+      : rows.findIndex(r => r.filename === file)
+    if (idx >= 0) jumpTo(idx)
+  }
+
+  const handleAiPost = (suggestion) => {
+    if (!headRefOid) {
+      setAiPostStatus('error: PR metadata not loaded')
+      setTimeout(() => setAiPostStatus(null), 4000)
+      return
+    }
+    if (!suggestion?.line) {
+      setAiPostStatus('error: no line number for this suggestion')
+      setTimeout(() => setAiPostStatus(null), 3000)
+      return
+    }
+    setAiPostStatus('posting...')
+    addPRLineComment(repo, prNumber, {
+      body:     suggestion.comment,
+      path:     suggestion.file,
+      line:     suggestion.line,
+      side:     'RIGHT',
+      commitId: headRefOid,
+    })
+      .then(() => {
+        setAiPostStatus('posted')
+        refetch()
+        setTimeout(() => setAiPostStatus(null), 3000)
+      })
+      .catch(err => {
+        setAiPostStatus(`error: ${err.message}`)
+        setTimeout(() => setAiPostStatus(null), 5000)
+      })
+  }
 
   if (isLargeDiff && !diffWarningAck) {
     return (
@@ -1046,6 +1123,29 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
             onCancel={() => setFileJumpActive(false)}
           />
         </Box>
+      )}
+
+      {aiReviewLoading && (
+        <Box borderStyle="round" borderColor={t.ui.selected} paddingX={2} marginX={1}>
+          <Text color={t.ui.muted}>Analyzing diff with Claude…</Text>
+        </Box>
+      )}
+
+      {aiReviewError && (
+        <Box borderStyle="round" borderColor={t.ci.fail} paddingX={2} marginX={1}>
+          <Text color={t.ci.fail}>{aiReviewError}</Text>
+        </Box>
+      )}
+
+      {aiReview && (
+        <AIReviewPane
+          suggestions={aiReview.suggestions}
+          summary={aiReview.summary}
+          onJumpTo={(file, line) => { handleAiJumpTo(file, line); setAiReview(null) }}
+          onPost={handleAiPost}
+          onClose={() => { setAiReview(null); setAiReviewError(null) }}
+          postStatus={aiPostStatus}
+        />
       )}
 
       {findActive && (

@@ -7,7 +7,7 @@ import { Box, Text, useInput } from 'ink'
 import { THEME_NAMES, BUILTIN_THEMES, useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
 import { loadConfig, saveConfig } from '../../config.js'
-import { logger } from '../../utils.js'
+import { logger, TextInput } from '../../utils.js'
 
 export function SettingsPane({ onBack }) {
   const { notifyDialog, setMouseEnabled } = useContext(AppContext)
@@ -22,9 +22,16 @@ export function SettingsPane({ onBack }) {
   }, [dialog, notifyDialog])
 
   const OPTIONS = [
-    { id: 'theme', label: 'Theme', value: themeName },
-    { id: 'mouse', label: 'Mouse Support', value: config.mouse ? 'Enabled' : 'Disabled' },
-    { id: 'pageSize', label: 'Page Size', value: config.pr?.pageSize || 50 },
+    { id: 'theme',    label: 'Theme',         value: themeName },
+    { id: 'mouse',    label: 'Mouse Support',  value: config.mouse ? 'Enabled' : 'Disabled' },
+    { id: 'pageSize', label: 'Page Size',      value: config.pr?.pageSize || 50 },
+    {
+      id: 'apiKey',
+      label: 'AI API Key',
+      value: config.anthropicApiKey
+        ? 'sk-' + '•'.repeat(8) + config.anthropicApiKey.slice(-4)
+        : '(not set)',
+    },
   ]
 
   useInput((input, key) => {
@@ -64,6 +71,16 @@ export function SettingsPane({ onBack }) {
     setDialog(null)
   }
 
+  if (dialog === 'apiKey') {
+    return (
+      <ApiKeyEditor
+        current={config.anthropicApiKey || ''}
+        onSave={(key) => { updateConfig({ anthropicApiKey: key }); setDialog(null) }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       <Box marginBottom={1} borderStyle="single" borderTop={false} borderLeft={false} borderRight={false} borderColor={t.ui.border}>
@@ -84,6 +101,45 @@ export function SettingsPane({ onBack }) {
 
       <Box borderStyle="single" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} borderColor={t.ui.border}>
         <Text color={t.ui.dim}>[j/k] navigate  [Enter] change  [Esc] back</Text>
+      </Box>
+    </Box>
+  )
+}
+
+function ApiKeyEditor({ current, onSave, onCancel }) {
+  const { t } = useTheme()
+  const [value, setValue] = useState(current)
+
+  useInput((_, key) => {
+    if (key.escape) onCancel()
+  })
+
+  const masked = value
+    ? 'sk-' + '•'.repeat(Math.max(0, value.length - 4)) + value.slice(-4)
+    : ''
+
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
+      <Box marginBottom={1}>
+        <Text bold color={t.ui.selected}>Set AI (Anthropic) API Key</Text>
+      </Box>
+      <Box>
+        <Text color={t.ui.muted}>Key: </Text>
+        <TextInput
+          value={value}
+          onChange={setValue}
+          focus={true}
+          mask="•"
+          onEnter={() => onSave(value.trim())}
+        />
+      </Box>
+      {value ? (
+        <Box marginTop={1}>
+          <Text color={t.ui.dim}>Will save as: {masked}</Text>
+        </Box>
+      ) : null}
+      <Box marginTop={1}>
+        <Text color={t.ui.dim}>[Enter] save  [Esc] cancel</Text>
       </Box>
     </Box>
   )

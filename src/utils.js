@@ -14,19 +14,50 @@ import { ThemeProvider, useTheme } from './theme.js'
 const LOG_FILE = join(homedir(), '.config', 'lazyhub', 'debug.log')
 
 /**
- * Global logger for debugging.
+ * Global logger for debugging. Provides methods for different log levels.
+ * Writes logs to ~/.config/lazyhub/debug.log in JSON format.
  */
 export const logger = {
+  /**
+   * Logs an informational message.
+   * @param {string} msg - The message to log.
+   * @param {Object} [meta] - Additional metadata to include.
+   */
   info:  (msg, meta) => log('INFO', msg, meta),
+
+  /**
+   * Logs a warning message.
+   * @param {string} msg - The warning message.
+   * @param {Object} [meta] - Additional metadata.
+   */
   warn:  (msg, meta) => log('WARN', msg, meta),
+
+  /**
+   * Logs an error message with stack trace if available.
+   * @param {string} msg - The error description.
+   * @param {Error|any} err - The error object.
+   * @param {Object} [meta] - Additional metadata.
+   */
   error: (msg, err, meta) => log('ERROR', msg, { 
     ...meta, 
     error: err?.message || String(err),
     stack: err?.stack 
   }),
+
+  /**
+   * Logs a debug message.
+   * @param {string} msg - The debug message.
+   * @param {Object} [meta] - Additional metadata.
+   */
   debug: (msg, meta) => log('DEBUG', msg, meta),
 }
 
+/**
+ * Internal logging helper that writes to the log file.
+ * @param {string} level - Log level (INFO, WARN, ERROR, DEBUG).
+ * @param {string} message - The message body.
+ * @param {Object} [meta] - Extra fields to merge into the JSON entry.
+ */
 function log(level, message, meta = {}) {
   try {
     const entry = {
@@ -45,7 +76,8 @@ function log(level, message, meta = {}) {
 }
 
 /**
- * Reads and parses logs from the log file.
+ * Reads and parses logs from the log file. Returns them newest first.
+ * @returns {Array<Object>} Array of parsed log objects.
  */
 export function getLogs() {
   if (!existsSync(LOG_FILE)) return []
@@ -60,7 +92,9 @@ export function getLogs() {
 }
 
 /**
- * Resolves paths starting with ~/ or relative paths.
+ * Resolves paths starting with ~/ or relative paths to absolute paths.
+ * @param {string} p - The path to resolve.
+ * @returns {string} The absolute resolved path.
  */
 export function resolvePath(p) {
   if (!p) return p
@@ -72,6 +106,8 @@ export function resolvePath(p) {
 
 /**
  * Strips ANSI escape codes from a string to prevent Terminal Injection.
+ * @param {string} str - The string to clean.
+ * @returns {string} The string without ANSI codes.
  */
 export function stripAnsi(str) {
   if (typeof str !== 'string') return str
@@ -80,15 +116,19 @@ export function stripAnsi(str) {
 }
 
 /**
- * Sanitize untrusted text for rendering.
- * Strips ANSI codes and potentially other dangerous characters.
+ * Sanitize untrusted text for rendering by stripping ANSI codes.
+ * @param {string} str - The untrusted string from API.
+ * @returns {string} A safe string for Ink rendering.
  */
 export function sanitize(str) {
   return stripAnsi(String(str || ''))
 }
 
 /**
- * Copy text to the system clipboard. Returns a Promise<void>.
+ * Copy text to the system clipboard using platform-native tools.
+ * Uses pbcopy (macOS), clip (Windows), or xclip (Linux).
+ * @param {string} text - The text to copy.
+ * @returns {Promise<import('execa').ExecaChildProcess>} Promise resolving when copy completes.
  */
 export function copyToClipboard(text) {
   return import('execa').then(({ execa }) => {
@@ -104,6 +144,8 @@ export function copyToClipboard(text) {
 
 /**
  * Safely applies a color (hex or keyword) to a chalk instance.
+ * @param {string} color - Hex code or chalk color name.
+ * @returns {import('chalk').Chalk} A chalk style function.
  */
 export function colorChalk(color) {
   if (typeof color !== 'string' || !color) return chalk.reset
@@ -114,6 +156,8 @@ export function colorChalk(color) {
 
 /**
  * Safely applies a background color (hex or keyword) to a chalk instance.
+ * @param {string} color - Hex code or chalk color name.
+ * @returns {import('chalk').Chalk} A chalk style function.
  */
 export function bgColorChalk(color) {
   if (typeof color !== 'string' || !color) return chalk.reset
@@ -124,7 +168,11 @@ export function bgColorChalk(color) {
 }
 
 /**
- * Safely applies foreground and background colors (hex or keyword) to a string using chalk.
+ * Safely applies foreground and background colors to a string using chalk.
+ * @param {string} text - The text to style.
+ * @param {string} [fg] - Foreground color (hex or name).
+ * @param {string} [bg] - Background color (hex or name).
+ * @returns {string} The styled string.
  */
 export function applyThemeStyle(text, fg, bg) {
   const safeText = String(text ?? '')
@@ -160,6 +208,12 @@ const themeMap = {
   tag: chalk.blue,
 }
 
+/**
+ * Internal helper to highlight code using highlight.js and convert to ANSI.
+ * @param {string} code - Raw code to highlight.
+ * @param {string} [lang] - Language identifier.
+ * @returns {string} ANSI styled code string.
+ */
 function highlightCode(code, lang) {
   const safeCode = String(code || '')
   try {
@@ -178,6 +232,14 @@ function highlightCode(code, lang) {
   }
 }
 
+/**
+ * Converts markdown text into an array of Ink Box/Text elements.
+ * Handles headers, lists, code blocks (with syntax highlighting), and paragraphs.
+ * @param {string} text - The markdown content.
+ * @param {number} [maxWidth=80] - Maximum width for word wrapping.
+ * @param {Object} t - The theme object.
+ * @returns {Array<import('react').ReactElement>} Array of Ink elements.
+ */
 export function getMarkdownRows(text, maxWidth = 80, t) {
   const safeText = String(text || '')
   if (!safeText) return []
@@ -262,6 +324,12 @@ export function getMarkdownRows(text, maxWidth = 80, t) {
   return rows
 }
 
+/**
+ * Word-wraps a string into multiple lines.
+ * @param {string} text - The input text.
+ * @param {number} width - Maximum character width.
+ * @returns {Array<string>} Array of wrapped lines.
+ */
 function wrapLine(text, width) {
   const safeText = String(text || '')
   if (width <= 0) return [safeText]
@@ -281,6 +349,12 @@ function wrapLine(text, width) {
   return lines
 }
 
+/**
+ * Renders inline markdown styles (bold, italic, code) into Ink components.
+ * @param {string} text - The inline text.
+ * @param {Object} t - The theme object.
+ * @returns {Array<import('react').ReactElement>} Array of Ink elements.
+ */
 function renderInline(text, t) {
   const safeText = String(text || '')
   // Simple regex for bold and italic
@@ -303,6 +377,14 @@ function renderInline(text, t) {
 
 /**
  * A basic text input component with cursor support and common shortcuts.
+ * @param {Object} props - Component props.
+ * @param {string} props.value - Current input value.
+ * @param {Function} props.onChange - Callback on value change.
+ * @param {string} [props.placeholder] - Text to show when empty.
+ * @param {boolean} [props.focus] - Whether the input is active.
+ * @param {string} [props.mask] - Optional character for masking.
+ * @param {Function} [props.onEnter] - Callback on Enter keypress.
+ * @returns {import('react').ReactElement} The rendered Ink component.
  */
 export function TextInput({ value = '', onChange, placeholder, focus, mask, onEnter }) {
   const { t } = useTheme()

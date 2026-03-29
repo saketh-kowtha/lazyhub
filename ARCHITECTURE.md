@@ -45,6 +45,7 @@ lazyhub/
 │   ├── context.js           ← AppContext (notifyDialog, openHelp, setMouseEnabled)
 │   ├── config.js            ← loads/saves ~/.config/lazyhub/config.json
 │   ├── executor.js          ← ALL gh CLI calls live here — never call gh elsewhere
+│   ├── ai.js                ← Anthropic API client — NOT in executor.js (no gh). getAICodeReview()
 │   ├── theme.js             ← ThemeProvider, useTheme() hook, resolveTheme()
 │   ├── utils.js             ← sanitize, copyToClipboard, TextInput, getMarkdownRows,
 │   │                           colorChalk, bgColorChalk, applyThemeStyle, logger, getLogs
@@ -52,6 +53,7 @@ lazyhub/
 │   │                           catppuccin-latte, tokyo-night, ansi-16
 │   ├── components/
 │   │   ├── ErrorBoundary.jsx   ← React class, catches render crashes, logs+shows title
+│   │   ├── AIReviewPane.jsx    ← overlay component for AI review results (j/k/Enter/p/q)
 │   │   ├── Sidebar.jsx
 │   │   ├── StatusBar.jsx
 │   │   ├── FooterKeys.jsx
@@ -89,7 +91,6 @@ lazyhub/
 │   └── scripts/prepare-release.mjs
 ├── docs/                    ← gh-pages site
 ├── ARCHITECTURE.md          ← THIS FILE
-├── CLAUDE.md                ← project instructions for Claude Code
 └── package.json
 ```
 
@@ -461,6 +462,7 @@ Full schema:
   "defaultPane": "prs",
   "theme": "github-dark",
   "mouse": false,
+  "anthropicApiKey": "sk-ant-...",    // optional — enables A key AI review in diff view
   "customPanes": {
     "my-id": {
       "label": "Label",
@@ -515,7 +517,73 @@ try {
 
 ---
 
-## 20. Complete bug fix log
+## 20. AI Inline Code Review — `A` key in diff view
+
+### What it does
+Press `A` in the diff view → Claude analyzes the diff → suggestions appear as an overlay.
+- `j/k` navigate suggestions
+- `Enter` jumps to the relevant file+line in the diff
+- `p` posts the suggestion as a real GitHub PR line comment
+- `q` / Escape closes the overlay
+
+### Module: `src/ai.js`
+The ONLY place that calls the Anthropic API. Uses Node 20+ built-in `fetch()`.
+
+**NOT in `executor.js`** — executor.js is gh-CLI-only. `ai.js` is a separate category.
+
+```js
+import { getAICodeReview, AIError } from './ai.js'
+const { summary, suggestions } = await getAICodeReview({ diff, prTitle, prBody, apiKey })
+// suggestions: [{ file, line, severity: 'bug'|'warning'|'suggestion', comment }]
+```
+
+**Error types:**
+- HTTP 401 → `AIError('Invalid API key', { status: 401 })`
+- HTTP 429 → `AIError('Rate limit exceeded — try again shortly', { status: 429 })`
+- HTTP 5xx → `AIError('Anthropic service error — try again', { status })`
+- Parse fail → `AIError('Could not parse AI response as JSON')`
+- Bad shape → `AIError('AI response format was unexpected')`
+
+**Diff is truncated to 8000 chars** before sending to stay within token budget.
+
+### Config: `anthropicApiKey`
+Stored as a top-level key in `~/.config/lazyhub/config.json`. `loadConfig()` passes it through as-is (no default, no merging). Set via Settings pane (`s` → AI API Key).
+
+```json
+{ "anthropicApiKey": "sk-ant-..." }
+```
+
+### Component: `src/components/AIReviewPane.jsx`
+Self-contained overlay component. Props: `suggestions, summary, onJumpTo, onPost, onClose, postStatus`.
+
+Uses `useTheme()` for severity colors:
+- `bug` → `t.ci.fail`
+- `warning` → `t.ci.pending`
+- `suggestion` → `t.ui.muted`
+
+### Integration in `diff.jsx`
+State added to `PRDiff`:
+```js
+const [aiReview, setAiReview]           = useState(null)
+const [aiReviewLoading, setAiReviewLoading] = useState(false)
+const [aiReviewError, setAiReviewError] = useState(null)
+const [aiPostStatus, setAiPostStatus]   = useState(null)
+```
+
+`notifyDialog` condition includes `aiReview || aiReviewLoading`.
+
+`useInput` guard: `if (aiReview) return` (after `fileJumpActive` guard).
+
+`A` key handler calls `getAICodeReview` imperatively from useInput (not from useEffect).
+
+### Critical invariants for AI feature
+- `getAICodeReview` is called imperatively from `useInput`, never from `useEffect`
+- `loadConfig().anthropicApiKey` is read at call time — not cached at module scope
+- `ai.js` is the ONLY file that imports from Anthropic API — never duplicate this logic
+
+---
+
+## 21. Complete bug fix log (reference)
 
 Every bug fixed in this codebase, with root cause and fix. Reference before touching related code.
 
@@ -592,7 +660,7 @@ Every bug fixed in this codebase, with root cause and fix. Reference before touc
 
 ---
 
-## 21. Non-goals (hard scope limits)
+## 22. Non-goals (hard scope limits)
 
 These are explicitly out of scope. Do not implement, do not document as features:
 
@@ -606,9 +674,9 @@ These are explicitly out of scope. Do not implement, do not document as features
 
 ---
 
-## 22. Key invariants — check before every change
+## 23. Key invariants — check before every change
 
-1. **`executor.js` is the only file that calls `gh`** — if you need a new GitHub API call, add it there
+1. **`executor.js` is the only file that calls `gh`** — enforced by `no-restricted-imports` in ESLint.
 2. **`useTheme()` not `import { t }`** — always use the hook in components
 3. **`useTheme()` in every nested function component** that renders themed text
 4. **FuzzySearch always gets objects**, never strings
@@ -618,3 +686,16 @@ These are explicitly out of scope. Do not implement, do not document as features
 8. **`sanitize()`** every string from GitHub API before rendering in `<Text>`
 9. **`copyToClipboard`** from utils.js — never duplicate clipboard logic inline
 10. **`process.stdin.prependListener`** for mouse data handler — never `on`
+11. **`ai.js` is the only file for Anthropic API calls** — never call fetch/Anthropic elsewhere
+12. **`getAICodeReview` called imperatively from `useInput`**, never from `useEffect` or module scope
+13. **`loadConfig().anthropicApiKey` read at call time** — never cache it at module scope
+
+---
+
+## 23. Quality Control (Deterministic)
+
+To maintain 100% accuracy with zero token cost, use these tools instead of AI for structural checks:
+
+- **Dead Code Detection:** Run `npx knip`. It identifies unused files, exports, and dependencies.
+- **Architectural Linting:** `npm run lint` enforces the "Executor Pattern" using `no-restricted-imports`. Direct imports of `execa` are blocked outside of `executor.js`, `bootstrap.js`, and tests.
+- **Validation:** Always run `npm test` before committing to ensure no regressions in the core CLI logic.
