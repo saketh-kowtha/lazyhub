@@ -950,7 +950,13 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     // A — trigger AI code review
     if (input === 'A') {
       if (aiReviewLoading) return
-      const apiKey = loadConfig().anthropicApiKey
+      const config = loadConfig()
+      if (config.aiReviewEnabled === false) {
+        setAiReviewError('AI Code Review is disabled in Settings (s)')
+        setTimeout(() => setAiReviewError(null), 3000)
+        return
+      }
+      const apiKey = config.anthropicApiKey
       if (!apiKey) {
         setAiReviewError('No API key — set Anthropic API key in Settings (s)')
         setTimeout(() => setAiReviewError(null), 4000)

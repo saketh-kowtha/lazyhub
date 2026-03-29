@@ -152,7 +152,7 @@ const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
     'anthropic-version': '2023-06-01',
   },
   body: JSON.stringify({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-sonnet-4-6-20260218',
     max_tokens: 4096,
     messages: [{ role: 'user', content: PROMPT }],
   }),

@@ -6,8 +6,9 @@ import React, { useState, useContext } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { THEME_NAMES, BUILTIN_THEMES, useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
-import { loadConfig, saveConfig } from '../../config.js'
+import { loadConfig, saveConfig, BUILTIN_PANES } from '../../config.js'
 import { logger, TextInput } from '../../utils.js'
+import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 
 export function SettingsPane({ onBack }) {
   const { notifyDialog, setMouseEnabled } = useContext(AppContext)
@@ -24,6 +25,8 @@ export function SettingsPane({ onBack }) {
   const OPTIONS = [
     { id: 'theme',    label: 'Theme',         value: themeName },
     { id: 'mouse',    label: 'Mouse Support',  value: config.mouse ? 'Enabled' : 'Disabled' },
+    { id: 'aiReview', label: 'AI Code Review', value: config.aiReviewEnabled !== false ? 'Enabled' : 'Disabled' },
+    { id: 'panes',    label: 'Active Panes',   value: (config.panes || []).join(', ') },
     { id: 'pageSize', label: 'Page Size',      value: config.pr?.pageSize || 50 },
     {
       id: 'apiKey',
@@ -69,6 +72,31 @@ export function SettingsPane({ onBack }) {
     updateConfig({ mouse: next })
     setMouseEnabled(next)
     setDialog(null)
+  }
+
+  if (dialog === 'aiReview') {
+    const next = config.aiReviewEnabled === false
+    updateConfig({ aiReviewEnabled: next })
+    setDialog(null)
+  }
+
+  if (dialog === 'panes') {
+    const allKnown = [...BUILTIN_PANES, ...Object.keys(config.customPanes || {})]
+    const items = allKnown.map(id => ({
+      id,
+      name: id,
+      selected: (config.panes || []).includes(id)
+    }))
+    return (
+      <MultiSelect
+        items={items}
+        onSubmit={(selectedIds) => {
+          updateConfig({ panes: selectedIds })
+          setDialog(null)
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
   }
 
   if (dialog === 'apiKey') {

@@ -188,11 +188,13 @@ export function loadConfig() {
 
     // Pass theme through as-is — theme.js resolves all formats
     const theme = user.theme != null ? user.theme : 'github-dark'
+    const aiReviewEnabled = user.aiReviewEnabled !== false
 
     const result = {
       panes,
       defaultPane,
       theme,
+      aiReviewEnabled,
       customPanes,
       pr:      mergeSection(DEFAULT_PR,      user.pr),
       issues:  mergeSection(DEFAULT_ISSUES,  user.issues),

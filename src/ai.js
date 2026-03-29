@@ -13,7 +13,7 @@
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 const ANTHROPIC_VERSION = '2023-06-01'
-const DEFAULT_MODEL      = 'claude-haiku-4-5-20251001'
+const DEFAULT_MODEL      = 'claude-sonnet-4-6-20260218'
 const MAX_TOKENS         = 4096
 const MAX_DIFF_CHARS     = 8000
 
