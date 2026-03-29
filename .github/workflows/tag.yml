@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      version: ${{ steps.pkg.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,3 +36,10 @@ jobs:
             --title "v${VERSION}" \
             --notes "Full release notes available in CHANGELOG.md" \
             --latest
+
+  publish:
+    needs: tag
+    uses: ./.github/workflows/publish.yml
+    with:
+      version: ${{ needs.tag.outputs.version }}
+    secrets: inherit

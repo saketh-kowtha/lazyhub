@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+    secrets:
+      NPM_TOKEN:
+        required: false
+      TAP_TOKEN:
+        required: false
 
 jobs:
   publish:
@@ -36,8 +46,9 @@ jobs:
       - name: Compute tarball SHA256 (for Homebrew)
         id: sha
         run: |
-          # Extract version from tag (e.g. refs/tags/v1.2.3 -> 1.2.3)
-          VERSION=${GITHUB_REF#refs/tags/v}
+          # Version from workflow_call input takes priority over tag ref
+          VERSION="${{ inputs.version }}"
+          [ -z "$VERSION" ] && VERSION=${GITHUB_REF#refs/tags/v}
           URL="https://registry.npmjs.org/lazyhub/-/lazyhub-${VERSION}.tgz"
           
           echo "Waiting for tarball ${VERSION} to become available on npm CDN..."

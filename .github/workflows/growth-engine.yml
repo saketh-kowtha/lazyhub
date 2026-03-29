@@ -5,8 +5,6 @@ on:
     branches: [main]
     paths:
       - 'src/**'
-      - 'README.md'
-      - 'docs/**'
 
 jobs:
   growth:
@@ -36,19 +34,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "No changes — skipping"
+          if [ -z "$(git status --porcelain docs/)" ]; then
+            echo "No changes to docs/ — skipping"
             exit 0
           fi
           BRANCH="chore/growth-engine-docs"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
-          git add README.md docs/
-          git commit -m "marketing: auto-update README and docs"
+          git add docs/
+          git commit -m "marketing: auto-update landing page"
           git push origin "$BRANCH" --force
           gh pr create \
-            --title "marketing: auto-update README and docs" \
-            --body "Automated documentation update from Growth Engine. Safe to merge or close." \
+            --title "marketing: auto-update landing page" \
+            --body "Automated landing page update from Growth Engine. Safe to merge or close." \
             --base main \
             --head "$BRANCH" 2>/dev/null || echo "PR already open — branch updated"

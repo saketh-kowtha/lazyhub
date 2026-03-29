@@ -35,6 +35,24 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Update Architecture (AI)
+        if: github.event_name == 'pull_request'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/auto-docs.mjs
+
+      - name: Commit AI changes back to PR
+        if: github.event_name == 'pull_request'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: auto-update ARCHITECTURE.md (AI)"
+          file_pattern: "ARCHITECTURE.md"
+
       - name: Build
         run: npm run build
 

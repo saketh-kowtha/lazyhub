@@ -12,6 +12,7 @@ on:
 
 jobs:
   prepare:
+    name: Prepare Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -39,30 +40,15 @@ jobs:
           echo "title=$(echo "$JSON"  | jq -r '.[0].title  // ""')" >> "$GITHUB_OUTPUT"
           echo "$JSON" | jq -r '.[0].body // ""' > /tmp/pr_body.txt
 
-      - name: Update Architecture (AI)
-        if: steps.last_pr.outputs.number != ''
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ steps.last_pr.outputs.number }}
-          PR_TITLE:  ${{ steps.last_pr.outputs.title }}
-          REPO: ${{ github.repository }}
-        run: |
-          export PR_BODY=$(cat /tmp/pr_body.txt)
-          node .github/scripts/auto-docs.mjs
-
       - name: Prepare Version & Changelog
         id: prepare
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUMP_TYPE: ${{ inputs.bump_type }}
-          PR_NUMBER: ${{ steps.last_pr.outputs.number }}
-          PR_TITLE:  ${{ steps.last_pr.outputs.title }}
           PR_LABELS: '[]'
           REPO: ${{ github.repository }}
         run: |
-          export PR_BODY=$(cat /tmp/pr_body.txt)
           node .github/scripts/prepare-release.mjs
 
       - name: Open release PR
@@ -75,13 +61,45 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
-          git add ARCHITECTURE.md package.json CHANGELOG.md README.md docs/
+          git add package.json CHANGELOG.md README.md docs/
           git diff --cached --quiet && echo "Nothing to commit" || \
-            git commit -m "chore: release v${VERSION}"
-          git push origin "$BRANCH"
+            git commit -m "chore: release v${VERSION} [skip ci]"
+          git push origin "$BRANCH" --force
           BODY=$(printf "## Release v%s (%s bump)\n\nReview CHANGELOG.md for what's included. Merge this PR to create the GitHub Release, publish to npm, and update Homebrew." "$VERSION" "$BUMP")
           gh pr create \
             --title "chore: release v${VERSION}" \
             --body "$BODY" \
             --base main \
             --head "$BRANCH"
+
+  sync:
+    name: Sync Release
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Open sync PR (Release ← Main)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          # Open a PR to bring the post-release merge commit back into release.
+          # Direct push is blocked by branch protection; a PR is the correct path.
+          BRANCH="chore/sync-release-v${VERSION}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin release
+          git checkout -b "$BRANCH" origin/main
+          git push origin "$BRANCH" --force
+          gh pr create \
+            --title "chore: sync release ← main after v${VERSION}" \
+            --body "Post-release sync: brings the release merge commit from \`main\` back into \`release\`. Safe to merge." \
+            --base release \
+            --head "$BRANCH" 2>/dev/null || echo "Sync PR already open — skipping"
