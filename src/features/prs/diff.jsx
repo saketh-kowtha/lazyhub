@@ -562,6 +562,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
+  const [adminMergeMsg, setAdminMergeMsg] = useState('')
   const [compose, setCompose] = useState(null)
   // compose types:
   //   new comment: { mode: 'new', commentType, body }
@@ -1067,20 +1068,20 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         title={`Merge PR #${prNumber}: ${sanitize(prMeta?.title || '')}`}
         options={mergeOpts}
         promptText="Commit message (optional)"
-        onSubmit={async (val) => {
+        onSubmit={(val) => {
           const strategy = typeof val === 'object' ? val.value : val
           const msg = typeof val === 'object' ? val.text : undefined
           if (strategy === 'admin') {
-            setDialog({ type: 'merge-admin', msg })
+            setAdminMergeMsg(msg || '')
+            setDialog('merge-admin')
           } else {
             setDialog(null)
-            try {
-              await mergePR(repo, prNumber, strategy, msg)
-              onBack()
-            } catch (err) {
-              setCommentStatus(`✗ Merge failed: ${err.message}`)
-              setTimeout(() => setCommentStatus(null), 5000)
-            }
+            mergePR(repo, prNumber, strategy, msg)
+              .then(() => onBack())
+              .catch(err => {
+                setCommentStatus(`✗ Merge failed: ${err.message}`)
+                setTimeout(() => setCommentStatus(null), 5000)
+              })
           }
         }}
         onCancel={() => setDialog(null)}
@@ -1088,22 +1089,20 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     )
   }
 
-  if (dialog?.type === 'merge-admin') {
-    const savedMsg = dialog.msg
+  if (dialog === 'merge-admin') {
     return (
       <OptionPicker
         title={`Merge method (admin bypass) — PR #${prNumber}`}
         options={MERGE_OPTIONS_BASE}
-        onSubmit={async (val) => {
+        onSubmit={(val) => {
           const method = typeof val === 'object' ? val.value : val
           setDialog(null)
-          try {
-            await mergePR(repo, prNumber, `admin-${method}`, savedMsg)
-            onBack()
-          } catch (err) {
-            setCommentStatus(`✗ Merge failed: ${err.message}`)
-            setTimeout(() => setCommentStatus(null), 5000)
-          }
+          mergePR(repo, prNumber, `admin-${method}`, adminMergeMsg || undefined)
+            .then(() => onBack())
+            .catch(err => {
+              setCommentStatus(`✗ Merge failed: ${err.message}`)
+              setTimeout(() => setCommentStatus(null), 5000)
+            })
         }}
         onCancel={() => setDialog('merge')}
       />

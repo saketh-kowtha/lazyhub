@@ -224,6 +224,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
 
   const [scrollY, setScrollY] = useState(0)
   const [dialog, setDialog]   = useState(null)
+  const [adminMergeMsg, setAdminMergeMsg] = useState('')
   const [searching, setSearching] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [statusMsg, setStatusMsg] = useState(null)
@@ -365,15 +366,17 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
         title={`Merge PR #${pr.number}: ${pr.title}`}
         options={mergeOpts}
         promptText="Commit message (optional)"
-        onSubmit={async (val) => {
+        onSubmit={(val) => {
           const strategy = typeof val === 'object' ? val.value : val
           const msg = typeof val === 'object' ? val.text : undefined
           if (strategy === 'admin') {
-            // --admin bypasses branch protection but still needs a merge method
-            setDialog({ type: 'merge-admin', msg })
+            setAdminMergeMsg(msg || '')
+            setDialog('merge-admin')
           } else {
             setDialog(null)
-            try { await mergePR(repo, pr.number, strategy, msg); refetch() } catch (err) { showStatus(`✗ Merge failed: ${err.message}`, true) }
+            mergePR(repo, pr.number, strategy, msg)
+              .then(() => refetch())
+              .catch(err => showStatus(`✗ Merge failed: ${err.message}`, true))
           }
         }}
         onCancel={() => setDialog(null)}
@@ -381,16 +384,17 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
     )
   }
 
-  if (dialog?.type === 'merge-admin') {
-    const savedMsg = dialog.msg
+  if (dialog === 'merge-admin') {
     return (
       <OptionPicker
         title={`Merge method (admin bypass) — PR #${pr.number}`}
         options={MERGE_OPTIONS_BASE}
-        onSubmit={async (val) => {
+        onSubmit={(val) => {
           const method = typeof val === 'object' ? val.value : val
           setDialog(null)
-          try { await mergePR(repo, pr.number, `admin-${method}`, savedMsg); refetch() } catch (err) { showStatus(`✗ Merge failed: ${err.message}`, true) }
+          mergePR(repo, pr.number, `admin-${method}`, adminMergeMsg || undefined)
+            .then(() => refetch())
+            .catch(err => showStatus(`✗ Merge failed: ${err.message}`, true))
         }}
         onCancel={() => setDialog('merge')}
       />
