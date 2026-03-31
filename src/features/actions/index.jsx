@@ -12,6 +12,7 @@ import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
 import { Spinner } from '../../components/Spinner.jsx'
+import { ActionListSkeleton } from '../../components/Skeleton.jsx'
 
 function StatusBadge({ run }) {
   const { t } = useTheme()
@@ -185,6 +186,9 @@ export function ActionList({ repo, listHeight = 10, onPaneState }) {
         </Box>
       )}
       <Box flexDirection="column" flexGrow={1}>
+        {loading && items.length === 0 && (
+          <ActionListSkeleton count={visibleHeight} />
+        )}
         {visibleRuns.map((run, i) => {
           const idx = scrollOffset + i
           const isSelected = idx === cursor

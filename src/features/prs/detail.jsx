@@ -20,6 +20,7 @@ import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
 import { sanitize, getMarkdownRows, TextInput } from '../../utils.js'
 import { Spinner } from '../../components/Spinner.jsx'
+import { PRDetailSkeleton } from '../../components/Skeleton.jsx'
 
 const MERGE_OPTIONS_BASE = [
   { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
@@ -325,11 +326,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
   // ── Loading / Error ────────────────────────────────────────────────────────
 
   if (loading) {
-    return (
-      <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
-        <Box gap={1}><Spinner /><Text color={t.ui.muted}>Loading PR #{prNumber}…</Text></Box>
-      </Box>
-    )
+    return <PRDetailSkeleton />
   }
 
   if (error) {

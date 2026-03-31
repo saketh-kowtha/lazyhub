@@ -29,6 +29,7 @@ import { AppContext } from '../../context.js'
 import { loadConfig } from '../../config.js'
 import { useTheme } from '../../theme.js'
 import { sanitize } from '../../utils.js'
+import { PRListSkeleton } from '../../components/Skeleton.jsx'
 
 const _cfg = loadConfig().pr
 
@@ -466,9 +467,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
       )}
 
       {loading && items.length === 0 && (
-        <Box paddingX={2} paddingY={1}>
-          <Text color={t.ui.muted}>  Loading pull requests…</Text>
-        </Box>
+        <PRListSkeleton count={height} />
       )}
 
       {visiblePRs.map((pr, i) => {

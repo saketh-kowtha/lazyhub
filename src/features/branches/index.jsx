@@ -10,6 +10,7 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
+import { BranchListSkeleton } from '../../components/Skeleton.jsx'
 
 const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t }) => {
   return (
@@ -194,6 +195,9 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
         </Box>
       )}
       <Box flexDirection="column" flexGrow={1}>
+        {loading && items.length === 0 && (
+          <BranchListSkeleton count={visibleHeight} />
+        )}
         {visibleBranches.map((branch, i) => {
           const idx = scrollOffset + i
           const isSelected = idx === cursor

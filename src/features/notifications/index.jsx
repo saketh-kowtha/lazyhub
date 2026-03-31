@@ -11,6 +11,7 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
+import { NotificationListSkeleton } from '../../components/Skeleton.jsx'
 
 export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneState }) {
   const { t } = useTheme()
@@ -144,6 +145,9 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
         </Box>
       )}
       <Box flexDirection="column" flexGrow={1}>
+        {loading && items.length === 0 && (
+          <NotificationListSkeleton count={visibleHeight} />
+        )}
         {visibleNotifs.map((notif, i) => {
           const idx = scrollOffset + i
           const isSelected = idx === cursor

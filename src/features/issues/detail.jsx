@@ -11,6 +11,7 @@ import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
 import { sanitize, getMarkdownRows, TextInput } from '../../utils.js'
+import { IssueDetailSkeleton } from '../../components/Skeleton.jsx'
 
 // Exported so app.jsx can use them if needed
 const FOOTER_KEYS = [
@@ -133,7 +134,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
     if (input === 'k' || key.upArrow)   { setScrollY(s => Math.max(0, s - 1)); return }
   })
 
-  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading...</Text></Box>
+  if (loading) return <IssueDetailSkeleton />
   if (error) return <Box paddingX={1}><Text color={t.ci.fail}>⚠ Failed — r to retry</Text></Box>
   if (!issue) return null
 

@@ -14,6 +14,7 @@ import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { AppContext } from '../../context.js'
 import { loadConfig } from '../../config.js'
 import { useTheme } from '../../theme.js'
+import { IssueListSkeleton } from '../../components/Skeleton.jsx'
 
 const _cfg = loadConfig().issues
 
@@ -262,9 +263,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
       </Box>
       <Box flexDirection="column" flexGrow={1}>
         {loading && items.length === 0 && (
-          <Box paddingX={2} paddingY={1}>
-            <Text color={t.ui.muted}>  Loading issues…</Text>
-          </Box>
+          <IssueListSkeleton count={visibleHeight} />
         )}
         {visibleIssues.map((issue, i) => {
           const idx = scrollOffset + i
