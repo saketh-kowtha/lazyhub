@@ -843,7 +843,7 @@ export async function createPR(repo, { title, body, head, base, draft = false, l
 export async function getRepoInfo(repo) {
   const args = [
     'repo', 'view', getRepo(repo),
-    '--json', 'name,owner,defaultBranchRef,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed,autoMergeAllowed,deleteBranchOnMerge,viewerPermission',
+    '--json', 'name,owner,defaultBranchRef,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed,deleteBranchOnMerge,viewerPermission',
   ]
   return run(args)
 }
