@@ -165,16 +165,32 @@ export async function closePR(repo, number) {
   return run(args)
 }
 
+/**
+ * Mark a PR as ready for review (remove draft status).
+ * @param repo
+ * @param number
+ */
 export async function markPRReady(repo, number) {
   const args = ['pr', 'ready', String(number), '--repo', getRepo(repo)]
   return run(args)
 }
 
+/**
+ * Convert an open PR to draft status.
+ * @param repo
+ * @param number
+ */
 export async function convertPRToDraft(repo, number) {
   const args = ['pr', 'ready', '--undo', String(number), '--repo', getRepo(repo)]
   return run(args)
 }
 
+/**
+ * Change the base branch of a PR.
+ * @param repo
+ * @param number
+ * @param newBase
+ */
 export async function editPRBase(repo, number, newBase) {
   const args = ['pr', 'edit', String(number), '--repo', getRepo(repo), '--base', newBase]
   return run(args)
