@@ -84,7 +84,19 @@ export function ActionList({ repo, listHeight = 10, onPaneState }) {
     setDialog('logs')
     try {
       const rawLogs = await getRunLogs(repo, run.databaseId)
-      const lines = typeof rawLogs === 'string' ? rawLogs.split('\n') : []
+      const rawLines = typeof rawLogs === 'string' ? rawLogs.split('\n') : []
+      const lines = rawLines
+        .filter(l => !l.trimStart().startsWith('##[endgroup]'))
+        .map(l => {
+          // Strip ANSI escape codes
+          let out = l.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+          // Convert ##[group]<name> to section header
+          const groupMatch = out.match(/^##\[group\](.+)/)
+          if (groupMatch) return `=== ${groupMatch[1].trim()} ===`
+          // Trim ISO timestamp prefix to HH:MM:SS
+          out = out.replace(/^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2}:\d{2})\.\d+Z\s*/, '$1 ')
+          return out
+        })
       setLogLines(lines)
     } catch (err) {
       setLogLines([`Error loading logs: ${err.message}`])
