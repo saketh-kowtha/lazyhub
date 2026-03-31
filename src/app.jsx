@@ -585,20 +585,17 @@ function App({ repo }) {
 
   if (view === 'detail' && selectedItem) {
     const DetailPane = pane === 'issues' ? IssueDetail : PRDetail
-    const detailFooter = [
-      { key: 'j/k', label: 'scroll' },
-      { key: 'gg/G', label: 'top/bottom' },
-      ...(pane === 'prs' ? [
-        { key: 'd', label: 'diff' }, { key: 'v', label: 'comments' },
-        { key: 'm', label: 'merge' }, { key: 'a', label: 'approve' },
-      ] : [
-        { key: 'r', label: 'reply' },
-      ]),
-      { key: 'l', label: 'labels' }, { key: 'A', label: 'assignees' },
-      { key: 'r', label: 'refresh' }, { key: 'S', label: 'settings' },
-      { key: '?', label: 'help' },
-      { key: 'Esc', label: 'back' },
-    ]
+    const detailFooter = pane === 'prs'
+      ? [
+          { key: 'j/k', label: 'scroll' }, { key: 'd', label: 'diff' },
+          { key: 'm', label: 'merge' }, { key: 'a', label: 'approve' },
+          { key: '?', label: 'more keys' }, { key: 'Esc', label: 'back' },
+        ]
+      : [
+          { key: 'j/k', label: 'scroll' }, { key: 'l', label: 'labels' },
+          { key: 'A', label: 'assignees' },
+          { key: '?', label: 'more keys' }, { key: 'Esc', label: 'back' },
+        ]
 
     return (
       <AppContext.Provider value={appCtx}>
