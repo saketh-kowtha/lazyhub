@@ -90,7 +90,7 @@ const MERGE_OPTIONS = [
 
 // ─── PRList ───────────────────────────────────────────────────────────────────
 
-export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff, onPaneState }) {
+export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff, onPaneState, initialCursor = 0, initialScrollOffset = 0 }) {
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
@@ -102,8 +102,8 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const [limit, setLimit] = useState(_cfg.pageSize)
   const { data: prs, loading, error, refetch } = useGh(listPRs, [repo, { state: filterState, scope, author: authorFilter || undefined, limit }])
 
-  const [cursor, setCursor] = useState(0)
-  const [scrollOffset, setScrollOffset] = useState(0)
+  const [cursor, setCursor] = useState(initialCursor)
+  const [scrollOffset, setScrollOffset] = useState(initialScrollOffset)
   const [dialog, setDialog] = useState(null)
   const [mergeOptions, setMergeOptions] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
@@ -116,10 +116,10 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const FK = _cfg.keys
   const STATE_CYCLE = ['open', 'closed', 'merged']
 
-  // Notify parent of loading/error/count
+  // Notify parent of loading/error/count/position
   useEffect(() => {
-    if (onPaneState) onPaneState({ loading, error, count: items.length })
-  }, [loading, error, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (onPaneState) onPaneState({ loading, error, count: items.length, cursor, scrollOffset })
+  }, [loading, error, items.length, cursor, scrollOffset]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Notify App when dialog opens/closes so global keys are suppressed
   useEffect(() => {

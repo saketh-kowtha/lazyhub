@@ -407,6 +407,7 @@ function App({ repo }) {
   const [paneState, setPaneState]       = useState({})
 
   const dialogActiveRef = useRef(false)
+  const savedListPosition = useRef({})
   const notifyDialog = useCallback((active) => { dialogActiveRef.current = active }, [])
   const openHelp     = useCallback(() => setShowHelp(true), [])
 
@@ -433,6 +434,7 @@ function App({ repo }) {
         ? (idx - 1 + PANES.length) % PANES.length
         : (idx + 1) % PANES.length
       ])
+      savedListPosition.current = {}
       setHoveredItem(null); setSelectedItem(null); setView('list')
       return
     }
@@ -463,7 +465,10 @@ function App({ repo }) {
   })
 
   // ─── Navigation callbacks ─────────────────────────────────────────────────
-  const goToDetail   = useCallback((item) => { setSelectedItem(item); setView('detail') }, [])
+  const goToDetail   = useCallback((item) => {
+    savedListPosition.current = { cursor: paneState.cursor ?? 0, scrollOffset: paneState.scrollOffset ?? 0 }
+    setSelectedItem(item); setView('detail')
+  }, [paneState])
   const goToDiff     = useCallback((item) => { setSelectedItem({ ...item, _fromList: view === 'list' }); setView('diff') }, [view])
   const goToComments = useCallback(() => setView('comments'), [])
   const goBack       = useCallback(() => {
@@ -629,11 +634,15 @@ function App({ repo }) {
       case 'prs': return (
         <PRList repo={repo} listHeight={listHeight}
           onHover={setHoveredItem} onSelectPR={goToDetail}
-          onOpenDiff={goToDiff} onPaneState={onPaneState} />
+          onOpenDiff={goToDiff} onPaneState={onPaneState}
+          initialCursor={savedListPosition.current.cursor ?? 0}
+          initialScrollOffset={savedListPosition.current.scrollOffset ?? 0} />
       )
       case 'issues': return (
         <IssueList repo={repo} listHeight={listHeight}
-          onSelectIssue={goToDetail} onPaneState={onPaneState} />
+          onSelectIssue={goToDetail} onPaneState={onPaneState}
+          initialCursor={savedListPosition.current.cursor ?? 0}
+          initialScrollOffset={savedListPosition.current.scrollOffset ?? 0} />
       )
       case 'branches':     return <BranchList repo={repo} listHeight={listHeight} onPaneState={onPaneState} />
       case 'actions':      return <ActionList repo={repo} listHeight={listHeight} onPaneState={onPaneState} />
