@@ -74,7 +74,6 @@ const GLOBAL_KEYS = [
   { key: '/',               label: 'fuzzy search current list' },
   { key: '?',               label: 'toggle this help overlay' },
   { key: 'S',               label: 'settings' },
-  { key: 'L',               label: 'logs' },
   { key: 'q / Esc',         label: 'back one level / quit at root' },
 ]
 
@@ -450,7 +449,7 @@ function App({ repo }) {
     }
 
     if (input === 'S') { setView('settings'); setSelectedItem(null); return }
-    if (input === 'L') { setView('logs'); setSelectedItem(null); return }
+    if (input === 'L' && process.env.LAZYHUB_DEBUG === '1') { setView('logs'); setSelectedItem(null); return }
 
     if (input === 'q' || key.escape) {
       if (showHelp)           { setShowHelp(false); return }
