@@ -66,8 +66,8 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
   }, [dialog, notifyDialog])
 
   const showStatus = (msg, isError = false) => {
-    setStatusMsg({ msg, isError })
-    setTimeout(() => setStatusMsg(null), 3000)
+    setStatusMsg({ msg, isError, persist: isError })
+    if (!isError) setTimeout(() => setStatusMsg(null), 3000)
   }
 
   const moveCursor = useCallback((delta) => {
@@ -86,6 +86,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
   )
 
   useInput((input, key) => {
+    if (statusMsg?.persist) { setStatusMsg(null); return }
     if (dialog) return
     if (input === 'j' || key.downArrow) { moveCursor(1); return }
     if (input === 'k' || key.upArrow)  { moveCursor(-1); return }
@@ -189,7 +190,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
     <Box flexDirection="column" flexGrow={1}>
       {statusMsg && (
         <Box paddingX={1}>
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}</Text>
+          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
         </Box>
       )}
       <Box flexDirection="column" flexGrow={1}>

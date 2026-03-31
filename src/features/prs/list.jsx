@@ -90,7 +90,7 @@ const MERGE_OPTIONS = [
 
 // ─── PRList ───────────────────────────────────────────────────────────────────
 
-export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff, onPaneState }) {
+export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff, onPaneState, initialCursor = 0, initialScrollOffset = 0 }) {
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
@@ -102,8 +102,8 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const [limit, setLimit] = useState(_cfg.pageSize)
   const { data: prs, loading, error, refetch } = useGh(listPRs, [repo, { state: filterState, scope, author: authorFilter || undefined, limit }])
 
-  const [cursor, setCursor] = useState(0)
-  const [scrollOffset, setScrollOffset] = useState(0)
+  const [cursor, setCursor] = useState(initialCursor)
+  const [scrollOffset, setScrollOffset] = useState(initialScrollOffset)
   const [dialog, setDialog] = useState(null)
   const [mergeOptions, setMergeOptions] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
@@ -116,10 +116,10 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const FK = _cfg.keys
   const STATE_CYCLE = ['open', 'closed', 'merged']
 
-  // Notify parent of loading/error/count
+  // Notify parent of loading/error/count/position
   useEffect(() => {
-    if (onPaneState) onPaneState({ loading, error, count: items.length })
-  }, [loading, error, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (onPaneState) onPaneState({ loading, error, count: items.length, cursor, scrollOffset })
+  }, [loading, error, items.length, cursor, scrollOffset]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Notify App when dialog opens/closes so global keys are suppressed
   useEffect(() => {
@@ -133,8 +133,8 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   }, [cursor, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const showStatus = (msg, isError = false) => {
-    setStatusMsg({ msg, isError })
-    setTimeout(() => setStatusMsg(null), 3000)
+    setStatusMsg({ msg, isError, persist: isError })
+    if (!isError) setTimeout(() => setStatusMsg(null), 3000)
   }
 
   const moveCursor = useCallback((delta) => {
@@ -154,6 +154,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const closeDialog = useCallback(() => setDialog(null), [])
 
   useInput((input, key) => {
+    if (statusMsg?.persist) { setStatusMsg(null); return }
     if (dialog) return
 
     // gg → top
@@ -454,7 +455,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
           <Text color={t.ui.dim}> ({items.length})</Text>
         )}
         {statusMsg && (
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>  {statusMsg.msg}</Text>
+          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>  {statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
         )}
       </Box>
 

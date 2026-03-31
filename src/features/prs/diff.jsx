@@ -12,7 +12,7 @@ import chalk from 'chalk'
 import hljs from 'highlight.js'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
-import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment } from '../../executor.js'
+import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
@@ -22,9 +22,17 @@ import { loadConfig } from '../../config.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
 import { TextInput, colorChalk, bgColorChalk, applyThemeStyle, sanitize } from '../../utils.js'
+import { Spinner } from '../../components/Spinner.jsx'
 
 const _diffCfg = loadConfig().diff
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+
+const MERGE_OPTIONS_BASE = [
+  { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
+  { value: 'squash', label: '--squash', description: 'Squash all commits into one' },
+  { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
+]
+const MERGE_OPTION_ADMIN = { value: 'admin', label: '--admin', description: 'Bypass branch protection (admin only)' }
 
 function getLang(filename) {
   if (!filename) return null
@@ -542,6 +550,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const [diffWarningAck, setDiffWarningAck] = useState(false)
 
   const { data: prMeta } = useGh(getPRMeta, [repo, prNumber], { ttl: 300_000 })
+  const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000 })
   const headRefOid = /^[0-9a-f]{40}$/.test(prMeta?.headRefOid) ? prMeta.headRefOid : null
   const { data: diffText, loading, error, refetch } = useGh(getPRDiff, [repo, prNumber])
   const { data: comments } = useGh(listPRComments, [repo, prNumber])
@@ -830,6 +839,8 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
 
     if (dialog) return
 
+    if (input === 'm' && prMeta?.state === 'OPEN') { setDialog('merge'); return }
+
     if (input === 'f') { setFileJumpActive(true); return }
 
     // gg → jump to top
@@ -1032,9 +1043,35 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     )
   }
 
+  if (dialog === 'merge') {
+    const mergeOpts = repoInfo?.viewerPermission === 'ADMIN'
+      ? [...MERGE_OPTIONS_BASE, MERGE_OPTION_ADMIN]
+      : MERGE_OPTIONS_BASE
+    return (
+      <OptionPicker
+        title={`Merge PR #${prNumber}: ${sanitize(prMeta?.title || '')}`}
+        options={mergeOpts}
+        promptText="Commit message (optional)"
+        onSubmit={async (val) => {
+          const strategy = typeof val === 'object' ? val.value : val
+          const msg = typeof val === 'object' ? val.text : undefined
+          setDialog(null)
+          try {
+            await mergePR(repo, prNumber, strategy, msg)
+            onBack()
+          } catch (err) {
+            setCommentStatus(`✗ Merge failed: ${err.message}`)
+            setTimeout(() => setCommentStatus(null), 5000)
+          }
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
   if (loading) return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Text color={t.ui.muted}>Loading diff…</Text>
+      <Box gap={1}><Spinner /><Text color={t.ui.muted}>Loading diff…</Text></Box>
     </Box>
   )
   if (error) return (

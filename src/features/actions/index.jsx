@@ -11,6 +11,7 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
+import { Spinner } from '../../components/Spinner.jsx'
 
 function StatusBadge({ run }) {
   const { t } = useTheme()
@@ -64,8 +65,8 @@ export function ActionList({ repo, listHeight = 10, onPaneState }) {
   }, [dialog, notifyDialog])
 
   const showStatus = (msg, isError = false) => {
-    setStatusMsg({ msg, isError })
-    setTimeout(() => setStatusMsg(null), 3000)
+    setStatusMsg({ msg, isError, persist: isError })
+    if (!isError) setTimeout(() => setStatusMsg(null), 3000)
   }
 
   const moveCursor = useCallback((delta) => {
@@ -84,7 +85,19 @@ export function ActionList({ repo, listHeight = 10, onPaneState }) {
     setDialog('logs')
     try {
       const rawLogs = await getRunLogs(repo, run.databaseId)
-      const lines = typeof rawLogs === 'string' ? rawLogs.split('\n') : []
+      const rawLines = typeof rawLogs === 'string' ? rawLogs.split('\n') : []
+      const lines = rawLines
+        .filter(l => !l.trimStart().startsWith('##[endgroup]'))
+        .map(l => {
+          // Strip ANSI escape codes
+          let out = l.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+          // Convert ##[group]<name> to section header
+          const groupMatch = out.match(/^##\[group\](.+)/)
+          if (groupMatch) return `=== ${groupMatch[1].trim()} ===`
+          // Trim ISO timestamp prefix to HH:MM:SS
+          out = out.replace(/^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2}:\d{2})\.\d+Z\s*/, '$1 ')
+          return out
+        })
       setLogLines(lines)
     } catch (err) {
       setLogLines([`Error loading logs: ${err.message}`])
@@ -93,6 +106,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState }) {
   }, [items, cursor, repo])
 
   useInput((input, key) => {
+    if (statusMsg?.persist) { setStatusMsg(null); return }
     if (dialog) return
     if (input === 'j' || key.downArrow) { moveCursor(1); return }
     if (input === 'k' || key.upArrow)  { moveCursor(-1); return }
@@ -126,7 +140,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState }) {
     if (logLoading) {
       return (
         <Box flexDirection="column" flexGrow={1} paddingX={1}>
-          <Text color={t.ui.muted}>Loading logs...</Text>
+          <Box gap={1}><Spinner /><Text color={t.ui.muted}>Loading logs…</Text></Box>
         </Box>
       )
     }
@@ -165,7 +179,9 @@ export function ActionList({ repo, listHeight = 10, onPaneState }) {
     <Box flexDirection="column" flexGrow={1}>
       {statusMsg && (
         <Box paddingX={1}>
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}</Text>
+          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>
+            {statusMsg.msg}{statusMsg.persist ? '  [any key to dismiss]' : ''}
+          </Text>
         </Box>
       )}
       <Box flexDirection="column" flexGrow={1}>

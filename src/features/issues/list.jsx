@@ -51,7 +51,7 @@ const IssueRow = memo(({ issue, isSelected, t }) => {
   )
 })
 
-export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState }) {
+export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, initialCursor = 0, initialScrollOffset = 0 }) {
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
@@ -60,8 +60,8 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
   const FK = _cfg.keys
   const [filterState, setFilterState] = useState(_cfg.defaultFilter)
   const { data: issues, loading, error, refetch } = useGh(listIssues, [repo, { state: filterState, limit: _cfg.pageSize }])
-  const [cursor, setCursor] = useState(0)
-  const [scrollOffset, setScrollOffset] = useState(0)
+  const [cursor, setCursor] = useState(initialCursor)
+  const [scrollOffset, setScrollOffset] = useState(initialScrollOffset)
   const [dialog, setDialog] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
   const lastKeyRef   = useRef(null)
@@ -71,8 +71,8 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
   const STATE_CYCLE = ['open', 'closed']
 
   useEffect(() => {
-    if (onPaneState) onPaneState({ loading, error, count: items.length })
-  }, [loading, error, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (onPaneState) onPaneState({ loading, error, count: items.length, cursor, scrollOffset })
+  }, [loading, error, items.length, cursor, scrollOffset]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     notifyDialog(!!dialog)
@@ -80,8 +80,8 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
   }, [dialog, notifyDialog])
 
   const showStatus = (msg, isError = false) => {
-    setStatusMsg({ msg, isError })
-    setTimeout(() => setStatusMsg(null), 3000)
+    setStatusMsg({ msg, isError, persist: isError })
+    if (!isError) setTimeout(() => setStatusMsg(null), 3000)
   }
 
   const moveCursor = useCallback((delta) => {
@@ -94,6 +94,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
   }, [items.length, scrollOffset, visibleHeight])
 
   useInput((input, key) => {
+    if (statusMsg?.persist) { setStatusMsg(null); return }
     if (dialog) return
 
     // gg → top
@@ -256,7 +257,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState })
         <Text color={filterState === 'open' ? t.issue.open : t.issue.closed} bold>{filterState}</Text>
         <Text color={t.ui.dim}>  [{FK.filterOpen}] open  [{FK.filterClosed}] closed  [n] new</Text>
         {statusMsg && (
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}</Text>
+          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
         )}
       </Box>
       <Box flexDirection="column" flexGrow={1}>

@@ -74,7 +74,6 @@ const GLOBAL_KEYS = [
   { key: '/',               label: 'fuzzy search current list' },
   { key: '?',               label: 'toggle this help overlay' },
   { key: 'S',               label: 'settings' },
-  { key: 'L',               label: 'logs' },
   { key: 'q / Esc',         label: 'back one level / quit at root' },
 ]
 
@@ -139,6 +138,7 @@ const VIEW_KEYS = {
     { key: 'gg / G',         label: 'jump to top / bottom' },
     { key: '[ / ]',          label: 'prev / next file' },
     { key: 'n / N',          label: 'prev / next comment thread' },
+    { key: 'm',              label: 'merge PR (pick strategy)' },
     { key: 'c',              label: 'comment on cursor line' },
     { key: 'v',              label: 'view all comments (tab to comments)' },
     { key: 'r',              label: 'refresh diff' },
@@ -148,8 +148,12 @@ const VIEW_KEYS = {
     { key: 'd',              label: 'open diff view' },
     { key: 'v',              label: 'open comments view' },
     { key: 'm',              label: 'merge PR' },
+    { key: 'M',              label: 'toggle auto-merge' },
     { key: 'a',              label: 'approve PR' },
     { key: 'x',              label: 'request changes' },
+    { key: 'X',              label: 'close PR' },
+    { key: 'D',              label: 'toggle draft / ready' },
+    { key: 'B',              label: 'change base branch' },
     { key: 'l',              label: 'edit labels' },
     { key: 'A',              label: 'edit assignees' },
     { key: 'r',              label: 'refresh' },
@@ -403,6 +407,7 @@ function App({ repo }) {
   const [paneState, setPaneState]       = useState({})
 
   const dialogActiveRef = useRef(false)
+  const savedListPosition = useRef({})
   const notifyDialog = useCallback((active) => { dialogActiveRef.current = active }, [])
   const openHelp     = useCallback(() => setShowHelp(true), [])
 
@@ -429,6 +434,7 @@ function App({ repo }) {
         ? (idx - 1 + PANES.length) % PANES.length
         : (idx + 1) % PANES.length
       ])
+      savedListPosition.current = {}
       setHoveredItem(null); setSelectedItem(null); setView('list')
       return
     }
@@ -445,7 +451,7 @@ function App({ repo }) {
     }
 
     if (input === 'S') { setView('settings'); setSelectedItem(null); return }
-    if (input === 'L') { setView('logs'); setSelectedItem(null); return }
+    if (input === 'L' && process.env.LAZYHUB_DEBUG === '1') { setView('logs'); setSelectedItem(null); return }
 
     if (input === 'q' || key.escape) {
       if (showHelp)           { setShowHelp(false); return }
@@ -459,7 +465,10 @@ function App({ repo }) {
   })
 
   // ─── Navigation callbacks ─────────────────────────────────────────────────
-  const goToDetail   = useCallback((item) => { setSelectedItem(item); setView('detail') }, [])
+  const goToDetail   = useCallback((item) => {
+    savedListPosition.current = { cursor: paneState.cursor ?? 0, scrollOffset: paneState.scrollOffset ?? 0 }
+    setSelectedItem(item); setView('detail')
+  }, [paneState])
   const goToDiff     = useCallback((item) => { setSelectedItem({ ...item, _fromList: view === 'list' }); setView('diff') }, [view])
   const goToComments = useCallback(() => setView('comments'), [])
   const goBack       = useCallback(() => {
@@ -585,24 +594,21 @@ function App({ repo }) {
 
   if (view === 'detail' && selectedItem) {
     const DetailPane = pane === 'issues' ? IssueDetail : PRDetail
-    const detailFooter = [
-      { key: 'j/k', label: 'scroll' },
-      { key: 'gg/G', label: 'top/bottom' },
-      ...(pane === 'prs' ? [
-        { key: 'd', label: 'diff' }, { key: 'v', label: 'comments' },
-        { key: 'm', label: 'merge' }, { key: 'a', label: 'approve' },
-      ] : [
-        { key: 'r', label: 'reply' },
-      ]),
-      { key: 'l', label: 'labels' }, { key: 'A', label: 'assignees' },
-      { key: 'r', label: 'refresh' }, { key: 'S', label: 'settings' },
-      { key: '?', label: 'help' },
-      { key: 'Esc', label: 'back' },
-    ]
+    const detailFooter = pane === 'prs'
+      ? [
+          { key: 'j/k', label: 'scroll' }, { key: 'd', label: 'diff' },
+          { key: 'm', label: 'merge' }, { key: 'a', label: 'approve' },
+          { key: '?', label: 'more keys' }, { key: 'Esc', label: 'back' },
+        ]
+      : [
+          { key: 'j/k', label: 'scroll' }, { key: 'l', label: 'labels' },
+          { key: 'A', label: 'assignees' },
+          { key: '?', label: 'more keys' }, { key: 'Esc', label: 'back' },
+        ]
 
     return (
       <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column">
+        <Box flexDirection="column" height={rows}>
           <Box borderStyle="single" borderColor={t.ui.selected} flexDirection="column" flexGrow={1}>
             <ErrorBoundary>
               <DetailPane
@@ -628,11 +634,15 @@ function App({ repo }) {
       case 'prs': return (
         <PRList repo={repo} listHeight={listHeight}
           onHover={setHoveredItem} onSelectPR={goToDetail}
-          onOpenDiff={goToDiff} onPaneState={onPaneState} />
+          onOpenDiff={goToDiff} onPaneState={onPaneState}
+          initialCursor={savedListPosition.current.cursor ?? 0}
+          initialScrollOffset={savedListPosition.current.scrollOffset ?? 0} />
       )
       case 'issues': return (
         <IssueList repo={repo} listHeight={listHeight}
-          onSelectIssue={goToDetail} onPaneState={onPaneState} />
+          onSelectIssue={goToDetail} onPaneState={onPaneState}
+          initialCursor={savedListPosition.current.cursor ?? 0}
+          initialScrollOffset={savedListPosition.current.scrollOffset ?? 0} />
       )
       case 'branches':     return <BranchList repo={repo} listHeight={listHeight} onPaneState={onPaneState} />
       case 'actions':      return <ActionList repo={repo} listHeight={listHeight} onPaneState={onPaneState} />

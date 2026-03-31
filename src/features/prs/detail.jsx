@@ -10,19 +10,23 @@ import { useGh } from '../../hooks/useGh.js'
 import {
   getPR, listLabels, listCollaborators, addLabels, removeLabels,
   getRepoInfo, getPRChecks, getBranchProtection,
-  enableAutoMerge, disableAutoMerge, mergePR,
+  enableAutoMerge, disableAutoMerge, mergePR, closePR,
+  markPRReady, convertPRToDraft, editPRBase,
 } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
+import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
-import { sanitize, getMarkdownRows } from '../../utils.js'
+import { sanitize, getMarkdownRows, TextInput } from '../../utils.js'
+import { Spinner } from '../../components/Spinner.jsx'
 
-const MERGE_OPTIONS = [
+const MERGE_OPTIONS_BASE = [
   { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
   { value: 'squash', label: '--squash', description: 'Squash all commits into one' },
   { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
 ]
+const MERGE_OPTION_ADMIN = { value: 'admin', label: '--admin', description: 'Bypass branch protection (admin only)' }
 
 function reviewStatusIcon(state, t) {
   switch (state) {
@@ -217,8 +221,15 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
   const [dialog, setDialog]   = useState(null)
   const [searching, setSearching] = useState(false)
   const [searchText, setSearchText] = useState('')
+  const [statusMsg, setStatusMsg] = useState(null)
+  const [baseInput, setBaseInput] = useState('')
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
+
+  const showStatus = (msg, isError = false) => {
+    setStatusMsg({ msg, isError, persist: isError })
+    if (!isError) setTimeout(() => setStatusMsg(null), 3000)
+  }
 
   React.useEffect(() => {
     notifyDialog(!!dialog)
@@ -249,6 +260,9 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
   const visibleRows   = filteredRows.slice(scrollY, scrollY + visibleHeight)
 
   useInput((input, key) => {
+    // Dismiss persistent error on any keypress
+    if (statusMsg?.persist) { setStatusMsg(null); return }
+
     // Search mode captures all typing
     if (searching) {
       if (key.escape) { setSearching(false); setSearchText(''); return }
@@ -258,6 +272,10 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
       return
     }
 
+    if (dialog === 'base') {
+      if (key.escape) { setDialog(null); setBaseInput(''); return }
+      return
+    }
     if (dialog) return
 
     if (input === 'r') { refetch(); return }
@@ -266,12 +284,18 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
     if (input === 'A') { setDialog('assignees'); return }
     if (input === '/') { setSearching(true); setSearchText(''); return }
     if (input === 'm' && pr && pr.state === 'OPEN') { setDialog('merge'); return }
+    if (input === 'X' && pr && pr.state === 'OPEN') { setDialog('close'); return }
+    if (input === 'D' && pr && pr.state === 'OPEN') { setDialog('draft'); return }
+    if (input === 'B' && pr && pr.state === 'OPEN') { setDialog('base'); return }
     if (input === 'M' && pr && pr.state === 'OPEN' && !pr.isDraft) {
       if (pr.autoMergeRequest) {
-        disableAutoMerge(repo, prNumber).then(() => refetch()).catch(() => {})
+        disableAutoMerge(repo, prNumber)
+          .then(() => { showStatus('✓ Auto-merge disabled'); refetch() })
+          .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
       } else {
         enableAutoMerge(repo, prNumber, repoInfo?.squashMergeAllowed ? 'squash' : 'merge')
-          .then(() => refetch()).catch(() => {})
+          .then(() => { showStatus('⟳ Auto-merge enabled'); refetch() })
+          .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
       }
       return
     }
@@ -303,7 +327,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
   if (loading) {
     return (
       <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
-        <Text color={t.ui.muted}>Loading PR #{prNumber}…</Text>
+        <Box gap={1}><Spinner /><Text color={t.ui.muted}>Loading PR #{prNumber}…</Text></Box>
       </Box>
     )
   }
@@ -322,28 +346,101 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
   // ── Dialogs ────────────────────────────────────────────────────────────────
 
   if (dialog === 'merge') {
+    const mergeOpts = repoInfo?.viewerPermission === 'ADMIN'
+      ? [...MERGE_OPTIONS_BASE, MERGE_OPTION_ADMIN]
+      : MERGE_OPTIONS_BASE
     return (
       <OptionPicker
         title={`Merge PR #${pr.number}: ${pr.title}`}
-        options={MERGE_OPTIONS}
+        options={mergeOpts}
         promptText="Commit message (optional)"
         onSubmit={async (val) => {
           const strategy = typeof val === 'object' ? val.value : val
           const msg = typeof val === 'object' ? val.text : undefined
           setDialog(null)
-          try { await mergePR(repo, pr.number, strategy, msg); refetch() } catch { /* ignore */ }
+          try { await mergePR(repo, pr.number, strategy, msg); refetch() } catch (err) { showStatus(`✗ Merge failed: ${err.message}`, true) }
         }}
         onCancel={() => setDialog(null)}
       />
     )
   }
 
+  if (dialog === 'close') {
+    return (
+      <ConfirmDialog
+        message={`Close PR #${pr.number}: ${pr.title}?`}
+        destructive={true}
+        onConfirm={async () => {
+          setDialog(null)
+          try { await closePR(repo, pr.number); refetch() }
+          catch (err) { showStatus(`✗ Close failed: ${err.message}`, true) }
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
+  if (dialog === 'draft') {
+    const DRAFT_OPTIONS = pr.isDraft
+      ? [{ value: 'ready', label: 'Mark ready for review', description: 'Remove draft status' }]
+      : [
+          { value: 'ready', label: 'Mark ready for review', description: 'Remove draft status' },
+          { value: 'draft', label: 'Convert to draft', description: 'Mark as work in progress' },
+        ]
+    return (
+      <OptionPicker
+        title={`PR #${pr.number}: Change draft state`}
+        options={DRAFT_OPTIONS}
+        onSubmit={async (val) => {
+          const action = typeof val === 'object' ? val.value : val
+          setDialog(null)
+          try {
+            if (action === 'ready') await markPRReady(repo, pr.number)
+            else await convertPRToDraft(repo, pr.number)
+            showStatus(action === 'ready' ? '✓ Marked ready for review' : '✓ Converted to draft')
+            refetch()
+          } catch (err) { showStatus(`✗ Failed: ${err.message}`, true) }
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
+  if (dialog === 'base') {
+    return (
+      <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
+        <Text color={t.ui.selected} bold>Change base branch</Text>
+        <Text color={t.ui.dim}>Current: {pr.baseRefName}</Text>
+        <Box marginTop={1} gap={1}>
+          <Text color={t.ui.muted}>New base: </Text>
+          <TextInput
+            value={baseInput}
+            onChange={setBaseInput}
+            placeholder={pr.baseRefName}
+            focus={true}
+            onEnter={async () => {
+              const newBase = baseInput.trim()
+              if (!newBase || newBase === pr.baseRefName) { setDialog(null); return }
+              setDialog(null)
+              try {
+                await editPRBase(repo, pr.number, newBase)
+                showStatus(`✓ Base branch changed to ${newBase}`)
+                refetch()
+              } catch (err) { showStatus(`✗ Failed: ${err.message}`, true) }
+            }}
+          />
+        </Box>
+        <Text color={t.ui.dim} marginTop={1}>[Enter] confirm  [Esc] cancel</Text>
+      </Box>
+    )
+  }
+
   if (dialog === 'labels') {
-    return <PRLabelDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} />
+    return <PRLabelDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(msg) => { setDialog(null); showStatus(msg, true) }} />
   }
 
   if (dialog === 'assignees') {
-    return <PRAssigneeDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} />
+    return <PRAssigneeDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(msg) => { setDialog(null); showStatus(msg, true) }} />
   }
 
   // ── Detail view ────────────────────────────────────────────────────────────
@@ -396,11 +493,13 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
 
       {/* ── Hint line ── */}
       <Box paddingX={1} justifyContent="space-between">
-        {maxScroll > 0
-          ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  [j/k] scroll  [gg/G] top/bottom</Text>
-          : <Text color={t.ui.dim}>[d] diff  [m] merge  [l] labels  [A] assignees  [M] auto-merge  [r] refresh</Text>
+        {statusMsg
+          ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? '  [any key to dismiss]' : ''}</Text>
+          : maxScroll > 0
+            ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  [j/k] scroll  [gg/G] top/bottom</Text>
+            : <Text color={t.ui.dim}>[d] diff  [m] merge  [M] auto-merge  [l] labels  [A] assignees  [r] refresh</Text>
         }
-        <Text color={t.ui.dim}>[/] search  [Esc] back</Text>
+        <Text color={t.ui.dim}>[/] search  [?] help  [Esc] back</Text>
       </Box>
     </Box>
   )
@@ -408,7 +507,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
 
 // ─── Sub-dialogs ──────────────────────────────────────────────────────────────
 
-function PRLabelDialog({ repo, pr, onClose }) {
+function PRLabelDialog({ repo, pr, onClose, onError }) {
   const { t } = useTheme()
   const { data: allLabels, loading } = useGh(listLabels, [repo])
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading labels…</Text></Box>
@@ -430,7 +529,7 @@ function PRLabelDialog({ repo, pr, onClose }) {
         try {
           if (toAdd.length)    await addLabels(repo, pr.number, toAdd, 'pr')
           if (toRemove.length) await removeLabels(repo, pr.number, toRemove, 'pr')
-        } catch { /* ignore */ }
+        } catch (err) { onError?.(`✗ Label update failed: ${err.message}`) }
         onClose()
       }}
       onCancel={onClose}
@@ -438,7 +537,7 @@ function PRLabelDialog({ repo, pr, onClose }) {
   )
 }
 
-function PRAssigneeDialog({ repo, pr, onClose }) {
+function PRAssigneeDialog({ repo, pr, onClose, onError }) {
   const { t } = useTheme()
   const { data: collabs, loading } = useGh(listCollaborators, [repo])
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators…</Text></Box>
@@ -459,7 +558,7 @@ function PRAssigneeDialog({ repo, pr, onClose }) {
             await execa('gh', ['pr', 'edit', String(pr.number), '--repo', repo,
               '--add-assignee', selectedIds.join(',')])
           }
-        } catch { /* ignore */ }
+        } catch (err) { onError?.(`✗ Assignee update failed: ${err.message}`) }
         onClose()
       }}
       onCancel={onClose}

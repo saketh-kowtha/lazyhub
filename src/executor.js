@@ -145,8 +145,12 @@ export async function mergePR(repo, number, strategy = 'merge', commitMessage) {
   const args = [
     'pr', 'merge', String(number),
     '--repo', getRepo(repo),
-    `--${strategy}`,
   ]
+  if (strategy === 'admin') {
+    args.push('--admin')
+  } else {
+    args.push(`--${strategy}`)
+  }
   if (commitMessage) args.push('--subject', commitMessage)
   return run(args)
 }
@@ -158,6 +162,37 @@ export async function mergePR(repo, number, strategy = 'merge', commitMessage) {
  */
 export async function closePR(repo, number) {
   const args = ['pr', 'close', String(number), '--repo', getRepo(repo)]
+  return run(args)
+}
+
+/**
+ * Mark a PR as ready for review (remove draft status).
+ * @param repo
+ * @param number
+ */
+export async function markPRReady(repo, number) {
+  const args = ['pr', 'ready', String(number), '--repo', getRepo(repo)]
+  return run(args)
+}
+
+/**
+ * Convert an open PR to draft status.
+ * @param repo
+ * @param number
+ */
+export async function convertPRToDraft(repo, number) {
+  const args = ['pr', 'ready', '--undo', String(number), '--repo', getRepo(repo)]
+  return run(args)
+}
+
+/**
+ * Change the base branch of a PR.
+ * @param repo
+ * @param number
+ * @param newBase
+ */
+export async function editPRBase(repo, number, newBase) {
+  const args = ['pr', 'edit', String(number), '--repo', getRepo(repo), '--base', newBase]
   return run(args)
 }
 
@@ -808,7 +843,7 @@ export async function createPR(repo, { title, body, head, base, draft = false, l
 export async function getRepoInfo(repo) {
   const args = [
     'repo', 'view', getRepo(repo),
-    '--json', 'name,owner,defaultBranchRef,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed,autoMergeAllowed,deleteBranchOnMerge',
+    '--json', 'name,owner,defaultBranchRef,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed,autoMergeAllowed,deleteBranchOnMerge,viewerPermission',
   ]
   return run(args)
 }
