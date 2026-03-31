@@ -277,10 +277,13 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
     if (input === 'm' && pr && pr.state === 'OPEN') { setDialog('merge'); return }
     if (input === 'M' && pr && pr.state === 'OPEN' && !pr.isDraft) {
       if (pr.autoMergeRequest) {
-        disableAutoMerge(repo, prNumber).then(() => refetch()).catch(err => showStatus(`✗ Failed: ${err.message}`, true))
+        disableAutoMerge(repo, prNumber)
+          .then(() => { showStatus('✓ Auto-merge disabled'); refetch() })
+          .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
       } else {
         enableAutoMerge(repo, prNumber, repoInfo?.squashMergeAllowed ? 'squash' : 'merge')
-          .then(() => refetch()).catch(err => showStatus(`✗ Failed: ${err.message}`, true))
+          .then(() => { showStatus('⟳ Auto-merge enabled'); refetch() })
+          .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
       }
       return
     }
