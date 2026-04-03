@@ -47,7 +47,14 @@ const DESTRUCTIVE_TOOLS = new Set(['merge_pr', 'close_pr', 'close_issue', 'cance
 
 // ─── Error class ──────────────────────────────────────────────────────────────
 
+/** Error class for AI assistant failures. */
 export class AssistantError extends Error {
+  /**
+   * @param {string} message
+   * @param {object} [opts]
+   * @param {number} [opts.status]
+   * @param {string} [opts.code]
+   */
   constructor(message, { status, code } = {}) {
     super(message)
     this.name  = 'AssistantError'
@@ -269,6 +276,10 @@ export const TOOL_DEFINITIONS = [
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
+/**
+ * Build the system prompt for the AI assistant.
+ * @param {object} [ctx]
+ */
 export function buildSystemPrompt(ctx = {}) {
   const { repo, pane, selectedItem } = ctx
   const today = new Date().toISOString().split('T')[0]
@@ -330,6 +341,11 @@ function toolLabel(name, input) {
 
 // ─── Confirm message builder ──────────────────────────────────────────────────
 
+/**
+ * Build a human-readable confirmation message for a mutating tool call.
+ * @param {string} toolName
+ * @param {object} input
+ */
 export function buildConfirmMessage(toolName, input) {
   switch (toolName) {
     case 'merge_pr':
@@ -396,6 +412,12 @@ async function callReadOnlyTool(toolName, toolInput, repo) {
 
 // ─── Mutating tool executor (called by UI after confirmation) ─────────────────
 
+/**
+ * Execute a mutating tool after user confirmation.
+ * @param {string} toolName
+ * @param {object} toolInput
+ * @param {string} repo
+ */
 export async function executeMutatingTool(toolName, toolInput, repo) {
   switch (toolName) {
     case 'merge_pr':       return mergePR(repo, toolInput.number, toolInput.strategy || 'merge', toolInput.message)
@@ -446,6 +468,10 @@ function findNavInText(text) {
 /**
  * Build the provider-specific message object for a tool result.
  * Push this into conversationRef.current after confirm/cancel.
+ * @param {string} provider
+ * @param {string} toolUseId
+ * @param {string} content
+ * @param {boolean} [isError]
  */
 export function buildToolResultMessage(provider, toolUseId, content, isError = false) {
   if (provider === 'openai') {
@@ -689,6 +715,7 @@ async function runOpenAITurn({ messages, userMessage, repo, ctx, aiConfig, onSta
  * @param {string} opts.repo         - owner/repo
  * @param {object} opts.ctx          - { repo, pane, selectedItem }
  * @param {object} opts.aiConfig     - From config.ai: { provider, model, anthropicApiKey, openaiApiKey, openaiBaseUrl }
+ * @param {Function} [opts.onStatus] - Called with a status string during tool execution
  * @returns {Promise<AssistantResult>}
  */
 export async function runAssistantTurn({ messages, userMessage, repo, ctx, aiConfig, onStatus }) {

@@ -1082,6 +1082,7 @@ export async function getConflictedFiles() {
 /**
  * Count `<<<<<<<` conflict markers in a local file.
  * Returns 0 if the file is clean (resolved) or doesn't exist.
+ * @param {string} filePath
  */
 export async function countFileConflicts(filePath) {
   try {
@@ -1093,6 +1094,7 @@ export async function countFileConflicts(filePath) {
 
 /**
  * Stage (git add) one or more files, marking them as resolved.
+ * @param {string[]} files
  */
 export async function gitAdd(files) {
   if (!files?.length) return
@@ -1105,6 +1107,7 @@ export async function gitAdd(files) {
 
 /**
  * Unstage (git restore --staged) one or more files.
+ * @param {string[]} files
  */
 export async function gitUnstage(files) {
   if (!files?.length) return
@@ -1128,6 +1131,7 @@ export async function gitMergeAbort() {
 
 /**
  * Commit with a message. Throws if the commit fails.
+ * @param {string} message
  */
 export async function gitCommit(message) {
   const result = await execa('git', ['commit', '-m', message],
@@ -1141,6 +1145,7 @@ export async function gitCommit(message) {
 /**
  * Start merging `branch` into the current branch (`git merge <branch> --no-edit`).
  * May exit non-zero when conflicts occur — that is expected; check for MERGE_HEAD.
+ * @param {string} branch
  */
 export async function gitMergeBranch(branch) {
   return execa('git', ['merge', branch, '--no-edit'],

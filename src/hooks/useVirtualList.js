@@ -17,6 +17,14 @@
 
 import { useState, useCallback, useEffect } from 'react'
 
+/**
+ * Virtual-scroll hook: returns only the visible window of items.
+ * @param {object} opts
+ * @param {Array}  opts.items
+ * @param {number} opts.height
+ * @param {number} [opts.initialCursor]
+ * @param {number} [opts.initialScrollOffset]
+ */
 export function useVirtualList({ items, height, initialCursor = 0, initialScrollOffset = 0 }) {
   const count = items.length
 
