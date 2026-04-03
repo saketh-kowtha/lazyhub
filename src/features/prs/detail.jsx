@@ -246,6 +246,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
 
   const [scrollY, setScrollY] = useState(0)
   const [dialog, setDialog]   = useState(null)
+  const [adminMergeMsg, setAdminMergeMsg] = useState('')
   const [searching, setSearching] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [statusMsg, setStatusMsg] = useState(null)
