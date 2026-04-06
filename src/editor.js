@@ -10,7 +10,6 @@
 
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { homedir } from 'os'
 import { execa } from 'execa'
 
 // ─── Editor profiles ──────────────────────────────────────────────────────────
@@ -91,7 +90,7 @@ async function findBin(bins) {
  *
  * @returns {Promise<string|null>} profile key or null
  */
-export async function detectEditor() {
+async function detectEditor() {
   // 1. Env vars
   const envEditor = (process.env.VISUAL || process.env.EDITOR || '').toLowerCase()
   for (const [key, profile] of Object.entries(EDITOR_PROFILES)) {

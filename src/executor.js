@@ -1069,34 +1069,6 @@ export async function getGist(id) {
 }
 
 /**
- * Create a new gist via the GitHub API.
- * files: { filename: content }
- * @param description
- * @param files
- * @param isPublic
- */
-async function createGist(description, files, isPublic = false) {
-  const payload = { description, public: isPublic, files: {} }
-  Object.entries(files).forEach(([name, content]) => { payload.files[name] = { content } })
-
-  const gheArgs = process.env.GH_HOST ? ['--hostname', process.env.GH_HOST] : []
-  const proc = execa('gh', [...gheArgs, 'api', 'gists', '--method', 'POST', '--input', '-'], { reject: false })
-  proc.stdin.write(JSON.stringify(payload))
-  proc.stdin.end()
-  const result = await proc
-
-  if (result.exitCode !== 0) {
-    throw new GhError({
-      message: result.stderr?.split('\n')[0] || 'gist create failed',
-      stderr: result.stderr || '',
-      exitCode: result.exitCode,
-      args: ['gist', 'create'],
-    })
-  }
-  try { return JSON.parse(result.stdout) } catch { return result.stdout }
-}
-
-/**
  * Delete a gist by ID.
  * @param id
  */
@@ -1111,15 +1083,6 @@ export async function deleteGist(id) {
  */
 export async function isInMerge() {
   const result = await execa('git', ['rev-parse', '--verify', 'MERGE_HEAD'],
-    { cwd: process.cwd(), reject: false })
-  return result.exitCode === 0
-}
-
-/**
- * Returns true if the working tree is in a mid-rebase state.
- */
-export async function isInRebase() {
-  const result = await execa('git', ['rev-parse', '--verify', 'REBASE_HEAD'],
     { cwd: process.cwd(), reject: false })
   return result.exitCode === 0
 }
@@ -1229,11 +1192,3 @@ export async function getMergeCommitMessage() {
   } catch { return 'Merge conflict resolution' }
 }
 
-/**
- * Get the full `git status --short` output (for display).
- */
-export async function getGitStatus() {
-  const r = await execa('git', ['status', '--short'],
-    { cwd: process.cwd(), reject: false })
-  return r.stdout.trim()
-}

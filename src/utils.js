@@ -2,15 +2,16 @@
  * src/utils.js — shared utility functions
  */
 
-/* eslint-disable-next-line no-unused-vars */
+/* eslint-disable no-unused-vars */
 import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
-import { appendFileSync, readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs'
+/* eslint-enable no-unused-vars */
+import { appendFileSync, readFileSync, existsSync, mkdirSync } from 'fs'
 import { join, isAbsolute, dirname } from 'path'
-import { homedir, tmpdir } from 'os'
+import { homedir } from 'os'
 import chalk from 'chalk'
 import hljs from 'highlight.js'
-import { ThemeProvider, useTheme } from './theme.js'
+import { useTheme } from './theme.js'
 
 const LOG_FILE = join(homedir(), '.config', 'lazyhub', 'debug.log')
 

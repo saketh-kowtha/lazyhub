@@ -45,27 +45,9 @@ const MAX_TOOL_ROUNDS   = 6
 const MUTATING_TOOLS   = new Set(['merge_pr', 'close_pr', 'close_issue', 'add_pr_comment', 'add_labels', 'review_pr', 'rerun_run', 'cancel_run'])
 const DESTRUCTIVE_TOOLS = new Set(['merge_pr', 'close_pr', 'close_issue', 'cancel_run'])
 
-// ─── Error class ──────────────────────────────────────────────────────────────
-
-/** Error class for AI assistant failures. */
-export class AssistantError extends Error {
-  /**
-   * @param {string} message
-   * @param {object} [opts]
-   * @param {number} [opts.status]
-   * @param {string} [opts.code]
-   */
-  constructor(message, { status, code } = {}) {
-    super(message)
-    this.name  = 'AssistantError'
-    this.status = status
-    this.code   = code
-  }
-}
-
 // ─── Tool definitions ─────────────────────────────────────────────────────────
 
-export const TOOL_DEFINITIONS = [
+const TOOL_DEFINITIONS = [
   // ── Read-only ──
   {
     name: 'list_prs',
@@ -280,7 +262,7 @@ export const TOOL_DEFINITIONS = [
  * Build the system prompt for the AI assistant.
  * @param {object} [ctx]
  */
-export function buildSystemPrompt(ctx = {}) {
+function buildSystemPrompt(ctx = {}) {
   const { repo, pane, selectedItem } = ctx
   const today = new Date().toISOString().split('T')[0]
 
@@ -346,7 +328,7 @@ function toolLabel(name, input) {
  * @param {string} toolName
  * @param {object} input
  */
-export function buildConfirmMessage(toolName, input) {
+function buildConfirmMessage(toolName, input) {
   switch (toolName) {
     case 'merge_pr':
       return `Merge PR #${input.number} using --${input.strategy || 'merge'}${input.message ? ` — "${input.message}"` : ''}`

@@ -27,18 +27,6 @@ export async function detectGh() {
 
 /**
  *
- */
-async function getArch() {
-  try {
-    const { stdout } = await execa('uname', ['-m'])
-    return stdout.trim()
-  } catch {
-    return process.arch
-  }
-}
-
-/**
- *
  * @param platform
  */
 export function printInstallInstructions(platform) {

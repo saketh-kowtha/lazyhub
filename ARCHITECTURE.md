@@ -220,3 +220,7 @@ To prevent merge conflicts and "branch drift":
 **B-47 — Any-key dismiss of persistent errors swallowed the triggering key (e.g. r to retry required two presses)**
 - Root cause: `if (statusMsg?.persist) { setStatusMsg(null); return }` — the `return` discarded the key.
 - Fix: Removed `return` so the key falls through to its handler after clearing the error.
+
+**B-48 — Knip and ESLint reported multiple unused exports, imports, and dead code**
+- Root cause: Accumulation of unused helper functions, binaries (`which`), and missing devDependencies (`vite`).
+- Fix: Added `vite` to `package.json`; ignored `which` in `knip.json`; removed or un-exported 10+ unused functions across `src/ai-assistant.js`, `src/executor.js`, `src/ipc.js`, and `src/utils.js`.

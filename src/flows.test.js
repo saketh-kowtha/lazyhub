@@ -37,11 +37,11 @@ import {
   // Auto-merge
   enableAutoMerge, disableAutoMerge,
   // Comments
-  listPRComments, resolveThread, replyToComment, editPRComment, deletePRComment,
+  resolveThread, replyToComment, editPRComment, deletePRComment,
 } from './executor.js'
 
 // Virtual list logic helpers (mirror the hook's internal math, tested in isolation)
-function computeScroll({ cursor, prevOffset, height, count }) {
+function computeScroll({ cursor, prevOffset, height, _count }) {
   if (cursor < prevOffset) return cursor
   if (cursor >= prevOffset + height) return Math.max(0, cursor - height + 1)
   return prevOffset
