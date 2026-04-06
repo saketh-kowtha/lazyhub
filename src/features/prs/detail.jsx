@@ -12,12 +12,14 @@ import {
   getRepoInfo, getPRChecks, getBranchProtection,
   enableAutoMerge, disableAutoMerge, mergePR, closePR,
   markPRReady, convertPRToDraft, editPRBase,
-  requestReviewers, removeReviewers,
+  requestReviewers, removeReviewers, reviewPR,
+  addPRAssignees, removePRAssignees,
   rerunCheckRun, getCheckRunAnnotations,
 } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
+import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
@@ -231,7 +233,7 @@ function buildContentRows(pr, checks, protection, cols, t, checkCursor = null) {
   return rows
 }
 
-export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, onOpenActions }) {
+export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments }) {
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
@@ -266,6 +268,8 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
     notifyDialog(!!dialog)
     return () => notifyDialog(false)
   }, [dialog, notifyDialog])
+
+  React.useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
   const contentRows = useMemo(
     () => pr ? buildContentRows(pr, checks, protection, cols, t, checkCursor) : [],
@@ -340,8 +344,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   }
 
   useInput((input, key) => {
-    // Dismiss persistent error on any keypress
-    if (statusMsg?.persist) { setStatusMsg(null); return }
+    if (statusMsg?.persist) { setStatusMsg(null) }
 
     // Search mode captures all typing
     if (searching) {
@@ -389,6 +392,16 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
 
     if (input === 'r') { refetch(); return }
     if (input === 'd' && pr) { onOpenDiff(pr); return }
+    if (input === 'v' && onViewComments) { onViewComments(); return }
+    if (input === 'o' && pr?.url) {
+      import('execa').then(({ execa }) => {
+        const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
+        execa(cmd, [pr.url]).catch(() => {})
+      })
+      return
+    }
+    if (input === 'a' && pr && pr.state === 'OPEN') { setDialog('approve-body'); return }
+    if (input === 'x' && pr && pr.state === 'OPEN') { setDialog('reqchanges-body'); return }
 
     // E — open first changed file of this PR in the local editor
     if (input === 'E' && pr) {
@@ -403,7 +416,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
     if (input === 'A') { setDialog('assignees'); return }
     if (input === 'R' && pr && pr.state === 'OPEN') { setDialog('reviewers'); return }
     if (input === 'C' && pr && pr.state === 'OPEN' && onOpenConflict &&
-        (pr.mergeable === 'CONFLICTING' || pr.mergeable === 'UNKNOWN')) {
+        pr.mergeable === 'CONFLICTING') {
       onOpenConflict()
       return
     }
@@ -579,6 +592,40 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
     )
   }
 
+  if (dialog === 'approve-body') {
+    return (
+      <FormCompose
+        title={`Approve PR #${pr.number}`}
+        fields={[{ name: 'body', label: 'Comment (optional)', type: 'text' }]}
+        onSubmit={async (values) => {
+          setDialog(null)
+          try {
+            await reviewPR(repo, pr.number, 'approve', values.body || '')
+            showStatus(`✓ Approved PR #${pr.number}`)
+          } catch (err) { showStatus(`✗ ${err.message}`, true) }
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
+  if (dialog === 'reqchanges-body') {
+    return (
+      <FormCompose
+        title={`Request changes on PR #${pr.number}`}
+        fields={[{ name: 'body', label: 'Describe the changes needed', type: 'text' }]}
+        onSubmit={async (values) => {
+          setDialog(null)
+          try {
+            await reviewPR(repo, pr.number, 'request-changes', values.body)
+            showStatus(`✓ Requested changes on PR #${pr.number}`)
+          } catch (err) { showStatus(`✗ ${err.message}`, true) }
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
   if (dialog === 'labels') {
     return <PRLabelDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(msg) => { setDialog(null); showStatus(msg, true) }} />
   }
@@ -613,6 +660,8 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
 
   return (
     <Box flexDirection="column" flexGrow={1}>
+
+      {loading && <Box paddingX={1}><Text color={t.ui.muted}>refreshing…</Text></Box>}
 
       {/* ── Fixed title header ── */}
       <Box flexDirection="column" paddingX={1} paddingY={0}
@@ -663,7 +712,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
             ? <Text color={t.ui.selected}>[j/k] nav checks  [Enter/o] open  [l] annotations  [R] rerun  [Esc] exit checks</Text>
             : maxScroll > 0
               ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  [j/k] scroll  [gg/G] top/bottom</Text>
-              : (pr?.mergeable === 'CONFLICTING' || pr?.mergeable === 'UNKNOWN')
+              : pr?.mergeable === 'CONFLICTING'
                 ? <Text color={t.pr.conflict || t.ci.pending}>[C] resolve conflicts  [c] checks  [d] diff  [m] merge  [l] labels  [A] assignees  [R] reviewers</Text>
                 : <Text color={t.ui.dim}>[d] diff  [E] editor  [m] merge  [M] auto-merge  [c] checks  [l] labels  [A] assignees  [R] reviewers</Text>
         }
@@ -720,12 +769,12 @@ function PRAssigneeDialog({ repo, pr, onClose, onError }) {
     <MultiSelect
       items={items}
       onSubmit={async (selectedIds) => {
+        const current = pr.assignees?.map(a => a.login) || []
+        const toAdd    = selectedIds.filter(id => !current.includes(id))
+        const toRemove = current.filter(id => !selectedIds.includes(id))
         try {
-          const { execa } = await import('execa')
-          if (selectedIds.length > 0) {
-            await execa('gh', ['pr', 'edit', String(pr.number), '--repo', repo,
-              '--add-assignee', selectedIds.join(',')])
-          }
+          if (toAdd.length)    await addPRAssignees(repo, pr.number, toAdd)
+          if (toRemove.length) await removePRAssignees(repo, pr.number, toRemove)
         } catch (err) { onError?.(`✗ Assignee update failed: ${err.message}`) }
         onClose()
       }}

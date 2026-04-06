@@ -6,7 +6,7 @@ import React, { useState, useContext, useMemo, useCallback, useRef } from 'react
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
-import { getIssue, addPRComment, listLabels, listCollaborators, addLabels, removeLabels } from '../../executor.js'
+import { getIssue, addIssueComment, listLabels, listCollaborators, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
@@ -87,19 +87,19 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
       })
     }
     return rows
-  }, [issue, termCols])
+  }, [issue, termCols, t])
 
   const visibleHeight = Math.max(3, termRows - 10)
   const maxScroll = Math.max(0, contentRows.length - visibleHeight)
   const visibleRows = contentRows.slice(scrollY, scrollY + visibleHeight)
 
   const doReply = useCallback(() => {
-    addPRComment(repo, issueNumber, replyText)
-      .then(() => { setStatusMsg('Reply sent'); refetch() })
-      .catch(err => setStatusMsg(`Failed: ${err.message}`))
-    setTimeout(() => setStatusMsg(null), 3000)
+    const text = replyText
     setReplyMode(false)
     setReplyText('')
+    addIssueComment(repo, issueNumber, text)
+      .then(() => { setStatusMsg('Reply sent'); refetch(); setTimeout(() => setStatusMsg(null), 3000) })
+      .catch(err => { setStatusMsg(`Failed: ${err.message}`); setTimeout(() => setStatusMsg(null), 5000) })
   }, [repo, issueNumber, replyText, refetch])
 
   useInput((input, key) => {
@@ -113,6 +113,13 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
     if (input === 'r') { setReplyMode(true); return }
     if (input === 'l') { setDialog('labels'); return }
     if (input === 'A') { setDialog('assignees'); return }
+    if (input === 'o' && issue?.url) {
+      import('execa').then(({ execa }) => {
+        const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
+        execa(cmd, [issue.url]).catch(() => {})
+      })
+      return
+    }
     if (key.escape || input === 'q') { onBack(); return }
 
     // gg → top
@@ -252,11 +259,12 @@ function IssueAssigneeDialog({ repo, issue, onClose }) {
     <MultiSelect
       items={items}
       onSubmit={async (selectedIds) => {
+        const current = issue.assignees?.map(a => a.login) || []
+        const toAdd    = selectedIds.filter(id => !current.includes(id))
+        const toRemove = current.filter(id => !selectedIds.includes(id))
         try {
-          const { execa } = await import('execa')
-          if (selectedIds.length) {
-            await execa('gh', ['issue', 'edit', String(issue.number), '--repo', repo, '--add-assignee', selectedIds.join(',')])
-          }
+          if (toAdd.length)    await addIssueAssignees(repo, issue.number, toAdd)
+          if (toRemove.length) await removeIssueAssignees(repo, issue.number, toRemove)
         } catch { /* ignore */ }
         onClose()
       }}

@@ -55,7 +55,7 @@ const BUILTIN_PANE_LABELS = {
 const BUILTIN_PANE_ICONS = {
   prs:           '⎇',
   issues:        '○',
-  branches:      '⎇',
+  branches:      '⊞',
   actions:       '▶',
   notifications: '●',
 }
@@ -228,6 +228,8 @@ const DIALOG_KEYS = {
 
 function HelpOverlay({ pane, view, onClose }) {
   const { t } = useTheme()
+  const { stdout } = useStdout()
+  const cols = stdout?.columns || 80
   useInput((input, key) => {
     if (key.escape || key.return || input === '?') onClose()
   })
@@ -237,6 +239,8 @@ function HelpOverlay({ pane, view, onClose }) {
   const contextLabel = isListView
     ? `${PANE_ICONS[pane] || '○'}  ${PANE_LABELS[pane] || pane} list`
     : `${view.charAt(0).toUpperCase()}${view.slice(1)} view`
+
+  const narrow = cols < 90
 
   return (
     <Box flexDirection="column" paddingX={2} paddingY={1} borderStyle="round" borderColor={t.ui.selected}>
@@ -265,20 +269,22 @@ function HelpOverlay({ pane, view, onClose }) {
           </Box>
         </Box>
 
-        {/* Global keys */}
-        <Box flexDirection="column" width={38}>
-          <Box marginBottom={0} borderStyle="single" borderTop={false} borderLeft={false} borderRight={false} borderBottom={true} borderColor={t.ui.dim}>
-            <Text color={t.ui.muted} bold>Global (any view)</Text>
+        {/* Global keys — hidden on narrow terminals */}
+        {!narrow && (
+          <Box flexDirection="column" width={38}>
+            <Box marginBottom={0} borderStyle="single" borderTop={false} borderLeft={false} borderRight={false} borderBottom={true} borderColor={t.ui.dim}>
+              <Text color={t.ui.muted} bold>Global (any view)</Text>
+            </Box>
+            <Box flexDirection="column" marginTop={1}>
+              {GLOBAL_KEYS.map(k => (
+                <Box key={k.key} gap={2}>
+                  <Text color={t.ui.selected} bold width={18}>{k.key}</Text>
+                  <Text color={t.ui.muted}>{k.label}</Text>
+                </Box>
+              ))}
+            </Box>
           </Box>
-          <Box flexDirection="column" marginTop={1}>
-            {GLOBAL_KEYS.map(k => (
-              <Box key={k.key} gap={2}>
-                <Text color={t.ui.selected} bold width={18}>{k.key}</Text>
-                <Text color={t.ui.muted}>{k.label}</Text>
-              </Box>
-            ))}
-          </Box>
-        </Box>
+        )}
       </Box>
 
       {/* ── Config + docs hint ── */}
@@ -286,9 +292,9 @@ function HelpOverlay({ pane, view, onClose }) {
         <Box gap={1}>
           <Text color={t.ui.dim}>Config:</Text>
           <Text color={t.ui.selected}>~/.config/lazyhub/config.json</Text>
-          <Box flexGrow={1} />
-          <Text color={t.ui.dim}>Docs:</Text>
-          <Text color={t.ui.selected}>https://saketh-kowtha.github.io/lgh</Text>
+          {!narrow && <Box flexGrow={1} />}
+          {!narrow && <Text color={t.ui.dim}>Docs:</Text>}
+          {!narrow && <Text color={t.ui.selected}>https://saketh-kowtha.github.io/lgh</Text>}
         </Box>
       </Box>
     </Box>
@@ -319,7 +325,6 @@ function PRSummaryPanel({ pr }) {
       <Text color={t.ui.selected} bold wrap="truncate">#{pr.number} {pr.title}</Text>
       <Box gap={1}>
         <Text color={stateBadge.color} bold>{stateBadge.label}</Text>
-        {pr.isDraft && <Text color={t.pr.draft}> Draft</Text>}
       </Box>
       <Text color={t.ui.muted}>by {pr.author?.login || '—'}</Text>
       {labels.length > 0 && (
@@ -472,6 +477,7 @@ function App({ repo }) {
       ])
       savedListPosition.current = {}
       setHoveredItem(null); setSelectedItem(null); setView('list')
+      setActionsBranch(null)
       return
     }
 
@@ -482,6 +488,7 @@ function App({ repo }) {
       if (target && target !== pane) {
         setPane(target)
         setHoveredItem(null); setSelectedItem(null); setView('list')
+        setActionsBranch(null)
       }
       return
     }
@@ -725,6 +732,7 @@ function App({ repo }) {
                 onOpenDiff={goToDiff}
                 onOpenConflict={pane === 'prs' ? goToConflict : undefined}
                 onOpenActions={pane === 'prs' ? goToActions : undefined}
+                onViewComments={pane === 'prs' ? goToComments : undefined}
               />
             </ErrorBoundary>
           </Box>

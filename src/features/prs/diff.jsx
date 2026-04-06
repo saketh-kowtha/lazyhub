@@ -14,6 +14,7 @@ import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
+import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { AIReviewPane } from '../../components/AIReviewPane.jsx'
@@ -66,7 +67,10 @@ function openEditorSync(initial) {
     tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
     const tmp = join(tmpDir, 'comment.md')
     writeFileSync(tmp, initial || '', { mode: 0o600 })
+    process.stdout.write('\x1b[?1049l')
     const result = spawnSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
+    // Re-enter alternate screen after editor exits
+    process.stdout.write('\x1b[?1049h\x1b[H')
     if (result.status !== 0) return initial
     return readFileSync(tmp, 'utf8')
   } catch { return initial }
@@ -983,7 +987,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         setTimeout(() => setAiReviewError(null), 3000)
         return
       }
-      const apiKey = config.anthropicApiKey
+      const apiKey = config.ai?.anthropicApiKey
       if (!apiKey) {
         setAiReviewError('No API key — set Anthropic API key in Settings (s)')
         setTimeout(() => setAiReviewError(null), 4000)
@@ -1096,15 +1100,30 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         options={MERGE_OPTIONS_BASE}
         onSubmit={(val) => {
           const method = typeof val === 'object' ? val.value : val
+          setAdminMergeMsg(prev => ({ strategy: `admin-${method}`, msg: typeof val === 'object' ? val.text || adminMergeMsg : adminMergeMsg }))
+          setDialog('merge-admin-confirm')
+        }}
+        onCancel={() => setDialog('merge')}
+      />
+    )
+  }
+
+  if (dialog === 'merge-admin-confirm') {
+    const pending = typeof adminMergeMsg === 'object' ? adminMergeMsg : { strategy: 'admin-merge', msg: adminMergeMsg }
+    return (
+      <ConfirmDialog
+        message={`⚠ ADMIN BYPASS: merge PR #${prNumber} via --${pending.strategy.replace('admin-', '')} bypassing branch protection?`}
+        destructive={true}
+        onConfirm={() => {
           setDialog(null)
-          mergePR(repo, prNumber, `admin-${method}`, adminMergeMsg || undefined)
+          mergePR(repo, prNumber, pending.strategy, pending.msg || undefined)
             .then(() => onBack())
             .catch(err => {
               setCommentStatus(`✗ Merge failed: ${err.message}`)
               setTimeout(() => setCommentStatus(null), 5000)
             })
         }}
-        onCancel={() => setDialog('merge')}
+        onCancel={() => setDialog('merge-admin')}
       />
     )
   }

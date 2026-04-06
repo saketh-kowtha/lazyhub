@@ -18,6 +18,7 @@ import {
   listPRs, listLabels, listCollaborators,
   mergePR, closePR, checkoutBranch, addLabels, removeLabels,
   requestReviewers, removeReviewers, reviewPR, getRepoInfo,
+  addPRAssignees, removePRAssignees,
 } from '../../executor.js'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
@@ -65,8 +66,8 @@ function CIBadge({ pr, t }) {
   const states  = checks.map(c => c.state || c.conclusion || c.status || '')
   const failing = states.filter(s => /failure|error/i.test(s)).length
   const pending = states.filter(s => /pending|in_progress|queued/i.test(s)).length
-  if (failing > 0) return <Text color={t.ci.fail}> ✗{failing}/{total}</Text>
-  if (pending > 0) return <Text color={t.ci.pending}> ●{pending}/{total}</Text>
+  if (failing > 0) return <Text color={t.ci.fail}> ✗ {failing}/{total}</Text>
+  if (pending > 0) return <Text color={t.ci.pending}> ● {pending}/{total}</Text>
   return <Text color={t.ci.pass}> ✓</Text>
 }
 
@@ -143,6 +144,8 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
     return () => notifyDialog(false)
   }, [dialog, notifyDialog])
 
+  useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
+
   // Notify parent of hovered item for side panel
   useEffect(() => {
     if (onHover) onHover(items[cursor] || null)
@@ -170,7 +173,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const closeDialog = useCallback(() => setDialog(null), [])
 
   useInput((input, key) => {
-    if (statusMsg?.persist) { setStatusMsg(null); return }
+    if (statusMsg?.persist) { setStatusMsg(null) }
     if (dialog) return
 
     // gg → top
@@ -189,8 +192,10 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
 
     // G → bottom
     if (input === 'G') {
-      const last = items.length - 1
-      setCursor(last); setScrollOffset(Math.max(0, last - height + 1))
+      if (items.length > 0) {
+        const last = items.length - 1
+        setCursor(last); setScrollOffset(Math.max(0, last - height + 1))
+      }
       return
     }
 
@@ -281,12 +286,13 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const selectedPR = items[cursor]
 
   if (dialog === 'fuzzy') {
+    const fuzzyItems = items.map(pr => ({ ...pr, authorLogin: pr.author?.login || '' }))
     return (
       <FuzzySearch
-        items={items}
-        searchFields={['title', 'number', 'author', 'headRefName']}
+        items={fuzzyItems}
+        searchFields={['title', 'number', 'authorLogin', 'headRefName']}
         onSubmit={(item) => {
-          const idx = items.indexOf(item)
+          const idx = items.findIndex(p => p.number === item.number)
           if (idx !== -1) {
             setCursor(idx)
             setScrollOffset(Math.max(0, idx - Math.floor(height / 2)))
@@ -316,7 +322,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   if (dialog === 'merge' && selectedPR) {
     return (
       <OptionPicker
-        title={`Merge PR #${selectedPR.number}: ${selectedPR.title}`}
+        title={`Merge PR #${selectedPR.number}: ${sanitize(selectedPR.title)}`}
         options={MERGE_OPTIONS}
         promptText="Commit message (optional, Enter to skip)"
         onSubmit={(val) => {
@@ -372,7 +378,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   if (dialog === 'close-pr' && selectedPR) {
     return (
       <ConfirmDialog
-        message={`Close PR #${selectedPR.number}: ${selectedPR.title}?`}
+        message={`Close PR #${selectedPR.number}: ${sanitize(selectedPR.title)}?`}
         destructive={true}
         onConfirm={async () => {
           closeDialog()
@@ -491,6 +497,10 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
         <PRListSkeleton count={height} />
       )}
 
+      {loading && items.length > 0 && (
+        <Box paddingX={1}><Text color={t.ui.muted}>refreshing…</Text></Box>
+      )}
+
       {visiblePRs.map((pr, i) => {
         const idx = scrollOffset + i
         const isSelected = idx === cursor
@@ -566,14 +576,12 @@ function AssigneeDialog({ repo, pr, onClose }) {
     <MultiSelect
       items={items}
       onSubmit={async (selectedIds) => {
+        const current = pr.assignees?.map(a => a.login) || []
+        const toAdd    = selectedIds.filter(id => !current.includes(id))
+        const toRemove = current.filter(id => !selectedIds.includes(id))
         try {
-          const { execa } = await import('execa')
-          if (selectedIds.length > 0) {
-            await execa('gh', [
-              'pr', 'edit', String(pr.number), '--repo', repo,
-              '--add-assignee', selectedIds.join(','),
-            ])
-          }
+          if (toAdd.length)    await addPRAssignees(repo, pr.number, toAdd)
+          if (toRemove.length) await removePRAssignees(repo, pr.number, toRemove)
         } catch { /* ignore */ }
         onClose()
       }}

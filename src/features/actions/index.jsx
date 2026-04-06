@@ -2,7 +2,7 @@
  * src/features/actions/index.jsx — Actions / workflow runs pane
  */
 
-import React, { useState, useCallback, useEffect, useContext, memo } from 'react'
+import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
@@ -54,6 +54,8 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
   const [logLines, setLogLines] = useState([])
   const [logLoading, setLogLoading] = useState(false)
   const [statusMsg, setStatusMsg] = useState(null)
+  const lastKeyRef   = useRef(null)
+  const lastKeyTimer = useRef(null)
 
   const items = runs || []
 
@@ -65,6 +67,8 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
     notifyDialog(!!dialog)
     return () => notifyDialog(false)
   }, [dialog, notifyDialog])
+
+  useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
   const showStatus = (msg, isError = false) => {
     setStatusMsg({ msg, isError, persist: isError })
@@ -108,12 +112,35 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
   }, [items, cursor, repo])
 
   useInput((input, key) => {
-    if (statusMsg?.persist) { setStatusMsg(null); return }
+    if (statusMsg?.persist) { setStatusMsg(null) }
     if (dialog) return
     if (input === 'j' || key.downArrow) { moveCursor(1); return }
     if (input === 'k' || key.upArrow)  { moveCursor(-1); return }
     if (input === 'r') { refetch(); return }
     if (input === 'x' && branchFilter) { setBranchFilter(null); setCursor(0); setScrollOffset(0); return }
+
+    // gg → top
+    if (input === 'g') {
+      if (lastKeyRef.current === 'g') {
+        clearTimeout(lastKeyTimer.current)
+        lastKeyRef.current = null
+        setCursor(0); setScrollOffset(0)
+        return
+      }
+      lastKeyRef.current = 'g'
+      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
+      return
+    }
+    lastKeyRef.current = null
+
+    // G → bottom
+    if (input === 'G') {
+      if (items.length > 0) {
+        const last = items.length - 1
+        setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
+      }
+      return
+    }
 
     if (key.return || input === 'l') {
       openLogs()

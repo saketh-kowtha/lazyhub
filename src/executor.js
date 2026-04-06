@@ -393,7 +393,7 @@ export async function removeReviewers(repo, number, reviewers) {
 export async function listBranches(repo) {
   const r = getRepo(repo)
   const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches`,
+    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches?per_page=100`,
     '--jq', '[.[] | {name: .name, protected: .protected, commit: {sha: .commit.sha}}]',
   ]
   return run(args)
@@ -518,6 +518,13 @@ export async function listNotifications(filter = {}) {
 }
 
 /**
+ * Mark all notifications as read in a single API call.
+ */
+export async function markAllNotificationsRead() {
+  return run(['api', 'notifications', '--method', 'PUT', '--field', 'read=true'])
+}
+
+/**
  * Mark a notification as read.
  * @param notificationId
  */
@@ -560,6 +567,65 @@ export async function addPRComment(repo, number, body) {
 }
 
 /**
+ * Add a general comment to an issue.
+ * @param repo
+ * @param number
+ * @param body
+ */
+export async function addIssueComment(repo, number, body) {
+  const args = [
+    'issue', 'comment', String(number),
+    '--repo', getRepo(repo),
+    '--body', body,
+  ]
+  return run(args)
+}
+
+/**
+ * Add assignees to a PR.
+ * @param repo
+ * @param number
+ * @param assignees
+ */
+export async function addPRAssignees(repo, number, assignees) {
+  const args = ['pr', 'edit', String(number), '--repo', getRepo(repo), '--add-assignee', assignees.join(',')]
+  return run(args)
+}
+
+/**
+ * Remove assignees from a PR.
+ * @param repo
+ * @param number
+ * @param assignees
+ */
+export async function removePRAssignees(repo, number, assignees) {
+  const args = ['pr', 'edit', String(number), '--repo', getRepo(repo), '--remove-assignee', assignees.join(',')]
+  return run(args)
+}
+
+/**
+ * Add assignees to an issue.
+ * @param repo
+ * @param number
+ * @param assignees
+ */
+export async function addIssueAssignees(repo, number, assignees) {
+  const args = ['issue', 'edit', String(number), '--repo', getRepo(repo), '--add-assignee', assignees.join(',')]
+  return run(args)
+}
+
+/**
+ * Remove assignees from an issue.
+ * @param repo
+ * @param number
+ * @param assignees
+ */
+export async function removeIssueAssignees(repo, number, assignees) {
+  const args = ['issue', 'edit', String(number), '--repo', getRepo(repo), '--remove-assignee', assignees.join(',')]
+  return run(args)
+}
+
+/**
  * Add a line-level review comment to a PR.
  * @param repo
  * @param number
@@ -578,8 +644,8 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
     '--method', 'POST',
     '--input', '-',
   ]
-  // We use gh api with --input - to read JSON from stdin
-  const proc = execa('gh', args, { reject: false })
+  const fullArgs = process.env.GH_HOST ? ['--hostname', process.env.GH_HOST, ...args] : args
+  const proc = execa('gh', fullArgs, { reject: false })
   proc.stdin.write(payload)
   proc.stdin.end()
   const result = await proc

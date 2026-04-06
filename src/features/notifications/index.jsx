@@ -2,11 +2,12 @@
  * src/features/notifications/index.jsx — Notifications pane
  */
 
-import React, { useState, useCallback, useEffect, useContext } from 'react'
+import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
-import { listNotifications, markNotificationRead } from '../../executor.js'
+import { listNotifications, markNotificationRead, markAllNotificationsRead } from '../../executor.js'
+import { sanitize } from '../../utils.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { AppContext } from '../../context.js'
@@ -35,6 +36,8 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
+  const lastKeyRef   = useRef(null)
+  const lastKeyTimer = useRef(null)
 
   const items = notifications || []
 
@@ -46,6 +49,8 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
     notifyDialog(!!dialog)
     return () => notifyDialog(false)
   }, [dialog, notifyDialog])
+
+  useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
   const showStatus = (msg, isError = false) => {
     setStatusMsg({ msg, isError, persist: isError })
@@ -62,12 +67,36 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
   }, [items.length, scrollOffset, visibleHeight])
 
   useInput((input, key) => {
-    if (statusMsg?.persist) { setStatusMsg(null); return }
+    if (statusMsg?.persist) { setStatusMsg(null) }
     if (dialog) return
     if (input === 'j' || key.downArrow) { moveCursor(1); return }
     if (input === 'k' || key.upArrow)  { moveCursor(-1); return }
     if (input === 'r') { refetch(); return }
     if (input === '/') { setDialog('fuzzy'); return }
+
+    // gg → top
+    if (input === 'g') {
+      if (lastKeyRef.current === 'g') {
+        clearTimeout(lastKeyTimer.current)
+        lastKeyRef.current = null
+        setCursor(0); setScrollOffset(0)
+        return
+      }
+      lastKeyRef.current = 'g'
+      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
+      return
+    }
+    lastKeyRef.current = null
+
+    // G → bottom
+    if (input === 'G') {
+      if (items.length > 0) {
+        const last = items.length - 1
+        setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
+      }
+      return
+    }
+
     if (loading || items.length === 0) return
 
     if (key.return) {
@@ -124,7 +153,7 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
           onConfirm={async () => {
             setDialog(null)
             try {
-              await Promise.all(items.map(n => markNotificationRead(n.id)))
+              await markAllNotificationsRead()
               showStatus('All marked as read')
               refetch()
             } catch (err) {
@@ -153,7 +182,7 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
           const isSelected = idx === cursor
           const typeInfo = notifTypeIcon(notif.subject?.type)
           return (
-            <Box key={notif.id} paddingX={1} backgroundColor={isSelected ? '#1c2128' : undefined}>
+            <Box key={notif.id} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
               <Text color={typeInfo.color}>{typeInfo.icon} </Text>
               <Text color={t.ui.dim}>{notif.repository?.name} </Text>
               <Text
@@ -162,7 +191,7 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
                 flexGrow={1}
                 bold={notif.unread}
               >
-                {notif.subject?.title}
+                {sanitize(notif.subject?.title || '')}
               </Text>
               <Text color={t.ui.dim}> {notif.reason}</Text>
               <Text color={t.ui.dim}> {format(notif.updatedAt)}</Text>

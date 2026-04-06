@@ -3,7 +3,7 @@
  * Supports: reply, edit, delete per comment
  */
 
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
@@ -43,6 +43,8 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   const [filterMode, setFilterMode] = useState('all')
   const [statusMsg, setStatusMsg]   = useState(null)
   const [scrollOffset, setScrollOffset] = useState(0)
+  const lastKeyRef   = useRef(null)
+  const lastKeyTimer = useRef(null)
 
   // action: null | { type: 'reply'|'edit'|'delete', comment }
   const [action, setAction]     = useState(null)
@@ -176,6 +178,27 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
         if (next < scrollOffset) setScrollOffset(s => Math.max(0, s - 1))
         return next
       })
+      return
+    }
+
+    // gg → top
+    if (input === 'g' && !action) {
+      if (lastKeyRef.current === 'g') {
+        clearTimeout(lastKeyTimer.current)
+        lastKeyRef.current = null
+        setCursor(0); setScrollOffset(0)
+        return
+      }
+      lastKeyRef.current = 'g'
+      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
+      return
+    }
+    if (input !== 'g') lastKeyRef.current = null
+
+    // G → bottom
+    if (input === 'G' && !action) {
+      const last = visibleCount - 1
+      setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
       return
     }
 

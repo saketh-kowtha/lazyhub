@@ -6,7 +6,8 @@ import React, { useState, useCallback, useEffect, useContext, useRef, memo } fro
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
-import { listIssues, listLabels, listCollaborators, closeIssue, createIssue, addLabels, removeLabels } from '../../executor.js'
+import { listIssues, listLabels, listCollaborators, closeIssue, createIssue, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees } from '../../executor.js'
+import { sanitize } from '../../utils.js'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
@@ -49,7 +50,7 @@ const IssueRow = memo(({ issue, isSelected, t }) => {
       <Text> </Text>
       <Text color={t.ui.dim} bold>#{String(issue.number).padEnd(5)}</Text>
       <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
-        {issue.title}
+        {sanitize(issue.title)}
       </Text>
       {visibleLabels.map(l => (
         <Text key={l.name} color={`#${l.color}`}> [{l.name.slice(0, 14)}]</Text>
@@ -95,6 +96,8 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
     return () => notifyDialog(false)
   }, [dialog, notifyDialog])
 
+  useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
+
   const showStatus = (msg, isError = false) => {
     setStatusMsg({ msg, isError, persist: isError })
     if (!isError) setTimeout(() => setStatusMsg(null), 3000)
@@ -110,7 +113,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
   }, [items.length, scrollOffset, visibleHeight])
 
   useInput((input, key) => {
-    if (statusMsg?.persist) { setStatusMsg(null); return }
+    if (statusMsg?.persist) { setStatusMsg(null) }
     if (dialog) return
 
     // gg → top
@@ -129,8 +132,10 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
 
     // G → bottom
     if (input === 'G') {
-      const last = items.length - 1
-      setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
+      if (items.length > 0) {
+        const last = items.length - 1
+        setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
+      }
       return
     }
 
@@ -200,19 +205,28 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
       if (issue) setDialog('assignees')
       return
     }
+
+    if (input === 'o' && issue?.url) {
+      import('execa').then(({ execa }) => {
+        const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
+        execa(cmd, [issue.url]).catch(() => {})
+      })
+      return
+    }
   })
 
   const selectedIssue = items[cursor]
   const visibleIssues = items.slice(scrollOffset, scrollOffset + visibleHeight)
 
   if (dialog === 'fuzzy') {
+    const fuzzyItems = items.map(issue => ({ ...issue, authorLogin: issue.author?.login || '' }))
     return (
       <Box flexDirection="column" flexGrow={1}>
         <FuzzySearch
-          items={items}
-          searchFields={['title', 'number', 'author']}
+          items={fuzzyItems}
+          searchFields={['title', 'number', 'authorLogin']}
           onSubmit={(item) => {
-            const idx = items.indexOf(item)
+            const idx = items.findIndex(i => i.number === item.number)
             if (idx !== -1) { setCursor(idx); setScrollOffset(Math.max(0, idx - 2)) }
             setDialog(null)
           }}
@@ -226,7 +240,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
     return (
       <Box flexDirection="column" flexGrow={1}>
         <ConfirmDialog
-          message={`Close issue #${selectedIssue.number}: ${selectedIssue.title}?`}
+          message={`Close issue #${selectedIssue.number}: ${sanitize(selectedIssue.title)}?`}
           destructive={true}
           onConfirm={async () => {
             setDialog(null)
@@ -294,6 +308,9 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
         {loading && items.length === 0 && (
           <IssueListSkeleton count={visibleHeight} />
         )}
+        {loading && items.length > 0 && (
+          <Box paddingX={1}><Text color={t.ui.muted}>refreshing…</Text></Box>
+        )}
         {visibleIssues.map((issue, i) => {
           const idx = scrollOffset + i
           const isSelected = idx === cursor
@@ -358,11 +375,12 @@ function IssueAssigneeDialog({ repo, issue, onClose }) {
     <MultiSelect
       items={items}
       onSubmit={async (selectedIds) => {
+        const current = issue.assignees?.map(a => a.login) || []
+        const toAdd    = selectedIds.filter(id => !current.includes(id))
+        const toRemove = current.filter(id => !selectedIds.includes(id))
         try {
-          const { execa } = await import('execa')
-          if (selectedIds.length) {
-            await execa('gh', ['issue', 'edit', String(issue.number), '--repo', repo, '--add-assignee', selectedIds.join(',')])
-          }
+          if (toAdd.length)    await addIssueAssignees(repo, issue.number, toAdd)
+          if (toRemove.length) await removeIssueAssignees(repo, issue.number, toRemove)
         } catch { /* ignore */ }
         onClose()
       }}
