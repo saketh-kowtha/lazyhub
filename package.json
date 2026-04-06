@@ -1,68 +1,68 @@
 {
-  "name": "lazyhub",
-  "version": "26.3.4",
-  "description": "A lazygit-style GitHub TUI — every GitHub action without leaving your terminal",
-  "type": "module",
-  "bin": {
-    "lazyhub": "./dist/lazyhub.js"
-  },
-  "scripts": {
-    "build": "node build.js",
-    "dev": "node build.js --watch & sleep 1 && node --watch dist/lazyhub.js",
-    "start": "node build.js && node dist/lazyhub.js",
-    "lint": "eslint src/",
-    "test": "vitest run",
-    "prepublishOnly": "npm run build && npm test"
-  },
-  "files": [
-    "dist/",
-    "README.md"
-  ],
-  "engines": {
-    "node": ">=20.0.0"
-  },
-  "keywords": [
-    "github",
-    "tui",
-    "cli",
-    "terminal",
-    "lazygit",
-    "lazyhub",
-    "ink",
-    "react",
-    "gh",
-    "pull-request",
-    "issues",
-    "devtools"
-  ],
-  "author": "saketh-kowtha",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/saketh-kowtha/lazyhub.git"
-  },
-  "homepage": "https://saketh-kowtha.github.io/lazyhub",
-  "bugs": {
-    "url": "https://github.com/saketh-kowtha/lazyhub/issues"
-  },
-  "dependencies": {
-    "chalk": "^5.3.0",
-    "execa": "^8.0.1",
-    "highlight.js": "^11.9.0",
-    "ink": "^4.4.1",
-    "react": "^18.2.0",
-    "timeago.js": "^4.0.2"
-  },
-  "devDependencies": {
-    "@google/generative-ai": "^0.24.1",
-    "@vitejs/plugin-react": "^6.0.1",
-    "esbuild": "^0.27.4",
-    "eslint": "^8.57.0",
-    "eslint-plugin-jsdoc": "^62.8.1",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "ink-testing-library": "^4.0.0",
-    "knip": "^6.1.0",
-    "vitest": "^4.1.2",
-    "vite": "^6.0.0"
-  }
+    "name": "lazyhub",
+    "version": "26.4.0",
+    "description": "A lazygit-style GitHub TUI — every GitHub action without leaving your terminal",
+    "type": "module",
+    "bin": {
+        "lazyhub": "./dist/lazyhub.js"
+    },
+    "scripts": {
+        "build": "node build.js",
+        "dev": "node build.js --watch & sleep 1 && node --watch dist/lazyhub.js",
+        "start": "node build.js && node dist/lazyhub.js",
+        "lint": "eslint src/",
+        "test": "vitest run",
+        "prepublishOnly": "npm run build && npm test"
+    },
+    "files": [
+        "dist/",
+        "README.md"
+    ],
+    "engines": {
+        "node": ">=20.0.0"
+    },
+    "keywords": [
+        "github",
+        "tui",
+        "cli",
+        "terminal",
+        "lazygit",
+        "lazyhub",
+        "ink",
+        "react",
+        "gh",
+        "pull-request",
+        "issues",
+        "devtools"
+    ],
+    "author": "saketh-kowtha",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/saketh-kowtha/lazyhub.git"
+    },
+    "homepage": "https://saketh-kowtha.github.io/lazyhub",
+    "bugs": {
+        "url": "https://github.com/saketh-kowtha/lazyhub/issues"
+    },
+    "dependencies": {
+        "chalk": "^5.3.0",
+        "execa": "^8.0.1",
+        "highlight.js": "^11.9.0",
+        "ink": "^4.4.1",
+        "react": "^18.2.0",
+        "timeago.js": "^4.0.2"
+    },
+    "devDependencies": {
+        "@google/generative-ai": "^0.24.1",
+        "@vitejs/plugin-react": "^6.0.1",
+        "esbuild": "^0.27.4",
+        "eslint": "^8.57.0",
+        "eslint-plugin-jsdoc": "^62.8.1",
+        "eslint-plugin-react-hooks": "^7.0.1",
+        "ink-testing-library": "^4.0.0",
+        "knip": "^6.1.0",
+        "vitest": "^4.1.2",
+        "vite": "^6.0.0"
+    }
 }
