@@ -1019,7 +1019,13 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     if (idx >= 0) jumpTo(idx)
   }
 
-  const handleAiPost = (suggestion) => {
+  // handleAiPost accepts an optional custom body (edited by the user in the
+  // interactive review flow). Falls back to suggestion.comment if not provided.
+  const handleAiPost = (suggestion, customBody) => {
+    const body = (typeof customBody === 'string' && customBody.trim())
+      ? customBody.trim()
+      : suggestion.comment
+
     if (!headRefOid) {
       setAiPostStatus('error: PR metadata not loaded')
       setTimeout(() => setAiPostStatus(null), 4000)
@@ -1032,7 +1038,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     }
     setAiPostStatus('posting...')
     addPRLineComment(repo, prNumber, {
-      body:     suggestion.comment,
+      body,
       path:     suggestion.file,
       line:     suggestion.line,
       side:     'RIGHT',
@@ -1041,7 +1047,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       .then(() => {
         setAiPostStatus('posted')
         refetch()
-        setTimeout(() => setAiPostStatus(null), 3000)
+        setTimeout(() => setAiPostStatus(null), 2000)
       })
       .catch(err => {
         setAiPostStatus(`error: ${err.message}`)
@@ -1236,10 +1242,11 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         <AIReviewPane
           suggestions={aiReview.suggestions}
           summary={aiReview.summary}
-          onJumpTo={(file, line) => { handleAiJumpTo(file, line); setAiReview(null) }}
+          onJumpTo={handleAiJumpTo}
           onPost={handleAiPost}
-          onClose={() => { setAiReview(null); setAiReviewError(null) }}
+          onClose={() => { setAiReview(null); setAiReviewError(null); setAiPostStatus(null) }}
           postStatus={aiPostStatus}
+          onOpenEditor={openEditorSync}
         />
       )}
 
