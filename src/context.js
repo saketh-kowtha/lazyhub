@@ -4,6 +4,6 @@
  * circular imports by reaching back into the root layout module.
  */
 
-import { createContext, useContext } from 'react'
+import { createContext } from 'react'
 
-export const AppContext = createContext({ notifyDialog: () => {}, openHelp: () => {}, setMouseEnabled: () => {} })
+export const AppContext = createContext({ notifyDialog: () => {}, openHelp: () => {}, openAI: () => {}, setMouseEnabled: () => {} })

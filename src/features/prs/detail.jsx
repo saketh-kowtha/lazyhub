@@ -12,10 +12,15 @@ import {
   getRepoInfo, getPRChecks, getBranchProtection,
   enableAutoMerge, disableAutoMerge, mergePR, closePR,
   markPRReady, convertPRToDraft, editPRBase,
+  requestReviewers, removeReviewers, reviewPR,
+  addPRAssignees, removePRAssignees,
+  rerunCheckRun, getCheckRunAnnotations,
 } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
+import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
+import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
 import { sanitize, getMarkdownRows, TextInput } from '../../utils.js'
@@ -31,7 +36,11 @@ const MERGE_OPTIONS_BASE = [
   { value: 'squash', label: '--squash', description: 'Squash all commits into one' },
   { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
 ]
-const MERGE_OPTION_ADMIN = { value: 'admin', label: '--admin', description: 'Bypass branch protection (admin only)' }
+const MERGE_OPTIONS_ADMIN = [
+  { value: 'admin-merge',  label: '--admin --merge',  description: 'Bypass branch protection + merge commit' },
+  { value: 'admin-squash', label: '--admin --squash', description: 'Bypass branch protection + squash' },
+  { value: 'admin-rebase', label: '--admin --rebase', description: 'Bypass branch protection + rebase' },
+]
 
 function reviewStatusIcon(state, t) {
   switch (state) {
@@ -43,17 +52,19 @@ function reviewStatusIcon(state, t) {
 }
 
 function prStateBadge(pr, t) {
-  if (pr.isDraft) return { icon: '⊘', color: t.pr.draft,  label: 'Draft'  }
+  if (pr.isDraft) return { icon: '⊘', color: t.pr.draft,   label: 'Draft'  }
+  if (pr.state === 'OPEN' && pr.mergeable === 'CONFLICTING')
+    return { icon: '●', color: t.pr.conflict || t.ci.pending, label: 'Conflict' }
   switch (pr.state) {
     case 'OPEN':   return { icon: '●', color: t.pr.open,   label: 'Open'   }
-    case 'MERGED': return { icon: '✓', color: t.pr.merged, label: 'Merged' }
-    case 'CLOSED': return { icon: '✗', color: t.pr.closed, label: 'Closed' }
-    default:       return { icon: '?', color: t.ui.muted,  label: pr.state }
+    case 'MERGED': return { icon: '●', color: t.pr.merged, label: 'Merged' }
+    case 'CLOSED': return { icon: '●', color: t.pr.closed, label: 'Closed' }
+    default:       return { icon: '●', color: t.ui.muted,  label: pr.state }
   }
 }
 
 // Build flat scrollable row array from PR data
-function buildContentRows(pr, checks, protection, cols, t) {
+function buildContentRows(pr, checks, protection, cols, t, checkCursor = null) {
   const rows = []
   const push = (id, el) => rows.push({ id, el })
   const sep  = (id) => push(id, <Box key={id} />)
@@ -117,34 +128,47 @@ function buildContentRows(pr, checks, protection, cols, t) {
   }
 
   // ── CI Checks ─────────────────────────────────────────────────────────────
-  const allChecks = (checks?.length > 0) ? checks : (pr.statusCheckRollup || [])
+  const rawChecks = (checks?.length > 0) ? checks : (pr.statusCheckRollup || [])
+  // Sort: failing first, then pending, then passing/skipped
+  const checkOrder = (c) => {
+    const s = c.conclusion || c.status || c.state || ''
+    if (/failure|error/i.test(s)) return 0
+    if (/pending|in_progress|queued/i.test(s)) return 1
+    if (/success/i.test(s)) return 2
+    return 3
+  }
+  const allChecks = [...rawChecks].sort((a, b) => checkOrder(a) - checkOrder(b))
   if (allChecks.length > 0) {
     const passing = allChecks.filter(c => /success/i.test(c.conclusion || c.status || c.state || '')).length
     const failing = allChecks.filter(c => /failure|error/i.test(c.conclusion || c.status || c.state || '')).length
     const pending = allChecks.filter(c => /pending|in_progress|queued/i.test(c.conclusion || c.status || c.state || '')).length
     const skipped = allChecks.filter(c => /cancelled|skipped/i.test(c.conclusion || c.status || c.state || '')).length
+    const checksActive = checkCursor !== null
     push('checks-hdr', (
       <Box key="checks-hdr" paddingX={1} gap={2}>
-        <Text color={t.ui.dim} bold>Checks</Text>
+        <Text color={checksActive ? t.ui.selected : t.ui.dim} bold>Checks</Text>
         {passing > 0 && <Text color={t.ci.pass}>✓ {passing}</Text>}
         {failing > 0 && <Text color={t.ci.fail}>✗ {failing}</Text>}
         {pending > 0 && <Text color={t.ci.pending}>● {pending}</Text>}
         {skipped > 0 && <Text color={t.ui.dim}>⊘ {skipped}</Text>}
+        {checksActive && <Text color={t.ui.dim}>[j/k] nav  [Enter/o] open  [R] rerun  [Esc] exit</Text>}
       </Box>
     ))
     allChecks.forEach((c, i) => {
       const status = c.conclusion || c.status || c.state || ''
       let icon, color
-      if      (/success/i.test(status))                  { icon = '✓'; color = t.ci.pass }
-      else if (/failure|error/i.test(status))            { icon = '✗'; color = t.ci.fail }
+      if      (/success/i.test(status))                    { icon = '✓'; color = t.ci.pass }
+      else if (/failure|error/i.test(status))              { icon = '✗'; color = t.ci.fail }
       else if (/pending|in_progress|queued/i.test(status)) { icon = '●'; color = t.ci.pending }
-      else if (/cancelled|skipped/i.test(status))        { icon = '⊘'; color = t.ui.dim }
-      else                                                { icon = '○'; color = t.ui.dim }
+      else if (/cancelled|skipped/i.test(status))          { icon = '⊘'; color = t.ui.dim }
+      else                                                  { icon = '○'; color = t.ui.dim }
       const name = (c.name || c.context || '').slice(0, 42)
+      const isSelected = checksActive && checkCursor === i
       push(`check-${i}`, (
-        <Box key={`check-${i}`} paddingX={2} gap={1}>
+        <Box key={`check-${i}`} paddingX={2} gap={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
           <Text color={color}>{icon}</Text>
-          <Text color={t.ui.muted} wrap="truncate">{name}</Text>
+          <Text color={isSelected ? t.ui.selected : t.ui.muted} wrap="truncate">{name}</Text>
+          {isSelected && c.appName && <Text color={t.ui.dim}> ({c.appName})</Text>}
         </Box>
       ))
     })
@@ -209,7 +233,7 @@ function buildContentRows(pr, checks, protection, cols, t) {
   return rows
 }
 
-export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
+export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments }) {
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
@@ -229,6 +253,9 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
   const [searchText, setSearchText] = useState('')
   const [statusMsg, setStatusMsg] = useState(null)
   const [baseInput, setBaseInput] = useState('')
+  const [checkCursor, setCheckCursor] = useState(null) // null = checks mode off, number = active
+  const [checkLogLines, setCheckLogLines] = useState([])
+  const [checkLogLoading, setCheckLogLoading] = useState(false)
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
 
@@ -242,10 +269,25 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
     return () => notifyDialog(false)
   }, [dialog, notifyDialog])
 
+  React.useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
+
   const contentRows = useMemo(
-    () => pr ? buildContentRows(pr, checks, protection, cols, t) : [],
-    [pr, checks, protection, cols, t]
+    () => pr ? buildContentRows(pr, checks, protection, cols, t, checkCursor) : [],
+    [pr, checks, protection, cols, t, checkCursor]
   )
+
+  // Sorted checks array (same ordering as in buildContentRows)
+  const allChecksForNav = useMemo(() => {
+    const raw = (checks?.length > 0) ? checks : (pr?.statusCheckRollup || [])
+    const order = (c) => {
+      const s = c.conclusion || c.status || c.state || ''
+      if (/failure|error/i.test(s)) return 0
+      if (/pending|in_progress|queued/i.test(s)) return 1
+      if (/success/i.test(s)) return 2
+      return 3
+    }
+    return [...raw].sort((a, b) => order(a) - order(b))
+  }, [checks, pr])
 
   const filteredRows = useMemo(() => {
     if (!searchText) return contentRows
@@ -265,9 +307,44 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
   const maxScroll     = Math.max(0, filteredRows.length - visibleHeight)
   const visibleRows   = filteredRows.slice(scrollY, scrollY + visibleHeight)
 
+  const openCheckInBrowser = (check) => {
+    if (!check?.url) return
+    import('execa').then(({ execa }) => {
+      const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
+      execa(cmd, [check.url]).catch(() => {})
+    })
+  }
+
+  const openCheckLogs = async (check) => {
+    if (!check?.id) {
+      openCheckInBrowser(check)
+      return
+    }
+    setCheckLogLoading(true)
+    setDialog('check-logs')
+    try {
+      const annotations = await getCheckRunAnnotations(repo, check.id)
+      if (!annotations || annotations.length === 0) {
+        // No annotations — fall back to opening in browser
+        setDialog(null)
+        setCheckLogLoading(false)
+        openCheckInBrowser(check)
+        return
+      }
+      const lines = annotations.map(a => {
+        const loc = a.path ? `${a.path}:${a.line || '?'}` : ''
+        const title = a.title ? `[${a.title}] ` : ''
+        return `${a.level?.toUpperCase() || 'NOTE'} ${title}${loc}\n  ${a.message || ''}`
+      }).join('\n').split('\n')
+      setCheckLogLines(lines)
+    } catch (err) {
+      setCheckLogLines([`Error loading annotations: ${err.message}`])
+    }
+    setCheckLogLoading(false)
+  }
+
   useInput((input, key) => {
-    // Dismiss persistent error on any keypress
-    if (statusMsg?.persist) { setStatusMsg(null); return }
+    if (statusMsg?.persist) { setStatusMsg(null) }
 
     // Search mode captures all typing
     if (searching) {
@@ -284,8 +361,47 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
     }
     if (dialog) return
 
+    // ── Checks navigation mode ─────────────────────────────────────────────
+    if (checkCursor !== null) {
+      if (key.escape) { setCheckCursor(null); return }
+      if (input === 'j' || key.downArrow) {
+        setCheckCursor(c => Math.min(allChecksForNav.length - 1, c + 1))
+        return
+      }
+      if (input === 'k' || key.upArrow) {
+        setCheckCursor(c => Math.max(0, c - 1))
+        return
+      }
+      if ((key.return || input === 'o') && allChecksForNav[checkCursor]) {
+        openCheckInBrowser(allChecksForNav[checkCursor])
+        return
+      }
+      if (input === 'l' && allChecksForNav[checkCursor]) {
+        openCheckLogs(allChecksForNav[checkCursor])
+        return
+      }
+      if (input === 'R' && allChecksForNav[checkCursor]?.id) {
+        const c = allChecksForNav[checkCursor]
+        rerunCheckRun(repo, c.id)
+          .then(() => showStatus(`↺ Re-run triggered for ${c.name}`))
+          .catch(err => showStatus(`✗ Re-run failed: ${err.message}`, true))
+        return
+      }
+      return
+    }
+
     if (input === 'r') { refetch(); return }
     if (input === 'd' && pr) { onOpenDiff(pr); return }
+    if (input === 'v' && onViewComments) { onViewComments(); return }
+    if (input === 'o' && pr?.url) {
+      import('execa').then(({ execa }) => {
+        const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
+        execa(cmd, [pr.url]).catch(() => {})
+      })
+      return
+    }
+    if (input === 'a' && pr && pr.state === 'OPEN') { setDialog('approve-body'); return }
+    if (input === 'x' && pr && pr.state === 'OPEN') { setDialog('reqchanges-body'); return }
 
     // E — open first changed file of this PR in the local editor
     if (input === 'E' && pr) {
@@ -298,6 +414,32 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
 
     if (input === 'l') { setDialog('labels'); return }
     if (input === 'A') { setDialog('assignees'); return }
+    if (input === 'R' && pr && pr.state === 'OPEN') { setDialog('reviewers'); return }
+    if (input === 'C' && pr && pr.state === 'OPEN' && onOpenConflict &&
+        pr.mergeable === 'CONFLICTING') {
+      onOpenConflict()
+      return
+    }
+    // C on clean PR → jump to Actions pane filtered to this branch
+    if (input === 'C' && pr && onOpenActions && pr.mergeable === 'MERGEABLE') {
+      onOpenActions(pr.headRefName)
+      return
+    }
+    // c (lowercase) — enter checks navigation mode
+    if (input === 'c') {
+      if (allChecksForNav.length === 0) {
+        showStatus('No CI checks for this PR')
+        return
+      }
+      // Start at first failing check, or 0
+      const firstFailing = allChecksForNav.findIndex(c => /failure|error/i.test(c.conclusion || c.status || c.state || ''))
+      const startIdx = firstFailing >= 0 ? firstFailing : 0
+      setCheckCursor(startIdx)
+      // Scroll to checks section
+      const checksRow = filteredRows.findIndex(r => r.id === 'checks-hdr')
+      if (checksRow >= 0) setScrollY(Math.min(checksRow, maxScroll))
+      return
+    }
     if (input === '/') { setSearching(true); setSearchText(''); return }
     if (input === 'm' && pr && pr.state === 'OPEN') { setDialog('merge'); return }
     if (input === 'X' && pr && pr.state === 'OPEN') { setDialog('close'); return }
@@ -358,8 +500,9 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
   // ── Dialogs ────────────────────────────────────────────────────────────────
 
   if (dialog === 'merge') {
-    const mergeOpts = repoInfo?.viewerPermission === 'ADMIN'
-      ? [...MERGE_OPTIONS_BASE, MERGE_OPTION_ADMIN]
+    // Show admin options when confirmed admin, or while repoInfo is still loading
+    const mergeOpts = !repoInfo || repoInfo.viewerPermission === 'ADMIN'
+      ? [...MERGE_OPTIONS_BASE, ...MERGE_OPTIONS_ADMIN]
       : MERGE_OPTIONS_BASE
     return (
       <OptionPicker
@@ -369,34 +512,12 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
         onSubmit={(val) => {
           const strategy = typeof val === 'object' ? val.value : val
           const msg = typeof val === 'object' ? val.text : undefined
-          if (strategy === 'admin') {
-            setAdminMergeMsg(msg || '')
-            setDialog('merge-admin')
-          } else {
-            setDialog(null)
-            mergePR(repo, pr.number, strategy, msg)
-              .then(() => refetch())
-              .catch(err => showStatus(`✗ Merge failed: ${err.message}`, true))
-          }
-        }}
-        onCancel={() => setDialog(null)}
-      />
-    )
-  }
-
-  if (dialog === 'merge-admin') {
-    return (
-      <OptionPicker
-        title={`Merge method (admin bypass) — PR #${pr.number}`}
-        options={MERGE_OPTIONS_BASE}
-        onSubmit={(val) => {
-          const method = typeof val === 'object' ? val.value : val
           setDialog(null)
-          mergePR(repo, pr.number, `admin-${method}`, adminMergeMsg || undefined)
+          mergePR(repo, pr.number, strategy, msg)
             .then(() => refetch())
             .catch(err => showStatus(`✗ Merge failed: ${err.message}`, true))
         }}
-        onCancel={() => setDialog('merge')}
+        onCancel={() => setDialog(null)}
       />
     )
   }
@@ -471,6 +592,40 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
     )
   }
 
+  if (dialog === 'approve-body') {
+    return (
+      <FormCompose
+        title={`Approve PR #${pr.number}`}
+        fields={[{ name: 'body', label: 'Comment (optional)', type: 'text' }]}
+        onSubmit={async (values) => {
+          setDialog(null)
+          try {
+            await reviewPR(repo, pr.number, 'approve', values.body || '')
+            showStatus(`✓ Approved PR #${pr.number}`)
+          } catch (err) { showStatus(`✗ ${err.message}`, true) }
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
+  if (dialog === 'reqchanges-body') {
+    return (
+      <FormCompose
+        title={`Request changes on PR #${pr.number}`}
+        fields={[{ name: 'body', label: 'Describe the changes needed', type: 'text' }]}
+        onSubmit={async (values) => {
+          setDialog(null)
+          try {
+            await reviewPR(repo, pr.number, 'request-changes', values.body)
+            showStatus(`✓ Requested changes on PR #${pr.number}`)
+          } catch (err) { showStatus(`✗ ${err.message}`, true) }
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
   if (dialog === 'labels') {
     return <PRLabelDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(msg) => { setDialog(null); showStatus(msg, true) }} />
   }
@@ -479,12 +634,34 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
     return <PRAssigneeDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(msg) => { setDialog(null); showStatus(msg, true) }} />
   }
 
+  if (dialog === 'reviewers') {
+    return <PRReviewerDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(msg) => { setDialog(null); showStatus(msg, true) }} />
+  }
+
+  if (dialog === 'check-logs') {
+    if (checkLogLoading) {
+      return (
+        <Box flexDirection="column" flexGrow={1} paddingX={1}>
+          <Box gap={1}><Spinner /><Text color={t.ui.muted}>Loading annotations…</Text></Box>
+        </Box>
+      )
+    }
+    return (
+      <LogViewer
+        lines={checkLogLines}
+        onClose={() => setDialog(null)}
+      />
+    )
+  }
+
   // ── Detail view ────────────────────────────────────────────────────────────
 
   const badge = prStateBadge(pr, t)
 
   return (
     <Box flexDirection="column" flexGrow={1}>
+
+      {loading && <Box paddingX={1}><Text color={t.ui.muted}>refreshing…</Text></Box>}
 
       {/* ── Fixed title header ── */}
       <Box flexDirection="column" paddingX={1} paddingY={0}
@@ -531,9 +708,13 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff }) {
       <Box paddingX={1} justifyContent="space-between">
         {statusMsg
           ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? '  [any key to dismiss]' : ''}</Text>
-          : maxScroll > 0
-            ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  [j/k] scroll  [gg/G] top/bottom</Text>
-            : <Text color={t.ui.dim}>[d] diff  [E] open in editor  [m] merge  [M] auto-merge  [l] labels  [A] assignees  [r] refresh</Text>
+          : checkCursor !== null
+            ? <Text color={t.ui.selected}>[j/k] nav checks  [Enter/o] open  [l] annotations  [R] rerun  [Esc] exit checks</Text>
+            : maxScroll > 0
+              ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  [j/k] scroll  [gg/G] top/bottom</Text>
+              : pr?.mergeable === 'CONFLICTING'
+                ? <Text color={t.pr.conflict || t.ci.pending}>[C] resolve conflicts  [c] checks  [d] diff  [m] merge  [l] labels  [A] assignees  [R] reviewers</Text>
+                : <Text color={t.ui.dim}>[d] diff  [E] editor  [m] merge  [M] auto-merge  [c] checks  [l] labels  [A] assignees  [R] reviewers</Text>
         }
         <Text color={t.ui.dim}>[/] search  [?] help  [Esc] back</Text>
       </Box>
@@ -588,13 +769,48 @@ function PRAssigneeDialog({ repo, pr, onClose, onError }) {
     <MultiSelect
       items={items}
       onSubmit={async (selectedIds) => {
+        const current = pr.assignees?.map(a => a.login) || []
+        const toAdd    = selectedIds.filter(id => !current.includes(id))
+        const toRemove = current.filter(id => !selectedIds.includes(id))
         try {
-          const { execa } = await import('execa')
-          if (selectedIds.length > 0) {
-            await execa('gh', ['pr', 'edit', String(pr.number), '--repo', repo,
-              '--add-assignee', selectedIds.join(',')])
-          }
+          if (toAdd.length)    await addPRAssignees(repo, pr.number, toAdd)
+          if (toRemove.length) await removePRAssignees(repo, pr.number, toRemove)
         } catch (err) { onError?.(`✗ Assignee update failed: ${err.message}`) }
+        onClose()
+      }}
+      onCancel={onClose}
+    />
+  )
+}
+
+function PRReviewerDialog({ repo, pr, onClose, onError }) {
+  const { t } = useTheme()
+  const { data: collabs, loading } = useGh(listCollaborators, [repo])
+  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators…</Text></Box>
+
+  // Current pending review requests (not yet reviewed)
+  const currentRequested = new Set(
+    (pr.reviewRequests || []).map(r => r.login || r.name).filter(Boolean)
+  )
+
+  const items = (collabs || []).map(c => ({
+    id: c.login,
+    name: c.login,
+    selected: currentRequested.has(c.login),
+  }))
+
+  return (
+    <MultiSelect
+      title="Request Reviewers"
+      items={items}
+      onSubmit={async (selectedIds) => {
+        const current = [...currentRequested]
+        const toAdd    = selectedIds.filter(id => !current.includes(id))
+        const toRemove = current.filter(id => !selectedIds.includes(id))
+        try {
+          if (toAdd.length)    await requestReviewers(repo, pr.number, toAdd)
+          if (toRemove.length) await removeReviewers(repo, pr.number, toRemove)
+        } catch (err) { onError?.(`✗ Reviewer update failed: ${err.message}`) }
         onClose()
       }}
       onCancel={onClose}

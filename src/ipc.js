@@ -26,10 +26,10 @@
  *   pr-merged       { prNumber }
  */
 
-import { createServer, createConnection } from 'net'
+import { createServer } from 'net'
 import { join } from 'path'
 import { homedir } from 'os'
-import { writeFileSync, unlinkSync, existsSync, readFileSync } from 'fs'
+import { writeFileSync, unlinkSync, existsSync } from 'fs'
 
 const SOCKET_POINTER = join(homedir(), '.lazyhub-socket')
 
@@ -152,18 +152,6 @@ export function startIPC({ getState, onNavigate } = {}) {
 }
 
 /**
- * Stop the IPC server.
- */
-export function stopIPC() {
-  if (!_server) return
-  _server.close()
-  _server = null
-  _clients.clear()
-  try { unlinkSync(socketPath()) } catch { /* ignore */ }
-  try { unlinkSync(SOCKET_POINTER) } catch { /* ignore */ }
-}
-
-/**
  * Emit a state-change event to all connected IDE clients.
  *
  * @param {string} event  - event name
@@ -171,51 +159,4 @@ export function stopIPC() {
  */
 export function emitIPC(event, data = {}) {
   broadcast(event, data)
-}
-
-// ─── Client helpers (used by editor integrations / CLI tools) ─────────────────
-
-/**
- * Send a single request to a running lazyhub IPC server.
- * Returns the parsed response, or null on error.
- *
- * @param {object} msg   - request object (type + params)
- * @param {string} [path] - socket path (default: reads ~/.lazyhub-socket)
- * @returns {Promise<object|null>}
- */
-export async function sendIPC(msg, path = null) {
-  const sockPath = path || (existsSync(SOCKET_POINTER)
-    ? readFileSync(SOCKET_POINTER, 'utf8').trim()
-    : null)
-  if (!sockPath || !existsSync(sockPath)) return null
-
-  return new Promise((resolve) => {
-    const socket = createConnection(sockPath)
-    let buf = ''
-    const id = Math.random().toString(36).slice(2)
-
-    socket.once('connect', () => {
-      socket.write(JSON.stringify({ id, ...msg }) + '\n')
-    })
-
-    socket.on('data', (chunk) => {
-      buf += chunk.toString()
-      const lines = buf.split('\n')
-      buf = lines.pop()
-      for (const line of lines) {
-        try {
-          const parsed = JSON.parse(line.trim())
-          if (parsed.id === id) {
-            socket.destroy()
-            resolve(parsed)
-            return
-          }
-        } catch { /* ignore */ }
-      }
-    })
-
-    socket.once('error',   () => resolve(null))
-    socket.once('timeout', () => { socket.destroy(); resolve(null) })
-    socket.setTimeout(3000)
-  })
 }

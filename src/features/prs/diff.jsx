@@ -14,6 +14,7 @@ import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
+import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { AIReviewPane } from '../../components/AIReviewPane.jsx'
@@ -66,7 +67,10 @@ function openEditorSync(initial) {
     tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
     const tmp = join(tmpDir, 'comment.md')
     writeFileSync(tmp, initial || '', { mode: 0o600 })
+    process.stdout.write('\x1b[?1049l')
     const result = spawnSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
+    // Re-enter alternate screen after editor exits
+    process.stdout.write('\x1b[?1049h\x1b[H')
     if (result.status !== 0) return initial
     return readFileSync(tmp, 'utf8')
   } catch { return initial }
@@ -983,7 +987,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         setTimeout(() => setAiReviewError(null), 3000)
         return
       }
-      const apiKey = config.anthropicApiKey
+      const apiKey = config.ai?.anthropicApiKey
       if (!apiKey) {
         setAiReviewError('No API key — set Anthropic API key in Settings (s)')
         setTimeout(() => setAiReviewError(null), 4000)
@@ -1060,7 +1064,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   }
 
   if (dialog === 'merge') {
-    const mergeOpts = repoInfo?.viewerPermission === 'ADMIN'
+    const mergeOpts = !repoInfo || repoInfo.viewerPermission === 'ADMIN'
       ? [...MERGE_OPTIONS_BASE, MERGE_OPTION_ADMIN]
       : MERGE_OPTIONS_BASE
     return (
@@ -1096,15 +1100,30 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         options={MERGE_OPTIONS_BASE}
         onSubmit={(val) => {
           const method = typeof val === 'object' ? val.value : val
+          setAdminMergeMsg(prev => ({ strategy: `admin-${method}`, msg: typeof val === 'object' ? val.text || adminMergeMsg : adminMergeMsg }))
+          setDialog('merge-admin-confirm')
+        }}
+        onCancel={() => setDialog('merge')}
+      />
+    )
+  }
+
+  if (dialog === 'merge-admin-confirm') {
+    const pending = typeof adminMergeMsg === 'object' ? adminMergeMsg : { strategy: 'admin-merge', msg: adminMergeMsg }
+    return (
+      <ConfirmDialog
+        message={`⚠ ADMIN BYPASS: merge PR #${prNumber} via --${pending.strategy.replace('admin-', '')} bypassing branch protection?`}
+        destructive={true}
+        onConfirm={() => {
           setDialog(null)
-          mergePR(repo, prNumber, `admin-${method}`, adminMergeMsg || undefined)
+          mergePR(repo, prNumber, pending.strategy, pending.msg || undefined)
             .then(() => onBack())
             .catch(err => {
               setCommentStatus(`✗ Merge failed: ${err.message}`)
               setTimeout(() => setCommentStatus(null), 5000)
             })
         }}
-        onCancel={() => setDialog('merge')}
+        onCancel={() => setDialog('merge-admin')}
       />
     )
   }
@@ -1121,11 +1140,10 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   )
 
   const colWidth = Math.floor(((stdout?.columns || 80) - 2) / 2)
-  const MAX_ROWS = _diffCfg.maxLines || 2000
-  const displayRows = rows.length > MAX_ROWS ? rows.slice(0, MAX_ROWS) : rows
   const composeBoxHeight = compose ? 6 : 0
-  const effectiveHeight = Math.max(3, visibleHeight - composeBoxHeight)
-  const visibleRows = displayRows.slice(scrollOffset, scrollOffset + effectiveHeight)
+  const effectiveHeight  = Math.max(3, visibleHeight - composeBoxHeight)
+  // No row cap — virtual slice keeps rendering O(visibleHeight) regardless of diff size
+  const visibleRows = rows.slice(scrollOffset, scrollOffset + effectiveHeight)
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -1163,7 +1181,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
           </>
         ) : (
           splitView
-            ? renderSplitView(displayRows, scrollOffset, effectiveHeight, cursor, langCache, colWidth, t)
+            ? renderSplitView(rows, scrollOffset, effectiveHeight, cursor, langCache, colWidth, t)
             : visibleRows.map((row, i) => {
                 const idx = scrollOffset + i
                 const isSelected = idx === cursor
@@ -1186,12 +1204,6 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
               })
         )}
       </Box>
-
-      {rows.length > MAX_ROWS && (
-        <Box paddingX={1}>
-          <Text color={t.ci.pending}>⚠ Diff truncated at {MAX_ROWS} rows — [o] open in browser for full diff</Text>
-        </Box>
-      )}
 
       {fileJumpActive && (
         <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1} marginX={1}>

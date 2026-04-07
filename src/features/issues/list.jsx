@@ -6,7 +6,8 @@ import React, { useState, useCallback, useEffect, useContext, useRef, memo } fro
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useGh } from '../../hooks/useGh.js'
-import { listIssues, listLabels, listCollaborators, closeIssue, createIssue, addLabels, removeLabels } from '../../executor.js'
+import { listIssues, listLabels, listCollaborators, closeIssue, createIssue, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees } from '../../executor.js'
+import { sanitize } from '../../utils.js'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
@@ -18,27 +19,38 @@ import { IssueListSkeleton } from '../../components/Skeleton.jsx'
 
 const _cfg = loadConfig().issues
 
-function IssueStateBadge({ issue }) {
-  const { t } = useTheme()
+// ─── Age colour ───────────────────────────────────────────────────────────────
+
+function ageColor(updatedAt, t) {
+  if (!updatedAt) return t.ui.dim
+  const days = (Date.now() - new Date(updatedAt).getTime()) / 86_400_000
+  if (days < 3)  return t.ci.pass     // green  — fresh
+  if (days < 7)  return undefined     // default — normal
+  if (days < 14) return t.ci.pending  // yellow — getting stale
+  return t.ci.fail                     // red    — stale
+}
+
+function IssueStateBadge({ issue, t }) {
   switch (issue.state) {
     case 'OPEN':   return <Text color={t.issue.open}>●</Text>
-    case 'CLOSED': return <Text color={t.issue.closed}>✗</Text>
-    default:       return <Text color={t.ui.muted}>?</Text>
+    case 'CLOSED': return <Text color={t.issue.closed}>●</Text>
+    default:       return <Text color={t.ui.muted}>●</Text>
   }
 }
 
 const IssueRow = memo(({ issue, isSelected, t }) => {
-  const authorLogin = String(issue.author?.login || '').padEnd(12)
+  const authorLogin   = String(issue.author?.login || '').padEnd(12)
   const visibleLabels = (issue.labels || []).slice(0, 2)
-  const extraLabels = (issue.labels || []).length - 2
+  const extraLabels   = (issue.labels || []).length - 2
+  const timeColor     = ageColor(issue.updatedAt, t)
 
   return (
     <Box paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-      <IssueStateBadge issue={issue} />
+      <IssueStateBadge issue={issue} t={t} />
       <Text> </Text>
       <Text color={t.ui.dim} bold>#{String(issue.number).padEnd(5)}</Text>
       <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
-        {issue.title}
+        {sanitize(issue.title)}
       </Text>
       {visibleLabels.map(l => (
         <Text key={l.name} color={`#${l.color}`}> [{l.name.slice(0, 14)}]</Text>
@@ -47,7 +59,7 @@ const IssueRow = memo(({ issue, isSelected, t }) => {
         <Text color={t.ui.muted}> +{extraLabels}</Text>
       )}
       <Text color={t.ui.muted}> {authorLogin}</Text>
-      <Text color={t.ui.dim}> {format(issue.updatedAt)}</Text>
+      <Text color={timeColor}> {format(issue.updatedAt)}</Text>
     </Box>
   )
 })
@@ -60,6 +72,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
 
   const FK = _cfg.keys
   const [filterState, setFilterState] = useState(_cfg.defaultFilter)
+  const [sortMode, setSortMode] = useState('default') // 'default' | 'oldest'
   const { data: issues, loading, error, refetch } = useGh(listIssues, [repo, { state: filterState, limit: _cfg.pageSize }])
   const [cursor, setCursor] = useState(initialCursor)
   const [scrollOffset, setScrollOffset] = useState(initialScrollOffset)
@@ -68,7 +81,10 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
 
-  const items = issues || []
+  const rawItems = issues || []
+  const items = sortMode === 'oldest'
+    ? [...rawItems].sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt))
+    : rawItems
   const STATE_CYCLE = ['open', 'closed']
 
   useEffect(() => {
@@ -79,6 +95,8 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
     notifyDialog(!!dialog)
     return () => notifyDialog(false)
   }, [dialog, notifyDialog])
+
+  useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
   const showStatus = (msg, isError = false) => {
     setStatusMsg({ msg, isError, persist: isError })
@@ -95,7 +113,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
   }, [items.length, scrollOffset, visibleHeight])
 
   useInput((input, key) => {
-    if (statusMsg?.persist) { setStatusMsg(null); return }
+    if (statusMsg?.persist) { setStatusMsg(null) }
     if (dialog) return
 
     // gg → top
@@ -114,8 +132,10 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
 
     // G → bottom
     if (input === 'G') {
-      const last = items.length - 1
-      setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
+      if (items.length > 0) {
+        const last = items.length - 1
+        setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
+      }
       return
     }
 
@@ -133,6 +153,17 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
       setFilterState(prev => {
         const next = STATE_CYCLE[(STATE_CYCLE.indexOf(prev) + 1) % STATE_CYCLE.length]
         showStatus(`▸ ${next}`)
+        return next
+      })
+      setCursor(0); setScrollOffset(0)
+      return
+    }
+
+    // s — cycle age sort
+    if (input === 's') {
+      setSortMode(prev => {
+        const next = prev === 'default' ? 'oldest' : 'default'
+        showStatus(next === 'oldest' ? 'sort: oldest first' : 'sort: default')
         return next
       })
       setCursor(0); setScrollOffset(0)
@@ -174,19 +205,28 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
       if (issue) setDialog('assignees')
       return
     }
+
+    if (input === 'o' && issue?.url) {
+      import('execa').then(({ execa }) => {
+        const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
+        execa(cmd, [issue.url]).catch(() => {})
+      })
+      return
+    }
   })
 
   const selectedIssue = items[cursor]
   const visibleIssues = items.slice(scrollOffset, scrollOffset + visibleHeight)
 
   if (dialog === 'fuzzy') {
+    const fuzzyItems = items.map(issue => ({ ...issue, authorLogin: issue.author?.login || '' }))
     return (
       <Box flexDirection="column" flexGrow={1}>
         <FuzzySearch
-          items={items}
-          searchFields={['title', 'number', 'author']}
+          items={fuzzyItems}
+          searchFields={['title', 'number', 'authorLogin']}
           onSubmit={(item) => {
-            const idx = items.indexOf(item)
+            const idx = items.findIndex(i => i.number === item.number)
             if (idx !== -1) { setCursor(idx); setScrollOffset(Math.max(0, idx - 2)) }
             setDialog(null)
           }}
@@ -200,7 +240,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
     return (
       <Box flexDirection="column" flexGrow={1}>
         <ConfirmDialog
-          message={`Close issue #${selectedIssue.number}: ${selectedIssue.title}?`}
+          message={`Close issue #${selectedIssue.number}: ${sanitize(selectedIssue.title)}?`}
           destructive={true}
           onConfirm={async () => {
             setDialog(null)
@@ -256,7 +296,10 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
       <Box paddingX={1} gap={1}>
         <Text color={t.ui.dim}>filter:</Text>
         <Text color={filterState === 'open' ? t.issue.open : t.issue.closed} bold>{filterState}</Text>
-        <Text color={t.ui.dim}>  [{FK.filterOpen}] open  [{FK.filterClosed}] closed  [n] new</Text>
+        {sortMode === 'oldest' && (
+          <Text color={t.ci.pending} bold>↑ oldest</Text>
+        )}
+        <Text color={t.ui.dim}>  [{FK.filterOpen}] open  [{FK.filterClosed}] closed  [s] sort  [n] new</Text>
         {statusMsg && (
           <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
         )}
@@ -264,6 +307,9 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
       <Box flexDirection="column" flexGrow={1}>
         {loading && items.length === 0 && (
           <IssueListSkeleton count={visibleHeight} />
+        )}
+        {loading && items.length > 0 && (
+          <Box paddingX={1}><Text color={t.ui.muted}>refreshing…</Text></Box>
         )}
         {visibleIssues.map((issue, i) => {
           const idx = scrollOffset + i
@@ -329,11 +375,12 @@ function IssueAssigneeDialog({ repo, issue, onClose }) {
     <MultiSelect
       items={items}
       onSubmit={async (selectedIds) => {
+        const current = issue.assignees?.map(a => a.login) || []
+        const toAdd    = selectedIds.filter(id => !current.includes(id))
+        const toRemove = current.filter(id => !selectedIds.includes(id))
         try {
-          const { execa } = await import('execa')
-          if (selectedIds.length) {
-            await execa('gh', ['issue', 'edit', String(issue.number), '--repo', repo, '--add-assignee', selectedIds.join(',')])
-          }
+          if (toAdd.length)    await addIssueAssignees(repo, issue.number, toAdd)
+          if (toRemove.length) await removeIssueAssignees(repo, issue.number, toRemove)
         } catch { /* ignore */ }
         onClose()
       }}

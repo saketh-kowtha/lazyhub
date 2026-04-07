@@ -2,7 +2,7 @@
  * src/features/branches/index.jsx — Branch list pane
  */
 
-import React, { useState, useCallback, useEffect, useContext, memo } from 'react'
+import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { useGh } from '../../hooks/useGh.js'
 import { listBranches, deleteBranch, listPRs } from '../../executor.js'
@@ -10,6 +10,7 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
+import { TextInput } from '../../utils.js'
 import { BranchListSkeleton } from '../../components/Skeleton.jsx'
 
 const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t }) => {
@@ -40,7 +41,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
   const { data: branches, loading, error, refetch } = useGh(listBranches, [repo])
-  const { data: prs } = useGh(listPRs, [repo])
+  const { data: prs } = useGh(listPRs, [repo, { state: 'open', limit: 100 }], { ttl: 120_000 })
   const [currentBranch, setCurrentBranch] = useState(null)
 
   useEffect(() => {
@@ -54,6 +55,9 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
+  const [newBranchName, setNewBranchName] = useState('')
+  const lastKeyRef   = useRef(null)
+  const lastKeyTimer = useRef(null)
 
   const items = branches || []
 
@@ -65,6 +69,8 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
     notifyDialog(!!dialog)
     return () => notifyDialog(false)
   }, [dialog, notifyDialog])
+
+  useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
   const showStatus = (msg, isError = false) => {
     setStatusMsg({ msg, isError, persist: isError })
@@ -88,11 +94,40 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
 
   useInput((input, key) => {
     if (statusMsg?.persist) { setStatusMsg(null); return }
+    if (dialog === 'new-branch') {
+      if (key.escape) { setDialog(null); setNewBranchName(''); return }
+      return
+    }
     if (dialog) return
     if (input === 'j' || key.downArrow) { moveCursor(1); return }
     if (input === 'k' || key.upArrow)  { moveCursor(-1); return }
     if (input === 'r') { refetch(); return }
     if (input === '/') { setDialog('fuzzy'); return }
+    if (input === 'n') { setNewBranchName(''); setDialog('new-branch'); return }
+
+    // gg → top
+    if (input === 'g') {
+      if (lastKeyRef.current === 'g') {
+        clearTimeout(lastKeyTimer.current)
+        lastKeyRef.current = null
+        setCursor(0); setScrollOffset(0)
+        return
+      }
+      lastKeyRef.current = 'g'
+      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
+      return
+    }
+    lastKeyRef.current = null
+
+    // G → bottom
+    if (input === 'G') {
+      if (items.length > 0) {
+        const last = items.length - 1
+        setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
+      }
+      return
+    }
+
     if (loading || items.length === 0) return
 
     if (input === ' ' || key.return) {
@@ -137,16 +172,18 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
 
   if (dialog === 'checkout' && selectedBranch) {
     const isCurrent = selectedBranch.name === currentBranch
+    if (isCurrent) {
+      setDialog(null)
+      showStatus(`Already on "${selectedBranch.name}"`)
+      return null
+    }
     return (
       <Box flexDirection="column" flexGrow={1}>
         <ConfirmDialog
-          message={isCurrent
-            ? `"${selectedBranch.name}" is already your current branch.`
-            : `Checkout branch "${selectedBranch.name}"?`}
+          message={`Checkout branch "${selectedBranch.name}"?`}
           destructive={false}
           onConfirm={async () => {
             setDialog(null)
-            if (isCurrent) return
             try {
               const { execa } = await import('execa')
               await execa('git', ['checkout', selectedBranch.name], { cwd: process.cwd() })
@@ -163,8 +200,8 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
 
   if (dialog === 'delete' && selectedBranch) {
     const msg = hasOpenPR
-      ? `⚠ Branch "${selectedBranch.name}" has an open PR! Delete anyway?`
-      : `Delete branch "${selectedBranch.name}"?`
+      ? `⚠ Branch "${selectedBranch.name}" has an open PR! Delete remote branch anyway?`
+      : `Delete remote branch "${selectedBranch.name}"? (local branch unaffected)`
     return (
       <Box flexDirection="column" flexGrow={1}>
         <ConfirmDialog
@@ -183,6 +220,40 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
           }}
           onCancel={() => setDialog(null)}
         />
+      </Box>
+    )
+  }
+
+  if (dialog === 'new-branch') {
+    return (
+      <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
+        <Text color={t.ui.selected} bold>Create new branch</Text>
+        <Box marginTop={1} gap={1}>
+          <Text color={t.ui.muted}>Name: </Text>
+          <TextInput
+            value={newBranchName}
+            onChange={setNewBranchName}
+            placeholder="branch-name"
+            focus={true}
+            onEnter={async () => {
+              const name = newBranchName.trim()
+              if (!name) { setDialog(null); return }
+              if (/[\s~^:?*\[\\]|\.\.|\.$|^-|\.lock$/.test(name)) {
+                showStatus(`Invalid branch name: "${name}"`, true)
+                setDialog(null)
+                return
+              }
+              setDialog(null)
+              try {
+                const { execa } = await import('execa')
+                await execa('git', ['checkout', '-b', name], { cwd: process.cwd() })
+                showStatus(`✓ Created and checked out ${name}`)
+                refetch()
+              } catch (err) { showStatus(`Failed: ${err.message}`, true) }
+            }}
+          />
+        </Box>
+        <Text color={t.ui.dim} marginTop={1}>[Enter] create  [Esc] cancel</Text>
       </Box>
     )
   }

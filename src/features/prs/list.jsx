@@ -17,7 +17,8 @@ import { useGh } from '../../hooks/useGh.js'
 import {
   listPRs, listLabels, listCollaborators,
   mergePR, closePR, checkoutBranch, addLabels, removeLabels,
-  requestReviewers, reviewPR, getRepoInfo,
+  requestReviewers, removeReviewers, reviewPR, getRepoInfo,
+  addPRAssignees, removePRAssignees,
 } from '../../executor.js'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
@@ -33,40 +34,51 @@ import { PRListSkeleton } from '../../components/Skeleton.jsx'
 
 const _cfg = loadConfig().pr
 
-// ─── Badges ──────────────────────────────────────────────────────────────────
+// ─── Age colour ───────────────────────────────────────────────────────────────
 
-function PRStateBadge({ pr }) {
-  const { t } = useTheme()
-  if (pr.isDraft) return <Text color={t.pr.draft}>⊘</Text>
+function ageColor(updatedAt, t) {
+  if (!updatedAt) return t.ui.dim
+  const days = (Date.now() - new Date(updatedAt).getTime()) / 86_400_000
+  if (days < 3)  return t.ci.pass     // green  — fresh
+  if (days < 7)  return undefined     // default — normal
+  if (days < 14) return t.ci.pending  // yellow — getting stale
+  return t.ci.fail                     // red    — stale
+}
+
+// ─── Badges ───────────────────────────────────────────────────────────────────
+
+function PRStateBadge({ pr, t }) {
+  const conflicting = pr.state === 'OPEN' && pr.mergeable === 'CONFLICTING'
+  if (pr.isDraft)   return <Text color={t.pr.draft}>⊘</Text>
+  if (conflicting)  return <Text color={t.pr.conflict || t.ci.pending}>⚡</Text>
   switch (pr.state) {
     case 'OPEN':   return <Text color={t.pr.open}>●</Text>
-    case 'MERGED': return <Text color={t.pr.merged}>✓</Text>
-    case 'CLOSED': return <Text color={t.pr.closed}>✗</Text>
-    default:       return <Text color={t.ui.muted}>?</Text>
+    case 'MERGED': return <Text color={t.pr.merged}>●</Text>
+    case 'CLOSED': return <Text color={t.pr.closed}>●</Text>
+    default:       return <Text color={t.ui.muted}>●</Text>
   }
 }
 
-function CIBadge({ pr }) {
-  const { t } = useTheme()
+function CIBadge({ pr, t }) {
   const checks = pr.statusCheckRollup
   if (!checks || checks.length === 0) return null
-  const states = checks.map(c => c.state || c.conclusion || c.status || '')
-  if (states.some(s => /failure|error/i.test(s)))              return <Text color={t.ci.fail}> ✗</Text>
-  if (states.some(s => /pending|in_progress|queued/i.test(s))) return <Text color={t.ci.pending}> ●</Text>
-  if (states.every(s => /success/i.test(s)))                   return <Text color={t.ci.pass}> ✓</Text>
-  return null
+  const total   = checks.length
+  const states  = checks.map(c => c.state || c.conclusion || c.status || '')
+  const failing = states.filter(s => /failure|error/i.test(s)).length
+  const pending = states.filter(s => /pending|in_progress|queued/i.test(s)).length
+  if (failing > 0) return <Text color={t.ci.fail}> ✗ {failing}/{total}</Text>
+  if (pending > 0) return <Text color={t.ci.pending}> ● {pending}/{total}</Text>
+  return <Text color={t.ci.pass}> ✓</Text>
 }
 
 const PRRow = memo(({ pr, isSelected, t }) => {
   const authorLogin = String(pr.author?.login || '').slice(0, 12).padEnd(12)
-  const timeStr = pr.updatedAt ? format(pr.updatedAt) : ''
+  const timeStr     = pr.updatedAt ? format(pr.updatedAt) : ''
+  const timeColor   = ageColor(pr.updatedAt, t)
 
   return (
-    <Box
-      paddingX={1}
-      backgroundColor={isSelected ? t.ui.headerBg : undefined}
-    >
-      <PRStateBadge pr={pr} />
+    <Box paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
+      <PRStateBadge pr={pr} t={t} />
       <Text color={t.ui.dim}> {'#' + String(pr.number).padEnd(5)}</Text>
       <Text
         color={isSelected ? t.ui.selected : undefined}
@@ -76,9 +88,9 @@ const PRRow = memo(({ pr, isSelected, t }) => {
       >
         {sanitize(pr.title)}
       </Text>
-      <CIBadge pr={pr} />
+      <CIBadge pr={pr} t={t} />
       <Text color={t.ui.muted}> {authorLogin}</Text>
-      <Text color={t.ui.dim}> {timeStr}</Text>
+      <Text color={timeColor}> {timeStr}</Text>
     </Box>
   )
 })
@@ -99,6 +111,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
 
   const [filterState, setFilterState] = useState(_cfg.defaultFilter)
   const [scope, setScope] = useState(_cfg.defaultScope)
+  const [sortMode, setSortMode] = useState('default') // 'default' | 'oldest'
   const [authorFilter, setAuthorFilter] = useState('')  // '' = all authors
   const [limit, setLimit] = useState(_cfg.pageSize)
   const { data: prs, loading, error, refetch } = useGh(listPRs, [repo, { state: filterState, scope, author: authorFilter || undefined, limit }])
@@ -111,7 +124,10 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
 
-  const items = prs || []
+  const rawItems = prs || []
+  const items = sortMode === 'oldest'
+    ? [...rawItems].sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt))
+    : rawItems
 
   // Filter keys from config (defaults: O=open, C=closed, M=merged)
   const FK = _cfg.keys
@@ -127,6 +143,8 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
     notifyDialog(!!dialog)
     return () => notifyDialog(false)
   }, [dialog, notifyDialog])
+
+  useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
   // Notify parent of hovered item for side panel
   useEffect(() => {
@@ -155,7 +173,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const closeDialog = useCallback(() => setDialog(null), [])
 
   useInput((input, key) => {
-    if (statusMsg?.persist) { setStatusMsg(null); return }
+    if (statusMsg?.persist) { setStatusMsg(null) }
     if (dialog) return
 
     // gg → top
@@ -174,8 +192,10 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
 
     // G → bottom
     if (input === 'G') {
-      const last = items.length - 1
-      setCursor(last); setScrollOffset(Math.max(0, last - height + 1))
+      if (items.length > 0) {
+        const last = items.length - 1
+        setCursor(last); setScrollOffset(Math.max(0, last - height + 1))
+      }
       return
     }
 
@@ -199,14 +219,20 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
       return
     }
 
-    // s — cycle scope
+    // s — cycle scope then age sort
     if (input === 's') {
-      const SCOPES = ['all', 'own', 'reviewing']
-      setScope(prev => {
-        const next = SCOPES[(SCOPES.indexOf(prev) + 1) % SCOPES.length]
+      const CYCLE = ['all', 'own', 'reviewing', 'oldest']
+      const current = sortMode === 'oldest' ? 'oldest' : scope
+      const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length]
+      if (next === 'oldest') {
+        setScope('all')
+        setSortMode('oldest')
+        showStatus('sort: oldest first')
+      } else {
+        setSortMode('default')
+        setScope(next)
         showStatus(`scope: ${next}`)
-        return next
-      })
+      }
       setCursor(0); setScrollOffset(0)
       return
     }
@@ -260,12 +286,13 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const selectedPR = items[cursor]
 
   if (dialog === 'fuzzy') {
+    const fuzzyItems = items.map(pr => ({ ...pr, authorLogin: pr.author?.login || '' }))
     return (
       <FuzzySearch
-        items={items}
-        searchFields={['title', 'number', 'author', 'headRefName']}
+        items={fuzzyItems}
+        searchFields={['title', 'number', 'authorLogin', 'headRefName']}
         onSubmit={(item) => {
-          const idx = items.indexOf(item)
+          const idx = items.findIndex(p => p.number === item.number)
           if (idx !== -1) {
             setCursor(idx)
             setScrollOffset(Math.max(0, idx - Math.floor(height / 2)))
@@ -295,7 +322,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   if (dialog === 'merge' && selectedPR) {
     return (
       <OptionPicker
-        title={`Merge PR #${selectedPR.number}: ${selectedPR.title}`}
+        title={`Merge PR #${selectedPR.number}: ${sanitize(selectedPR.title)}`}
         options={MERGE_OPTIONS}
         promptText="Commit message (optional, Enter to skip)"
         onSubmit={(val) => {
@@ -351,7 +378,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   if (dialog === 'close-pr' && selectedPR) {
     return (
       <ConfirmDialog
-        message={`Close PR #${selectedPR.number}: ${selectedPR.title}?`}
+        message={`Close PR #${selectedPR.number}: ${sanitize(selectedPR.title)}?`}
         destructive={true}
         onConfirm={async () => {
           closeDialog()
@@ -441,8 +468,8 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
           {filterState}
         </Text>
         <Text color={t.ui.dim}>·</Text>
-        <Text color={scope === 'own' ? t.ui.selected : scope === 'reviewing' ? t.ci.pending : t.ui.muted} bold>
-          {scope === 'own' ? 'mine' : scope === 'reviewing' ? 'reviewing' : 'all'}
+        <Text color={sortMode === 'oldest' ? t.ci.pending : scope === 'own' ? t.ui.selected : scope === 'reviewing' ? t.ci.pending : t.ui.muted} bold>
+          {sortMode === 'oldest' ? '↑ oldest' : scope === 'own' ? 'mine' : scope === 'reviewing' ? 'reviewing' : 'all'}
         </Text>
         {authorFilter && (
           <>
@@ -468,6 +495,10 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
 
       {loading && items.length === 0 && (
         <PRListSkeleton count={height} />
+      )}
+
+      {loading && items.length > 0 && (
+        <Box paddingX={1}><Text color={t.ui.muted}>refreshing…</Text></Box>
       )}
 
       {visiblePRs.map((pr, i) => {
@@ -545,14 +576,12 @@ function AssigneeDialog({ repo, pr, onClose }) {
     <MultiSelect
       items={items}
       onSubmit={async (selectedIds) => {
+        const current = pr.assignees?.map(a => a.login) || []
+        const toAdd    = selectedIds.filter(id => !current.includes(id))
+        const toRemove = current.filter(id => !selectedIds.includes(id))
         try {
-          const { execa } = await import('execa')
-          if (selectedIds.length > 0) {
-            await execa('gh', [
-              'pr', 'edit', String(pr.number), '--repo', repo,
-              '--add-assignee', selectedIds.join(','),
-            ])
-          }
+          if (toAdd.length)    await addPRAssignees(repo, pr.number, toAdd)
+          if (toRemove.length) await removePRAssignees(repo, pr.number, toRemove)
         } catch { /* ignore */ }
         onClose()
       }}
@@ -593,18 +622,27 @@ function ReviewerDialog({ repo, pr, onClose }) {
   const { data: collabs, loading } = useGh(listCollaborators, [repo])
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators…</Text></Box>
 
+  const currentRequested = new Set(
+    (pr.reviewRequests || []).map(r => r.login || r.name).filter(Boolean)
+  )
+
   const items = (collabs || []).map(c => ({
     id: c.login,
     name: c.login,
-    selected: pr.reviewRequests?.some(r => r.login === c.login) ?? false,
+    selected: currentRequested.has(c.login),
   }))
 
   return (
     <MultiSelect
+      title="Request Reviewers"
       items={items}
       onSubmit={async (selectedIds) => {
+        const current = [...currentRequested]
+        const toAdd    = selectedIds.filter(id => !current.includes(id))
+        const toRemove = current.filter(id => !selectedIds.includes(id))
         try {
-          if (selectedIds.length) await requestReviewers(repo, pr.number, selectedIds)
+          if (toAdd.length)    await requestReviewers(repo, pr.number, toAdd)
+          if (toRemove.length) await removeReviewers(repo, pr.number, toRemove)
         } catch { /* ignore */ }
         onClose()
       }}

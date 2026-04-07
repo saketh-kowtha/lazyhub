@@ -122,6 +122,14 @@ const DEFAULT_IPC = {
   enabled: true,           // start IPC socket server for IDE integrations
 }
 
+const DEFAULT_AI = {
+  provider:        'anthropic',                   // 'anthropic' | 'openai'
+  model:           '',                            // empty = use provider default
+  anthropicApiKey: '',
+  openaiApiKey:    '',
+  openaiBaseUrl:   'https://api.openai.com/v1',  // override for Azure / Ollama / Groq / etc.
+}
+
 const DEFAULTS = {
   panes:       BUILTIN_PANES,
   defaultPane: 'prs',
@@ -133,6 +141,7 @@ const DEFAULTS = {
   diff:        DEFAULT_DIFF,
   editor:      DEFAULT_EDITOR,
   ipc:         DEFAULT_IPC,
+  ai:          DEFAULT_AI,
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -175,7 +184,15 @@ function validateCustomPane(id, def) {
  *
  */
 export function loadConfig() {
-  if (!existsSync(CONFIG_PATH)) return { ...DEFAULTS }
+  if (!existsSync(CONFIG_PATH)) {
+    const ai = { ...DEFAULT_AI }
+    if (process.env.ANTHROPIC_API_KEY)  ai.anthropicApiKey = process.env.ANTHROPIC_API_KEY
+    if (process.env.OPENAI_API_KEY)     ai.openaiApiKey    = process.env.OPENAI_API_KEY
+    if (process.env.OPENAI_BASE_URL)    ai.openaiBaseUrl   = process.env.OPENAI_BASE_URL
+    if (process.env.LAZYHUB_AI_PROVIDER) ai.provider       = process.env.LAZYHUB_AI_PROVIDER
+    if (process.env.LAZYHUB_AI_MODEL)   ai.model           = process.env.LAZYHUB_AI_MODEL
+    return { ...DEFAULTS, ai }
+  }
   try {
     const user = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'))
 
@@ -202,7 +219,19 @@ export function loadConfig() {
     const theme = user.theme != null ? user.theme : 'github-dark'
     const aiReviewEnabled = user.aiReviewEnabled !== false
 
-    const result = {
+    // Merge ai section; fall back to legacy top-level anthropicApiKey
+    const ai = mergeSection(DEFAULT_AI, user.ai)
+    if (!ai.anthropicApiKey && typeof user.anthropicApiKey === 'string' && user.anthropicApiKey) {
+      ai.anthropicApiKey = user.anthropicApiKey
+    }
+    // Env var fallbacks (config file takes priority; env vars fill gaps)
+    if (!ai.anthropicApiKey && process.env.ANTHROPIC_API_KEY) ai.anthropicApiKey = process.env.ANTHROPIC_API_KEY
+    if (!ai.openaiApiKey    && process.env.OPENAI_API_KEY)    ai.openaiApiKey    = process.env.OPENAI_API_KEY
+    if (!ai.openaiBaseUrl   && process.env.OPENAI_BASE_URL)   ai.openaiBaseUrl   = process.env.OPENAI_BASE_URL
+    if (!ai.provider        && process.env.LAZYHUB_AI_PROVIDER) ai.provider      = process.env.LAZYHUB_AI_PROVIDER
+    if (!ai.model           && process.env.LAZYHUB_AI_MODEL)  ai.model           = process.env.LAZYHUB_AI_MODEL
+
+    return {
       panes,
       defaultPane,
       theme,
@@ -214,12 +243,8 @@ export function loadConfig() {
       diff:    mergeSection(DEFAULT_DIFF,    user.diff),
       editor:  mergeSection(DEFAULT_EDITOR,  user.editor),
       ipc:     mergeSection(DEFAULT_IPC,     user.ipc),
+      ai,
     }
-    // Pass through sensitive/optional top-level fields that don't need schema merging
-    if (typeof user.anthropicApiKey === 'string' && user.anthropicApiKey) {
-      result.anthropicApiKey = user.anthropicApiKey
-    }
-    return result
   } catch {
     return { ...DEFAULTS }
   }

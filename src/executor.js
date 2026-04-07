@@ -104,7 +104,7 @@ export async function listPRs(repo, filter = {}) {
   const args = [
     'pr', 'list',
     '--repo', getRepo(repo),
-    '--json', 'number,title,state,author,labels,reviewRequests,statusCheckRollup,updatedAt,isDraft,headRefName,assignees,body',
+    '--json', 'number,title,state,author,labels,reviewRequests,statusCheckRollup,updatedAt,isDraft,headRefName,assignees,body,mergeable',
     '--limit', String(filter.limit || 50),
   ]
   if (filter.state)  args.push('--state',    filter.state)
@@ -369,6 +369,21 @@ export async function requestReviewers(repo, number, reviewers) {
   return run(args)
 }
 
+/**
+ * Remove reviewer requests from a PR.
+ * @param repo
+ * @param number
+ * @param reviewers
+ */
+export async function removeReviewers(repo, number, reviewers) {
+  const args = [
+    'pr', 'edit', String(number),
+    '--repo', getRepo(repo),
+    '--remove-reviewer', reviewers.join(','),
+  ]
+  return run(args)
+}
+
 // ─── Branch functions ─────────────────────────────────────────────────────────
 
 /**
@@ -378,7 +393,7 @@ export async function requestReviewers(repo, number, reviewers) {
 export async function listBranches(repo) {
   const r = getRepo(repo)
   const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches`,
+    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches?per_page=100`,
     '--jq', '[.[] | {name: .name, protected: .protected, commit: {sha: .commit.sha}}]',
   ]
   return run(args)
@@ -503,6 +518,13 @@ export async function listNotifications(filter = {}) {
 }
 
 /**
+ * Mark all notifications as read in a single API call.
+ */
+export async function markAllNotificationsRead() {
+  return run(['api', 'notifications', '--method', 'PUT', '--field', 'read=true'])
+}
+
+/**
  * Mark a notification as read.
  * @param notificationId
  */
@@ -545,6 +567,65 @@ export async function addPRComment(repo, number, body) {
 }
 
 /**
+ * Add a general comment to an issue.
+ * @param repo
+ * @param number
+ * @param body
+ */
+export async function addIssueComment(repo, number, body) {
+  const args = [
+    'issue', 'comment', String(number),
+    '--repo', getRepo(repo),
+    '--body', body,
+  ]
+  return run(args)
+}
+
+/**
+ * Add assignees to a PR.
+ * @param repo
+ * @param number
+ * @param assignees
+ */
+export async function addPRAssignees(repo, number, assignees) {
+  const args = ['pr', 'edit', String(number), '--repo', getRepo(repo), '--add-assignee', assignees.join(',')]
+  return run(args)
+}
+
+/**
+ * Remove assignees from a PR.
+ * @param repo
+ * @param number
+ * @param assignees
+ */
+export async function removePRAssignees(repo, number, assignees) {
+  const args = ['pr', 'edit', String(number), '--repo', getRepo(repo), '--remove-assignee', assignees.join(',')]
+  return run(args)
+}
+
+/**
+ * Add assignees to an issue.
+ * @param repo
+ * @param number
+ * @param assignees
+ */
+export async function addIssueAssignees(repo, number, assignees) {
+  const args = ['issue', 'edit', String(number), '--repo', getRepo(repo), '--add-assignee', assignees.join(',')]
+  return run(args)
+}
+
+/**
+ * Remove assignees from an issue.
+ * @param repo
+ * @param number
+ * @param assignees
+ */
+export async function removeIssueAssignees(repo, number, assignees) {
+  const args = ['issue', 'edit', String(number), '--repo', getRepo(repo), '--remove-assignee', assignees.join(',')]
+  return run(args)
+}
+
+/**
  * Add a line-level review comment to a PR.
  * @param repo
  * @param number
@@ -563,8 +644,8 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
     '--method', 'POST',
     '--input', '-',
   ]
-  // We use gh api with --input - to read JSON from stdin
-  const proc = execa('gh', args, { reject: false })
+  const fullArgs = process.env.GH_HOST ? ['--hostname', process.env.GH_HOST, ...args] : args
+  const proc = execa('gh', fullArgs, { reject: false })
   proc.stdin.write(payload)
   proc.stdin.end()
   const result = await proc
@@ -877,6 +958,36 @@ export async function getPRChecks(repo, number) {
 }
 
 /**
+ * Re-run a specific check run via its check run ID.
+ * @param repo
+ * @param checkRunId
+ */
+export async function rerunCheckRun(repo, checkRunId) {
+  const r = getRepo(repo)
+  return run([
+    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/check-runs/${checkRunId}/rerequest`,
+    '--method', 'POST',
+  ])
+}
+
+/**
+ * Get annotations for a check run (errors/warnings with file/line info).
+ * @param repo
+ * @param checkRunId
+ */
+export async function getCheckRunAnnotations(repo, checkRunId) {
+  const r = getRepo(repo)
+  try {
+    return await run([
+      'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/check-runs/${checkRunId}/annotations`,
+      '--jq', '[.[] | {path: .path, line: .start_line, level: .annotation_level, message: .message, title: .title}]',
+    ])
+  } catch {
+    return []
+  }
+}
+
+/**
  * Get branch protection rules for a branch.
  * @param repo
  * @param branch
@@ -958,37 +1069,126 @@ export async function getGist(id) {
 }
 
 /**
- * Create a new gist via the GitHub API.
- * files: { filename: content }
- * @param description
- * @param files
- * @param isPublic
- */
-async function createGist(description, files, isPublic = false) {
-  const payload = { description, public: isPublic, files: {} }
-  Object.entries(files).forEach(([name, content]) => { payload.files[name] = { content } })
-
-  const gheArgs = process.env.GH_HOST ? ['--hostname', process.env.GH_HOST] : []
-  const proc = execa('gh', [...gheArgs, 'api', 'gists', '--method', 'POST', '--input', '-'], { reject: false })
-  proc.stdin.write(JSON.stringify(payload))
-  proc.stdin.end()
-  const result = await proc
-
-  if (result.exitCode !== 0) {
-    throw new GhError({
-      message: result.stderr?.split('\n')[0] || 'gist create failed',
-      stderr: result.stderr || '',
-      exitCode: result.exitCode,
-      args: ['gist', 'create'],
-    })
-  }
-  try { return JSON.parse(result.stdout) } catch { return result.stdout }
-}
-
-/**
  * Delete a gist by ID.
  * @param id
  */
 export async function deleteGist(id) {
   return run(['gist', 'delete', id, '--yes'])
 }
+
+// ─── Git conflict-resolution helpers ─────────────────────────────────────────
+
+/**
+ * Returns true if the working tree is in a mid-merge state (MERGE_HEAD exists).
+ */
+export async function isInMerge() {
+  const result = await execa('git', ['rev-parse', '--verify', 'MERGE_HEAD'],
+    { cwd: process.cwd(), reject: false })
+  return result.exitCode === 0
+}
+
+/**
+ * Parse `git status --porcelain` and return conflicting file entries.
+ * Each entry: { path, xy, resolved }
+ *   xy       — two-letter status code (UU, AA, DD, AU, UA, DU, UD)
+ *   resolved — file has been `git add`-ed (index clean, worktree clean)
+ */
+export async function getConflictedFiles() {
+  const result = await execa('git', ['status', '--porcelain'],
+    { cwd: process.cwd(), reject: false })
+  if (result.exitCode !== 0 || !result.stdout.trim()) return []
+
+  return result.stdout.trim().split('\n')
+    .filter(Boolean)
+    .map(line => {
+      const xy   = line.slice(0, 2)
+      const path = line.slice(3).trim()
+      return { path, xy }
+    })
+    .filter(({ xy }) => /^(UU|AA|DD|AU|UA|DU|UD)$/.test(xy))
+}
+
+/**
+ * Count `<<<<<<<` conflict markers in a local file.
+ * Returns 0 if the file is clean (resolved) or doesn't exist.
+ * @param {string} filePath
+ */
+export async function countFileConflicts(filePath) {
+  try {
+    const r = await execa('grep', ['-c', '^<<<<<<< ', filePath],
+      { cwd: process.cwd(), reject: false })
+    return parseInt(r.stdout.trim(), 10) || 0
+  } catch { return 0 }
+}
+
+/**
+ * Stage (git add) one or more files, marking them as resolved.
+ * @param {string[]} files
+ */
+export async function gitAdd(files) {
+  if (!files?.length) return
+  const result = await execa('git', ['add', '--', ...files],
+    { cwd: process.cwd(), reject: false })
+  if (result.exitCode !== 0) {
+    throw new Error((result.stderr || 'git add failed').split('\n')[0].trim())
+  }
+}
+
+/**
+ * Unstage (git restore --staged) one or more files.
+ * @param {string[]} files
+ */
+export async function gitUnstage(files) {
+  if (!files?.length) return
+  const result = await execa('git', ['restore', '--staged', '--', ...files],
+    { cwd: process.cwd(), reject: false })
+  if (result.exitCode !== 0) {
+    throw new Error((result.stderr || 'git restore failed').split('\n')[0].trim())
+  }
+}
+
+/**
+ * Abort an in-progress merge (`git merge --abort`).
+ */
+export async function gitMergeAbort() {
+  const result = await execa('git', ['merge', '--abort'],
+    { cwd: process.cwd(), reject: false })
+  if (result.exitCode !== 0) {
+    throw new Error((result.stderr || 'git merge --abort failed').split('\n')[0].trim())
+  }
+}
+
+/**
+ * Commit with a message. Throws if the commit fails.
+ * @param {string} message
+ */
+export async function gitCommit(message) {
+  const result = await execa('git', ['commit', '-m', message],
+    { cwd: process.cwd(), reject: false })
+  if (result.exitCode !== 0) {
+    throw new Error((result.stderr || result.stdout || 'git commit failed').split('\n')[0].trim())
+  }
+  return result.stdout
+}
+
+/**
+ * Start merging `branch` into the current branch (`git merge <branch> --no-edit`).
+ * May exit non-zero when conflicts occur — that is expected; check for MERGE_HEAD.
+ * @param {string} branch
+ */
+export async function gitMergeBranch(branch) {
+  return execa('git', ['merge', branch, '--no-edit'],
+    { cwd: process.cwd(), reject: false })
+}
+
+/**
+ * Read the auto-generated merge commit message from .git/MERGE_MSG.
+ */
+export async function getMergeCommitMessage() {
+  try {
+    const r = await execa('cat', ['.git/MERGE_MSG'],
+      { cwd: process.cwd(), reject: false })
+    return r.stdout.trim() || 'Merge conflict resolution'
+  } catch { return 'Merge conflict resolution' }
+}
+

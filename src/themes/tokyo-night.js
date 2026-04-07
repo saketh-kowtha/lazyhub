@@ -1,5 +1,5 @@
 export default {
-  pr:    { open: '#9ece6a', merged: '#bb9af7', closed: '#565f89', draft: '#565f89' },
+  pr:    { open: '#9ece6a', merged: '#bb9af7', closed: '#f7768e', draft: '#565f89', conflict: '#e0af68' },
   issue: { open: '#9ece6a', closed: '#565f89' },
   ci:    { pass: '#9ece6a', fail: '#f7768e', pending: '#e0af68', running: '#e0af68' },
   ui: {

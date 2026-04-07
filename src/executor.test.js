@@ -34,6 +34,8 @@ import {
   getRunLogs,
   rerunRun,
   cancelRun,
+  rerunCheckRun,
+  getCheckRunAnnotations,
   listReleases,
   listNotifications,
   markNotificationRead,
@@ -386,6 +388,36 @@ describe('cancelRun()', () => {
     const [, args] = execa.mock.calls[0]
     expect(args).toContain('cancel')
     expect(args).toContain('888')
+  })
+})
+
+describe('rerunCheckRun()', () => {
+  it('calls gh api POST check-runs rerequest', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: '{}', stderr: '' })
+    await rerunCheckRun('owner/repo', 12345)
+    const [, args] = execa.mock.calls[0]
+    expect(args).toContain('api')
+    expect(args.some(a => String(a).includes('12345') && String(a).includes('rerequest'))).toBe(true)
+    expect(args).toContain('--method')
+    expect(args).toContain('POST')
+  })
+})
+
+describe('getCheckRunAnnotations()', () => {
+  it('returns parsed annotations', async () => {
+    const annotations = [{ path: 'src/foo.js', start_line: 10, annotation_level: 'failure', message: 'oops', title: 'Error' }]
+    mockSuccess(annotations)
+    const result = await getCheckRunAnnotations('owner/repo', 99)
+    const [, args] = execa.mock.calls[0]
+    expect(args).toContain('api')
+    expect(args.some(a => String(a).includes('99') && String(a).includes('annotations'))).toBe(true)
+    expect(result).toEqual(annotations)
+  })
+
+  it('returns empty array on error', async () => {
+    execa.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'not found' })
+    const result = await getCheckRunAnnotations('owner/repo', 0)
+    expect(result).toEqual([])
   })
 })
 

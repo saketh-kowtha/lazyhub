@@ -52,7 +52,7 @@
   },
   "overrides": [
     {
-      "files": ["src/executor.js", "src/bootstrap.js", "src/**/*.test.js", "build.js", "bin/*.js"],
+      "files": ["src/executor.js", "src/editor.js", "src/bootstrap.js", "src/**/*.test.js", "build.js", "bin/*.js"],
       "rules": {
         "no-restricted-imports": "off"
       }

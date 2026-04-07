@@ -1,13 +1,15 @@
 /**
- * FuzzySearch.jsx — fuzzy search dialog primitive.
+ * FuzzySearch.jsx — fuzzy search dialog with virtual scrolling.
+ * Renders only as many items as fit in the terminal — safe for thousands of items.
  * Props: items, onSubmit(item), onCancel(), searchFields
  */
 
-import React, { useState, useMemo } from 'react'
-import { Box, Text, useInput } from 'ink'
-import chalk from 'chalk'
+import React, { useMemo } from 'react'
+import { Box, Text, useInput, useStdout } from 'ink'
 import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
+import { useVirtualList } from '../../hooks/useVirtualList.js'
+import { useState } from 'react'
 
 function matchesQuery(item, query, searchFields) {
   if (!query) return true
@@ -17,76 +19,75 @@ function matchesQuery(item, query, searchFields) {
 
 function getDisplayText(item, searchFields) {
   if (item.title != null) return `${item.number != null ? '#' + item.number + ' ' : ''}${item.title}`
-  if (item.name != null) return item.name
+  if (item.name  != null) return item.name
   return String(item[searchFields[0]] ?? '')
-}
-
-function highlightMatch(display, query) {
-  if (!query) return display
-  return display
 }
 
 export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['title', 'name'] }) {
   const { t } = useTheme()
+  const { stdout } = useStdout()
   const [query, setQuery] = useState('')
-  const [cursor, setCursor] = useState(0)
 
   const filtered = useMemo(() => {
     return items.filter(item => matchesQuery(item, query, searchFields))
   }, [items, query, searchFields])
 
+  // Chrome: border(2) + header-row(1) + margin(1) + footer(1) = 5; leave 2 extra for safety
+  const listHeight = Math.max(3, (stdout?.rows || 24) - 7)
+
+  const { cursor, scrollOffset, visibleItems, moveCursor, jumpTop, jumpBottom,
+          canScrollUp, canScrollDown, setCursor, setScrollOffset } =
+    useVirtualList({ items: filtered, height: listHeight })
+
   useInput((input, key) => {
-    if (key.escape) {
-      onCancel()
-      return
-    }
+    if (key.escape) { onCancel(); return }
     if (key.return) {
       if (filtered[cursor]) onSubmit(filtered[cursor])
       return
     }
-    if (key.upArrow || (key.ctrl && input === 'k')) {
-      setCursor(c => Math.max(0, c - 1))
-      return
-    }
-    if (key.downArrow || (key.ctrl && input === 'j')) {
-      setCursor(c => Math.min(filtered.length - 1, c + 1))
-      return
-    }
-    // Note: backspace and character input are now handled by TextInput
+    if (key.upArrow   || (key.ctrl && input === 'k')) { moveCursor(cursor - 1); return }
+    if (key.downArrow || (key.ctrl && input === 'j')) { moveCursor(cursor + 1); return }
+    if (input === 'g') { jumpTop();    return }
+    if (input === 'G') { jumpBottom(); return }
   })
-
-  const visibleItems = filtered.slice(0, 15)
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
-      <Box marginBottom={1}>
-        <Text color={t.ui.muted}>Search: </Text>
-        <TextInput
-          value={query}
-          onChange={(v) => { setQuery(v); setCursor(0) }}
-          focus={true}
-        />
+      {/* Header */}
+      <Box marginBottom={1} justifyContent="space-between">
+        <Box>
+          <Text color={t.ui.muted}>Search: </Text>
+          <TextInput
+            value={query}
+            onChange={(v) => { setQuery(v); setCursor(0); setScrollOffset(0) }}
+            focus={true}
+          />
+        </Box>
+        <Text color={t.ui.dim}>
+          {filtered.length > 0 ? `${cursor + 1}/${filtered.length}` : '0'}
+          {canScrollUp   ? ' ↑' : '  '}
+          {canScrollDown ? '↓' : ' '}
+        </Text>
       </Box>
-      {visibleItems.length === 0 && (
+
+      {/* Virtualised list */}
+      {visibleItems.length === 0 ? (
         <Text color={t.ui.muted}>  No results</Text>
+      ) : (
+        visibleItems.map((item, i) => {
+          const isSelected = scrollOffset + i === cursor
+          const display = getDisplayText(item, searchFields)
+          return (
+            <Box key={item.id ?? item.number ?? i}>
+              <Text color={isSelected ? t.ui.selected : t.ui.muted}>{isSelected ? '▶ ' : '  '}</Text>
+              <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate">{display}</Text>
+            </Box>
+          )
+        })
       )}
-      {visibleItems.map((item, i) => {
-        const display = getDisplayText(item, searchFields)
-        const highlighted = highlightMatch(display, query)
-        const isSelected = i === cursor
-        return (
-          <Box key={item.id || item.number || i}>
-            <Text color={isSelected ? t.ui.selected : t.ui.muted}>
-              {isSelected ? '▶ ' : '  '}
-            </Text>
-            <Text color={isSelected ? t.ui.selected : undefined}>
-              {highlighted}
-            </Text>
-          </Box>
-        )
-      })}
+
       <Box marginTop={1}>
-        <Text color={t.ui.dim}>[↑↓] navigate  [Enter] select  [Esc] cancel</Text>
+        <Text color={t.ui.dim}>[↑↓/jk] navigate  [g/G] top/bottom  [Enter] select  [Esc] cancel</Text>
       </Box>
     </Box>
   )
