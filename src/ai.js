@@ -166,7 +166,16 @@ Rules:
 
 // ── Error class ───────────────────────────────────────────────────────────────
 
+/**
+ * Error thrown when the Anthropic API call fails or returns unexpected output.
+ */
 export class AIError extends Error {
+  /**
+   * @param {string} message
+   * @param {object} [opts]
+   * @param {number} [opts.status]
+   * @param {string} [opts.code]
+   */
   constructor(message, { status, code } = {}) {
     super(message)
     this.name = 'AIError'
