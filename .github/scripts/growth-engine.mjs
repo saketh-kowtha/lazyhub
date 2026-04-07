@@ -816,7 +816,7 @@ async function run() {
   }
 
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY)
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-04-17" })
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
 
   // Ask Gemini ONLY for creative marketing copy — all factual content is locked above.
   const PROMPT = `You are writing marketing copy for **lazyhub** — a lazygit-style GitHub TUI built with React/Ink.
