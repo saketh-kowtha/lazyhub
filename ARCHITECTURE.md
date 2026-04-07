@@ -224,3 +224,7 @@ To prevent merge conflicts and "branch drift":
 **B-48 — Knip and ESLint reported multiple unused exports, imports, and dead code**
 - Root cause: Accumulation of unused helper functions, binaries (`which`), and missing devDependencies (`vite`).
 - Fix: Added `vite` to `package.json`; ignored `which` in `knip.json`; removed or un-exported 10+ unused functions across `src/ai-assistant.js`, `src/executor.js`, `src/ipc.js`, and `src/utils.js`.
+
+**B-49 — Maintenance scripts used outdated section references and CI included redundant Node versions**
+- Root cause: `auto-docs.mjs` targeted incorrect section indices and used fragile splicing logic; CI matrix included Node 20 which is no longer the target runtime.
+- Fix: Updated internal scripts to point to Section 21; simplified documentation auto-updates to append-only; restricted CI matrix to Node 22; updated LLM model string to stable `gemini-2.5-flash`.

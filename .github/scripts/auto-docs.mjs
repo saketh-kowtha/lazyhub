@@ -56,8 +56,8 @@ ${currentArch.slice(-3000)}
 ${diff.slice(0, 10000)}
 
 **Task:**
-1. If this is a bug fix (starts with "fix:"), generate a new entry for "§20. Complete bug fix log". 
-2. If this introduces a new architectural rule, update "§22. Key invariants" or "§23. Quality Control".
+1. If this is a bug fix (starts with "fix:"), generate a new entry for "§21. Complete bug fix log".
+2. If this introduces a new architectural rule, update "§6. Quality Control" or "§5. Development Invariants".
 3. Return ONLY the markdown section to be inserted. If no update is needed, return "NO_UPDATE".
 
 Return format:
@@ -75,21 +75,13 @@ CONTENT: [Markdown Content]
   }
 
   // 5. Apply update
-  if (update.includes('SECTION: 20')) {
+  if (update.includes('SECTION: 21')) {
     const parts = update.split('CONTENT:')
     if (parts.length < 2) throw new Error('AI response format was invalid (missing CONTENT).')
-    
+
     const newBug = parts[1].trim()
-    const lines = currentArch.split('\n')
-    const lastSectionIndex = lines.findLastIndex(l => l.startsWith('## 24.'))
-    
-    if (lastSectionIndex !== -1) {
-      lines.splice(lastSectionIndex - 1, 0, newBug + '\n')
-      writeFileSync(archPath, lines.join('\n'))
-      console.log('✓ ARCHITECTURE.md bug log updated.')
-    } else {
-      throw new Error('Could not find target section in ARCHITECTURE.md.')
-    }
+    writeFileSync(archPath, currentArch.trimEnd() + '\n\n' + newBug + '\n')
+    console.log('✓ ARCHITECTURE.md bug log updated.')
   }
 }
 
