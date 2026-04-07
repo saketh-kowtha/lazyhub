@@ -1,5 +1,54 @@
 # Changelog
 
+## v26.5.0
+
+# lazyhub v26.5.0 Release Notes
+
+## What's New
+
+### 🔌 Deep IDE Integration
+lazyhub now speaks directly to your editor. A new **IPC layer**, **MCP server**, **NeoVim plugin**, and **VSCode extension** let you open PRs, diffs, and issues without leaving your editor — or jump from lazyhub straight into the relevant file at the right line. (#77)
+
+### 🤖 AI Features
+New AI-powered capabilities have landed alongside a round of bug fixes. Details will be surfaced in the full changelog as the feature stabilises. (088fbd7)
+
+### ⏳ Skeleton Loaders
+All list and detail panes now show **skeleton loaders** while data is fetching, eliminating blank screens and layout shifts during slow network calls. (#75)
+
+---
+
+## Bug Fixes
+
+### 🔀 Admin Force Merge
+Two follow-up fixes stabilise the **admin force-merge flow** that was introduced in an earlier release. Edge cases around permissions and state transitions have been resolved. (#81, #82)
+
+### 🛠️ 12 UX Fixes
+A focused sweep across the `ghui-roadmap` board closed **issues #43–#57**, addressing a range of interaction bugs including focus traps, keybinding conflicts, scroll position resets, and rendering glitches. (#74)
+
+### 🔧 API Fix — `autoMergeAllowed`
+Removed an invalid `autoMergeAllowed` field from the `getRepoInfo` query that was causing GraphQL errors for some repository configurations. (#76)
+
+---
+
+## Other Changes
+
+- Growth engine content is now locked behind a structured HTML layer for accuracy and consistency. (#42)
+- General bug fixes across multiple subsystems. (688e0f8)
+
+---
+
+## Upgrade Notes
+
+> **IDE integration** requires installing the companion plugin for your editor separately. See the [IDE Integration docs](#) for setup instructions for NeoVim and VSCode.
+
+No breaking changes. This is a **minor** release — drop it in as a direct replacement for v26.4.x.
+
+---
+
+**Full Changelog:** [`v26.4.0...v26.5.0`](#)
+
+---
+
 ## v26.3.4
 
 # Release Notes — lazyhub v26.3.4
