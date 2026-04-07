@@ -128,8 +128,8 @@ describe('getAICodeReview', () => {
     expect(result.suggestions[0].severity).toBe('suggestion')
   })
 
-  it('diff > 8000 chars is truncated before sending', async () => {
-    const longDiff = 'x'.repeat(10_000)
+  it('diff > 16000 chars is truncated before sending', async () => {
+    const longDiff = 'x'.repeat(20_000)
     fetchMock.mockResolvedValue(makeSuccessResponse('ok', []))
 
     await getAICodeReview({ ...BASE_OPTS, diff: longDiff })
@@ -137,13 +137,13 @@ describe('getAICodeReview', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
     const callBody = JSON.parse(fetchMock.mock.calls[0][1].body)
     const sentContent = callBody.messages[0].content
-    // The user message should contain at most 8000 chars of diff content
+    // The user message should contain at most 16000 chars of diff content
     expect(sentContent.length).toBeLessThanOrEqual(
-      // message includes title + body + labels + the 8000 char diff
-      longDiff.length - 2000 + 8000 + 200  // rough upper bound
+      // message includes title + body + header + the 16000 char diff
+      20_000 - 4000 + 16_000 + 300  // rough upper bound
     )
-    // Specifically, the diff portion should be truncated
-    expect(sentContent).not.toContain('x'.repeat(8001))
+    // Specifically, the diff portion should be truncated at 16000
+    expect(sentContent).not.toContain('x'.repeat(16_001))
   })
 
   it('null line values are preserved as null in suggestions', async () => {

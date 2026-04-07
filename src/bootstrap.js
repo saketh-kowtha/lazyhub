@@ -60,8 +60,11 @@ export function printInstallInstructions(platform) {
  *
  */
 export async function checkAuth() {
+  const args = process.env.GH_HOST
+    ? ['auth', 'status', '--hostname', process.env.GH_HOST]
+    : ['auth', 'status']
   try {
-    const result = await execa('gh', ['auth', 'status'], { reject: false })
+    const result = await execa('gh', args, { reject: false })
     return result.exitCode === 0
   } catch {
     return false
@@ -107,8 +110,11 @@ async function readPATFromStdin(rl) {
  *
  */
 export async function getLoggedInUser() {
+  const args = process.env.GH_HOST
+    ? ['--hostname', process.env.GH_HOST, 'api', 'user', '--jq', '.login']
+    : ['api', 'user', '--jq', '.login']
   try {
-    const { stdout } = await execa('gh', ['api', 'user', '--jq', '.login'])
+    const { stdout } = await execa('gh', args)
     return stdout.trim()
   } catch {
     return null
@@ -119,11 +125,15 @@ export async function getLoggedInUser() {
  *
  */
 async function runLoginFlow() {
+  const ghHost = process.env.GH_HOST
   process.stdout.write('  lazyhub needs GitHub access. Starting login...\n')
 
   if (process.env.GITHUB_TOKEN) {
     try {
-      const proc = execa('gh', ['auth', 'login', '--with-token'], { reject: false })
+      const loginArgs = ghHost
+        ? ['auth', 'login', '--hostname', ghHost, '--with-token']
+        : ['auth', 'login', '--with-token']
+      const proc = execa('gh', loginArgs, { reject: false })
       proc.stdin.write(process.env.GITHUB_TOKEN)
       proc.stdin.end()
       await proc
@@ -133,15 +143,20 @@ async function runLoginFlow() {
     }
   }
 
+  const loginArgs = ['auth', 'login']
+  if (ghHost) loginArgs.push('--hostname', ghHost)
   if (hasBrowser()) {
-    await execa('gh', ['auth', 'login', '--web', '--git-protocol', 'https'], {
+    await execa('gh', [...loginArgs, '--web', '--git-protocol', 'https'], {
       stdio: 'inherit',
       reject: false,
     })
   } else {
     const pat = await readPATFromStdin()
     if (pat) {
-      const proc = execa('gh', ['auth', 'login', '--with-token'], { reject: false })
+      const withTokenArgs = ghHost
+        ? ['auth', 'login', '--hostname', ghHost, '--with-token']
+        : ['auth', 'login', '--with-token']
+      const proc = execa('gh', withTokenArgs, { reject: false })
       proc.stdin.write(pat)
       proc.stdin.end()
       await proc
@@ -155,20 +170,26 @@ async function runLoginFlow() {
  *
  */
 export async function detectRepo() {
+  const ghHost = process.env.GH_HOST || 'github.com'
+  const escapedHost = ghHost.replace(/\./g, '\\.')
+
   // 1. Parse git remote origin URL — fast, no network needed
   try {
     const result = await execa('git', ['remote', 'get-url', 'origin'], { reject: false })
     if (result.exitCode === 0) {
       const url = result.stdout.trim()
-      // Handles HTTPS (github.com/owner/repo) and SSH (git@github.com:owner/repo)
-      const match = url.match(/github\.com[/:]([^/\s]+\/[^/\s.]+?)(?:\.git)?$/)
+      // Handles HTTPS (host/owner/repo) and SSH (git@host:owner/repo)
+      const match = url.match(new RegExp(`${escapedHost}[/:]([^/\\s]+\\/[^/\\s.]+?)(?:\\.git)?$`))
       if (match) return match[1]
     }
   } catch { /* not in a git repo */ }
 
   // 2. Let gh resolve it from the git context
+  const viewArgs = process.env.GH_HOST
+    ? ['--hostname', process.env.GH_HOST, 'repo', 'view', '--json', 'name,owner']
+    : ['repo', 'view', '--json', 'name,owner']
   try {
-    const result = await execa('gh', ['repo', 'view', '--json', 'name,owner'], { reject: false })
+    const result = await execa('gh', viewArgs, { reject: false })
     if (result.exitCode === 0 && result.stdout) {
       const data = JSON.parse(result.stdout)
       return `${data.owner.login}/${data.name}`
@@ -182,8 +203,10 @@ export async function detectRepo() {
  *
  */
 export async function listRepos() {
+  const baseArgs = process.env.GH_HOST ? ['--hostname', process.env.GH_HOST] : []
   try {
     const { stdout } = await execa('gh', [
+      ...baseArgs,
       'repo', 'list',
       '--limit', '20',
       '--json', 'name,nameWithOwner',
