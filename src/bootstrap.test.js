@@ -16,6 +16,7 @@ import { execa } from 'execa'
 import {
   detectGh,
   checkAuth,
+  detectHostFromRemote,
   hasBrowser,
   detectRepo,
   listRepos,
@@ -51,14 +52,20 @@ describe('checkAuth', () => {
     vi.clearAllMocks()
   })
 
-  it('returns true when gh auth status exits 0', async () => {
-    execa.mockResolvedValue({ exitCode: 0, stdout: 'Logged in to github.com as user' })
+  it('returns true when gh auth token returns a token', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: 'ghp_abc123def456\n' })
     const result = await checkAuth()
     expect(result).toBe(true)
   })
 
-  it('returns false when gh auth status exits non-zero', async () => {
+  it('returns false when gh auth token exits non-zero', async () => {
     execa.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'You are not logged in' })
+    const result = await checkAuth()
+    expect(result).toBe(false)
+  })
+
+  it('returns false when token output is empty even with exit 0', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: '' })
     const result = await checkAuth()
     expect(result).toBe(false)
   })
@@ -67,6 +74,58 @@ describe('checkAuth', () => {
     execa.mockRejectedValue(new Error('gh not found'))
     const result = await checkAuth()
     expect(result).toBe(false)
+  })
+
+  it('uses --hostname when GH_HOST is set', async () => {
+    const prevHost = process.env.GH_HOST
+    process.env.GH_HOST = 'github.enterprise.com'
+    execa.mockResolvedValue({ exitCode: 0, stdout: 'ghp_token\n' })
+    await checkAuth()
+    expect(execa).toHaveBeenCalledWith(
+      'gh',
+      ['auth', 'token', '--hostname', 'github.enterprise.com'],
+      expect.any(Object),
+    )
+    if (prevHost === undefined) delete process.env.GH_HOST
+    else process.env.GH_HOST = prevHost
+  })
+})
+
+// ─── detectHostFromRemote ─────────────────────────────────────────────────────
+
+describe('detectHostFromRemote', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('extracts host from https remote', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: 'https://github.enterprise.com/org/repo.git\n' })
+    expect(await detectHostFromRemote()).toBe('github.enterprise.com')
+  })
+
+  it('extracts host from ssh remote (git@host:owner/repo)', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: 'git@github.acme.com:org/repo.git\n' })
+    expect(await detectHostFromRemote()).toBe('github.acme.com')
+  })
+
+  it('extracts host from ssh:// remote', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: 'ssh://git@github.internal:22/org/repo.git\n' })
+    expect(await detectHostFromRemote()).toBe('github.internal')
+  })
+
+  it('returns github.com for vanilla github remote', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: 'https://github.com/me/repo.git\n' })
+    expect(await detectHostFromRemote()).toBe('github.com')
+  })
+
+  it('returns null when not in a git repo', async () => {
+    execa.mockResolvedValue({ exitCode: 128, stdout: '', stderr: 'not a git repo' })
+    expect(await detectHostFromRemote()).toBeNull()
+  })
+
+  it('returns null for unparseable URLs', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: 'file:///tmp/repo\n' })
+    expect(await detectHostFromRemote()).toBeNull()
   })
 })
 
@@ -284,23 +343,55 @@ describe('bootstrap() integration', () => {
 
   it('path D: calls renderApp when all checks pass', async () => {
     const { bootstrap } = await import('./bootstrap.js')
+    const prevHost = process.env.GH_HOST
+    delete process.env.GH_HOST
 
     // execa calls in order:
-    // 1. detectGh: gh --version → success
-    // 2. checkAuth: gh auth status → success (exitCode 0)
-    // 3. detectRepo: git remote get-url origin → github URL
+    //   1. detectGh:              gh --version
+    //   2. detectHostFromRemote:  git remote get-url origin (→ github.com, so GH_HOST stays unset)
+    //   3. checkAuth:             gh auth token
+    //   4. detectRepo:            git remote get-url origin
     execa
-      .mockResolvedValueOnce({ exitCode: 0, stdout: 'gh version 2.0.0' })          // detectGh
-      .mockResolvedValueOnce({ exitCode: 0, stdout: 'Logged in' })                  // checkAuth
-      .mockResolvedValueOnce({                                                       // detectRepo: git remote
-        exitCode: 0,
-        stdout: 'https://github.com/me/my-repo.git',
-      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'gh version 2.0.0' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'https://github.com/me/my-repo.git' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'ghp_abc123\n' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'https://github.com/me/my-repo.git' })
 
     const renderApp = vi.fn()
     await bootstrap(renderApp)
 
     expect(renderApp).toHaveBeenCalledOnce()
     expect(process.env.GHUI_REPO).toBe('me/my-repo')
+
+    if (prevHost === undefined) delete process.env.GH_HOST
+    else process.env.GH_HOST = prevHost
+  })
+
+  it('path D (GHE): auto-detects GH_HOST from a GHE remote before auth check', async () => {
+    const { bootstrap } = await import('./bootstrap.js')
+    const prevHost = process.env.GH_HOST
+    delete process.env.GH_HOST
+
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'gh version 2.0.0' })                    // detectGh
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'git@github.enterprise.com:org/app.git' }) // detectHostFromRemote
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'ghe_token\n' })                          // checkAuth
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'git@github.enterprise.com:org/app.git' }) // detectRepo (git remote)
+
+    const renderApp = vi.fn()
+    await bootstrap(renderApp)
+
+    expect(process.env.GH_HOST).toBe('github.enterprise.com')
+    expect(process.env.GHUI_REPO).toBe('org/app')
+    expect(renderApp).toHaveBeenCalledOnce()
+
+    // checkAuth should have been called with --hostname github.enterprise.com
+    const authCall = execa.mock.calls.find(([bin, args]) =>
+      bin === 'gh' && Array.isArray(args) && args[0] === 'auth' && args[1] === 'token'
+    )
+    expect(authCall?.[1]).toEqual(['auth', 'token', '--hostname', 'github.enterprise.com'])
+
+    delete process.env.GH_HOST
+    if (prevHost !== undefined) process.env.GH_HOST = prevHost
   })
 })

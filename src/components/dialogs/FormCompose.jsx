@@ -31,7 +31,11 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
       tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
       const tmpFile = join(tmpDir, 'compose.md')
       writeFileSync(tmpFile, values[fieldName] || '', { mode: 0o600 })
+      // Exit alternate screen so terminal editors (vim/nano) render cleanly;
+      // re-enter after the editor closes so Ink's state isn't garbled.
+      process.stdout.write('\x1b[?1049l')
       const result = spawnSync(editorBin, [...editorArgs, tmpFile], { stdio: 'inherit' })
+      process.stdout.write('\x1b[?1049h\x1b[H')
       if (result.status !== 0) return
       const content = readFileSync(tmpFile, 'utf8')
       setValues(prev => ({ ...prev, [fieldName]: content }))

@@ -48,8 +48,10 @@ export function MultiSelect({ items = [], onSubmit, onCancel, title }) {
     if (key.return)    { onSubmit(Array.from(selected)); return }
     if (key.upArrow)   { moveCursor(cursor - 1); return }
     if (key.downArrow) { moveCursor(cursor + 1); return }
-    if (input === 'g') { jumpTop();    return }
-    if (input === 'G') { jumpBottom(); return }
+    // Ctrl+g / Ctrl+G jump to top/bottom — plain g/G are reserved for typing
+    // into the filter (e.g. label names like "bug", "enhancement").
+    if (key.ctrl && input === 'g') { jumpTop();    return }
+    if (key.ctrl && input === 'G') { jumpBottom(); return }
     if (input === ' ') { toggleCurrent(); return }
     if (key.backspace || key.delete) {
       setQuery(q => q.slice(0, -1)); setCursor(0); setScrollOffset(0); return
@@ -100,7 +102,7 @@ export function MultiSelect({ items = [], onSubmit, onCancel, title }) {
       )}
 
       <Box marginTop={1}>
-        <Text color={t.ui.dim}>[type] filter  [↑↓/jk] nav  [g/G] top/bot  [Space] toggle  [Enter] confirm  [Esc] cancel</Text>
+        <Text color={t.ui.dim}>[type] filter  [↑↓] nav  [Ctrl+g/G] top/bot  [Space] toggle  [Enter] confirm  [Esc] cancel</Text>
       </Box>
     </Box>
   )

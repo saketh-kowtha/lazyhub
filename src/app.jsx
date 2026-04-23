@@ -169,7 +169,7 @@ const VIEW_KEYS = {
     { key: 'gg / G',         label: 'jump to top / bottom' },
     { key: 'r',              label: 'reply to current thread' },
     { key: 'R',              label: 'resolve current thread' },
-    { key: 'g',              label: 'jump to this line in diff' },
+    { key: 'J',              label: 'jump to this line in diff' },
     { key: 'f',              label: 'filter: open only / all / by author' },
     { key: 'Esc',            label: 'back to diff' },
   ],

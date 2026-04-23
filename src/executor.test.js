@@ -577,8 +577,8 @@ describe('rate limit detection', () => {
 // ─── 404 / not found detection ────────────────────────────────────────────────
 
 describe('404 / not found detection', () => {
-  it('throws GhError with not found message for exit 404', async () => {
-    execa.mockResolvedValue({ exitCode: 404, stdout: '', stderr: '' })
+  it('throws GhError with not found message when stderr mentions HTTP 404', async () => {
+    execa.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'HTTP 404: Not Found' })
     await expect(getPR('owner/repo', 999)).rejects.toMatchObject({
       message: 'Resource not found',
     })

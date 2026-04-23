@@ -198,7 +198,9 @@ export function AIReviewPane({
           {skipped > 0 && <Text color={t.ui.dim}>⊘ Skipped {skipped}</Text>}
           {posted === 0 && skipped === 0 && <Text color={t.ui.muted}>Nothing posted.</Text>}
         </Box>
-        <Text color={t.ui.dim} marginTop={1}>[any key] close</Text>
+        <Box marginTop={1}>
+          <Text color={t.ui.dim}>[any key] close</Text>
+        </Box>
       </Box>
     )
   }

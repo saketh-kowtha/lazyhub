@@ -506,7 +506,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
       : MERGE_OPTIONS_BASE
     return (
       <OptionPicker
-        title={`Merge PR #${pr.number}: ${pr.title}`}
+        title={`Merge PR #${pr.number}: ${sanitize(pr.title)}`}
         options={mergeOpts}
         promptText="Commit message (optional)"
         onSubmit={(val) => {
@@ -525,7 +525,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   if (dialog === 'close') {
     return (
       <ConfirmDialog
-        message={`Close PR #${pr.number}: ${pr.title}?`}
+        message={`Close PR #${pr.number}: ${sanitize(pr.title)}?`}
         destructive={true}
         onConfirm={async () => {
           setDialog(null)
@@ -587,7 +587,9 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
             }}
           />
         </Box>
-        <Text color={t.ui.dim} marginTop={1}>[Enter] confirm  [Esc] cancel</Text>
+        <Box marginTop={1}>
+          <Text color={t.ui.dim}>[Enter] confirm  [Esc] cancel</Text>
+        </Box>
       </Box>
     )
   }

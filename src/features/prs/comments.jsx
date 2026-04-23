@@ -3,7 +3,7 @@
  * Supports: reply, edit, delete per comment
  */
 
-import React, { useState, useMemo, useCallback, useRef } from 'react'
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
@@ -49,6 +49,8 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   // action: null | { type: 'reply'|'edit'|'delete', comment }
   const [action, setAction]     = useState(null)
   const [actionText, setActionText] = useState('')
+
+  useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
   // ── Build flat list: each comment is individually navigable ────────────────
 
@@ -102,7 +104,9 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
       const tmp = join(tmpDir, 'comment.md')
       writeFileSync(tmp, initial || '', { mode: 0o600 })
+      process.stdout.write('\x1b[?1049l')
       const result = spawnSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
+      process.stdout.write('\x1b[?1049h\x1b[H')
       if (result.status !== 0) return initial
       const content = readFileSync(tmp, 'utf8')
       return content
@@ -232,7 +236,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       setFilterMode(FILTER_MODES[(idx + 1) % FILTER_MODES.length])
       return
     }
-    if (input === 'g' && comment && onJumpToDiff) {
+    if (input === 'J' && comment && onJumpToDiff) {
       onJumpToDiff(comment.line)
       return
     }
@@ -319,7 +323,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
                 ))}
                 {isSelected && (
                   <Box gap={2} paddingLeft={2}>
-                    <Text color={t.ui.dim}>[r] reply  [e] edit  [d] delete  [R] resolve  [g] jump to diff</Text>
+                    <Text color={t.ui.dim}>[r] reply  [e] edit  [d] delete  [R] resolve  [J] jump to diff</Text>
                   </Box>
                 )}
               </Box>
