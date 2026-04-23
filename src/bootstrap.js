@@ -101,6 +101,35 @@ export async function checkAuth() {
 }
 
 /**
+ * Parse `gh auth status` output to find any host the user is logged into.
+ * Prefers a host marked as the active account; otherwise returns the first
+ * logged-in host found. Returns null if nothing is logged in.
+ *
+ * Why: `gh auth token` without `--hostname` only checks github.com. When a
+ * user is GHE-only logged in and runs lazyhub outside a git repo (so the
+ * remote-based GH_HOST auto-detect can't fire), the default check misses
+ * their existing login and prompts a bogus re-login.
+ */
+export async function detectAuthenticatedHost() {
+  try {
+    const result = await execa('gh', ['auth', 'status'], { reject: false })
+    const text = `${result.stdout || ''}\n${result.stderr || ''}`
+    const blocks = text.split(/\n\s*\n/)
+    let firstHost = null
+    for (const block of blocks) {
+      const loginMatch = block.match(/Logged in to (\S+)/)
+      if (!loginMatch) continue
+      const host = loginMatch[1]
+      if (!firstHost) firstHost = host
+      if (/Active account:\s*true/.test(block)) return host
+    }
+    return firstHost
+  } catch {
+    return null
+  }
+}
+
+/**
  *
  */
 export function hasBrowser() {
@@ -329,7 +358,16 @@ export async function bootstrap(renderApp) {
   }
 
   // Step 2 — detect auth
-  const isLoggedIn = await checkAuth()
+  let isLoggedIn = await checkAuth()
+  if (!isLoggedIn && !process.env.GH_HOST) {
+    // Covers the GHE-only-login-outside-a-git-repo case where checkAuth
+    // defaulted to github.com and missed the user's actual login.
+    const authedHost = await detectAuthenticatedHost()
+    if (authedHost) {
+      process.env.GH_HOST = authedHost
+      isLoggedIn = await checkAuth()
+    }
+  }
   if (!isLoggedIn) {
     const host = process.env.GH_HOST || 'github.com'
     process.stdout.write(`  Not authenticated with ${host}.\n`)

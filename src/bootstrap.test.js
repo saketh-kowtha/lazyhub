@@ -16,6 +16,7 @@ import { execa } from 'execa'
 import {
   detectGh,
   checkAuth,
+  detectAuthenticatedHost,
   detectHostFromRemote,
   hasBrowser,
   detectRepo,
@@ -88,6 +89,74 @@ describe('checkAuth', () => {
     )
     if (prevHost === undefined) delete process.env.GH_HOST
     else process.env.GH_HOST = prevHost
+  })
+})
+
+// ─── detectAuthenticatedHost ──────────────────────────────────────────────────
+
+describe('detectAuthenticatedHost', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns the host with Active account: true when multiple are logged in', async () => {
+    // gh writes status to stderr in older versions; include both for robustness
+    execa.mockResolvedValue({
+      exitCode: 0,
+      stdout: '',
+      stderr: [
+        'github.com',
+        '  ✓ Logged in to github.com account alice (keyring)',
+        '  - Active account: false',
+        '  - Git operations protocol: https',
+        '',
+        'github.enterprise.com',
+        '  ✓ Logged in to github.enterprise.com account alice (keyring)',
+        '  - Active account: true',
+        '  - Git operations protocol: https',
+      ].join('\n'),
+    })
+    expect(await detectAuthenticatedHost()).toBe('github.enterprise.com')
+  })
+
+  it('returns the only logged-in host (GHE-only setup)', async () => {
+    execa.mockResolvedValue({
+      exitCode: 0,
+      stdout: '',
+      stderr: [
+        'github.enterprise.com',
+        '  ✓ Logged in to github.enterprise.com account alice (keyring)',
+        '  - Active account: true',
+      ].join('\n'),
+    })
+    expect(await detectAuthenticatedHost()).toBe('github.enterprise.com')
+  })
+
+  it('falls back to the first logged-in host when no active marker is present', async () => {
+    execa.mockResolvedValue({
+      exitCode: 0,
+      stdout: '',
+      stderr: [
+        'github.com',
+        '  ✓ Logged in to github.com account alice (keyring)',
+        '  - Git operations protocol: https',
+      ].join('\n'),
+    })
+    expect(await detectAuthenticatedHost()).toBe('github.com')
+  })
+
+  it('returns null when gh is not logged in to anything', async () => {
+    execa.mockResolvedValue({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'You are not logged into any GitHub hosts. Run gh auth login to authenticate.',
+    })
+    expect(await detectAuthenticatedHost()).toBeNull()
+  })
+
+  it('returns null when execa throws', async () => {
+    execa.mockRejectedValue(new Error('gh missing'))
+    expect(await detectAuthenticatedHost()).toBeNull()
   })
 })
 
@@ -390,6 +459,58 @@ describe('bootstrap() integration', () => {
       bin === 'gh' && Array.isArray(args) && args[0] === 'auth' && args[1] === 'token'
     )
     expect(authCall?.[1]).toEqual(['auth', 'token', '--hostname', 'github.enterprise.com'])
+
+    delete process.env.GH_HOST
+    if (prevHost !== undefined) process.env.GH_HOST = prevHost
+  })
+
+  it('path D (GHE, no git repo): falls back to detectAuthenticatedHost when default auth check fails', async () => {
+    const { bootstrap } = await import('./bootstrap.js')
+    const prevHost = process.env.GH_HOST
+    delete process.env.GH_HOST
+
+    // User is logged into GHE only, running lazyhub from a non-git directory.
+    // execa calls in order:
+    //   1. detectGh:                 gh --version
+    //   2. detectHostFromRemote:     git remote get-url origin (→ not a git repo)
+    //   3. checkAuth #1:             gh auth token (no --hostname) → fails, no github.com token
+    //   4. detectAuthenticatedHost:  gh auth status → surfaces github.enterprise.com
+    //   5. checkAuth #2:             gh auth token --hostname github.enterprise.com → ok
+    //   6. detectRepo (git):         git remote get-url origin (not a git repo)
+    //   7. detectRepo (gh):          gh repo view → succeeds
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'gh version 2.0.0' })
+      .mockResolvedValueOnce({ exitCode: 128, stdout: '', stderr: 'not a git repo' })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'not logged in' })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '',
+        stderr: [
+          'github.enterprise.com',
+          '  ✓ Logged in to github.enterprise.com account alice (keyring)',
+          '  - Active account: true',
+        ].join('\n'),
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'ghe_token\n' })
+      .mockResolvedValueOnce({ exitCode: 128, stdout: '', stderr: 'not a git repo' })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: JSON.stringify({ name: 'app', owner: { login: 'org' } }),
+      })
+
+    const renderApp = vi.fn()
+    await bootstrap(renderApp)
+
+    expect(process.env.GH_HOST).toBe('github.enterprise.com')
+    expect(renderApp).toHaveBeenCalledOnce()
+
+    // The second checkAuth call must target the detected host.
+    const authCalls = execa.mock.calls.filter(([bin, args]) =>
+      bin === 'gh' && Array.isArray(args) && args[0] === 'auth' && args[1] === 'token'
+    )
+    expect(authCalls).toHaveLength(2)
+    expect(authCalls[0][1]).toEqual(['auth', 'token'])
+    expect(authCalls[1][1]).toEqual(['auth', 'token', '--hostname', 'github.enterprise.com'])
 
     delete process.env.GH_HOST
     if (prevHost !== undefined) process.env.GH_HOST = prevHost
