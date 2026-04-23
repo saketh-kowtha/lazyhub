@@ -1,5 +1,25 @@
 # Changelog
 
+## v26.5.2
+
+# lazyhub v26.5.2
+
+## What's Changed
+
+### 🐛 Bug Fixes
+
+- Various bug fixes to improve stability and reliability (#87) (`0bc6cfa`)
+
+---
+
+**Full Changelog:** [`v26.5.1...v26.5.2`](https://github.com/yourusername/lazyhub/compare/v26.5.1...v26.5.2)
+
+---
+
+> **Note:** This is a patch release. No new features or breaking changes are included.
+
+---
+
 ## v26.5.1
 
 # lazyhub v26.5.1
