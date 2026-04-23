@@ -70,14 +70,6 @@ export function SettingsPane({ onBack }) {
     { id: 'aiProvider', label: 'AI Provider',    value: aiProviderSummary(ai) },
   ]
 
-  useInput((input, key) => {
-    if (dialog) return
-    if (key.escape || input === 'q') { onBack(); return }
-    if (input === 'j' || key.downArrow) { setCursor(c => (c + 1) % OPTIONS.length); return }
-    if (input === 'k' || key.upArrow)   { setCursor(c => (c - 1 + OPTIONS.length) % OPTIONS.length); return }
-    if (key.return) { setDialog(OPTIONS[cursor].id) }
-  })
-
   const updateConfig = (patch) => {
     const next = { ...config, ...patch }
     setConfig(next)
@@ -90,18 +82,28 @@ export function SettingsPane({ onBack }) {
     updateConfig({ ai: { ...(config.ai || {}), ...aiPatch } })
   }
 
-  // ── Instant-toggle dialogs ────────────────────────────────────────────────
-  if (dialog === 'mouse') {
-    const next = !config.mouse
-    updateConfig({ mouse: next })
-    setMouseEnabled(next)
-    setDialog(null)
-  }
-
-  if (dialog === 'aiReview') {
-    updateConfig({ aiReviewEnabled: config.aiReviewEnabled === false })
-    setDialog(null)
-  }
+  useInput((input, key) => {
+    if (dialog) return
+    if (key.escape || input === 'q') { onBack(); return }
+    if (input === 'j' || key.downArrow) { setCursor(c => (c + 1) % OPTIONS.length); return }
+    if (input === 'k' || key.upArrow)   { setCursor(c => (c - 1 + OPTIONS.length) % OPTIONS.length); return }
+    if (key.return) {
+      const id = OPTIONS[cursor].id
+      // Toggles are applied directly from the key handler instead of via a
+      // "dialog" re-entry; that avoided calling setState during render.
+      if (id === 'mouse') {
+        const next = !config.mouse
+        updateConfig({ mouse: next })
+        setMouseEnabled(next)
+        return
+      }
+      if (id === 'aiReview') {
+        updateConfig({ aiReviewEnabled: config.aiReviewEnabled === false })
+        return
+      }
+      setDialog(id)
+    }
+  })
 
   // ── Sub-screen dialogs ────────────────────────────────────────────────────
   if (dialog === 'theme') {
@@ -350,7 +352,10 @@ function FieldEditor({ label, hint, value, mask, onSave, onCancel }) {
 
 function ThemePicker({ current, onSelect, onCancel }) {
   const { t } = useTheme()
-  const [cursor, setCursor] = useState(THEME_NAMES.indexOf(current) || 0)
+  const [cursor, setCursor] = useState(() => {
+    const idx = THEME_NAMES.indexOf(current)
+    return idx >= 0 ? idx : 0
+  })
 
   useInput((input, key) => {
     if (key.escape) { onCancel(); return }

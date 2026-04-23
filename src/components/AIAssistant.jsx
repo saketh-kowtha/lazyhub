@@ -103,10 +103,11 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
 
     if (key.escape) { onClose(); return }
 
-    if (key.downArrow || input === 'j') { setScrollOffset(s => Math.min(s + 1, maxOffset)); return }
-    if (key.upArrow   || input === 'k') { setScrollOffset(s => Math.max(0, s - 1));         return }
-    if (input === 'G') { setScrollOffset(maxOffset); return }
-    if (input === 'g') { setScrollOffset(0); return }
+    // Scroll bindings avoid plain j/k/g/G — those are typed into the prompt.
+    if (key.downArrow || (key.ctrl && input === 'j')) { setScrollOffset(s => Math.min(s + 1, maxOffset)); return }
+    if (key.upArrow   || (key.ctrl && input === 'k')) { setScrollOffset(s => Math.max(0, s - 1));         return }
+    if (key.pageDown || (key.ctrl && input === 'G')) { setScrollOffset(maxOffset); return }
+    if (key.pageUp   || (key.ctrl && input === 'g')) { setScrollOffset(0);         return }
   })
 
   // ─── Submit message ───────────────────────────────────────────────────────

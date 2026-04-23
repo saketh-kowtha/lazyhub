@@ -47,8 +47,10 @@ export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['t
     }
     if (key.upArrow   || (key.ctrl && input === 'k')) { moveCursor(cursor - 1); return }
     if (key.downArrow || (key.ctrl && input === 'j')) { moveCursor(cursor + 1); return }
-    if (input === 'g') { jumpTop();    return }
-    if (input === 'G') { jumpBottom(); return }
+    // Plain g/G would hijack characters typed into the search query (e.g.
+    // filtering PRs by "bug" or author "greg"). Scope jumps to Ctrl+g / Ctrl+G.
+    if (key.ctrl && input === 'g') { jumpTop();    return }
+    if (key.ctrl && input === 'G') { jumpBottom(); return }
   })
 
   return (
@@ -87,7 +89,7 @@ export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['t
       )}
 
       <Box marginTop={1}>
-        <Text color={t.ui.dim}>[↑↓/jk] navigate  [g/G] top/bottom  [Enter] select  [Esc] cancel</Text>
+        <Text color={t.ui.dim}>[↑↓ / Ctrl+jk] navigate  [Ctrl+g/G] top/bottom  [Enter] select  [Esc] cancel</Text>
       </Box>
     </Box>
   )

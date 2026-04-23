@@ -20,8 +20,12 @@ export function ConfirmDialog({ message, destructive = false, onConfirm, onCance
     if (key.escape) { onCancel(); return }
     if (key.leftArrow) { setCursor(0); return }
     if (key.rightArrow) { setCursor(1); return }
-    if (key.upArrow || input === 'k') { setCursor(0); return }
-    if (key.downArrow || input === 'j') { setCursor(1); return }
+    if (key.upArrow) { setCursor(0); return }
+    if (key.downArrow) { setCursor(1); return }
+    // Only use j/k for selection when no text-typing mode — otherwise branch
+    // names / confirm strings containing j or k would be unreachable.
+    if (!requireText && input === 'k') { setCursor(0); return }
+    if (!requireText && input === 'j') { setCursor(1); return }
     if (key.return) {
       if (cursor === 0 && canConfirm) {
         onConfirm()

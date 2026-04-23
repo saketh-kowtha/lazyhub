@@ -61,7 +61,7 @@ export async function run(args) {
 
     if (stderr.includes('rate limit')) {
       message = 'GitHub API rate limit exceeded'
-    } else if (result.exitCode === 404 || stderr.includes('not found') || stderr.includes('Could not resolve')) {
+    } else if (stderr.includes('not found') || stderr.includes('Could not resolve') || /HTTP\s*404/i.test(stderr)) {
       message = 'Resource not found'
     } else if (stderr) {
       // Basic sanitization of stderr to prevent leaking potentially sensitive data in error messages

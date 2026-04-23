@@ -201,8 +201,10 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
     lastKeyRef.current = null
 
     if (input === 'G') {
-      const last = items.length - 1
-      setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
+      if (items.length > 0) {
+        const last = items.length - 1
+        setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
+      }
       return
     }
     if (input === 'j' || key.downArrow) { moveCursor(1);  return }

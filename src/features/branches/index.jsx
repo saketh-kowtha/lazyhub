@@ -131,7 +131,13 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
     if (loading || items.length === 0) return
 
     if (input === ' ' || key.return) {
-      if (selectedBranch) setDialog('checkout')
+      if (selectedBranch) {
+        if (selectedBranch.name === currentBranch) {
+          showStatus(`Already on "${selectedBranch.name}"`)
+          return
+        }
+        setDialog('checkout')
+      }
       return
     }
 
@@ -171,12 +177,6 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
   }
 
   if (dialog === 'checkout' && selectedBranch) {
-    const isCurrent = selectedBranch.name === currentBranch
-    if (isCurrent) {
-      setDialog(null)
-      showStatus(`Already on "${selectedBranch.name}"`)
-      return null
-    }
     return (
       <Box flexDirection="column" flexGrow={1}>
         <ConfirmDialog
@@ -253,7 +253,9 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
             }}
           />
         </Box>
-        <Text color={t.ui.dim} marginTop={1}>[Enter] create  [Esc] cancel</Text>
+        <Box marginTop={1}>
+          <Text color={t.ui.dim}>[Enter] create  [Esc] cancel</Text>
+        </Box>
       </Box>
     )
   }

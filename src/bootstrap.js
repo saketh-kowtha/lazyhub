@@ -57,15 +57,44 @@ export function printInstallInstructions(platform) {
 // ─── Step 2: detect auth ──────────────────────────────────────────────────────
 
 /**
+ * Extract the hostname (e.g. "github.enterprise.com") from the origin remote
+ * URL of the current working directory. Returns null when not in a git repo,
+ * when no origin is set, or when the URL can't be parsed.
  *
+ * Handles:
+ *   https://host/owner/repo(.git)?
+ *   https://user@host/owner/repo(.git)?
+ *   ssh://git@host[:port]/owner/repo(.git)?
+ *   git@host:owner/repo(.git)?
+ */
+export async function detectHostFromRemote() {
+  try {
+    const result = await execa('git', ['remote', 'get-url', 'origin'], { reject: false })
+    if (result.exitCode !== 0) return null
+    const url = result.stdout.trim()
+    const m = url.match(/^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/git@|git@)([^/:]+)[/:]/)
+    return m ? m[1] : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Check that the user is authenticated with `gh` for the target hostname
+ * (GH_HOST if set, otherwise github.com).
+ *
+ * Uses `gh auth token` rather than `gh auth status`: the former exits 0 iff
+ * there is a valid token for the host, while `gh auth status` can exit
+ * non-zero when a secondary host has issues — falsely marking GHE users as
+ * unauthenticated when they're perfectly logged in.
  */
 export async function checkAuth() {
   const args = process.env.GH_HOST
-    ? ['auth', 'status', '--hostname', process.env.GH_HOST]
-    : ['auth', 'status']
+    ? ['auth', 'token', '--hostname', process.env.GH_HOST]
+    : ['auth', 'token']
   try {
     const result = await execa('gh', args, { reject: false })
-    return result.exitCode === 0
+    return result.exitCode === 0 && !!(result.stdout || '').trim()
   } catch {
     return false
   }
@@ -289,14 +318,27 @@ export async function bootstrap(renderApp) {
     process.exit(1)
   }
 
+  // Auto-detect GitHub Enterprise host from the git remote. Users who cloned
+  // a GHE repo but haven't exported GH_HOST would otherwise be treated as if
+  // they were targeting github.com and get a bogus "not logged in" prompt.
+  if (!process.env.GH_HOST) {
+    const detectedHost = await detectHostFromRemote()
+    if (detectedHost && detectedHost !== 'github.com') {
+      process.env.GH_HOST = detectedHost
+    }
+  }
+
   // Step 2 — detect auth
   const isLoggedIn = await checkAuth()
   if (!isLoggedIn) {
+    const host = process.env.GH_HOST || 'github.com'
+    process.stdout.write(`  Not authenticated with ${host}.\n`)
     await runLoginFlow()
 
     const stillLoggedIn = await checkAuth()
     if (!stillLoggedIn) {
-      console.error('\n  ✗ GitHub authentication failed. Please run: gh auth login\n')
+      console.error(`\n  ✗ GitHub authentication failed for ${host}.`)
+      console.error(`    Please run: gh auth login${process.env.GH_HOST ? ` --hostname ${process.env.GH_HOST}` : ''}\n`)
       process.exit(1)
     }
 

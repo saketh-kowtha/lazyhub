@@ -1106,7 +1106,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         options={MERGE_OPTIONS_BASE}
         onSubmit={(val) => {
           const method = typeof val === 'object' ? val.value : val
-          setAdminMergeMsg(prev => ({ strategy: `admin-${method}`, msg: typeof val === 'object' ? val.text || adminMergeMsg : adminMergeMsg }))
+          // Preserve the commit message the user typed in the prior picker,
+          // whether it's still the raw string or was already wrapped into
+          // {strategy, msg} by an earlier pass through this dialog.
+          const priorMsg = typeof adminMergeMsg === 'object' ? adminMergeMsg.msg : adminMergeMsg
+          const nextMsg  = (typeof val === 'object' && val.text) ? val.text : priorMsg
+          setAdminMergeMsg({ strategy: `admin-${method}`, msg: nextMsg })
           setDialog('merge-admin-confirm')
         }}
         onCancel={() => setDialog('merge')}
