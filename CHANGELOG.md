@@ -1,5 +1,25 @@
 # Changelog
 
+## v26.5.3
+
+# lazyhub v26.5.3
+
+## What's Changed
+
+### 🐛 Bug Fixes & Tests
+
+- Fixed a failing test to improve reliability of the test suite (#89) (`40b8ec2`)
+
+---
+
+## Notes
+
+This is a **patch release** with no user-facing functional changes. The fix addresses an internal test issue, helping maintain codebase stability and CI health.
+
+**Full Changelog:** https://github.com/yourusername/lazyhub/compare/v26.5.2...v26.5.3
+
+---
+
 ## v26.5.2
 
 # lazyhub v26.5.2
