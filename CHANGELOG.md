@@ -1,5 +1,42 @@
 # Changelog
 
+## v26.5.1
+
+# lazyhub v26.5.1
+
+> Patch release — bug fixes and AI code review improvements
+
+---
+
+## 🐛 Bug Fixes
+
+- **General bug fixes** to improve overall stability and reliability ([#85](../../pull/85), `847b169`)
+- **Improved AI code review accuracy** — the AI-assisted review feature now produces more precise and relevant feedback ([#84](../../pull/84), `37ded14`)
+
+---
+
+## 📦 Installation / Upgrade
+
+```bash
+# Homebrew
+brew upgrade lazyhub
+
+# Go
+go install github.com/yourorg/lazyhub@v26.5.1
+```
+
+---
+
+## 🔗 Full Changelog
+
+[v26.5.0...v26.5.1](../../compare/v26.5.0...v26.5.1)
+
+---
+
+*No breaking changes. Safe to upgrade from any v26.5.x release.*
+
+---
+
 ## v26.5.0
 
 # lazyhub v26.5.0 Release Notes
