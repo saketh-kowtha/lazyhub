@@ -367,7 +367,7 @@ function PaneHeader({ pane, count, loading, error }) {
       <Text color={t.ui.selected} bold>{PANE_ICONS[pane] || '○'} {PANE_LABELS[pane] || pane}</Text>
       {count != null && !loading && <Text color={t.ui.dim}> ({count})</Text>}
       {loading && <Text color={t.ui.muted}> loading…</Text>}
-      {error && <Text color={t.ci.fail}>  ⚠ error — [r] retry</Text>}
+      {error && <Text color={t.ci.fail}>  ⚠ {error?.message || 'fetch error'} — [r] retry</Text>}
     </Box>
   )
 }
