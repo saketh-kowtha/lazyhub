@@ -101,22 +101,28 @@ function getRepo(overrideRepo) {
  * @param filter
  */
 export async function listPRs(repo, filter = {}) {
-  const args = [
+  const base = [
     'pr', 'list',
     '--repo', getRepo(repo),
-    '--json', 'number,title,state,author,labels,reviewRequests,statusCheckRollup,updatedAt,isDraft,headRefName,assignees,body,mergeable',
     '--limit', String(filter.limit || 50),
   ]
-  if (filter.state)  args.push('--state',    filter.state)
-  if (filter.author) args.push('--author',   filter.author)
-  if (filter.label)  args.push('--label',    filter.label)
-  if (filter.assignee) args.push('--assignee', filter.assignee)
-  // scope: 'own' → @me author, 'reviewing' → review-requested
+  if (filter.state)    base.push('--state',    filter.state)
+  if (filter.author)   base.push('--author',   filter.author)
+  if (filter.label)    base.push('--label',    filter.label)
+  if (filter.assignee) base.push('--assignee', filter.assignee)
   if (!filter.author) {
-    if (filter.scope === 'own')       args.push('--author', '@me')
-    if (filter.scope === 'reviewing') args.push('--reviewer', '@me')
+    if (filter.scope === 'own')       base.push('--author',   '@me')
+    if (filter.scope === 'reviewing') base.push('--reviewer', '@me')
   }
-  return run(args)
+
+  // Try with all fields first; fall back to a reduced set for GHE instances
+  // where statusCheckRollup / mergeable are not in the GraphQL schema.
+  try {
+    return await run([...base, '--json', 'number,title,state,author,labels,reviewRequests,statusCheckRollup,updatedAt,isDraft,headRefName,assignees,body,mergeable,url'])
+  } catch (err) {
+    if (!/unknown|field|not found/i.test(err.message)) throw err
+    return run([...base, '--json', 'number,title,state,author,labels,reviewRequests,updatedAt,isDraft,headRefName,assignees,body,url'])
+  }
 }
 
 /**
@@ -225,18 +231,25 @@ export async function reviewPR(repo, number, event, body = '') {
  * @param filter
  */
 export async function listIssues(repo, filter = {}) {
-  const args = [
+  const base = [
     'issue', 'list',
     '--repo', getRepo(repo),
-    '--json', 'number,title,state,author,labels,assignees,updatedAt,body,milestone,comments',
     '--limit', String(filter.limit || 50),
   ]
-  if (filter.state) args.push('--state', filter.state)
-  if (filter.author) args.push('--author', filter.author)
-  if (filter.label) args.push('--label', filter.label)
-  if (filter.assignee) args.push('--assignee', filter.assignee)
-  if (filter.milestone) args.push('--milestone', filter.milestone)
-  return run(args)
+  if (filter.state)     base.push('--state',     filter.state)
+  if (filter.author)    base.push('--author',    filter.author)
+  if (filter.label)     base.push('--label',     filter.label)
+  if (filter.assignee)  base.push('--assignee',  filter.assignee)
+  if (filter.milestone) base.push('--milestone', filter.milestone)
+
+  // Try with comments field; fall back without it for GHE instances where
+  // the field is not available in the issue list GraphQL query.
+  try {
+    return await run([...base, '--json', 'number,title,state,author,labels,assignees,updatedAt,body,milestone,comments,url'])
+  } catch (err) {
+    if (!/unknown|field|not found/i.test(err.message)) throw err
+    return run([...base, '--json', 'number,title,state,author,labels,assignees,updatedAt,body,milestone,url'])
+  }
 }
 
 /**
