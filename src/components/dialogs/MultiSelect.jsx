@@ -8,8 +8,10 @@ import React, { useState, useMemo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { useTheme } from '../../theme.js'
 import { useVirtualList } from '../../hooks/useVirtualList.js'
+import { useKeyScope } from '../../keyscope.js'
 
 export function MultiSelect({ items = [], onSubmit, onCancel, title }) {
+  useKeyScope('dialog')
   const { t } = useTheme()
   const { stdout } = useStdout()
   const [query, setQuery] = useState('')

@@ -8,8 +8,10 @@ import { Box, Text, useInput, useStdout } from 'ink'
 import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
 import { useVirtualList } from '../../hooks/useVirtualList.js'
+import { useKeyScope } from '../../keyscope.js'
 
 export function OptionPicker({ options = [], onSubmit, onCancel, title, promptText }) {
+  useKeyScope('dialog')
   const { t } = useTheme()
   const { stdout } = useStdout()
   const [step, setStep] = useState('pick') // 'pick' | 'text'

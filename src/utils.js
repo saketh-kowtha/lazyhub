@@ -378,6 +378,22 @@ function renderInline(text, t) {
 }
 
 /**
+ * Returns a compact age string ≤4 chars for list row timestamps.
+ * @param {string|number|Date} ts
+ */
+export function shortAge(ts) {
+  if (!ts) return '    '
+  const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000)
+  if (s < 60)         return 'now'
+  if (s < 3600)       return `${Math.floor(s / 60)}m`
+  if (s < 86400)      return `${Math.floor(s / 3600)}h`
+  if (s < 86400 * 14) return `${Math.floor(s / 86400)}d`
+  if (s < 86400 * 60) return `${Math.floor(s / (86400 * 7))}w`
+  if (s < 86400 * 365) return `${Math.floor(s / (86400 * 30))}mo`
+  return `${Math.floor(s / (86400 * 365))}y`
+}
+
+/**
  * A basic text input component with cursor support and common shortcuts.
  * @param {Object} props - Component props.
  * @param {string} props.value - Current input value.

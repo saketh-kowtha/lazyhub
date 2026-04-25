@@ -4,11 +4,15 @@
  */
 export default {
   ui: {
-    selected: 'cyan',
-    headerBg: 'blue',
-    border:   'grey',
-    muted:    'grey',
-    dim:      'grey',
+    selected:     'cyan',
+    headerBg:     'blue',
+    border:       'grey',
+    borderActive: 'blueBright',
+    muted:        'grey',
+    dim:          'grey',
+    activeBg:     undefined,
+    divider:      'gray',
+    rowHover:     undefined,
   },
   pr: {
     open:     'green',

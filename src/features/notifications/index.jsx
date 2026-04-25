@@ -5,6 +5,7 @@
 import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
+import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import { listNotifications, markNotificationRead, markAllNotificationsRead } from '../../executor.js'
 import { sanitize } from '../../utils.js'
@@ -15,6 +16,7 @@ import { useTheme } from '../../theme.js'
 import { NotificationListSkeleton } from '../../components/Skeleton.jsx'
 
 export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneState }) {
+  useKeyScope('pane')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
 

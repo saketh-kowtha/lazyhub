@@ -10,6 +10,7 @@ import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { format } from 'timeago.js'
+import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
   listPRComments, resolveThread,
@@ -34,6 +35,7 @@ const FILTER_MODES = ['all', 'open', 'resolved']
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
 
 export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
+  useKeyScope('view')
   const { t } = useTheme()
   const { stdout } = useStdout()
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 8)
@@ -152,7 +154,8 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       }
       // reply / edit: exit keys handled here, text by TextInput
       if (key.escape) { setAction(null); setActionText(''); return }
-      if (input === 'e' && action.type !== 'delete') {
+      // Ctrl+E opens editor; bare 'e' is a normal character typed in TextInput
+      if (key.ctrl && input === 'e' && action.type !== 'delete') {
         const result = openEditor(actionText)
         setActionText(result)
         return

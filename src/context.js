@@ -6,4 +6,10 @@
 
 import { createContext } from 'react'
 
-export const AppContext = createContext({ notifyDialog: () => {}, openHelp: () => {}, openAI: () => {}, setMouseEnabled: () => {} })
+export const AppContext = createContext({
+  notifyDialog: () => {},
+  openHelp: () => {},
+  openAI: () => {},
+  setMouseEnabled: () => {},
+  paneStateMap: null,   // Map<paneId, stateObject> — set by App
+})

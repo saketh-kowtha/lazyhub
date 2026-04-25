@@ -12,7 +12,7 @@
 
 import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
-import { format } from 'timeago.js'
+import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
   listPRs, listLabels, listCollaborators,
@@ -27,9 +27,10 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { NewPRDialog } from './NewPRDialog.jsx'
 import { AppContext } from '../../context.js'
+import { usePaneState } from '../../hooks/usePaneState.js'
 import { loadConfig } from '../../config.js'
 import { useTheme } from '../../theme.js'
-import { sanitize } from '../../utils.js'
+import { sanitize, TextInput, shortAge } from '../../utils.js'
 import { PRListSkeleton } from '../../components/Skeleton.jsx'
 
 const _cfg = loadConfig().pr
@@ -71,10 +72,14 @@ function CIBadge({ pr, t }) {
   return <Text color={t.ci.pass}> ✓</Text>
 }
 
-const PRRow = memo(({ pr, isSelected, t }) => {
+// Fixed columns: badge(2) + num(7) + ci(6) + author(13) + age(5) + paddingX(2) = 35 reserved
+const PR_ROW_RESERVED = 35
+
+const PRRow = memo(({ pr, isSelected, t, termCols = 80 }) => {
   const authorLogin = String(pr.author?.login || '').slice(0, 12).padEnd(12)
-  const timeStr     = pr.updatedAt ? format(pr.updatedAt) : ''
+  const ageStr      = shortAge(pr.updatedAt).padStart(4)
   const timeColor   = ageColor(pr.updatedAt, t)
+  const titleWidth  = Math.max(10, termCols - PR_ROW_RESERVED)
 
   return (
     <Box paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
@@ -84,13 +89,13 @@ const PRRow = memo(({ pr, isSelected, t }) => {
         color={isSelected ? t.ui.selected : undefined}
         italic={pr.isDraft}
         wrap="truncate"
-        flexGrow={1}
+        width={titleWidth}
       >
         {sanitize(pr.title)}
       </Text>
       <CIBadge pr={pr} t={t} />
       <Text color={t.ui.muted}> {authorLogin}</Text>
-      <Text color={timeColor}> {timeStr}</Text>
+      <Text color={timeColor}> {ageStr}</Text>
     </Box>
   )
 })
@@ -103,28 +108,49 @@ const MERGE_OPTIONS = [
 
 // ─── PRList ───────────────────────────────────────────────────────────────────
 
-export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff, onPaneState, initialCursor = 0, initialScrollOffset = 0 }) {
+export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff, onPaneState }) {
+  useKeyScope('pane')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const height = listHeight || Math.max(3, (stdout?.rows || 24) - 5)
 
-  const [filterState, setFilterState] = useState(_cfg.defaultFilter)
-  const [scope, setScope] = useState(_cfg.defaultScope)
-  const [sortMode, setSortMode] = useState('default') // 'default' | 'oldest'
-  const [authorFilter, setAuthorFilter] = useState('')  // '' = all authors
-  const [limit, setLimit] = useState(_cfg.pageSize)
+  // Preserve filter/cursor/scroll across back-navigation from detail/diff
+  const [savedState, setSavedState] = usePaneState('prs', {
+    filterState: _cfg.defaultFilter,
+    scope: _cfg.defaultScope,
+    sortMode: 'default',
+    authorFilter: '',
+    limit: _cfg.pageSize,
+    cursor: 0,
+    scrollOffset: 0,
+  })
+
+  const [filterState, setFilterStateRaw] = useState(savedState.filterState)
+  const [scope, setScopeRaw] = useState(savedState.scope)
+  const [sortMode, setSortModeRaw] = useState(savedState.sortMode)
+  const [authorFilter, setAuthorFilterRaw] = useState(savedState.authorFilter)
+  const [limit, setLimitRaw] = useState(savedState.limit)
   const { data: prs, loading, error, refetch } = useGh(listPRs, [repo, { state: filterState, scope, author: authorFilter || undefined, limit }])
 
-  const [cursor, setCursor] = useState(initialCursor)
-  const [scrollOffset, setScrollOffset] = useState(initialScrollOffset)
+  const [cursor, setCursorRaw] = useState(savedState.cursor)
+  const [scrollOffset, setScrollOffsetRaw] = useState(savedState.scrollOffset)
+
+  // Wrap setters to also persist to pane state map
+  const setFilterState = (v) => { setFilterStateRaw(v); setSavedState({ filterState: typeof v === 'function' ? v(filterState) : v }) }
+  const setScope = (v) => { setScopeRaw(v); setSavedState({ scope: v }) }
+  const setSortMode = (v) => { setSortModeRaw(v); setSavedState({ sortMode: v }) }
+  const setAuthorFilter = (v) => { setAuthorFilterRaw(v); setSavedState({ authorFilter: v }) }
+  const setLimit = (v) => { setLimitRaw(v); setSavedState({ limit: typeof v === 'function' ? v(limit) : v }) }
+  const setCursor = (v) => { setCursorRaw(v); setSavedState({ cursor: typeof v === 'function' ? v(cursor) : v }) }
+  const setScrollOffset = (v) => { setScrollOffsetRaw(v); setSavedState({ scrollOffset: typeof v === 'function' ? v(scrollOffset) : v }) }
   const [dialog, setDialog] = useState(null)
   const [mergeOptions, setMergeOptions] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
 
-  const rawItems = prs || []
+  const rawItems = (prs || []).filter(Boolean)
   const items = sortMode === 'oldest'
     ? [...rawItems].sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt))
     : rawItems
@@ -511,6 +537,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
             pr={pr}
             isSelected={isSelected}
             t={t}
+            termCols={stdout?.columns || 80}
           />
         )
       })}
@@ -594,12 +621,11 @@ function AssigneeDialog({ repo, pr, onClose }) {
 function AuthorSearchDialog({ current, onSubmit, onCancel }) {
   const { t } = useTheme()
   const [text, setText] = useState(current || '')
+  useKeyScope('dialog')
 
   useInput((input, key) => {
     if (key.escape) { onCancel(); return }
     if (key.return) { onSubmit(text.trim()); return }
-    if (key.backspace || key.delete) { setText(s => s.slice(0, -1)); return }
-    if (input && !key.ctrl && !key.meta) { setText(s => s + input); return }
   })
 
   return (
@@ -607,8 +633,7 @@ function AuthorSearchDialog({ current, onSubmit, onCancel }) {
       <Text color={t.ui.selected} bold>Filter by author</Text>
       <Box marginTop={1} gap={1}>
         <Text color={t.ui.dim}>@</Text>
-        <Text color={t.ui.selected}>{text}</Text>
-        <Text color={t.ui.dim}>█</Text>
+        <TextInput value={text} onChange={setText} focus={true} placeholder="username" />
       </Box>
       <Box marginTop={0}>
         <Text color={t.ui.dim}>[Enter] apply  [Esc] cancel  (empty = show all authors)</Text>

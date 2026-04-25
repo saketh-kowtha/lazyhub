@@ -3,8 +3,15 @@ export default {
   issue: { open: '#9ece6a', closed: '#565f89' },
   ci:    { pass: '#9ece6a', fail: '#f7768e', pending: '#e0af68', running: '#e0af68' },
   ui: {
-    selected: '#7aa2f7', muted: '#a9b1d6', dim: '#565f89',
-    border: '#292e42', headerBg: '#16161e',
+    selected:     '#7aa2f7',
+    muted:        '#a9b1d6',
+    dim:          '#565f89',
+    border:       '#292e42',
+    borderActive: '#7aa2f7',
+    headerBg:     '#16161e',
+    activeBg:     '#1a1b2e',
+    divider:      '#16161e',
+    rowHover:     '#13131e',
   },
   diff: {
     addBg: '#1a2a1a', addFg: '#9ece6a', addSign: '#9ece6a',

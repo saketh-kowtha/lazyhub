@@ -11,6 +11,7 @@ import { join } from 'path'
 import chalk from 'chalk'
 import hljs from 'highlight.js'
 import { format } from 'timeago.js'
+import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
@@ -160,16 +161,31 @@ function htmlToChalk(html, bgColor, t) {
   return parts.join('')
 }
 
+// Module-level cache: (lang:bgColor:code) → chalk string. Survives re-renders.
+// Cap at 5000 entries with simple FIFO eviction.
+const _syntaxCache = new Map()
+const _SYNTAX_CACHE_MAX = 5000
+
 function syntaxHighlight(code, lang, bgColor, t) {
   if (!lang) {
     return applyThemeStyle(code, t.syntax.default, bgColor)
   }
+  const cacheKey = `${lang}:${bgColor}:${code}`
+  if (_syntaxCache.has(cacheKey)) return _syntaxCache.get(cacheKey)
+
+  let result
   try {
     const { value } = hljs.highlight(code, { language: lang, ignoreIllegals: true })
-    return htmlToChalk(value, bgColor, t)
+    result = htmlToChalk(value, bgColor, t)
   } catch {
-    return applyThemeStyle(code, t.syntax.default, bgColor)
+    result = applyThemeStyle(code, t.syntax.default, bgColor)
   }
+
+  if (_syntaxCache.size >= _SYNTAX_CACHE_MAX) {
+    _syntaxCache.delete(_syntaxCache.keys().next().value)
+  }
+  _syntaxCache.set(cacheKey, result)
+  return result
 }
 
 // ─── Diff parser ──────────────────────────────────────────────────────────────
@@ -550,6 +566,7 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
 }
 
 export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
+  useKeyScope('view')
   const { t } = useTheme()
   const { stdout } = useStdout()
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 6)
@@ -562,7 +579,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000 })
   const headRefOid = /^[0-9a-f]{40}$/.test(prMeta?.headRefOid) ? prMeta.headRefOid : null
   const { data: diffText, loading, error, refetch } = useGh(getPRDiff, [repo, prNumber])
-  const { data: comments } = useGh(listPRComments, [repo, prNumber])
+  const { data: comments, refetch: refetchComments, mutate: mutateComments } = useGh(listPRComments, [repo, prNumber])
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
@@ -606,6 +623,15 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     notifyDialog(!!(gotoActive || findActive || compose || showTree || dialog || fileJumpActive || aiReview || aiReviewLoading))
     return () => notifyDialog(false)
   }, [gotoActive, findActive, compose, showTree, dialog, fileJumpActive, aiReview, aiReviewLoading, notifyDialog])
+
+  // Cleanup transient input states on unmount so they don't bleed into re-mounts
+  useEffect(() => () => {
+    setFindActive(false)
+    setFindQuery('')
+    setGotoActive(false)
+    setGotoInput('')
+    setCompose(null)
+  }, [])
 
   const files = useMemo(() => parseDiff(diffText || ''), [diffText])
   const rows  = useMemo(() => flattenFiles(files), [files])
@@ -767,10 +793,16 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       // delete confirm
       if (compose.mode === 'delete') {
         if (input === 'y') {
-          deletePRComment(repo, compose.commentId)
-            .then(() => { setCommentStatus('Deleted'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
-            .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
+          const deleteId = compose.commentId
+          mutateComments(prev => (prev || []).filter(c => c.id !== deleteId))
           setCompose(null)
+          deletePRComment(repo, deleteId)
+            .then(() => { setCommentStatus('Deleted'); setTimeout(() => setCommentStatus(null), 3000) })
+            .catch(err => {
+              refetchComments()
+              setCommentStatus(`Failed: ${err.message}`)
+              setTimeout(() => setCommentStatus(null), 3000)
+            })
         } else if (input === 'n') {
           setCompose(null)
         }
@@ -802,25 +834,37 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
               setCompose(null)
               return
             }
+            const optimisticId = `optimistic-${Date.now()}`
+            const optimisticComment = {
+              id: optimisticId, body, path: row.filename,
+              line: row.newLine || row.oldLine,
+              side: row.type === 'del' ? 'LEFT' : 'RIGHT',
+              createdAt: new Date().toISOString(), pending: true,
+              user: { login: '…' }, inReplyToId: null,
+            }
+            mutateComments(prev => [...(prev || []), optimisticComment])
+            setCompose(null)
+            setCommentStatus('Posting…')
             addPRLineComment(repo, prNumber, {
-              body,
-              path: row.filename,
+              body, path: row.filename,
               line: row.newLine || row.oldLine,
               side: row.type === 'del' ? 'LEFT' : 'RIGHT',
               commitId: headRefOid,
             }).then(() => {
               setCommentStatus('Comment added')
               setTimeout(() => setCommentStatus(null), 3000)
-              refetch()
+              refetchComments()
             }).catch(err => {
+              mutateComments(prev => (prev || []).filter(c => c.id !== optimisticId))
               setCommentStatus(`Failed: ${err.message}`)
               setTimeout(() => setCommentStatus(null), 3000)
             })
           }
         } else if (compose.mode === 'reply') {
           if (body) {
+            setCompose(null)
             replyToComment(repo, prNumber, compose.rootCommentId, body)
-              .then(() => { setCompose(null); setCommentStatus('Reply sent'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
+              .then(() => { setCommentStatus('Reply sent'); refetchComments(); setTimeout(() => setCommentStatus(null), 3000) })
               .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
           } else {
             setCompose(null)
@@ -828,9 +872,16 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
           return
         } else if (compose.mode === 'edit') {
           if (body) {
-            editPRComment(repo, compose.commentId, body)
-              .then(() => { setCompose(null); setCommentStatus('Comment updated'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
-              .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
+            const editId = compose.commentId
+            mutateComments(prev => (prev || []).map(c => c.id === editId ? { ...c, body } : c))
+            setCompose(null)
+            editPRComment(repo, editId, body)
+              .then(() => { setCommentStatus('Comment updated'); setTimeout(() => setCommentStatus(null), 3000) })
+              .catch(err => {
+                refetchComments()
+                setCommentStatus(`Failed: ${err.message}`)
+                setTimeout(() => setCommentStatus(null), 3000)
+              })
           } else {
             setCompose(null)
           }
@@ -839,7 +890,8 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         setCompose(null)
         return
       }
-      if (input === 'e' && (compose.mode === 'reply' || compose.mode === 'edit' || compose.mode === 'new')) {
+      // Ctrl+E opens editor — bare 'e' is a normal character handled by TextInput
+      if (key.ctrl && input === 'e' && compose.mode !== 'delete') {
         const edited = openEditorSync(compose.body)
         setCompose(c => ({ ...c, body: edited }))
         return
@@ -1151,8 +1203,9 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   )
 
   const colWidth = Math.floor(((stdout?.columns || 80) - 2) / 2)
-  const composeBoxHeight = compose ? 6 : 0
-  const effectiveHeight  = Math.max(3, visibleHeight - composeBoxHeight)
+  // Always reserve COMPOSE_HEIGHT rows so the diff never jumps when compose opens/closes
+  const COMPOSE_HEIGHT  = 6
+  const effectiveHeight = Math.max(3, visibleHeight - COMPOSE_HEIGHT)
   // No row cap — virtual slice keeps rendering O(visibleHeight) regardless of diff size
   const visibleRows = rows.slice(scrollOffset, scrollOffset + effectiveHeight)
 

@@ -12,8 +12,10 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
+import { useKeyScope } from '../../keyscope.js'
 
 export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
+  useKeyScope('dialog')
   const { t } = useTheme()
   const [activeField, setActiveField] = useState(0)
   const [values, setValues] = useState(() => {

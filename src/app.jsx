@@ -15,7 +15,8 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { render, Box, Text, useInput, useApp, useStdout } from 'ink'
 import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
-import { loadConfig } from './config.js'
+import { KeyScopeProvider, useActiveScope, useKeyScope } from './keyscope.js'
+import { loadConfig, CONFIG_PATH } from './config.js'
 import { AppContext } from './context.js'
 import { logger } from './utils.js'
 import { emitIPC, startIPC } from './ipc.js'
@@ -37,6 +38,7 @@ import { NotificationList } from './features/notifications/index.jsx'
 import { CustomPane } from './components/CustomPane.jsx'
 import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 import { AIAssistant } from './components/AIAssistant.jsx'
+import { openInEditor } from './editor.js'
 
 const _config = loadConfig()
 
@@ -54,11 +56,12 @@ const BUILTIN_PANE_LABELS = {
 
 const BUILTIN_PANE_ICONS = {
   prs:           '⎇',
-  issues:        '○',
-  branches:      '⊞',
-  actions:       '▶',
-  notifications: '●',
+  issues:        '◎',
+  branches:      '⑂',
+  actions:       '⚡',
+  notifications: '◈',
 }
+
 
 // Merge built-in + custom so label/icon lookups work uniformly
 const PANE_LABELS = { ...BUILTIN_PANE_LABELS }
@@ -203,7 +206,7 @@ const DIALOG_KEYS = {
   ],
   compose: [
     { key: 'Tab',            label: 'next field' },
-    { key: 'e',              label: 'open $EDITOR for body' },
+    { key: 'Ctrl+E',         label: 'open $EDITOR for body' },
     { key: 'Ctrl+G',         label: 'submit' },
     { key: 'Esc',            label: 'cancel' },
   ],
@@ -216,10 +219,8 @@ const DIALOG_KEYS = {
   ],
   comment: [
     { key: '←→',             label: 'pick comment type' },
-    { key: 'Tab',            label: 'next field' },
-    { key: 'e',              label: 'open $EDITOR for body' },
+    { key: 'Ctrl+E',         label: 'open $EDITOR for body' },
     { key: 'Ctrl+G',         label: 'submit comment' },
-    { key: 'Ctrl+R',         label: 'submit + resolve thread' },
     { key: 'Esc',            label: 'cancel' },
   ],
 }
@@ -227,6 +228,7 @@ const DIALOG_KEYS = {
 // ─── Help overlay — shown on ? from any view ─────────────────────────────────
 
 function HelpOverlay({ pane, view, onClose }) {
+  useKeyScope('overlay')
   const { t } = useTheme()
   const { stdout } = useStdout()
   const cols = stdout?.columns || 80
@@ -306,68 +308,101 @@ function HelpOverlay({ pane, view, onClose }) {
 function PRSummaryPanel({ pr }) {
   const { t } = useTheme()
   if (!pr) return (
-    <Box flexDirection="column" paddingX={1} paddingY={1}>
-      <Text color={t.ui.dim}>No PR selected</Text>
+    <Box flexDirection="column" paddingX={2} paddingY={2}>
+      <Text color={t.ui.dim}>↑  hover a PR to preview</Text>
     </Box>
   )
 
   const stateBadge = pr.isDraft
-    ? { label: 'Draft', color: t.pr.draft }
-    : pr.state === 'MERGED' ? { label: 'Merged', color: t.pr.merged }
-    : pr.state === 'CLOSED' ? { label: 'Closed', color: t.pr.closed }
-    : { label: 'Open', color: t.pr.open }
+    ? { icon: '⊘', label: 'Draft',  color: t.pr.draft  }
+    : pr.state === 'MERGED' ? { icon: '⎇', label: 'Merged', color: t.pr.merged }
+    : pr.state === 'CLOSED' ? { icon: '✕', label: 'Closed', color: t.pr.closed }
+    : { icon: '●', label: 'Open',   color: t.pr.open   }
 
-  const labels = pr.labels?.slice(0, 3) || []
+  const labels    = pr.labels?.slice(0, 4) || []
   const reviewers = pr.reviewRequests?.slice(0, 3) || []
+
+  const ciChecks = pr.statusCheckRollup || []
+  const failing  = ciChecks.filter(c => /failure|error/i.test(c.state || c.conclusion || '')).length
+  const pending  = ciChecks.filter(c => /pending|in_progress/i.test(c.state || c.conclusion || c.status || '')).length
+  const ciColor  = failing ? t.ci.fail : pending ? t.ci.pending : ciChecks.length ? t.ci.pass : null
+  const ciLabel  = failing ? `✗ ${failing} failing` : pending ? `● ${pending} pending` : ciChecks.length ? '✓ passing' : null
 
   return (
     <Box flexDirection="column" paddingX={1} paddingY={1} gap={1}>
-      <Text color={t.ui.selected} bold wrap="truncate">#{pr.number} {pr.title}</Text>
+      {/* Title */}
+      <Text color={t.ui.selected} bold wrap="truncate">{pr.title}</Text>
+
+      {/* State + author */}
       <Box gap={1}>
-        <Text color={stateBadge.color} bold>{stateBadge.label}</Text>
+        <Text color={stateBadge.color} bold>{stateBadge.icon} {stateBadge.label}</Text>
+        <Text color={t.ui.dim}>·</Text>
+        <Text color={t.ui.muted}>{pr.author?.login || '—'}</Text>
       </Box>
-      <Text color={t.ui.muted}>by {pr.author?.login || '—'}</Text>
-      {labels.length > 0 && (
-        <Box flexDirection="column">
-          <Text color={t.ui.dim}>Labels</Text>
-          {labels.map(l => <Text key={l.name} color={t.ui.muted}>  • {l.name}</Text>)}
-        </Box>
-      )}
-      {reviewers.length > 0 && (
-        <Box flexDirection="column">
-          <Text color={t.ui.dim}>Reviewers</Text>
-          {reviewers.map(r => <Text key={r.login} color={t.ui.muted}>  {r.login}</Text>)}
-        </Box>
-      )}
-      {pr.checksState && (
+
+      {/* Branch */}
+      {pr.headRefName && (
         <Box gap={1}>
-          <Text color={t.ui.dim}>CI</Text>
-          <Text color={
-            pr.checksState === 'SUCCESS' ? t.ci.pass
-            : pr.checksState === 'FAILURE' ? t.ci.fail
-            : t.ci.pending
-          }>
-            {pr.checksState === 'SUCCESS' ? '✓ Passing'
-              : pr.checksState === 'FAILURE' ? '✗ Failing'
-              : '● Pending'}
-          </Text>
+          <Text color={t.ui.dim}>⑂</Text>
+          <Text color={t.ui.muted} wrap="truncate">{pr.headRefName}</Text>
         </Box>
       )}
-      <Text color={t.ui.dim} dimColor>[d] diff  [Enter] detail  [?] help</Text>
+
+      {/* CI */}
+      {ciLabel && (
+        <Box gap={1}>
+          <Text color={t.ui.dim}>⚡</Text>
+          <Text color={ciColor}>{ciLabel}</Text>
+        </Box>
+      )}
+
+      {/* Labels */}
+      {labels.length > 0 && (
+        <Box flexDirection="column" gap={0}>
+          <Text color={t.ui.dim}>Labels</Text>
+          {labels.map(l => (
+            <Box key={l.name} paddingLeft={1} gap={1}>
+              <Text color={t.ui.dim}>◆</Text>
+              <Text color={t.ui.muted}>{l.name}</Text>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {/* Reviewers */}
+      {reviewers.length > 0 && (
+        <Box flexDirection="column" gap={0}>
+          <Text color={t.ui.dim}>Reviewers</Text>
+          {reviewers.map(r => (
+            <Box key={r.login} paddingLeft={1} gap={1}>
+              <Text color={t.ui.dim}>◇</Text>
+              <Text color={t.ui.muted}>{r.login}</Text>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      <Box flexGrow={1} />
+      <Text color={t.ui.dim}>Enter detail  ·  d diff  ·  ? help</Text>
     </Box>
   )
 }
 
 // ─── Pane header ──────────────────────────────────────────────────────────────
 
-function PaneHeader({ pane, count, loading, error }) {
+function PaneHeader({ pane, count, loading, error, innerWidth }) {
   const { t } = useTheme()
+  const { stdout } = useStdout()
+  const w = innerWidth || (stdout?.columns || 80) - 2
   return (
-    <Box paddingX={1}>
-      <Text color={t.ui.selected} bold>{PANE_ICONS[pane] || '○'} {PANE_LABELS[pane] || pane}</Text>
-      {count != null && !loading && <Text color={t.ui.dim}> ({count})</Text>}
-      {loading && <Text color={t.ui.muted}> loading…</Text>}
-      {error && <Text color={t.ci.fail}>  ⚠ {error?.message || 'fetch error'} — [r] retry</Text>}
+    <Box flexDirection="column">
+      <Box paddingX={1} paddingY={0} gap={1}>
+        <Text color={t.ui.selected} bold>{PANE_ICONS[pane] || '◈'}  {PANE_LABELS[pane] || pane}</Text>
+        {count != null && !loading && <Text color={t.ui.dim}>{count}</Text>}
+        {loading && <Text color={t.ui.muted}>loading…</Text>}
+        {error   && <Text color={t.ci.fail}>⚠  {error?.message || 'fetch error'} · r retry</Text>}
+      </Box>
+      <Box paddingX={1}><Text color={t.ui.divider}>{'─'.repeat(Math.max(1, w - 2))}</Text></Box>
     </Box>
   )
 }
@@ -380,6 +415,7 @@ function App({ repo }) {
   const { stdout } = useStdout()
   const columns = stdout?.columns || 80
   const rows    = stdout?.rows    || 24
+  const activeScope = useActiveScope()
 
   // ─── Mouse support ────────────────────────────────────────────────────────
   const [mouseEnabled, setMouseEnabled] = useState(
@@ -419,11 +455,12 @@ function App({ repo }) {
   const dialogActiveRef    = useRef(false)
   const savedListPosition  = useRef({})
   const pendingNavigationRef = useRef(null)
+  const paneStateMapRef    = useRef(new Map())
   const notifyDialog = useCallback((active) => { dialogActiveRef.current = active }, [])
   const openHelp     = useCallback(() => setShowHelp(true), [])
   const openAI       = useCallback(() => setShowAI(true), [])
 
-  const appCtx = { notifyDialog, openHelp, openAI, setMouseEnabled }
+  const appCtx = { notifyDialog, openHelp, openAI, setMouseEnabled, paneStateMap: paneStateMapRef.current }
 
   // ─── IPC state broadcast ──────────────────────────────────────────────────
   useEffect(() => {
@@ -438,10 +475,14 @@ function App({ repo }) {
   }, [pane, view, selectedItem])
 
   // ─── Layout breakpoints ───────────────────────────────────────────────────
-  const showSidebar     = columns >= 80
-  const showDetailPanel = columns >= 100 && view === 'list' && pane === 'prs'
-  const detailPanelWidth = showDetailPanel ? 40 : 0
-  const listHeight = Math.max(3, rows - 5)
+  const layout = _config.layout
+  const sidebarWidth    = layout.sidebarWidth
+  const borderStyle     = layout.borderStyle === 'none' ? undefined : layout.borderStyle
+  const showSidebar     = layout.sidebar && columns >= 80
+  const showDetailPanel = layout.previewPanel && columns >= 100 && view === 'list' && pane === 'prs'
+  const detailPanelWidth = showDetailPanel ? layout.previewWidth : 0
+  const footerRows      = layout.compactFooter ? 1 : 2   // status bar only vs status + footer keys
+  const listHeight      = Math.max(3, rows - (layout.compactFooter ? 2 : 3))
 
   // ─── AI navigate callback ─────────────────────────────────────────────────
   const handleAINavigate = useCallback(({ pane: tp, itemNumber, filter } = {}) => {
@@ -459,10 +500,15 @@ function App({ repo }) {
 
   // ─── Global key handler ───────────────────────────────────────────────────
   useInput((input, key) => {
-    // Ctrl+A: open AI assistant (before dialog guard so it always fires)
+    // Ctrl+A: open AI assistant (always fires regardless of scope)
     if (key.ctrl && input === 'a') { setShowAI(true); return }
 
-    if (dialogActiveRef.current) return
+    // Only handle global keys when no higher-priority scope has captured input.
+    // Scope stack: global(0) < pane(1) < view(2) < overlay(3) < dialog(4) < input(5)
+    // At pane level, Tab/number/? are still valid (list pane doesn't block them).
+    // At view/overlay/dialog/input, we must defer.
+    const highScope = activeScope !== 'global' && activeScope !== 'pane' && activeScope !== 'list'
+    if (highScope || dialogActiveRef.current) return
 
     if (input === '?') { setShowHelp(v => !v); return }
 
@@ -476,6 +522,7 @@ function App({ repo }) {
         : (idx + 1) % PANES.length
       ])
       savedListPosition.current = {}
+      paneStateMapRef.current.clear()
       setHoveredItem(null); setSelectedItem(null); setView('list')
       setActionsBranch(null)
       return
@@ -487,6 +534,7 @@ function App({ repo }) {
       const target = PANES[numKey - 1]
       if (target && target !== pane) {
         setPane(target)
+        paneStateMapRef.current.clear()
         setHoveredItem(null); setSelectedItem(null); setView('list')
         setActionsBranch(null)
       }
@@ -494,6 +542,7 @@ function App({ repo }) {
     }
 
     if (input === 'S') { setView('settings'); setSelectedItem(null); return }
+    if (input === 'E') { openInEditor(CONFIG_PATH, 1, _config.editor).catch(() => {}); return }
     if (input === 'L' && process.env.LAZYHUB_DEBUG === '1') { setView('logs'); setSelectedItem(null); return }
 
     if (input === 'q' || key.escape) {
@@ -510,9 +559,8 @@ function App({ repo }) {
 
   // ─── Navigation callbacks ─────────────────────────────────────────────────
   const goToDetail   = useCallback((item) => {
-    savedListPosition.current = { cursor: paneState.cursor ?? 0, scrollOffset: paneState.scrollOffset ?? 0 }
     setSelectedItem(item); setView('detail')
-  }, [paneState])
+  }, [])
   const goToDiff       = useCallback((item) => { setSelectedItem({ ...item, _fromList: view === 'list' }); setView('diff') }, [view])
   const goToComments   = useCallback(() => setView('comments'), [])
   const goToConflict   = useCallback(() => setView('conflict'), [])
@@ -539,10 +587,10 @@ function App({ repo }) {
         <Box flexDirection="column" height={rows} overflow="hidden">
           <Box flexDirection="row" flexGrow={1} overflow="hidden">
             {showSidebar && (
-              <Sidebar currentPane={pane} visiblePanes={PANES}
-                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS}
+              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
+                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
                 onSelect={(p) => { setPane(p); setShowAI(false); setHoveredItem(null); setSelectedItem(null); setView('list') }}
-                height={rows - 2}
+                height={rows - (layout.compactFooter ? 1 : 3)}
               />
             )}
             <ErrorBoundary>
@@ -557,8 +605,8 @@ function App({ repo }) {
               />
             </ErrorBoundary>
           </Box>
-          <StatusBar repo={repo} pane={pane} count={paneState.count} />
-          <FooterKeys keys={[{ key: 'Esc', label: 'close AI' }, { key: 'j/k', label: 'scroll' }, { key: 'Enter', label: 'send' }]} />
+          <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={activeScope !== 'global' && activeScope !== 'list' ? activeScope.toUpperCase() : null} />
+          <FooterKeys hidden={layout.compactFooter} keys={[{ key: 'Esc', label: 'close AI' }, { key: 'j/k', label: 'scroll' }, { key: 'Enter', label: 'send' }]} />
         </Box>
       </AppContext.Provider>
     )
@@ -571,10 +619,10 @@ function App({ repo }) {
         <Box flexDirection="column" height={rows} overflow="hidden">
           <Box flexDirection="row" flexGrow={1} overflow="hidden">
             {showSidebar && (
-              <Sidebar currentPane={pane} visiblePanes={PANES}
-                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS}
+              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
+                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
                 onSelect={(p) => { setPane(p); setShowHelp(false); setHoveredItem(null); setSelectedItem(null); setView('list') }}
-                height={rows - 2}
+                height={rows - (layout.compactFooter ? 1 : 3)}
               />
             )}
           <Box flexDirection="column" flexGrow={1} overflow="hidden"
@@ -582,8 +630,8 @@ function App({ repo }) {
             <HelpOverlay pane={pane} view={view} onClose={() => setShowHelp(false)} />
           </Box>
           </Box>
-          <StatusBar repo={repo} pane={pane} count={paneState.count} />
-          <FooterKeys keys={[{ key: '? / Esc / Enter', label: 'close help' }]} />
+          <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={activeScope !== 'global' && activeScope !== 'list' ? activeScope.toUpperCase() : null} />
+          <FooterKeys hidden={layout.compactFooter} keys={[{ key: '? / Esc / Enter', label: 'close help' }]} />
         </Box>
       </AppContext.Provider>
     )
@@ -604,8 +652,8 @@ function App({ repo }) {
               />
             </ErrorBoundary>
           </Box>
-          <StatusBar repo={repo} pane={pane} />
-          <FooterKeys keys={[
+          <StatusBar repo={repo} pane={pane} scopeIndicator={activeScope !== 'global' && activeScope !== 'list' ? activeScope.toUpperCase() : null} />
+          <FooterKeys hidden={layout.compactFooter} keys={[
             { key: 'j/k', label: 'navigate' },
             { key: 'e/Enter', label: 'open editor' },
             { key: 'Space', label: 'stage/unstage' },
@@ -653,18 +701,18 @@ function App({ repo }) {
         <Box flexDirection="column" height={rows}>
           <Box flexDirection="row" flexGrow={1}>
             {showSidebar && (
-              <Sidebar currentPane={pane} visiblePanes={PANES}
-                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS}
+              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
+                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
                 onSelect={(p) => { setPane(p); setSelectedItem(null); setView('list') }}
-                height={rows - 2}
+                height={rows - (layout.compactFooter ? 1 : 3)}
               />
             )}
             <ErrorBoundary>
               <LogPane onBack={() => setView('list')} />
             </ErrorBoundary>
           </Box>
-          <StatusBar repo={repo} pane="logs" />
-          <FooterKeys keys={[
+          <StatusBar repo={repo} pane="logs" scopeIndicator={activeScope !== 'global' && activeScope !== 'list' ? activeScope.toUpperCase() : null} />
+          <FooterKeys hidden={layout.compactFooter} keys={[
             { key: 'j/k', label: 'navigate' },
             { key: 'Enter', label: 'detail' },
             { key: 'f', label: 'level' },
@@ -682,18 +730,18 @@ function App({ repo }) {
         <Box flexDirection="column" height={rows}>
           <Box flexDirection="row" flexGrow={1}>
             {showSidebar && (
-              <Sidebar currentPane={pane} visiblePanes={PANES}
-                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS}
+              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
+                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
                 onSelect={(p) => { setPane(p); setSelectedItem(null); setView('list') }}
-                height={rows - 2}
+                height={rows - (layout.compactFooter ? 1 : 3)}
               />
             )}
             <ErrorBoundary>
               <SettingsPane onBack={() => setView('list')} />
             </ErrorBoundary>
           </Box>
-          <StatusBar repo={repo} pane="settings" />
-          <FooterKeys keys={[
+          <StatusBar repo={repo} pane="settings" scopeIndicator={activeScope !== 'global' && activeScope !== 'list' ? activeScope.toUpperCase() : null} />
+          <FooterKeys hidden={layout.compactFooter} keys={[
             { key: 'j/k', label: 'navigate' },
             { key: 'Enter', label: 'select' },
             { key: '?', label: 'help' },
@@ -721,7 +769,7 @@ function App({ repo }) {
     return (
       <AppContext.Provider value={appCtx}>
         <Box flexDirection="column" height={rows}>
-          <Box borderStyle="single" borderColor={t.ui.selected} flexDirection="column" flexGrow={1}>
+          <Box flexDirection="column" flexGrow={1}>
             <ErrorBoundary>
               <DetailPane
                 {...(pane === 'issues'
@@ -736,8 +784,8 @@ function App({ repo }) {
               />
             </ErrorBoundary>
           </Box>
-          <StatusBar repo={repo} pane={pane} count={paneState.count} />
-          <FooterKeys keys={detailFooter} />
+          <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={activeScope !== 'global' && activeScope !== 'list' ? activeScope.toUpperCase() : null} />
+          <FooterKeys hidden={layout.compactFooter} keys={detailFooter} />
         </Box>
       </AppContext.Provider>
     )
@@ -749,15 +797,11 @@ function App({ repo }) {
       case 'prs': return (
         <PRList repo={repo} listHeight={listHeight}
           onHover={setHoveredItem} onSelectPR={goToDetail}
-          onOpenDiff={goToDiff} onPaneState={onPaneState}
-          initialCursor={savedListPosition.current.cursor ?? 0}
-          initialScrollOffset={savedListPosition.current.scrollOffset ?? 0} />
+          onOpenDiff={goToDiff} onPaneState={onPaneState} />
       )
       case 'issues': return (
         <IssueList repo={repo} listHeight={listHeight}
-          onSelectIssue={goToDetail} onPaneState={onPaneState}
-          initialCursor={savedListPosition.current.cursor ?? 0}
-          initialScrollOffset={savedListPosition.current.scrollOffset ?? 0} />
+          onSelectIssue={goToDetail} onPaneState={onPaneState} />
       )
       case 'branches':     return <BranchList repo={repo} listHeight={listHeight} onPaneState={onPaneState} />
       case 'actions':      return <ActionList repo={repo} listHeight={listHeight} onPaneState={onPaneState} initialBranch={actionsBranch} />
@@ -797,14 +841,16 @@ function App({ repo }) {
       <Box flexDirection="column" height={rows} overflow="hidden">
         <Box flexDirection="row" flexGrow={1} overflow="hidden">
           {showSidebar && (
-            <Sidebar currentPane={pane} visiblePanes={PANES}
-              paneLabels={PANE_LABELS} paneIcons={PANE_ICONS}
+            <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
+              paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
               onSelect={(p) => { setPane(p); setHoveredItem(null); setSelectedItem(null); setView('list') }}
-              height={rows - 2}
+              height={rows - (layout.compactFooter ? 1 : 3)}
             />
           )}
 
-          <Box flexDirection="column" flexGrow={1} overflow="hidden" borderStyle="single" borderColor={t.ui.selected}>
+          <Box flexDirection="column" flexGrow={1} overflow="hidden"
+               borderStyle={borderStyle || 'round'}
+               borderColor={t.ui.borderActive}>
             <PaneHeader pane={pane} count={paneState.count} loading={paneState.loading} error={paneState.error} />
             <Box flexGrow={1} flexDirection="column" overflow="hidden">
               <ErrorBoundary>
@@ -814,15 +860,23 @@ function App({ repo }) {
           </Box>
 
           {showDetailPanel && (
-            <Box width={detailPanelWidth} flexDirection="column" borderStyle="single" borderColor={t.ui.border}>
-              <Box paddingX={1}><Text color={t.ui.muted} bold>Detail</Text></Box>
+            <Box width={detailPanelWidth} flexDirection="column"
+                 borderStyle={borderStyle || 'round'}
+                 borderColor={t.ui.border}>
+              <Box flexDirection="column">
+                <Box paddingX={1} gap={1}>
+                  <Text color={t.ui.dim} bold>⎇  Preview</Text>
+                  {hoveredItem && <Text color={t.ui.dim}>#{hoveredItem.number}</Text>}
+                </Box>
+                <Box paddingX={1}><Text color={t.ui.divider}>{'─'.repeat(Math.max(1, detailPanelWidth - 4))}</Text></Box>
+              </Box>
               <PRSummaryPanel pr={hoveredItem} />
             </Box>
           )}
         </Box>
 
-        <StatusBar repo={repo} pane={pane} count={paneState.count} />
-        <FooterKeys keys={listFooter} />
+        <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={activeScope !== 'global' && activeScope !== 'list' ? activeScope.toUpperCase() : null} />
+        <FooterKeys hidden={layout.compactFooter} keys={listFooter} />
       </Box>
     </AppContext.Provider>
   )
@@ -847,7 +901,9 @@ export function renderApp() {
   try {
     const { unmount } = render(
       <ThemeProvider initialTheme={initialTheme}>
-        <App repo={repo} />
+        <KeyScopeProvider>
+          <App repo={repo} />
+        </KeyScopeProvider>
       </ThemeProvider>
     )
 

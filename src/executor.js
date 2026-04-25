@@ -38,14 +38,11 @@ export class GhError extends Error {
  * @param args
  */
 export async function run(args) {
-  // GHE support: prepend --hostname when GH_HOST is set
-  const fullArgs = process.env.GH_HOST
-    ? ['--hostname', process.env.GH_HOST, ...args]
-    : args
-
+  // GH_HOST is inherited by the child process from process.env — no need to
+  // also pass --hostname as a flag (which some gh versions don't accept globally).
   let result
   try {
-    result = await execa('gh', fullArgs, { reject: false })
+    result = await execa('gh', args, { reject: false })
   } catch (err) {
     throw new GhError({
       message: err.message,
@@ -657,8 +654,7 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
     '--method', 'POST',
     '--input', '-',
   ]
-  const fullArgs = process.env.GH_HOST ? ['--hostname', process.env.GH_HOST, ...args] : args
-  const proc = execa('gh', fullArgs, { reject: false })
+  const proc = execa('gh', args, { reject: false })
   proc.stdin.write(payload)
   proc.stdin.end()
   const result = await proc
