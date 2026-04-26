@@ -30,7 +30,7 @@ import { AppContext } from '../../context.js'
 import { usePaneState } from '../../hooks/usePaneState.js'
 import { loadConfig } from '../../config.js'
 import { useTheme } from '../../theme.js'
-import { sanitize, TextInput, shortAge } from '../../utils.js'
+import { sanitize, TextInput, shortAge, authorColor } from '../../utils.js'
 import { PRListSkeleton } from '../../components/Skeleton.jsx'
 
 const _cfg = loadConfig().pr
@@ -40,20 +40,23 @@ const _cfg = loadConfig().pr
 function ageColor(updatedAt, t) {
   if (!updatedAt) return t.ui.dim
   const days = (Date.now() - new Date(updatedAt).getTime()) / 86_400_000
-  if (days < 3)  return t.ci.pass     // green  — fresh
-  if (days < 7)  return undefined     // default — normal
-  if (days < 14) return t.ci.pending  // yellow — getting stale
-  return t.ci.fail                     // red    — stale
+  if (days < 0.167) return t.ci.pass   // < 4h — fresh, green
+  if (days < 3)     return undefined    // 4h–3d — recent, default
+  if (days < 7)     return t.ci.pending // 3–7d — aging, yellow
+  if (days < 21)    return t.ci.fail    // 7–21d — stale, red
+  return t.ui.dim                        // > 21d — frozen, dim
 }
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
 
 function PRStateBadge({ pr, t }) {
   const conflicting = pr.state === 'OPEN' && pr.mergeable === 'CONFLICTING'
-  if (pr.isDraft)   return <Text color={t.pr.draft}>⊘</Text>
-  if (conflicting)  return <Text color={t.pr.conflict || t.ci.pending}>⚡</Text>
+  if (pr.isDraft)   return <Text color={t.pr.draft}>◐</Text>
+  if (conflicting)  return <Text color={t.pr.conflict || t.ci.pending}>▲</Text>
   switch (pr.state) {
-    case 'OPEN':   return <Text color={t.pr.open}>●</Text>
+    case 'OPEN':
+      if (pr.autoMergeRequest) return <Text color={t.pr.merged}>⟳</Text>
+      return <Text color={t.pr.open}>●</Text>
     case 'MERGED': return <Text color={t.pr.merged}>●</Text>
     case 'CLOSED': return <Text color={t.pr.closed}>●</Text>
     default:       return <Text color={t.ui.muted}>●</Text>
@@ -72,30 +75,84 @@ function CIBadge({ pr, t }) {
   return <Text color={t.ci.pass}> ✓</Text>
 }
 
-// Fixed columns: badge(2) + num(7) + ci(6) + author(13) + age(5) + paddingX(2) = 35 reserved
-const PR_ROW_RESERVED = 35
+// Fixed columns in each PRRow: paddingX(2) + cursor(1) + badge(2) + num(7) + CI_max(8) + author(13) + age(5) = 38; +4 buffer for wide unicode
+const PR_ROW_FIXED_COLS = 42
 
-const PRRow = memo(({ pr, isSelected, t, termCols = 80 }) => {
-  const authorLogin = String(pr.author?.login || '').slice(0, 12).padEnd(12)
-  const ageStr      = shortAge(pr.updatedAt).padStart(4)
-  const timeColor   = ageColor(pr.updatedAt, t)
-  const titleWidth  = Math.max(10, termCols - PR_ROW_RESERVED)
+// ─── Expanded detail shown below selected PR ─────────────────────────────────
+
+function PRExpandedDetail({ pr, t }) {
+  const checks   = pr.statusCheckRollup || []
+  const labels   = (pr.labels || []).slice(0, 5)
+  const reviewers = (pr.reviewRequests || []).slice(0, 4)
+  const bodyLine = (pr.body || '').trim().split('\n').find(l => l.trim()) || ''
+
+  const failing = checks.filter(c => /failure|error/i.test(c.state || c.conclusion || '')).length
+  const pending = checks.filter(c => /pending|in_progress|queued/i.test(c.state || c.conclusion || c.status || '')).length
+  const passing = checks.length - failing - pending
+  const ciColor = failing ? t.ci.fail : pending ? t.ci.pending : checks.length ? t.ci.pass : t.ui.dim
+  const ciParts = []
+  if (passing) ciParts.push(`✓ ${passing}`)
+  if (pending) ciParts.push(`● ${pending}`)
+  if (failing) ciParts.push(`✗ ${failing}`)
+  if (checks.length) ciParts.push(`/ ${checks.length}`)
+
+  const branch = [pr.headRefName, pr.baseRefName].filter(Boolean).join(' → ')
 
   return (
-    <Box paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-      <PRStateBadge pr={pr} t={t} />
-      <Text color={t.ui.dim}> {'#' + String(pr.number).padEnd(5)}</Text>
-      <Text
-        color={isSelected ? t.ui.selected : undefined}
-        italic={pr.isDraft}
-        wrap="truncate"
-        width={titleWidth}
-      >
-        {sanitize(pr.title)}
-      </Text>
-      <CIBadge pr={pr} t={t} />
-      <Text color={t.ui.muted}> {authorLogin}</Text>
-      <Text color={timeColor}> {ageStr}</Text>
+    <Box flexDirection="column" paddingLeft={4}>
+      {branch ? (
+        <Text color={t.ui.muted} wrap="truncate">⑂  {branch}</Text>
+      ) : null}
+      {checks.length > 0 && (
+        <Text color={ciColor} wrap="truncate">   {ciParts.join('  ')}</Text>
+      )}
+      {labels.length > 0 && (
+        <Text color={t.ui.dim} wrap="truncate">
+          {'◆  ' + labels.map(l => l.name).join('  ·  ')}
+        </Text>
+      )}
+      {reviewers.length > 0 && (
+        <Text color={t.ui.dim} wrap="truncate">
+          {'◇  ' + reviewers.map(r => '@' + (r.login || r.name || '')).join('  ')}
+        </Text>
+      )}
+      {bodyLine ? (
+        <Text color={t.ui.dim} dimColor italic wrap="truncate">
+          {"   " + sanitize(bodyLine).slice(0, 120)}
+        </Text>
+      ) : null}
+    </Box>
+  )
+}
+
+const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded }) => {
+  const authorLogin = String(pr.author?.login || '').slice(0, 11).padEnd(11)
+  const authorClr   = authorColor(pr.author?.login)
+  const ageStr      = shortAge(pr.updatedAt).padStart(4)
+  const timeColor   = ageColor(pr.updatedAt, t)
+  const tw          = Math.max(8, titleWidth || 20)
+
+  return (
+    <Box flexDirection="column">
+      <Box paddingX={1} height={1}>
+        <Text color={isSelected ? t.ui.selected : t.ui.dim}>{isSelected ? '▎' : ' '}</Text>
+        <PRStateBadge pr={pr} t={t} />
+        <Text color={t.ui.dim}> {'#' + String(pr.number).padEnd(5)}</Text>
+        <Box width={tw} overflow="hidden">
+          <Text
+            color={isSelected ? t.ui.selected : undefined}
+            bold={isSelected}
+            italic={pr.isDraft}
+            wrap="truncate"
+          >
+            {sanitize(pr.title)}
+          </Text>
+        </Box>
+        <CIBadge pr={pr} t={t} />
+        <Text color={authorClr || t.ui.muted}> @{authorLogin}</Text>
+        <Text color={timeColor}> {ageStr}</Text>
+      </Box>
+      {expanded && <PRExpandedDetail pr={pr} t={t} />}
     </Box>
   )
 })
@@ -108,12 +165,17 @@ const MERGE_OPTIONS = [
 
 // ─── PRList ───────────────────────────────────────────────────────────────────
 
-export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff, onPaneState }) {
+export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDiff, onPaneState }) {
   useKeyScope('pane')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
-  const height = listHeight || Math.max(3, (stdout?.rows || 24) - 5)
+  const termRows = stdout?.rows || 24
+  const height = listHeight || Math.max(3, termRows - 5)
+  // Reserve rows for the expanded detail block; disable on tiny terminals
+  const EXPAND_ROWS = 5
+  const expansionEnabled = termRows >= 20
+  const effectiveHeight = expansionEnabled ? Math.max(3, height - EXPAND_ROWS) : height
 
   // Preserve filter/cursor/scroll across back-navigation from detail/diff
   const [savedState, setSavedState] = usePaneState('prs', {
@@ -150,7 +212,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
 
-  const rawItems = (prs || []).filter(Boolean)
+  const rawItems = (prs || []).filter(pr => pr && pr.number)
   const items = sortMode === 'oldest'
     ? [...rawItems].sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt))
     : rawItems
@@ -159,23 +221,19 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   const FK = _cfg.keys
   const STATE_CYCLE = ['open', 'closed', 'merged']
 
-  // Notify parent of loading/error/count/position
+  // Notify parent of loading/error/count — cursor/scrollOffset stay local
   useEffect(() => {
-    if (onPaneState) onPaneState({ loading, error, count: items.length, cursor, scrollOffset })
-  }, [loading, error, items.length, cursor, scrollOffset]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (onPaneState) onPaneState({ loading, error, count: items.length })
+  }, [loading, error, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Notify App when dialog opens/closes so global keys are suppressed
+  // Notify App when dialog opens/closes so global keys are suppressed + footer updates
   useEffect(() => {
     notifyDialog(!!dialog)
-    return () => notifyDialog(false)
-  }, [dialog, notifyDialog])
+    if (onPaneState) onPaneState({ dialogHint: dialog || null })
+    return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
+  }, [dialog, notifyDialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
-
-  // Notify parent of hovered item for side panel
-  useEffect(() => {
-    if (onHover) onHover(items[cursor] || null)
-  }, [cursor, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const showStatus = (msg, isError = false) => {
     setStatusMsg({ msg, isError, persist: isError })
@@ -183,17 +241,14 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
   }
 
   const moveCursor = useCallback((delta) => {
-    setCursor(prev => {
-      const next = Math.max(0, Math.min(items.length - 1, prev + delta))
-      if (next < scrollOffset) setScrollOffset(next)
-      if (next >= scrollOffset + height) setScrollOffset(next - height + 1)
-      // Load more when within 10 items of the bottom
-      if (next >= items.length - 10 && !loading) {
-        setLimit(l => l + 100)
-      }
-      return next
-    })
-  }, [items.length, scrollOffset, height, loading])
+    const next = Math.max(0, Math.min(items.length - 1, cursor + delta))
+    setCursor(next)
+    if (next < scrollOffset) setScrollOffset(next)
+    if (next >= scrollOffset + effectiveHeight) setScrollOffset(next - effectiveHeight + 1)
+    if (next >= items.length - 10 && !loading) {
+      setLimit(l => l + 100)
+    }
+  }, [cursor, items.length, scrollOffset, effectiveHeight, loading])
 
   const openDialog = useCallback((name) => setDialog(name), [])
   const closeDialog = useCallback(() => setDialog(null), [])
@@ -220,7 +275,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
     if (input === 'G') {
       if (items.length > 0) {
         const last = items.length - 1
-        setCursor(last); setScrollOffset(Math.max(0, last - height + 1))
+        setCursor(last); setScrollOffset(Math.max(0, last - effectiveHeight + 1))
       }
       return
     }
@@ -321,7 +376,7 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
           const idx = items.findIndex(p => p.number === item.number)
           if (idx !== -1) {
             setCursor(idx)
-            setScrollOffset(Math.max(0, idx - Math.floor(height / 2)))
+            setScrollOffset(Math.max(0, idx - Math.floor(effectiveHeight / 2)))
           }
           closeDialog()
         }}
@@ -485,11 +540,11 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
 
   // ── List view ─────────────────────────────────────────────────────────────
 
-  const visiblePRs = items.slice(scrollOffset, scrollOffset + height)
+  const visiblePRs = items.slice(scrollOffset, scrollOffset + effectiveHeight)
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      <Box paddingX={1} gap={1}>
+      <Box paddingX={1} gap={1} overflow="hidden">
         <Text color={filterState === 'open' ? t.pr.open : filterState === 'merged' ? t.pr.merged : t.pr.closed} bold>
           {filterState}
         </Text>
@@ -504,12 +559,13 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
             <Text color={t.ui.dim}> [@] change</Text>
           </>
         )}
-        <Text color={t.ui.dim}>  [{FK.filterOpen}]open [{FK.filterClosed}]closed [{FK.filterMerged}]merged [s]scope [@]author</Text>
+        {loading && items.length > 0 && <Text color={t.ui.dim}>⟳</Text>}
+        {statusMsg
+          ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
+          : <Text color={t.ui.dim}>[{FK.filterOpen}]open [{FK.filterClosed}]closed [{FK.filterMerged}]merged [s]scope [@]author</Text>
+        }
         {items.length >= _cfg.pageSize && (
           <Text color={t.ui.dim}> ({items.length})</Text>
-        )}
-        {statusMsg && (
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>  {statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
         )}
       </Box>
 
@@ -523,29 +579,25 @@ export function PRList({ repo, listHeight = 10, onHover, onSelectPR, onOpenDiff,
         <PRListSkeleton count={height} />
       )}
 
-      {loading && items.length > 0 && (
-        <Box paddingX={1}><Text color={t.ui.muted}>refreshing…</Text></Box>
-      )}
-
       {visiblePRs.map((pr, i) => {
         const idx = scrollOffset + i
         const isSelected = idx === cursor
-
         return (
           <PRRow
-            key={pr.number}
+            key={`${pr.number}`}
             pr={pr}
             isSelected={isSelected}
             t={t}
-            termCols={stdout?.columns || 80}
+            titleWidth={innerWidth ? innerWidth - PR_ROW_FIXED_COLS : undefined}
+            expanded={expansionEnabled && isSelected}
           />
         )
       })}
 
-      {(items.length > height || items.length >= 100) && (
+      {(items.length > effectiveHeight || items.length >= 100) && (
         <Box paddingX={1} justifyContent="space-between">
           <Text color={t.ui.dim}>
-            {scrollOffset + 1}–{Math.min(scrollOffset + height, items.length)} / {items.length}
+            {scrollOffset + 1}–{Math.min(scrollOffset + effectiveHeight, items.length)} / {items.length}
           </Text>
           {items.length >= 100 && !loading && (
             <Text color={t.ui.dim}>scroll down for more</Text>

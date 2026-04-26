@@ -123,7 +123,7 @@ export function stripAnsi(str) {
  * @returns {string} A safe string for Ink rendering.
  */
 export function sanitize(str) {
-  return stripAnsi(String(str || ''))
+  return stripAnsi(String(str || '')).replace(/[\r\n\t]/g, ' ')
 }
 
 /**
@@ -485,4 +485,15 @@ export function TextInput({ value = '', onChange, placeholder, focus, mask, onEn
       )}
     </Box>
   )
+}
+
+// Deterministic color from author login — 8 accent buckets, stable across renders
+const _AUTHOR_COLOR_PALETTE = [
+  '#7dcfff', '#7aa2f7', '#bb9af7', '#f7768e',
+  '#9ece6a', '#e0af68', '#73daca', '#ff9e64',
+]
+export function authorColor(login) {
+  if (!login) return undefined
+  const h = [...String(login)].reduce((a, c) => a + c.charCodeAt(0), 0)
+  return _AUTHOR_COLOR_PALETTE[h % _AUTHOR_COLOR_PALETTE.length]
 }

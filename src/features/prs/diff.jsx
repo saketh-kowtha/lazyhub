@@ -10,7 +10,6 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import chalk from 'chalk'
 import hljs from 'highlight.js'
-import { format } from 'timeago.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo } from '../../executor.js'
@@ -23,7 +22,8 @@ import { getAICodeReview, AIError } from '../../ai.js'
 import { loadConfig } from '../../config.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
-import { TextInput, colorChalk, bgColorChalk, applyThemeStyle, sanitize } from '../../utils.js'
+import { TextInput, colorChalk, bgColorChalk, applyThemeStyle, sanitize, shortAge } from '../../utils.js'
+import { CommentThread } from '../../components/CommentThread.jsx'
 import { Spinner } from '../../components/Spinner.jsx'
 import { openInEditor } from '../../editor.js'
 
@@ -379,7 +379,7 @@ function renderThreads(comments, t) {
         <Text color={t.diff.threadBorder}>┃</Text>
         <Text color={t.ui.selected} bold>@{comment.user?.login}</Text>
         <Text color={t.ui.dim}>·</Text>
-        <Text color={t.ui.dim}>{format(comment.createdAt)}</Text>
+        <Text color={t.ui.dim}>{shortAge(comment.createdAt)}</Text>
       </Box>
     )
     // Body lines
@@ -407,7 +407,7 @@ function renderThreads(comments, t) {
           <Text color={t.diff.threadBorder}>┃  </Text>
           <Text color={t.ui.selected} bold>@{reply.user?.login}</Text>
           <Text color={t.ui.dim}>·</Text>
-          <Text color={t.ui.dim}>{format(reply.createdAt)}</Text>
+          <Text color={t.ui.dim}>{shortAge(reply.createdAt)}</Text>
         </Box>
       )
       const replyLines = (reply.body || '').split('\n')
@@ -475,7 +475,9 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
   while (i < slice.length) {
     const row = slice[i]
     const idx = scrollOffset + i
-    const isSelected = idx === cursor
+    // del+add pairs: del highlights when cursor is on either side
+    const nextIsPairedAdd = row.type === 'del' && slice[i + 1]?.type === 'add'
+    const isSelected = idx === cursor || (nextIsPairedAdd && (scrollOffset + i + 1) === cursor)
 
     // Full-width rows (file-header, hunk)
     if (row.type === 'file-header' || row.type === 'hunk') {
@@ -510,14 +512,17 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
       const nextRow = slice[i + 1]
       const lang = langCache.get(row.filename)
 
-      const delGutter = applyThemeStyle(`${String(row.oldLine ?? '').padStart(4)}     - `, t.diff.delSign, t.diff.delBg)
-      const delCode   = syntaxHighlight(row.text, lang, t.diff.delBg, t)
-      const delLine   = isSelected ? applyThemeStyle(delGutter + delCode, null, t.diff.cursorBg) : delGutter + delCode
+      const delCur    = isSelected ? applyThemeStyle('▶', '#ffffff', t.diff.cursorBg) : ' '
+      const delGutter = applyThemeStyle(`${String(row.oldLine ?? '').padStart(4)}     - `, isSelected ? '#ffffff' : t.diff.delSign, isSelected ? t.diff.cursorBg : t.diff.delBg)
+      const delCode   = syntaxHighlight(row.text, lang, isSelected ? t.diff.cursorBg : t.diff.delBg, t)
+      const delLine   = delCur + delGutter + delCode
 
       if (nextRow && nextRow.type === 'add') {
-        const addGutter = applyThemeStyle(`    ${String(nextRow.newLine ?? '').padStart(4)} + `, t.diff.addSign, t.diff.addBg)
-        const addCode   = syntaxHighlight(nextRow.text, langCache.get(nextRow.filename), t.diff.addBg, t)
-        const addLine   = isSelected ? applyThemeStyle(addGutter + addCode, null, t.diff.cursorBg) : addGutter + addCode
+        const addSelected = idx === cursor || (scrollOffset + i + 1) === cursor
+        const addCur    = addSelected ? applyThemeStyle('▶', '#ffffff', t.diff.cursorBg) : ' '
+        const addGutter = applyThemeStyle(`    ${String(nextRow.newLine ?? '').padStart(4)} + `, addSelected ? '#ffffff' : t.diff.addSign, addSelected ? t.diff.cursorBg : t.diff.addBg)
+        const addCode   = syntaxHighlight(nextRow.text, langCache.get(nextRow.filename), addSelected ? t.diff.cursorBg : t.diff.addBg, t)
+        const addLine   = addCur + addGutter + addCode
 
         result.push(
           <Box key={idx}>
@@ -528,7 +533,6 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
         )
         i += 2
       } else {
-        // Unpaired del
         result.push(
           <Box key={idx}>
             <Box width={colWidth} overflow="hidden"><Text wrap="truncate">{delLine}</Text></Box>
@@ -542,11 +546,12 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
     }
 
     if (row.type === 'add') {
-      // Unpaired add (del was already consumed or not present before)
-      const lang = langCache.get(row.filename)
-      const addGutter = applyThemeStyle(`    ${String(row.newLine ?? '').padStart(4)} + `, t.diff.addSign, t.diff.addBg)
-      const addCode   = syntaxHighlight(row.text, lang, t.diff.addBg, t)
-      const addLine   = isSelected ? applyThemeStyle(addGutter + addCode, null, t.diff.cursorBg) : addGutter + addCode
+      // Unpaired add
+      const lang    = langCache.get(row.filename)
+      const addCur  = isSelected ? applyThemeStyle('▶', '#ffffff', t.diff.cursorBg) : ' '
+      const addGutter = applyThemeStyle(`    ${String(row.newLine ?? '').padStart(4)} + `, isSelected ? '#ffffff' : t.diff.addSign, isSelected ? t.diff.cursorBg : t.diff.addBg)
+      const addCode   = syntaxHighlight(row.text, lang, isSelected ? t.diff.cursorBg : t.diff.addBg, t)
+      const addLine   = addCur + addGutter + addCode
 
       result.push(
         <Box key={idx}>
@@ -809,21 +814,14 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         return
       }
 
-      // comment type picker (new comment only)
-      if (compose.mode === 'new') {
-        if (key.leftArrow) {
-          const idx = COMMENT_TYPES.indexOf(compose.commentType)
-          setCompose(c => ({ ...c, commentType: COMMENT_TYPES[Math.max(0, idx - 1)] }))
-          return
-        }
-        if (key.rightArrow) {
-          const idx = COMMENT_TYPES.indexOf(compose.commentType)
-          setCompose(c => ({ ...c, commentType: COMMENT_TYPES[Math.min(COMMENT_TYPES.length - 1, idx + 1)] }))
-          return
-        }
+      // comment type picker (new comment only) — Tab cycles, not arrows (arrows move text cursor)
+      if (compose.mode === 'new' && key.tab) {
+        const idx = COMMENT_TYPES.indexOf(compose.commentType)
+        setCompose(c => ({ ...c, commentType: COMMENT_TYPES[(idx + 1) % COMMENT_TYPES.length] }))
+        return
       }
 
-      if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) {
+      if ((key.ctrl && key.return) || (key.ctrl && (input === 'g' || input === '\x07'))) {
         const body = compose.body.trim()
         if (compose.mode === 'new') {
           const row = rows[cursor]
@@ -1218,33 +1216,32 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         <Text color={t.ui.dim}>{cursor + 1} / {rows.length}</Text>
       </Box>
 
-      <Box flexDirection="column" flexGrow={1} overflow="hidden">
-        {showTree ? (
-          <>
-            <Box paddingX={1} justifyContent="space-between">
-              <Text color={t.ui.selected} bold>PR #{prNumber} — {files.length} files changed</Text>
-              <Text color={t.ui.dim}>[t/Esc] close tree</Text>
+      <Box flexDirection="row" flexGrow={1} overflow="hidden">
+        {/* File tree side pane — 24 cols, persistent when showTree */}
+        {showTree && (
+          <Box width={24} flexDirection="column" borderStyle="single" borderColor={t.ui.border} overflow="hidden">
+            <Box paddingX={1}>
+              <Text color={t.ui.selected} bold>Files </Text>
+              <Text color={t.ui.dim}>{files.length}</Text>
             </Box>
-            {treeRows.map((treeRow, i) => {
-              const isTreeSelected = i === treeCursor
-              return (
-                <Box key={i} backgroundColor={isTreeSelected ? t.ui.headerBg : undefined}>
-                  <Text color={isTreeSelected ? t.ui.selected : (treeRow.type === 'dir' ? t.ui.muted : t.diff.ctxFg)}>
-                    {treeRow.prefix}{treeRow.name}
-                  </Text>
-                  {treeRow.type === 'file' && (
-                    <Box marginLeft={1}>
-                      <Text color={t.ci.pass}>+{treeRow.addCount}</Text>
-                      <Text color={t.ui.dim}> </Text>
-                      <Text color={t.ci.fail}>-{treeRow.delCount}</Text>
-                    </Box>
-                  )}
-                </Box>
-              )
-            })}
-          </>
-        ) : (
-          splitView
+            <Box flexDirection="column" flexGrow={1} overflow="hidden">
+              {treeRows.map((treeRow, i) => {
+                const isTreeSelected = i === treeCursor
+                const fileGlyph = treeRow.type === 'dir' ? '▸' : '●'
+                return (
+                  <Box key={i} backgroundColor={isTreeSelected ? t.ui.headerBg : undefined} paddingX={1}>
+                    <Text color={isTreeSelected ? t.ui.selected : (treeRow.type === 'dir' ? t.ui.muted : t.diff.ctxFg)} wrap="truncate">
+                      {treeRow.prefix.replace(/[─└├│]/g, c => ({ '─': '─', '└': '└', '├': '├', '│': '│' }[c] || c))}{fileGlyph} {treeRow.name}
+                    </Text>
+                  </Box>
+                )
+              })}
+            </Box>
+          </Box>
+        )}
+        {/* Diff content */}
+        <Box flexDirection="column" flexGrow={1} overflow="hidden">
+          {splitView
             ? renderSplitView(rows, scrollOffset, effectiveHeight, cursor, langCache, colWidth, t)
             : visibleRows.map((row, i) => {
                 const idx = scrollOffset + i
@@ -1260,13 +1257,14 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
                     <DiffLine row={row} isSelected={isSelected} lang={lang} isMatch={isMatch} t={t} />
                     {hasComment && (
                       <Box paddingX={1} flexDirection="column" borderStyle="single" borderColor={t.diff.threadBorder}>
-                        {renderThreads(commentsByLine.get(lineKey), t)}
+                        <CommentThread comments={commentsByLine.get(lineKey)} t={t} />
                       </Box>
                     )}
                   </Box>
                 )
               })
-        )}
+          }
+        </Box>
       </Box>
 
       {fileJumpActive && (
@@ -1341,8 +1339,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         const row = rows[cursor]
         if (compose.mode === 'delete') {
           return (
-            <Box flexDirection="column" borderStyle="round" borderColor={t.ci.fail}
-              paddingX={1} marginX={1}>
+            <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={t.ci.fail} paddingX={1}>
               <Text color={t.ci.fail} bold>Delete comment?</Text>
               <Text color={t.ui.dim} wrap="truncate">  "{stripAnsi(compose.commentBody || '').slice(0, 70)}"</Text>
               <Text color={t.ui.dim}>[y] confirm  [n / Esc] cancel</Text>
@@ -1351,43 +1348,26 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         }
         if (compose.mode === 'reply') {
           return (
-            <Box flexDirection="column" borderStyle="round" borderColor={t.diff.threadBorder}
-              paddingX={1} marginX={1}>
-              <Text color={t.ui.dim}>Reply to thread:</Text>
-              <TextInput
-                value={compose.body}
-                onChange={(v) => setCompose(c => ({ ...c, body: v }))}
-                focus={true}
-                onEnter={() => {
-                  if (compose.body.trim()) {
-                    replyToComment(repo, prNumber, compose.rootCommentId, compose.body.trim())
-                      .then(() => { setCompose(null); setCommentStatus('Reply sent'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
-                      .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
-                  }
-                }}
-              />
-              <Text color={t.ui.dim}>[Ctrl+G / Enter] send  [Ctrl+E] open editor  [Esc] cancel</Text>
+            <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={t.diff.threadBorder} paddingX={1}>
+              <Text color={t.ui.muted} bold>Reply to thread</Text>
+              <Box>
+                <TextInput
+                  value={compose.body}
+                  onChange={(v) => setCompose(c => ({ ...c, body: v }))}
+                  focus={true}
+                  placeholder="Type your reply…"
+                />
+              </Box>
+              <Text color={t.ui.dim}>[Ctrl+G] send  [Ctrl+E] editor  [Esc] cancel</Text>
             </Box>
           )
         }
         if (compose.mode === 'edit') {
           return (
-            <Box flexDirection="column" borderStyle="round" borderColor={t.diff.threadBorder}
-              paddingX={1} marginX={1}>
-              <Text color={t.ui.dim}>Edit comment:</Text>
-              <TextInput
-                value={compose.body}
-                onChange={(v) => setCompose(c => ({ ...c, body: v }))}
-                focus={true}
-                onEnter={() => {
-                  if (compose.body.trim()) {
-                    editPRComment(repo, compose.commentId, compose.body.trim())
-                      .then(() => { setCompose(null); setCommentStatus('Comment updated'); refetch(); setTimeout(() => setCommentStatus(null), 3000) })
-                      .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
-                  }
-                }}
-              />
-              <Text color={t.ui.dim}>[Ctrl+G / Enter] save  [Ctrl+E] open editor  [Esc] cancel</Text>
+            <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={t.diff.threadBorder} paddingX={1}>
+              <Text color={t.ui.muted} bold>Edit comment</Text>
+              <TextInput value={compose.body} onChange={(v) => setCompose(c => ({ ...c, body: v }))} focus={true} />
+              <Text color={t.ui.dim}>[Ctrl+G] save  [Ctrl+E] editor  [Esc] cancel</Text>
             </Box>
           )
         }
@@ -1397,25 +1377,25 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
             borderStyle="round" borderColor={t.diff.threadBorder}
             paddingX={1} marginX={1} marginBottom={0}>
             <Box gap={1}>
-              <Text color={t.ui.dim}>Line {row?.newLine ?? row?.oldLine}:</Text>
+              <Text color={t.ui.dim}>❯ Line {row?.newLine ?? row?.oldLine}</Text>
               <Text color={t.diff.ctxFg} wrap="truncate">{(row?.text || '').slice(0, 60)}</Text>
             </Box>
-            <Box gap={3} marginTop={0}>
+            <Box gap={3}>
               {COMMENT_TYPES.map(type => {
                 const isActive = compose.commentType === type
                 return (
                   <Text key={type} color={isActive ? t.ui.selected : t.ui.dim} bold={isActive}>
-                    {isActive ? '● ' : '○ '}{type}
+                    {isActive ? '[' : ' '}{type}{isActive ? ']' : ' '}
                   </Text>
                 )
               })}
             </Box>
-            <TextInput
-              value={compose.body}
-              onChange={(v) => setCompose(c => ({ ...c, body: v }))}
-              focus={true}
-            />
-            <Text color={t.ui.dim}>[←→] type  [Ctrl+G / Enter] submit  [Ctrl+E] open editor  [Esc] cancel</Text>
+            <Box>
+              {!compose.body && <Text color={t.ui.dim} italic>Type your comment. Ctrl+E for $EDITOR.</Text>}
+              <TextInput value={compose.body} onChange={(v) => setCompose(c => ({ ...c, body: v }))} focus={true} />
+              {!compose.body && <Text color={t.ui.selected}>▍</Text>}
+            </Box>
+            <Text color={t.ui.dim}>[Tab] type  [Ctrl+G] submit  [Ctrl+E] editor  [Esc] cancel</Text>
           </Box>
         )
       })()}

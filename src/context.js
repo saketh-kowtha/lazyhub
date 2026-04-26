@@ -11,5 +11,6 @@ export const AppContext = createContext({
   openHelp: () => {},
   openAI: () => {},
   setMouseEnabled: () => {},
+  addToast: null,       // (opts) => {} — adds a toast to the notification stack
   paneStateMap: null,   // Map<paneId, stateObject> — set by App
 })

@@ -56,7 +56,7 @@ export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['t
   })
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
       {/* Header */}
       <Box marginBottom={1} justifyContent="space-between">
         <Box>

@@ -115,10 +115,10 @@ export async function listPRs(repo, filter = {}) {
   // Try with all fields first; fall back to a reduced set for GHE instances
   // where statusCheckRollup / mergeable are not in the GraphQL schema.
   try {
-    return await run([...base, '--json', 'number,title,state,author,labels,reviewRequests,statusCheckRollup,updatedAt,isDraft,headRefName,assignees,body,mergeable,url'])
+    return await run([...base, '--json', 'number,title,state,author,labels,reviewRequests,statusCheckRollup,updatedAt,isDraft,headRefName,baseRefName,assignees,body,mergeable,url'])
   } catch (err) {
     if (!/unknown|field|not found/i.test(err.message)) throw err
-    return run([...base, '--json', 'number,title,state,author,labels,reviewRequests,updatedAt,isDraft,headRefName,assignees,body,url'])
+    return run([...base, '--json', 'number,title,state,author,labels,reviewRequests,updatedAt,isDraft,headRefName,baseRefName,assignees,body,url'])
   }
 }
 

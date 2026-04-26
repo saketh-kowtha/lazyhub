@@ -49,8 +49,9 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
 
   useEffect(() => {
     notifyDialog(!!dialog)
-    return () => notifyDialog(false)
-  }, [dialog, notifyDialog])
+    if (onPaneState) onPaneState({ dialogHint: dialog || null })
+    return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
+  }, [dialog, notifyDialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 

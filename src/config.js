@@ -85,7 +85,7 @@ export const CONFIG_PATH = join(homedir(), '.config', 'lazyhub', 'config.json')
 
 const DEFAULT_PR = {
   defaultFilter: 'open',   // 'open' | 'closed' | 'merged'
-  defaultScope:  'all',    // 'all' | 'own' | 'reviewing'
+  defaultScope:  'own',    // 'all' | 'own' | 'reviewing'
   pageSize:      100,
   keys: {
     filterOpen:   'O',
@@ -319,7 +319,7 @@ export function writeDefaultConfig() {
       },
       pr: {
         defaultFilter: 'open',
-        defaultScope: 'all',
+        defaultScope: 'own',
         pageSize: 100,
         keys: { filterOpen: 'O', filterClosed: 'C', filterMerged: 'M' },
       },

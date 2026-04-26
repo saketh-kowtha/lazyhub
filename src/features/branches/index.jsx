@@ -69,7 +69,8 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
 
   useEffect(() => {
     notifyDialog(!!dialog)
-    return () => notifyDialog(false)
+    if (onPaneState) onPaneState({ dialogHint: dialog || null })
+    return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
   }, [dialog, notifyDialog])
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])

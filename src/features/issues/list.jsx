@@ -90,13 +90,14 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
   const STATE_CYCLE = ['open', 'closed']
 
   useEffect(() => {
-    if (onPaneState) onPaneState({ loading, error, count: items.length, cursor, scrollOffset })
-  }, [loading, error, items.length, cursor, scrollOffset]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (onPaneState) onPaneState({ loading, error, count: items.length })
+  }, [loading, error, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     notifyDialog(!!dialog)
-    return () => notifyDialog(false)
-  }, [dialog, notifyDialog])
+    if (onPaneState) onPaneState({ dialogHint: dialog || null })
+    return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
+  }, [dialog, notifyDialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 

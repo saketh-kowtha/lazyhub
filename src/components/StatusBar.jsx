@@ -4,12 +4,23 @@ import { useTheme } from '../theme.js'
 
 const PANE_META = {
   prs:           { icon: '⎇',  label: 'Pull Requests' },
-  issues:        { icon: '◎',  label: 'Issues'        },
+  issues:        { icon: '◆',  label: 'Issues'        },
   branches:      { icon: '⑂',  label: 'Branches'      },
   actions:       { icon: '⚡', label: 'Actions'       },
-  notifications: { icon: '◈',  label: 'Notifications' },
+  notifications: { icon: '◔',  label: 'Notifications' },
   settings:      { icon: '⊙',  label: 'Settings'      },
   logs:          { icon: '≡',  label: 'Logs'          },
+}
+
+// Mode chip colors — uses semantic tokens if available, falls back to ci/ui tokens
+function modeColor(mode, t) {
+  const m = t.semantic?.mode
+  if (m) {
+    const map = { NORMAL: m.normal, SEARCH: m.search, COMMAND: m.command, VISUAL: m.visual, COMPOSE: m.compose }
+    if (map[mode]) return map[mode]
+  }
+  const fallback = { NORMAL: t.ui.selected, SEARCH: t.ci.pending, COMMAND: t.ui.selected, VISUAL: t.ci.pass, COMPOSE: t.ci.pass }
+  return fallback[mode] || t.ui.dim
 }
 
 function formatAge(ms) {
@@ -20,8 +31,10 @@ function formatAge(ms) {
   return `${Math.floor(s / 3600)}h ago`
 }
 
-export function StatusBar({ repo, pane, count, filterState, scopeIndicator }) {
+export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode = 'NORMAL' }) {
   const { t } = useTheme()
+  const { stdout } = useStdout()
+  const cols = stdout?.columns || 80
   const [mountTime] = useState(Date.now())
   const [, tick] = useState(0)
 
@@ -30,20 +43,28 @@ export function StatusBar({ repo, pane, count, filterState, scopeIndicator }) {
     return () => clearInterval(id)
   }, [])
 
-  const meta = PANE_META[pane] || { icon: '◈', label: pane || '' }
-  const dot = <Text color={t.ui.dim}>  ·  </Text>
+  const meta    = PANE_META[pane] || { icon: '◈', label: pane || '' }
+  const dot     = <Text color={t.ui.dim}>  ·  </Text>
+  const chipClr = modeColor(mode, t)
+  const narrow  = cols < 100
 
   return (
     <Box paddingX={1} justifyContent="space-between" backgroundColor={t.ui.headerBg}>
+      {/* Left zone: pane · repo · count · filter */}
       <Box gap={0}>
         <Text color={t.ui.selected} bold>{meta.icon}  {meta.label}</Text>
         {repo && <>{dot}<Text color={t.ui.muted}>{repo}</Text></>}
         {count != null && <>{dot}<Text color={t.ui.dim}>{count} items</Text></>}
-        {filterState && <>{dot}<Text color={t.ui.muted}>{filterState}</Text></>}
+        {filterState && !narrow && <>{dot}<Text color={t.ui.muted}>{filterState}</Text></>}
       </Box>
+
+      {/* Right zone: mode chip · refresh age · scope */}
       <Box gap={1}>
+        {mode !== 'NORMAL' && (
+          <Text color={chipClr} bold>{mode}</Text>
+        )}
         {scopeIndicator && <Text color={t.ui.dim}>[{scopeIndicator}]</Text>}
-        <Text color={t.ui.dim}>⟳ {formatAge(mountTime)}</Text>
+        {!narrow && <Text color={t.ui.dim}>⟳ {formatAge(mountTime)}</Text>}
       </Box>
     </Box>
   )

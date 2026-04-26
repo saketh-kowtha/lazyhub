@@ -48,7 +48,7 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
 
   if (step === 'text') {
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
+      <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
         <Box marginBottom={1}>
           <Text color={t.ui.selected} bold>Selected: </Text>
           <Text>{options.find(o => o.value === pickedValue)?.label ?? pickedValue}</Text>

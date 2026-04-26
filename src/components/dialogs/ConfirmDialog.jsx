@@ -48,7 +48,7 @@ export function ConfirmDialog({ message, destructive = false, onConfirm, onCance
   })
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={borderColor} paddingX={2} paddingY={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={borderColor} paddingX={2} paddingY={1}>
       <Box marginBottom={1}>
         <Text color={destructive ? '#f85149' : t.ui.selected} bold>
           {destructive ? '⚠ ' : 'ℹ '}

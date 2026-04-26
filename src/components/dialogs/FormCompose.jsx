@@ -84,7 +84,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
   })
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
       {title && (
         <Box marginBottom={1}>
           <Text color={t.ui.selected} bold>{title}</Text>

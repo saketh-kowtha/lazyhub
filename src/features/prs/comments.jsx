@@ -9,7 +9,6 @@ import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { format } from 'timeago.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
@@ -18,7 +17,7 @@ import {
 } from '../../executor.js'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { useTheme } from '../../theme.js'
-import { TextInput, sanitize } from '../../utils.js'
+import { TextInput, sanitize, shortAge } from '../../utils.js'
 
 const FOOTER_KEYS = [
   { key: 'j/k',   label: 'nav' },
@@ -315,7 +314,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
                 <Box gap={1}>
                   <Text color={t.diff.threadBorder}>{isReply ? '  ┗' : '┃'}</Text>
                   <Text color={t.ui.selected} bold>@{comment.user?.login}</Text>
-                  <Text color={t.ui.dim}>{format(comment.createdAt)}</Text>
+                  <Text color={t.ui.dim}>{shortAge(comment.createdAt)}</Text>
                   {isReply && <Text color={t.ui.dim}>(reply)</Text>}
                 </Box>
                 {stripAnsi(comment.body || '').split('\n').map((line, li) => (
