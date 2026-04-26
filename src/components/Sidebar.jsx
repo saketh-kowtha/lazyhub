@@ -1,15 +1,3 @@
-/**
- * Sidebar.jsx — navigation sidebar.
- *
- * Props:
- *   currentPane   string
- *   onSelect      fn(pane)
- *   height        number
- *   visiblePanes  string[]   — ordered pane ids from config
- *   paneLabels    object     — id → label (includes custom panes)
- *   paneIcons     object     — id → icon  (includes custom panes)
- */
-
 import React from 'react'
 import { Box, Text } from 'ink'
 import { useTheme } from '../theme.js'
@@ -19,64 +7,78 @@ const BUILTIN_LABELS = {
   issues:        'Issues',
   branches:      'Branches',
   actions:       'Actions',
-  notifications: 'Notifs',
+  notifications: 'Notifications',
 }
 
 const BUILTIN_ICONS = {
   prs:           '⎇',
-  issues:        '○',
-  branches:      '⎇',
-  actions:       '▶',
-  notifications: '●',
+  issues:        '◎',
+  branches:      '⑂',
+  actions:       '⚡',
+  notifications: '◈',
 }
 
-export function Sidebar({ currentPane, onSelect, height, visiblePanes, paneLabels, paneIcons }) {
+export function Sidebar({ currentPane, onSelect, height, visiblePanes, paneLabels, paneIcons, repo, width = 24, borderStyle = 'round', borderRight = true, paneCounts = {} }) {
   const { t } = useTheme()
+  const INNER = width - 4
   const labels = paneLabels || BUILTIN_LABELS
   const icons  = paneIcons  || BUILTIN_ICONS
 
-  const allItems = (visiblePanes || Object.keys(BUILTIN_LABELS)).map(id => ({
+  const parts = (repo || process.env.GHUI_REPO || '').split('/')
+  const owner    = parts[0] || ''
+  const repoName = parts[1] || ''
+  const repoDisplay = owner && repoName ? `${owner}/${repoName}` : (owner || repoName)
+
+  const allItems = (visiblePanes || Object.keys(BUILTIN_LABELS)).map((id, idx) => ({
     pane:  id,
-    icon:  icons[id]  || '◈',
-    label: (labels[id] || id).slice(0, 13),   // truncate to fit sidebar width
+    icon:  icons[id] || '◈',
+    label: (labels[id] || id).slice(0, INNER - 5),
+    num:   idx + 1,
+    count: paneCounts[id] || 0,
   }))
 
-  // Separator width: sidebar inner width minus borders (20 - 2 = 18)
-  const separator = '─'.repeat(18)
+  const divider = <Box paddingX={1}><Text color={t.ui.divider}>{'─'.repeat(INNER)}</Text></Box>
 
   return (
     <Box
-      width={20}
+      width={width}
       flexDirection="column"
-      borderStyle="single"
+      borderStyle={borderStyle || 'round'}
       borderColor={t.ui.border}
+      borderRight={borderRight}
       height={height}
     >
-      <Box paddingX={1} marginBottom={1}>
-        <Text color={t.ui.selected} bold>lazyhub</Text>
+      {/* Brand */}
+      <Box paddingX={1} flexDirection="column">
+        <Text color={t.ui.selected} bold wrap="truncate">⌂ lazyhub</Text>
+        {repoDisplay && <Text color={t.ui.muted} wrap="truncate">{repoDisplay.slice(0, INNER)}</Text>}
       </Box>
 
-      {allItems.map(({ pane, icon, label }) => {
-        const isActive = pane === currentPane
-        return (
-          <Box
-            key={pane}
-            paddingLeft={1}
-            backgroundColor={isActive ? t.ui.headerBg : undefined}
-          >
-            <Text color={isActive ? t.ui.selected : t.ui.dim}>
-              {isActive ? '▌' : ' '}
-            </Text>
-            <Text color={isActive ? t.ui.selected : t.ui.muted} bold={isActive}>
-              {' '}{icon}{' '}{label}
-            </Text>
-          </Box>
-        )
-      })}
+      {divider}
 
-      <Box flexGrow={1} />
-      <Box borderStyle="single" borderColor={t.ui.border} borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} paddingX={1}>
-        <Text color={t.ui.dim}>[Tab]/[1-9]</Text>
+      {/* Nav */}
+      <Box flexDirection="column" flexGrow={1}>
+        {allItems.map(({ pane, icon, label, num, count }) => {
+          const active = pane === currentPane
+          const countColor = pane === 'notifications' ? t.ui.selected : t.ui.dim
+          return (
+            <Box key={pane} paddingX={1} backgroundColor={active ? t.ui.activeBg : undefined}>
+              <Text color={active ? t.ui.selected : t.ui.dim} bold={active} wrap="truncate">
+                {active ? '▎' : ' '}{icon} {label.padEnd(INNER - 5).slice(0, INNER - 5)}
+              </Text>
+              {!active && count > 0 && <Text color={countColor}> [{count}]</Text>}
+              <Box flexGrow={1} />
+              <Text color={active ? t.ui.selected : t.ui.dim}>{num}</Text>
+            </Box>
+          )
+        })}
+      </Box>
+
+      {divider}
+
+      {/* Footer */}
+      <Box paddingX={1}>
+        <Text color={t.ui.dim} wrap="truncate">? help · S cfg · E edit</Text>
       </Box>
     </Box>
   )

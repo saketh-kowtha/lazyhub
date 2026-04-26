@@ -10,6 +10,7 @@ import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
 import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { useState } from 'react'
+import { useKeyScope } from '../../keyscope.js'
 
 function matchesQuery(item, query, searchFields) {
   if (!query) return true
@@ -24,6 +25,7 @@ function getDisplayText(item, searchFields) {
 }
 
 export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['title', 'name'] }) {
+  useKeyScope('dialog')
   const { t } = useTheme()
   const { stdout } = useStdout()
   const [query, setQuery] = useState('')
@@ -54,7 +56,7 @@ export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['t
   })
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
       {/* Header */}
       <Box marginBottom={1} justifyContent="space-between">
         <Box>

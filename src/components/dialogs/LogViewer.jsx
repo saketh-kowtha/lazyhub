@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { useTheme } from '../../theme.js'
+import { useKeyScope } from '../../keyscope.js'
 
 const STEP_HEADER_RE = /^(##\s+|Step \d+|^\d{4}-\d{2}-\d{2}.*\s+(##|step)|\s*\d+\.\d+\s)/i
 
@@ -14,6 +15,7 @@ function isStepHeader(line) {
 }
 
 export function LogViewer({ lines = [], onClose }) {
+  useKeyScope('dialog')
   const { t } = useTheme()
   const { stdout } = useStdout()
   const visibleHeight = (stdout?.rows || 24) - 6

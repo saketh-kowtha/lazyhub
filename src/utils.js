@@ -123,7 +123,7 @@ export function stripAnsi(str) {
  * @returns {string} A safe string for Ink rendering.
  */
 export function sanitize(str) {
-  return stripAnsi(String(str || ''))
+  return stripAnsi(String(str || '')).replace(/[\r\n\t]/g, ' ')
 }
 
 /**
@@ -378,6 +378,22 @@ function renderInline(text, t) {
 }
 
 /**
+ * Returns a compact age string ≤4 chars for list row timestamps.
+ * @param {string|number|Date} ts
+ */
+export function shortAge(ts) {
+  if (!ts) return '    '
+  const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000)
+  if (s < 60)         return 'now'
+  if (s < 3600)       return `${Math.floor(s / 60)}m`
+  if (s < 86400)      return `${Math.floor(s / 3600)}h`
+  if (s < 86400 * 14) return `${Math.floor(s / 86400)}d`
+  if (s < 86400 * 60) return `${Math.floor(s / (86400 * 7))}w`
+  if (s < 86400 * 365) return `${Math.floor(s / (86400 * 30))}mo`
+  return `${Math.floor(s / (86400 * 365))}y`
+}
+
+/**
  * A basic text input component with cursor support and common shortcuts.
  * @param {Object} props - Component props.
  * @param {string} props.value - Current input value.
@@ -469,4 +485,15 @@ export function TextInput({ value = '', onChange, placeholder, focus, mask, onEn
       )}
     </Box>
   )
+}
+
+// Deterministic color from author login — 8 accent buckets, stable across renders
+const _AUTHOR_COLOR_PALETTE = [
+  '#7dcfff', '#7aa2f7', '#bb9af7', '#f7768e',
+  '#9ece6a', '#e0af68', '#73daca', '#ff9e64',
+]
+export function authorColor(login) {
+  if (!login) return undefined
+  const h = [...String(login)].reduce((a, c) => a + c.charCodeAt(0), 0)
+  return _AUTHOR_COLOR_PALETTE[h % _AUTHOR_COLOR_PALETTE.length]
 }

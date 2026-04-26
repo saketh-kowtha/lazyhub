@@ -12,8 +12,10 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
+import { useKeyScope } from '../../keyscope.js'
 
 export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
+  useKeyScope('dialog')
   const { t } = useTheme()
   const [activeField, setActiveField] = useState(0)
   const [values, setValues] = useState(() => {
@@ -82,7 +84,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
   })
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
       {title && (
         <Box marginBottom={1}>
           <Text color={t.ui.selected} bold>{title}</Text>

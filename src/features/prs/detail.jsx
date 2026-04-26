@@ -6,6 +6,7 @@
 import React, { useState, useContext, useMemo, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
+import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
   getPR, listLabels, listCollaborators, addLabels, removeLabels,
@@ -234,6 +235,7 @@ function buildContentRows(pr, checks, protection, cols, t, checkCursor = null) {
 }
 
 export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments }) {
+  useKeyScope('view')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()

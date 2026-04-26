@@ -21,6 +21,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useTheme } from '../theme.js'
 import { TextInput } from '../utils.js'
+import { useKeyScope } from '../keyscope.js'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ export function AIReviewPane({
   postStatus,     // string | null
   onOpenEditor,   // (initialText) → string — open $EDITOR, return edited text
 }) {
+  useKeyScope('overlay')
   const { t } = useTheme()
 
   // phase: 'summary' | 'step' | 'done'

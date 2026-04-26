@@ -4,6 +4,7 @@
 
 import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
+import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import { listBranches, deleteBranch, listPRs } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
@@ -35,6 +36,7 @@ const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t }) => {
 })
 
 export function BranchList({ repo, listHeight = 10, onPaneState }) {
+  useKeyScope('pane')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
@@ -67,7 +69,8 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
 
   useEffect(() => {
     notifyDialog(!!dialog)
-    return () => notifyDialog(false)
+    if (onPaneState) onPaneState({ dialogHint: dialog || null })
+    return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
   }, [dialog, notifyDialog])
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
