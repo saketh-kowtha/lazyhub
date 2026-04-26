@@ -1,5 +1,25 @@
 # Changelog
 
+## v26.5.4
+
+# lazyhub v26.5.4
+
+## What's Changed
+
+### 🐛 Bug Fixes
+
+- Fixed bugs (#91) (97d624e)
+
+---
+
+**Full Changelog**: https://github.com/reacherhq/lazyhub/compare/v26.5.3...v26.5.4
+
+---
+
+> **Note:** This is a patch release. No breaking changes or new features are included.
+
+---
+
 ## v26.5.3
 
 # lazyhub v26.5.3
