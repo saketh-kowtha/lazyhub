@@ -534,8 +534,6 @@ function App({ repo }) {
         ? (idx - 1 + PANES.length) % PANES.length
         : (idx + 1) % PANES.length
       ])
-      savedListPosition.current = {}
-      paneStateMapRef.current.clear()
       setSelectedItem(null); setView('list')
       setActionsBranch(null)
       return
@@ -547,7 +545,6 @@ function App({ repo }) {
       const target = PANES[numKey - 1]
       if (target && target !== pane) {
         setPane(target)
-        paneStateMapRef.current.clear()
         setSelectedItem(null); setView('list')
         setActionsBranch(null)
       }

@@ -72,6 +72,7 @@ export default {
     pending: '#9a6700',
     running: '#0969da',
   },
+  review: { approved: '#1a7f37', changes: '#cf222e', pending: '#9a6700' },
   ui: {
     selected: '#0969da',
     muted: '#656d76',

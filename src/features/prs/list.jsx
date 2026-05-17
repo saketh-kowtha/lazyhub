@@ -75,8 +75,16 @@ function CIBadge({ pr, t }) {
   return <Text color={t.ci.pass}> ✓</Text>
 }
 
-// Fixed columns in each PRRow: paddingX(2) + cursor(1) + badge(2) + num(7) + CI_max(8) + author(13) + age(5) = 38; +4 buffer for wide unicode
-const PR_ROW_FIXED_COLS = 42
+function ReviewBadge({ pr, t }) {
+  const rd = pr.reviewDecision
+  if (!rd || rd === 'REVIEW_REQUIRED') return <Text> </Text>
+  if (rd === 'APPROVED')          return <Text color={t.review?.approved || t.ci.pass}> ✓</Text>
+  if (rd === 'CHANGES_REQUESTED') return <Text color={t.review?.changes  || t.ci.fail}> ✗</Text>
+  return <Text> </Text>
+}
+
+// Fixed columns: paddingX(2) + cursor(1) + badge(2) + num(7) + review(2) + CI_max(8) + author(13) + age(5) = 40; +4 buffer
+const PR_ROW_FIXED_COLS = 44
 
 // ─── Expanded detail shown below selected PR ─────────────────────────────────
 
@@ -149,6 +157,7 @@ const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded }) => {
           </Text>
         </Box>
         <CIBadge pr={pr} t={t} />
+        <ReviewBadge pr={pr} t={t} />
         <Text color={authorClr || t.ui.muted}> @{authorLogin}</Text>
         <Text color={timeColor}> {ageStr}</Text>
       </Box>
@@ -179,7 +188,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
   // Preserve filter/cursor/scroll across back-navigation from detail/diff
   const [savedState, setSavedState] = usePaneState('prs', {
-    filterState: _cfg.defaultFilter,
+    filterStates: [_cfg.defaultFilter],
     scope: _cfg.defaultScope,
     sortMode: 'default',
     authorFilter: '',
@@ -188,18 +197,35 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     scrollOffset: 0,
   })
 
-  const [filterState, setFilterStateRaw] = useState(savedState.filterState)
+  // Hydrate filterStates — migrate legacy single-string filterState
+  const initFilterStates = (() => {
+    if (Array.isArray(savedState.filterStates) && savedState.filterStates.length > 0) return savedState.filterStates
+    if (typeof savedState.filterState === 'string') return [savedState.filterState]
+    return [_cfg.defaultFilter]
+  })()
+
+  const [filterStatesArr, setFilterStatesArr] = useState(initFilterStates)
+  const filterStates = new Set(filterStatesArr)
+
   const [scope, setScopeRaw] = useState(savedState.scope)
   const [sortMode, setSortModeRaw] = useState(savedState.sortMode)
   const [authorFilter, setAuthorFilterRaw] = useState(savedState.authorFilter)
   const [limit, setLimitRaw] = useState(savedState.limit)
-  const { data: prs, loading, error, refetch } = useGh(listPRs, [repo, { state: filterState, scope, author: authorFilter || undefined, limit }])
+
+  // Single state → pass it directly; multi-state → fetch 'all' and filter client-side
+  const apiState = filterStates.size === 1 ? [...filterStates][0] : 'all'
+  const { data: prs, loading, error, refetch } = useGh(listPRs, [repo, { state: apiState, scope, author: authorFilter || undefined, limit }])
 
   const [cursor, setCursorRaw] = useState(savedState.cursor)
   const [scrollOffset, setScrollOffsetRaw] = useState(savedState.scrollOffset)
 
   // Wrap setters to also persist to pane state map
-  const setFilterState = (v) => { setFilterStateRaw(v); setSavedState({ filterState: typeof v === 'function' ? v(filterState) : v }) }
+  const setFilterStates = (updater) => {
+    const next = typeof updater === 'function' ? updater(filterStates) : updater
+    const arr = Array.from(next)
+    setFilterStatesArr(arr)
+    setSavedState({ filterStates: arr })
+  }
   const setScope = (v) => { setScopeRaw(v); setSavedState({ scope: v }) }
   const setSortMode = (v) => { setSortModeRaw(v); setSavedState({ sortMode: v }) }
   const setAuthorFilter = (v) => { setAuthorFilterRaw(v); setSavedState({ authorFilter: v }) }
@@ -212,7 +238,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
 
-  const rawItems = (prs || []).filter(pr => pr && pr.number)
+  const rawItems = (prs || []).filter(pr => pr && pr.number && filterStates.has((pr.state || '').toLowerCase()))
   const items = sortMode === 'oldest'
     ? [...rawItems].sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt))
     : rawItems
@@ -285,16 +311,26 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     if (input === 'r') { refetch(); return }
     if (input === '/') { openDialog('fuzzy'); return }
 
-    // Configurable direct filter keys (defaults: O=open, C=closed, M=merged)
-    if (FK.filterOpen   && input === FK.filterOpen   && filterState !== 'open')   { setFilterState('open');   showStatus('▸ open');   setCursor(0); setScrollOffset(0); return }
-    if (FK.filterClosed && input === FK.filterClosed && filterState !== 'closed') { setFilterState('closed'); showStatus('▸ closed'); setCursor(0); setScrollOffset(0); return }
-    if (FK.filterMerged && input === FK.filterMerged && filterState !== 'merged') { setFilterState('merged'); showStatus('▸ merged'); setCursor(0); setScrollOffset(0); return }
-    // f still cycles through all states (kept as fallback)
+    // Filter state toggles (defaults: O/C/M) — press to toggle state in/out of active set
+    if (FK.filterOpen && input === FK.filterOpen) {
+      setFilterStates(prev => { const n = new Set(prev); n.has('open') ? (n.size > 1 && n.delete('open')) : n.add('open'); return n })
+      setCursor(0); setScrollOffset(0); return
+    }
+    if (FK.filterClosed && input === FK.filterClosed) {
+      setFilterStates(prev => { const n = new Set(prev); n.has('closed') ? (n.size > 1 && n.delete('closed')) : n.add('closed'); return n })
+      setCursor(0); setScrollOffset(0); return
+    }
+    if (FK.filterMerged && input === FK.filterMerged) {
+      setFilterStates(prev => { const n = new Set(prev); n.has('merged') ? (n.size > 1 && n.delete('merged')) : n.add('merged'); return n })
+      setCursor(0); setScrollOffset(0); return
+    }
+    // f cycles single-state sets: open → closed → merged → open
     if (input === 'f') {
-      setFilterState(prev => {
-        const next = STATE_CYCLE[(STATE_CYCLE.indexOf(prev) + 1) % STATE_CYCLE.length]
+      setFilterStates(prev => {
+        const current = prev.size === 1 ? [...prev][0] : 'open'
+        const next = STATE_CYCLE[(STATE_CYCLE.indexOf(current) + 1) % STATE_CYCLE.length]
         showStatus(`▸ ${next}`)
-        return next
+        return new Set([next])
       })
       setCursor(0); setScrollOffset(0)
       return
@@ -545,9 +581,15 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   return (
     <Box flexDirection="column" flexGrow={1}>
       <Box paddingX={1} gap={1} overflow="hidden">
-        <Text color={filterState === 'open' ? t.pr.open : filterState === 'merged' ? t.pr.merged : t.pr.closed} bold>
-          {filterState}
-        </Text>
+        {/* State chips — active states colored, inactive dimmed */}
+        <Box gap={0}>
+          {[['open', t.pr.open], ['closed', t.pr.closed], ['merged', t.pr.merged]].map(([state, color], i) => (
+            <React.Fragment key={state}>
+              {i > 0 && <Text color={t.ui.dim}>/</Text>}
+              <Text color={filterStates.has(state) ? color : t.ui.dim} bold={filterStates.has(state)}>{state}</Text>
+            </React.Fragment>
+          ))}
+        </Box>
         <Text color={t.ui.dim}>·</Text>
         <Text color={sortMode === 'oldest' ? t.ci.pending : scope === 'own' ? t.ui.selected : scope === 'reviewing' ? t.ci.pending : t.ui.muted} bold>
           {sortMode === 'oldest' ? '↑ oldest' : scope === 'own' ? 'mine' : scope === 'reviewing' ? 'reviewing' : 'all'}
@@ -571,7 +613,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
       {!loading && !error && items.length === 0 && (
         <Box paddingX={2} paddingY={1}>
-          <Text color={t.ui.muted}>No {filterState} pull requests. [f] change filter  [r] refresh</Text>
+          <Text color={t.ui.muted}>No {[...filterStates].join('/')} pull requests. [f] change filter  [r] refresh</Text>
         </Box>
       )}
 

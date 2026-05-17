@@ -2,6 +2,7 @@ export default {
   pr:    { open: '#3fb950', merged: '#a371f7', closed: '#f85149', draft: '#8b949e', conflict: '#d29922' },
   issue: { open: '#3fb950', closed: '#8b949e' },
   ci:    { pass: '#3fb950', fail: '#f85149', pending: '#d29922', running: '#d29922' },
+  review: { approved: '#3fb950', changes: '#f85149', pending: '#d29922' },
   ui: {
     selected:     '#58a6ff',
     muted:        '#8b949e',

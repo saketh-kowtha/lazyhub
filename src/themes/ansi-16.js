@@ -29,6 +29,7 @@ export default {
     fail:     'red',
     pending:  'yellow',
   },
+  review: { approved: 'green', changes: 'red', pending: 'yellow' },
   diff: {
     addBg:    'black',
     addFg:    'green',
