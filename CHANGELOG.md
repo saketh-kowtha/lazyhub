@@ -1,5 +1,83 @@
 # Changelog
 
+## v26.6.0
+
+# lazyhub v26.6.0
+
+> **lazygit-style GitHub TUI** — minor release
+
+---
+
+## ✨ What's New
+
+### 🧠 Neovim Integration (Phases 1 & 2)
+
+lazyhub now ships a first-class Neovim integration — no separate plugin required.
+
+**Phase 1** (`#95`) lays the foundation:
+- **Ambient PR status** — see the PR state for the current branch directly in your editor without leaving it
+- **Smart `:LazyHubPR` command** — opens the relevant PR context based on your cursor position and current branch
+- **LazyExtras support** — opt-in via `lazyhub.nvim` in your LazyExtras config, just like any other extra
+
+**Phase 2** (`#96`) goes deeper into the review workflow:
+- **Inline review comments rendered in the buffer** — read review feedback right where the code lives
+- **Reply and resolve threads without leaving Neovim** — full round-trip review actions from the editor
+
+---
+
+### 🤖 Pluggable AI Providers (`#94`)
+
+Swap in your preferred AI backend — lazyhub no longer assumes a single provider:
+
+| Provider | Notes |
+|---|---|
+| **Claude Code** | Anthropic's agentic CLI |
+| **Codex** | OpenAI's CLI |
+| **Gemini CLI** | Google's CLI |
+
+Configure your provider once and all AI-assisted features (PR summaries, review suggestions, etc.) route through it automatically.
+
+---
+
+### 🐛 Bug Fixes
+
+#### Self-Hosted GitHub Enterprise (`#97`)
+A long-standing issue where GHES instances were silently broken due to a hardcoded `github.com` base URL has been fixed. If you're on GitHub Enterprise Server, PR interactions should now work correctly. Accompanying tests have been corrected as well.
+
+#### UI Bugs & Enhancements (`#93`)
+A batch of smaller UI polish fixes — layout inconsistencies, edge-case rendering bugs, and UX improvements across various panels.
+
+---
+
+## 📦 Installation / Upgrade
+
+```sh
+# Homebrew
+brew upgrade lazyhub
+
+# Go
+go install github.com/yourusername/lazyhub@v26.6.0
+
+# From source
+git checkout v26.6.0 && make install
+```
+
+---
+
+## 🔗 Full Changelog
+
+`v26.5.0...v26.6.0` — [compare on GitHub](https://github.com/yourusername/lazyhub/compare/v26.5.0...v26.6.0)
+
+| Commit | PR | Description |
+|---|---|---|
+| `dd2a18b` | #96 | feat(nvim): Phase 2 — inline review comments + reply/resolve from buffer |
+| `97c8d5e` | #97 | fix(ghes): self-hosted PRs broken — hardcoded github.com + wrong tests |
+| `5fe8e82` | #95 | feat(nvim): Phase 1 — ambient PR status, smart :LazyHubPR, LazyExtras |
+| `6e28bfc` | #94 | feat(ai): pluggable AI providers — Claude Code / Codex / Gemini CLI |
+| `668bca1` | #93 | UI bugs & Enhancements |
+
+---
+
 ## v26.5.4
 
 # lazyhub v26.5.4
