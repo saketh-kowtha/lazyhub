@@ -65,7 +65,7 @@ To prevent merge conflicts and "branch drift":
 5. **`notifyDialog(true/false)`** must be called by any component that opens/closes a dialog.
 6. **`ErrorBoundary` wraps every view branch** in `app.jsx`.
 7. **`sanitize()`** every string from GitHub API before rendering in Ink components.
-8. **`ai.js` is the only file for Anthropic API calls**.
+8. **`src/ai/providers/anthropic-api.js` is the only file that makes Anthropic HTTP calls. All AI calls (any provider) go through `src/ai/index.js`.**
 
 ---
 

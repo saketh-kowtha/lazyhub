@@ -1,13 +1,13 @@
 /**
- * src/ai.test.js — Backward-compat test: imports via the re-export shim.
+ * src/ai/index.test.js — Unit tests for the AI code review public API.
  *
- * Tests are identical to src/ai/index.test.js but import from './ai.js'
- * to verify the shim works. Both test files should stay in sync.
+ * Ported from src/ai.test.js; tests now run through the new index.js
+ * with the anthropic-api provider active (ANTHROPIC_API_KEY set in env).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { getAICodeReview, AIError } from './ai.js'
-import { clearDetectionCache } from './ai/detect.js'
+import { getAICodeReview, AIError } from './index.js'
+import { clearDetectionCache } from './detect.js'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -31,7 +31,7 @@ const BASE_OPTS = {
   diff:     '--- a/foo.js\n+++ b/foo.js\n@@ -1 +1 @@\n-old\n+new',
   prTitle:  'Fix bug',
   prBody:   'This fixes a critical bug.',
-  apiKey:   'sk-ant-test-key',  // kept for backward compat; provider reads from env
+  // apiKey accepted but ignored — provider reads from env
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ describe('getAICodeReview', () => {
   let fetchMock
 
   beforeEach(() => {
-    // Force anthropic-api provider so tests don't depend on claude CLI
+    // Force anthropic-api provider so these tests don't depend on claude CLI
     process.env.LAZYHUB_AI_PROVIDER = 'anthropic-api'
     process.env.ANTHROPIC_API_KEY   = 'sk-ant-test-key'
     fetchMock = vi.fn()

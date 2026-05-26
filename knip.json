@@ -1,5 +1,11 @@
 {
-  "entry": ["bin/lazyhub.js", "src/**/*.test.js"],
+  "entry": [
+    "bin/lazyhub.js",
+    "src/**/*.test.js",
+    "src/ai/providers/anthropic-api.js",
+    "src/ai/providers/claude-code.js",
+    "src/ai/providers/_base.js"
+  ],
   "project": ["src/**/*.{js,jsx}", "bin/*.js"],
   "ignoreBinaries": ["sleep", "gh", "which"]
 }
