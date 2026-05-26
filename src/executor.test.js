@@ -47,6 +47,9 @@ import {
   listGists,
   getGist,
   deleteGist,
+  getPRReviewComments,
+  addPRReviewThreadReply,
+  resolvePRReviewThread,
 } from './executor.js'
 
 // Helper: make execa return a successful JSON response
@@ -652,5 +655,110 @@ describe('deleteGist', () => {
     execa.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
     await deleteGist('abc123')
     expect(execa).toHaveBeenCalledWith('gh', expect.arrayContaining(['gist', 'delete', 'abc123']), expect.anything())
+  })
+})
+
+// ─── Phase 2 IPC review functions ────────────────────────────────────────────
+
+describe('getPRReviewComments', () => {
+  it('calls gh api graphql and returns shaped comment array', async () => {
+    const gqlResponse = {
+      data: {
+        repository: {
+          pullRequest: {
+            reviewThreads: {
+              nodes: [
+                {
+                  id: 'PRRT_abc123',
+                  isResolved: false,
+                  comments: {
+                    nodes: [
+                      {
+                        databaseId: 101,
+                        body: 'Please fix this',
+                        path: 'src/foo.js',
+                        line: 42,
+                        originalLine: 42,
+                        author: { login: 'alice' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    }
+    mockSuccess(gqlResponse)
+    const result = await getPRReviewComments('owner/repo', 7)
+    expect(execa).toHaveBeenCalledWith('gh', expect.arrayContaining(['api', 'graphql']), expect.anything())
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      id:       101,
+      threadId: 'PRRT_abc123',
+      path:     'src/foo.js',
+      line:     42,
+      body:     'Please fix this',
+      user:     'alice',
+      resolved: false,
+    })
+  })
+
+  it('throws GhError on invalid repo format', async () => {
+    await expect(getPRReviewComments('bad repo!', 1)).rejects.toBeInstanceOf(Error)
+  })
+
+  it('returns empty array when no threads', async () => {
+    mockSuccess({ data: { repository: { pullRequest: { reviewThreads: { nodes: [] } } } } })
+    const result = await getPRReviewComments('owner/repo', 1)
+    expect(result).toEqual([])
+  })
+})
+
+describe('addPRReviewThreadReply', () => {
+  it('calls gh api graphql with the reply mutation', async () => {
+    mockSuccess({
+      data: {
+        addPullRequestReviewThreadReply: {
+          comment: { databaseId: 999 },
+        },
+      },
+    })
+    const result = await addPRReviewThreadReply('PRRT_abc123', 'Great point!')
+    expect(execa).toHaveBeenCalledWith('gh', expect.arrayContaining(['api', 'graphql']), expect.anything())
+    const [, args] = execa.mock.calls[0]
+    expect(args).toContain('-f')
+    // Verify mutation and thread ID are passed
+    const allFArgs = []
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '-f' && args[i + 1]) allFArgs.push(args[i + 1])
+    }
+    expect(allFArgs.some(a => a.startsWith('threadId='))).toBe(true)
+    expect(result).toMatchObject({ ok: true, commentId: 999 })
+  })
+})
+
+describe('resolvePRReviewThread', () => {
+  it('calls gh api graphql with the resolve mutation', async () => {
+    mockSuccess({
+      data: {
+        resolveReviewThread: { thread: { id: 'PRRT_abc123', isResolved: true } },
+      },
+    })
+    const result = await resolvePRReviewThread('PRRT_abc123')
+    expect(execa).toHaveBeenCalledWith('gh', expect.arrayContaining(['api', 'graphql']), expect.anything())
+    const [, args] = execa.mock.calls[0]
+    const allFArgs = []
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '-f' && args[i + 1]) allFArgs.push(args[i + 1])
+    }
+    expect(allFArgs.some(a => a.startsWith('threadId='))).toBe(true)
+    expect(result).toMatchObject({ ok: true })
+  })
+
+  it('propagates GhError on gh failure', async () => {
+    mockFailure('not found', 1)
+    await expect(resolvePRReviewThread('PRRT_bad')).rejects.toBeInstanceOf(Error)
   })
 })

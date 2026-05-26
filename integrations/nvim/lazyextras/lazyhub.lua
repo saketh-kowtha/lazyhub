@@ -31,18 +31,31 @@ return {
       'LazyHubBlame',
       'LazyHubDiag',
       'LazyHubState',
+      'LazyHubReview',
+      'LazyHubReviewRefresh',
+      'LazyHubReviewDetach',
     },
 
     keys = {
-      -- which-key group label
+      -- ── which-key group: lazyhub ───────────────────────────────────────────
       { '<leader>gh',  group = 'lazyhub' },
 
-      -- Individual commands
       { '<leader>gho', '<cmd>LazyHub<cr>',       desc = 'Open lazyhub' },
       { '<leader>ghp', '<cmd>LazyHubPR<cr>',     desc = 'Open PR for current branch' },
       { '<leader>ghb', '<cmd>LazyHubBlame<cr>',  desc = 'Open PR for line under cursor' },
       { '<leader>ghd', '<cmd>LazyHubDiag<cr>',   desc = 'Load PR review comments as diagnostics' },
       { '<leader>ghs', '<cmd>LazyHubState<cr>',  desc = 'Show lazyhub IPC state' },
+
+      -- ── which-key group: review ────────────────────────────────────────────
+      { '<leader>gr',  group = 'review' },
+
+      { '<leader>grr', '<cmd>LazyHubReview<cr>',         desc = 'Attach review overlay' },
+      { '<leader>grR', '<Plug>(lazyhub-review-reply)',   desc = 'Reply to thread under cursor' },
+      { '<leader>grx', '<Plug>(lazyhub-review-resolve)', desc = 'Resolve thread under cursor' },
+
+      -- ── navigation ─────────────────────────────────────────────────────────
+      { ']r',          '<Plug>(lazyhub-review-next)',    desc = 'Next review comment' },
+      { '[r',          '<Plug>(lazyhub-review-prev)',    desc = 'Previous review comment' },
     },
 
     opts = {
@@ -55,6 +68,7 @@ return {
 
     config = function(_, opts)
       require('lazyhub').setup(opts)
+      require('lazyhub.review').setup()
 
       -- Kick off the statusline poller.
       -- The component is exposed for manual wiring — see lualine snippet below.
