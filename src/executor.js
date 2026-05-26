@@ -38,8 +38,10 @@ export class GhError extends Error {
  * @param args
  */
 export async function run(args) {
-  // GH_HOST is inherited by the child process from process.env — no need to
-  // also pass --hostname as a flag (which some gh versions don't accept globally).
+  // GH_HOST is inherited by the child process from process.env. gh CLI honors
+  // it for `--repo OWNER/REPO`-style invocations. We deliberately do NOT pass
+  // --hostname here: it's a per-subcommand flag (valid on `gh api`, `gh auth *`,
+  // `gh repo *`) and is rejected globally by `gh pr list`, `gh issue list`, etc.
   let result
   try {
     result = await execa('gh', args, { reject: false })

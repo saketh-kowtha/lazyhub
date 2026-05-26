@@ -719,7 +719,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       if (input === 'o') {
         import('execa').then(({ execa }) => {
           const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
-          execa(cmd, [`https://github.com/${repo}/pull/${prNumber}/files`]).catch(() => {})
+          // prMeta.url comes from the GitHub API and already reflects the
+          // correct host (github.com or a GHES instance). Fall back to a
+          // GH_HOST-aware constructed URL if prMeta hasn't loaded yet.
+          const baseUrl = prMeta?.url
+            || `https://${process.env.GH_HOST || 'github.com'}/${repo}/pull/${prNumber}`
+          execa(cmd, [`${baseUrl}/files`]).catch(() => {})
         })
         return
       }

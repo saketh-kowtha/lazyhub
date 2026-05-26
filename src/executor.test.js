@@ -544,13 +544,15 @@ describe('createPR()', () => {
 // ─── GHE / GH_HOST support ───────────────────────────────────────────────────
 
 describe('GH_HOST support', () => {
-  it('passes --hostname flag when GH_HOST is set', async () => {
+  // gh CLI honors GH_HOST via env inheritance for `--repo OWNER/REPO` calls.
+  // We deliberately do NOT pass --hostname: it's invalid on `gh pr list`,
+  // `gh issue list`, etc. (valid only on `gh api`, `gh auth *`, `gh repo *`).
+  it('does not pass --hostname when GH_HOST is set (relies on env inheritance)', async () => {
     process.env.GH_HOST = 'github.example.com'
     mockSuccess([])
     await listPRs('owner/repo')
     const [_cmd, args] = execa.mock.calls[0]
-    expect(args).toContain('--hostname')
-    expect(args).toContain('github.example.com')
+    expect(args).not.toContain('--hostname')
     delete process.env.GH_HOST
   })
 
