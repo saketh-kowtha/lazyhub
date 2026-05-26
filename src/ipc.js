@@ -31,6 +31,8 @@
  *   view-changed      { view }
  *   pr-merged         { prNumber }
  *   pr-state-changed  { branch, prNumber, ciStatus, unresolvedThreads }
+ *     — broadcast helper provided; triggers (CI refresh, merge) ship in later phases.
+ *       Call emitIPC('pr-state-changed', payload) from any refresh path.
  *   review-comment-added   { prNumber, comment }
  *   review-thread-resolved { prNumber, threadId }
  */
@@ -107,11 +109,13 @@ function handleMessage(socket, raw) {
     }
 
     case 'pr-for-branch': {
+      // nvim statusline / smart :LazyHubPR — look up PR for a branch
       const branch = msg.branch
       if (!branch) {
         sendResponse(socket, id, { prNumber: null })
         break
       }
+      // Async handler — respond when the executor call resolves
       ;(_prForBranchHandler(branch, msg.repo || null))
         .then(result => sendResponse(socket, id, result))
         .catch(() => sendResponse(socket, id, { prNumber: null }))

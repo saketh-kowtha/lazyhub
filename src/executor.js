@@ -38,8 +38,10 @@ export class GhError extends Error {
  * @param args
  */
 export async function run(args) {
-  // GH_HOST is inherited by the child process from process.env — no need to
-  // also pass --hostname as a flag (which some gh versions don't accept globally).
+  // GH_HOST is inherited by the child process from process.env. gh CLI honors
+  // it for `--repo OWNER/REPO`-style invocations. We deliberately do NOT pass
+  // --hostname here: it's a per-subcommand flag (valid on `gh api`, `gh auth *`,
+  // `gh repo *`) and is rejected globally by `gh pr list`, `gh issue list`, etc.
   let result
   try {
     result = await execa('gh', args, { reject: false })
@@ -912,6 +914,87 @@ export async function resolvePRReviewThread(threadId) {
     '-f', `threadId=${threadId}`,
   ])
   return { ok: true }
+}
+
+/**
+ * Get PR state for a given branch head ref.
+ *
+ * Runs `gh pr list --head <branch>` and maps the first result to the IPC
+ * response shape expected by the nvim statusline.
+ *
+ * CI status mapping:
+ *   SUCCESS          → 'pass'
+ *   FAILURE / ERROR  → 'fail'
+ *   anything else    → 'pending'
+ *   missing          → null
+ *
+ * @param {string} branch  - head ref name (e.g. 'feat/my-feature')
+ * @param {string} [repo]  - optional repo override; falls back to GHUI_REPO
+ * @returns {Promise<{prNumber:number|null, prState?:string, ciStatus?:string|null, unresolvedThreads?:number}>}
+ */
+export async function getPRStateForBranch(branch, repo) {
+  if (!branch) return { prNumber: null }
+
+  const args = [
+    'pr', 'list',
+    '--head', branch,
+    '--json', 'number,state,statusCheckRollup,reviewThreads',
+    '--limit', '1',
+  ]
+
+  if (repo || process.env.GHUI_REPO) {
+    args.push('--repo', getRepo(repo))
+  }
+
+  let results
+  try {
+    results = await run(args)
+  } catch {
+    // If the call fails (e.g. no remote, rate-limit), degrade gracefully.
+    return { prNumber: null }
+  }
+
+  if (!Array.isArray(results) || results.length === 0) {
+    return { prNumber: null }
+  }
+
+  const pr = results[0]
+
+  // Map statusCheckRollup to ciStatus
+  let ciStatus = null
+  const rollup = pr.statusCheckRollup
+  if (Array.isArray(rollup) && rollup.length > 0) {
+    // Rollup is an array of check objects; derive overall status from the worst conclusion
+    const conclusions = rollup.map(c => (c.conclusion || c.state || '').toUpperCase())
+    if (conclusions.some(c => c === 'FAILURE' || c === 'ERROR' || c === 'TIMED_OUT' || c === 'CANCELLED')) {
+      ciStatus = 'fail'
+    } else if (conclusions.every(c => c === 'SUCCESS')) {
+      ciStatus = 'pass'
+    } else {
+      ciStatus = 'pending'
+    }
+  } else if (typeof rollup === 'string') {
+    const s = rollup.toUpperCase()
+    if (s === 'SUCCESS') ciStatus = 'pass'
+    else if (s === 'FAILURE' || s === 'ERROR') ciStatus = 'fail'
+    else if (s) ciStatus = 'pending'
+  }
+
+  // Count unresolved review threads
+  let unresolvedThreads
+  if (Array.isArray(pr.reviewThreads)) {
+    const count = pr.reviewThreads.filter(t => t.isResolved === false).length
+    if (count > 0) unresolvedThreads = count
+  }
+
+  const response = {
+    prNumber: pr.number,
+    prState:  pr.state,
+    ciStatus,
+  }
+  if (unresolvedThreads !== undefined) response.unresolvedThreads = unresolvedThreads
+
+  return response
 }
 
 /**

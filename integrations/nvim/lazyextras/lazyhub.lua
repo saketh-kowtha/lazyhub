@@ -1,12 +1,6 @@
 --[[
-  lazyhub LazyExtras module — Phase 1 + Phase 2
-  ==============================================
-  NOTE TO MAINTAINER: This file was written for Phase 2 and intentionally
-  includes the full set of Phase 1 keymaps (<leader>gh*) as well as the new
-  Phase 2 keymaps (<leader>gr*). When PR #95 (Phase 1) merges first, the Phase 1
-  LazyExtras file should be REPLACED by this one rather than merged — this file
-  is the single authoritative copy covering both phases.
-
+  lazyhub LazyExtras module
+  =========================
   This file is a COPY-PASTE TARGET — it is NOT auto-loaded by the lazyhub plugin.
 
   To use it, either:
@@ -28,7 +22,7 @@ return {
   {
     'saketh-kowtha/lazyhub',
     -- The nvim plugin lives in a subdirectory of the monorepo.
-    -- lazy.nvim >= 11 supports `subdir` natively; older versions need `dir`.
+    -- lazy.nvim ≥ 11 supports `subdir` natively; older versions need `dir`.
     subdir = 'integrations/nvim',
 
     cmd = {
@@ -43,25 +37,23 @@ return {
     },
 
     keys = {
-      -- ── Phase 1: which-key group label ─────────────────────────────────────
+      -- ── which-key group: lazyhub ───────────────────────────────────────────
       { '<leader>gh',  group = 'lazyhub' },
 
-      -- ── Phase 1: individual commands ───────────────────────────────────────
       { '<leader>gho', '<cmd>LazyHub<cr>',       desc = 'Open lazyhub' },
       { '<leader>ghp', '<cmd>LazyHubPR<cr>',     desc = 'Open PR for current branch' },
       { '<leader>ghb', '<cmd>LazyHubBlame<cr>',  desc = 'Open PR for line under cursor' },
       { '<leader>ghd', '<cmd>LazyHubDiag<cr>',   desc = 'Load PR review comments as diagnostics' },
       { '<leader>ghs', '<cmd>LazyHubState<cr>',  desc = 'Show lazyhub IPC state' },
 
-      -- ── Phase 2: which-key group label ─────────────────────────────────────
+      -- ── which-key group: review ────────────────────────────────────────────
       { '<leader>gr',  group = 'review' },
 
-      -- ── Phase 2: review overlay commands ───────────────────────────────────
-      { '<leader>grr', '<cmd>LazyHubReview<cr>',        desc = 'Attach review overlay' },
+      { '<leader>grr', '<cmd>LazyHubReview<cr>',         desc = 'Attach review overlay' },
       { '<leader>grR', '<Plug>(lazyhub-review-reply)',   desc = 'Reply to thread under cursor' },
       { '<leader>grx', '<Plug>(lazyhub-review-resolve)', desc = 'Resolve thread under cursor' },
 
-      -- ── Phase 2: navigation ─────────────────────────────────────────────────
+      -- ── navigation ─────────────────────────────────────────────────────────
       { ']r',          '<Plug>(lazyhub-review-next)',    desc = 'Next review comment' },
       { '[r',          '<Plug>(lazyhub-review-prev)',    desc = 'Previous review comment' },
     },

@@ -18,7 +18,7 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { AIReviewPane } from '../../components/AIReviewPane.jsx'
-import { getAICodeReview, AIError } from '../../ai.js'
+import { getAICodeReview, AIError } from '../../ai/index.js'
 import { loadConfig } from '../../config.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
@@ -719,7 +719,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       if (input === 'o') {
         import('execa').then(({ execa }) => {
           const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
-          execa(cmd, [`https://github.com/${repo}/pull/${prNumber}/files`]).catch(() => {})
+          // prMeta.url comes from the GitHub API and already reflects the
+          // correct host (github.com or a GHES instance). Fall back to a
+          // GH_HOST-aware constructed URL if prMeta hasn't loaded yet.
+          const baseUrl = prMeta?.url
+            || `https://${process.env.GH_HOST || 'github.com'}/${repo}/pull/${prNumber}`
+          execa(cmd, [`${baseUrl}/files`]).catch(() => {})
         })
         return
       }
@@ -1037,19 +1042,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         setTimeout(() => setAiReviewError(null), 3000)
         return
       }
-      const apiKey = config.ai?.anthropicApiKey
-      if (!apiKey) {
-        setAiReviewError('No API key — set Anthropic API key in Settings (s)')
-        setTimeout(() => setAiReviewError(null), 4000)
-        return
-      }
       setAiReviewLoading(true)
       setAiReviewError(null)
       getAICodeReview({
         diff:     diffText || '',
         prTitle:  sanitize(prMeta?.title || `PR #${prNumber}`),
         prBody:   sanitize((prMeta?.body || '').slice(0, 500)),
-        apiKey,
       })
         .then(result => { setAiReview(result) })
         .catch(err => {
