@@ -8,8 +8,10 @@ import React, { useState, useMemo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { useTheme } from '../../theme.js'
 import { useVirtualList } from '../../hooks/useVirtualList.js'
+import { useKeyScope } from '../../keyscope.js'
 
 export function MultiSelect({ items = [], onSubmit, onCancel, title }) {
+  useKeyScope('dialog')
   const { t } = useTheme()
   const { stdout } = useStdout()
   const [query, setQuery] = useState('')
@@ -62,7 +64,7 @@ export function MultiSelect({ items = [], onSubmit, onCancel, title }) {
   })
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
       {title && (
         <Box marginBottom={1}>
           <Text color={t.ui.selected} bold>{title}</Text>

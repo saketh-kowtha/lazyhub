@@ -67,6 +67,24 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
     fetchData(true)
   }, [fetchData])
 
+  /**
+   * Optimistically update cached data without refetching.
+   * updater receives the current data and returns the new data.
+   * Pass { revalidate: true } to trigger a background refetch after update.
+   */
+  const mutate = useCallback((updater, opts = {}) => {
+    setData(prev => {
+      const next = updater(prev)
+      // Keep cache in sync so refetch doesn't overwrite our optimistic state
+      const cached = cache.get(cacheKey)
+      if (cached) cache.set(cacheKey, { data: next, timestamp: cached.timestamp })
+      return next
+    })
+    if (opts.revalidate) {
+      setTimeout(() => fetchData(true), 0)
+    }
+  }, [cacheKey, fetchData])
+
   useEffect(() => {
     mountedRef.current = true
     fetchData(false)
@@ -75,5 +93,5 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
     }
   }, [cacheKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { data, loading, error, refetch }
+  return { data, loading, error, refetch, mutate }
 }

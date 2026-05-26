@@ -18,6 +18,7 @@
 
 import React, { useState, useEffect, useCallback, useContext, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
+import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
 import { loadConfig } from '../../config.js'
@@ -55,6 +56,7 @@ function fileStatusIcon(file, t) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ConflictView({ pr, repo, onBack, onResolved }) {
+  useKeyScope('view')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()

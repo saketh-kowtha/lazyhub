@@ -14,6 +14,8 @@ import catppuccinMocha from './themes/catppuccin-mocha.js'
 import catppuccinLatte from './themes/catppuccin-latte.js'
 import tokyoNight      from './themes/tokyo-night.js'
 import ansi16          from './themes/ansi-16.js'
+import auroraDark      from './themes/aurora-dark.js'
+import auroraLight     from './themes/aurora-light.js'
 
 export const BUILTIN_THEMES = {
   'github-dark':      githubDark,
@@ -22,6 +24,8 @@ export const BUILTIN_THEMES = {
   'catppuccin-latte': catppuccinLatte,
   'tokyo-night':      tokyoNight,
   'ansi-16':          ansi16,
+  'aurora-dark':      auroraDark,
+  'aurora-light':     auroraLight,
 }
 
 export const THEME_NAMES = Object.keys(BUILTIN_THEMES)
@@ -97,6 +101,42 @@ function loadThemeFile(p) {
   try { return JSON.parse(readFileSync(resolved, 'utf8')) } catch { return null }
 }
 
+// ─── Semantic token resolver ──────────────────────────────────────────────────
+// Themes may declare `palette` and `semantic` objects. Semantic values can be
+// string references like 'palette.gray.0' which are resolved against palette.
+// This is additive — themes without palette/semantic work unchanged.
+
+function resolvePaletteRef(ref, palette) {
+  if (typeof ref !== 'string' || !ref.startsWith('palette.')) return ref
+  const parts = ref.slice('palette.'.length).split('.')
+  let cur = palette
+  for (const part of parts) {
+    if (cur == null || typeof cur !== 'object') return ref
+    cur = cur[part]
+  }
+  return typeof cur === 'string' ? cur : ref
+}
+
+function resolveSemanticTokens(rawTheme) {
+  const { palette, semantic, ...rest } = rawTheme
+  if (!palette && !semantic) return rawTheme
+  if (!semantic) return rawTheme
+
+  // Deep-resolve all string refs in semantic tree
+  function resolveNode(node) {
+    if (typeof node === 'string') return resolvePaletteRef(node, palette || {})
+    if (Array.isArray(node)) return node.map(resolveNode)
+    if (node && typeof node === 'object') {
+      const out = {}
+      for (const [k, v] of Object.entries(node)) out[k] = resolveNode(v)
+      return out
+    }
+    return node
+  }
+
+  return { ...rest, palette, semantic: resolveNode(semantic) }
+}
+
 // ─── Theme resolution ─────────────────────────────────────────────────────────
 
 /**
@@ -110,18 +150,18 @@ export function resolveTheme(cfg) {
 
   // String: either a built-in name or a file path
   if (typeof cfg === 'string') {
-    if (BUILTIN_THEMES[cfg]) return deepMerge(fallback, BUILTIN_THEMES[cfg])
+    if (BUILTIN_THEMES[cfg]) return resolveSemanticTokens(deepMerge(fallback, BUILTIN_THEMES[cfg]))
     const fromFile = loadThemeFile(cfg)
-    return fromFile ? deepMerge(fallback, fromFile) : fallback
+    return fromFile ? resolveSemanticTokens(deepMerge(fallback, fromFile)) : fallback
   }
 
   // Object forms
   if (typeof cfg === 'object' && !Array.isArray(cfg)) {
     if (typeof cfg.name === 'string') {
       const namedBase = BUILTIN_THEMES[cfg.name] || fallback
-      return deepMerge(deepMerge(fallback, namedBase), cfg.overrides || {})
+      return resolveSemanticTokens(deepMerge(deepMerge(fallback, namedBase), cfg.overrides || {}))
     }
-    return deepMerge(fallback, cfg)
+    return resolveSemanticTokens(deepMerge(fallback, cfg))
   }
 
   return fallback

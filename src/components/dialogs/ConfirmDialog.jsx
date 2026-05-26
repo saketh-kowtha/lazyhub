@@ -6,8 +6,10 @@
 import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useTheme } from '../../theme.js'
+import { useKeyScope } from '../../keyscope.js'
 
 export function ConfirmDialog({ message, destructive = false, onConfirm, onCancel, requireText }) {
+  useKeyScope('dialog')
   const { t } = useTheme()
   const [cursor, setCursor] = useState(1) // 0 = Yes, 1 = No (default No for safety)
   const [typed, setTyped] = useState('')
@@ -46,7 +48,7 @@ export function ConfirmDialog({ message, destructive = false, onConfirm, onCance
   })
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={borderColor} paddingX={2} paddingY={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={borderColor} paddingX={2} paddingY={1}>
       <Box marginBottom={1}>
         <Text color={destructive ? '#f85149' : t.ui.selected} bold>
           {destructive ? '⚠ ' : 'ℹ '}

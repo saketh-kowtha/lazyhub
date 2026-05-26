@@ -5,6 +5,7 @@
 import React, { useState, useContext, useMemo, useCallback, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
+import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getIssue, addIssueComment, listLabels, listCollaborators, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
@@ -22,6 +23,7 @@ const FOOTER_KEYS = [
 ]
 
 export function IssueDetail({ issueNumber, repo, onBack }) {
+  useKeyScope('pane')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()

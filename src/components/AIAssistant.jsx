@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useTheme } from '../theme.js'
+import { useKeyScope } from '../keyscope.js'
 import { AppContext } from '../context.js'
 import { Spinner } from './Spinner.jsx'
 import { TextInput, sanitize } from '../utils.js'
@@ -55,6 +56,7 @@ function MessageRow({ msg, maxWidth }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiConfig, rows }) {
+  useKeyScope('overlay')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
 

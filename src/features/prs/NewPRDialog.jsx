@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
+import { useKeyScope } from '../../keyscope.js'
 import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
@@ -145,6 +146,7 @@ function BaseStatus({ validating, status }) {
 // ─── Main dialog ──────────────────────────────────────────────────────────────
 
 export function NewPRDialog({ repo, onClose, onCreated }) {
+  useKeyScope('dialog')
   const { stdout } = useStdout()
   const cols = stdout?.columns || 80
 

@@ -79,13 +79,13 @@ import { homedir } from 'os'
 
 export const BUILTIN_PANES = ['prs', 'issues', 'branches', 'actions', 'notifications']
 
-const CONFIG_PATH = join(homedir(), '.config', 'lazyhub', 'config.json')
+export const CONFIG_PATH = join(homedir(), '.config', 'lazyhub', 'config.json')
 
 // ─── Section defaults ─────────────────────────────────────────────────────────
 
 const DEFAULT_PR = {
   defaultFilter: 'open',   // 'open' | 'closed' | 'merged'
-  defaultScope:  'all',    // 'all' | 'own' | 'reviewing'
+  defaultScope:  'own',    // 'all' | 'own' | 'reviewing'
   pageSize:      100,
   keys: {
     filterOpen:   'O',
@@ -130,11 +130,29 @@ const DEFAULT_AI = {
   openaiBaseUrl:   'https://api.openai.com/v1',  // override for Azure / Ollama / Groq / etc.
 }
 
+const DEFAULT_LAYOUT = {
+  // Sidebar
+  sidebarWidth:   24,      // columns (min 16, max 40)
+  sidebar:        true,    // false = always hide even on wide terminals
+
+  // Right preview panel (shown on prs list when terminal is wide enough)
+  previewPanel:   true,    // false = always hide
+  previewWidth:   40,      // columns (min 24, max 80)
+
+  // Border style for sidebar + main pane box
+  // Options: 'round' | 'single' | 'double' | 'bold' | 'classic' | 'none'
+  borderStyle:    'round',
+
+  // Compact mode: hide footer key hints bar (saves 2 rows on small terminals)
+  compactFooter:  false,
+}
+
 const DEFAULTS = {
   panes:       BUILTIN_PANES,
   defaultPane: 'prs',
   theme:       'github-dark',
   customPanes: {},
+  layout:      DEFAULT_LAYOUT,
   pr:          DEFAULT_PR,
   issues:      DEFAULT_ISSUES,
   actions:     DEFAULT_ACTIONS,
@@ -231,12 +249,23 @@ export function loadConfig() {
     if (!ai.provider        && process.env.LAZYHUB_AI_PROVIDER) ai.provider      = process.env.LAZYHUB_AI_PROVIDER
     if (!ai.model           && process.env.LAZYHUB_AI_MODEL)  ai.model           = process.env.LAZYHUB_AI_MODEL
 
+    // Merge layout; clamp numeric fields to safe ranges
+    const layoutRaw = mergeSection(DEFAULT_LAYOUT, user.layout)
+    const layout = {
+      ...layoutRaw,
+      sidebarWidth:  Math.min(40, Math.max(16, layoutRaw.sidebarWidth)),
+      previewWidth:  Math.min(80, Math.max(24, layoutRaw.previewWidth)),
+      borderStyle:   ['round','single','double','bold','classic','none'].includes(layoutRaw.borderStyle)
+        ? layoutRaw.borderStyle : 'round',
+    }
+
     return {
       panes,
       defaultPane,
       theme,
       aiReviewEnabled,
       customPanes,
+      layout,
       pr:      mergeSection(DEFAULT_PR,      user.pr),
       issues:  mergeSection(DEFAULT_ISSUES,  user.issues),
       actions: mergeSection(DEFAULT_ACTIONS, user.actions),
@@ -279,9 +308,18 @@ export function writeDefaultConfig() {
     const template = {
       panes: BUILTIN_PANES,
       defaultPane: 'prs',
+      theme: 'github-dark',
+      layout: {
+        sidebarWidth:  22,
+        sidebar:       true,
+        previewPanel:  true,
+        previewWidth:  40,
+        borderStyle:   'round',
+        compactFooter: false,
+      },
       pr: {
         defaultFilter: 'open',
-        defaultScope: 'all',
+        defaultScope: 'own',
         pageSize: 100,
         keys: { filterOpen: 'O', filterClosed: 'C', filterMerged: 'M' },
       },
@@ -292,7 +330,6 @@ export function writeDefaultConfig() {
       },
       actions: { pageSize: 30 },
       diff: { defaultView: 'unified', syntaxHighlight: true, maxLines: 2000 },
-      theme: 'github-dark',
       customPanes: {},
     }
     writeFileSync(CONFIG_PATH, JSON.stringify(template, null, 2) + '\n', 'utf8')

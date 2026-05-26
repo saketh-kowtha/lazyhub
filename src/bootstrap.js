@@ -168,11 +168,8 @@ async function readPATFromStdin(rl) {
  *
  */
 export async function getLoggedInUser() {
-  const args = process.env.GH_HOST
-    ? ['--hostname', process.env.GH_HOST, 'api', 'user', '--jq', '.login']
-    : ['api', 'user', '--jq', '.login']
   try {
-    const { stdout } = await execa('gh', args)
+    const { stdout } = await execa('gh', ['api', 'user', '--jq', '.login'])
     return stdout.trim()
   } catch {
     return null
@@ -243,9 +240,7 @@ export async function detectRepo() {
   } catch { /* not in a git repo */ }
 
   // 2. Let gh resolve it from the git context
-  const viewArgs = process.env.GH_HOST
-    ? ['--hostname', process.env.GH_HOST, 'repo', 'view', '--json', 'name,owner']
-    : ['repo', 'view', '--json', 'name,owner']
+  const viewArgs = ['repo', 'view', '--json', 'name,owner']
   try {
     const result = await execa('gh', viewArgs, { reject: false })
     if (result.exitCode === 0 && result.stdout) {
@@ -261,10 +256,8 @@ export async function detectRepo() {
  *
  */
 export async function listRepos() {
-  const baseArgs = process.env.GH_HOST ? ['--hostname', process.env.GH_HOST] : []
   try {
     const { stdout } = await execa('gh', [
-      ...baseArgs,
       'repo', 'list',
       '--limit', '20',
       '--json', 'name,nameWithOwner',

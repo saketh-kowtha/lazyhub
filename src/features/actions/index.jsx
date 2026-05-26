@@ -5,6 +5,7 @@
 import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { format } from 'timeago.js'
+import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import { listRuns, getRunLogs, rerunRun, cancelRun } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
@@ -41,6 +42,7 @@ const ActionRow = memo(({ run, isSelected, t }) => {
 })
 
 export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch = null }) {
+  useKeyScope('pane')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
@@ -65,8 +67,9 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
 
   useEffect(() => {
     notifyDialog(!!dialog)
-    return () => notifyDialog(false)
-  }, [dialog, notifyDialog])
+    if (onPaneState) onPaneState({ dialogHint: dialog || null })
+    return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
+  }, [dialog, notifyDialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
