@@ -816,6 +816,104 @@ export async function resolveThread(threadId) {
   return run(args)
 }
 
+// ─── IPC-facing review functions (Phase 2) ───────────────────────────────────
+
+/**
+ * Get PR review comments shaped for the IPC `review-comments` response.
+ * Uses GraphQL to retrieve thread node IDs and resolution status.
+ *
+ * @param {string} repo       - "owner/name" (falls back to GHUI_REPO)
+ * @param {number|string} prNumber
+ * @returns {Promise<Array<{id, threadId, path, line, body, user, resolved}>>}
+ */
+export async function getPRReviewComments(repo, prNumber) {
+  const r = getRepo(repo)
+  const [owner, name] = r.split('/')
+  if (!REPO_PART_RE.test(owner) || !REPO_PART_RE.test(name)) {
+    throw new GhError({ message: `Invalid repository format: ${r}`, stderr: '', exitCode: 1, args: [] })
+  }
+  const query = `
+    query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100) {
+            nodes {
+              id
+              isResolved
+              comments(first: 50) {
+                nodes {
+                  databaseId
+                  body
+                  path
+                  line
+                  originalLine
+                  author { login }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `
+  const result = await run([
+    'api', 'graphql',
+    '-f', `owner=${owner}`,
+    '-f', `name=${name}`,
+    '-F', `number=${Number(prNumber)}`,
+    '-f', `query=${query}`,
+  ])
+  const threads = result?.data?.repository?.pullRequest?.reviewThreads?.nodes || []
+  // Flatten: one entry per comment, carrying threadId + resolved from the parent thread
+  return threads.flatMap(thread =>
+    thread.comments.nodes.map(c => ({
+      id:       c.databaseId,
+      threadId: thread.id,
+      path:     c.path,
+      line:     c.line ?? c.originalLine ?? null,
+      body:     c.body,
+      user:     c.author?.login || null,
+      resolved: thread.isResolved,
+    }))
+  )
+}
+
+/**
+ * Reply to a PR review thread via GraphQL `addPullRequestReviewThreadReply`.
+ *
+ * @param {string} threadId  - node ID of the review thread (e.g. "PRRT_...")
+ * @param {string} body      - reply text
+ * @returns {Promise<{ok: true, commentId: number}>}
+ */
+export async function addPRReviewThreadReply(threadId, body) {
+  // threadId is a GraphQL node ID (ID!); body is a String!
+  const mutation = 'mutation($threadId: ID!, $body: String!) { addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $threadId, body: $body }) { comment { databaseId } } }'
+  const result = await run([
+    'api', 'graphql',
+    '-f', `query=${mutation}`,
+    '-f', `threadId=${threadId}`,
+    '-f', `body=${body}`,
+  ])
+  const commentId = result?.data?.addPullRequestReviewThreadReply?.comment?.databaseId
+  return { ok: true, commentId: commentId || null }
+}
+
+/**
+ * Resolve a PR review thread via GraphQL `resolveReviewThread`.
+ *
+ * @param {string} threadId  - node ID of the review thread (e.g. "PRRT_...")
+ * @returns {Promise<{ok: true}>}
+ */
+export async function resolvePRReviewThread(threadId) {
+  const mutation = 'mutation($threadId: ID!) { resolveReviewThread(input: { threadId: $threadId }) { thread { id isResolved } } }'
+  await run([
+    'api', 'graphql',
+    '-f', `query=${mutation}`,
+    '-f', `threadId=${threadId}`,
+  ])
+  return { ok: true }
+}
+
 /**
  * Get a single remote branch (returns null if not found).
  * @param repo
