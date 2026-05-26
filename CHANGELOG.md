@@ -1,5 +1,17 @@
 # Changelog
 
+## v26.6.1
+
+# lazyhub v26.6.1
+
+This is a patch release with no user-facing changes.
+
+---
+
+**Full Changelog:** [`v26.6.0...v26.6.1`](https://github.com/your-org/lazyhub/compare/v26.6.0...v26.6.1)
+
+---
+
 ## v26.6.0
 
 # lazyhub v26.6.0
