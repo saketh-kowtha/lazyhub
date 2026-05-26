@@ -391,6 +391,29 @@ export async function bootstrap(renderApp) {
   }
   process.env.GHUI_REPO = repo
 
+  // Step 3b — parse optional GHUI_PR and GHUI_VIEW env vars
+  // Used by integrations (e.g. nvim :LazyHubPR) to pre-navigate on startup.
+  // GHUI_PR: pre-select a specific PR by number (positive integer only, silently ignored if invalid)
+  // GHUI_VIEW: pre-select view type ('diff' | 'comments' | 'checks', defaults to 'list')
+  const prNumberStr = process.env.GHUI_PR
+  if (prNumberStr) {
+    const prNum = parseInt(prNumberStr, 10)
+    if (prNum > 0 && Number.isFinite(prNum)) {
+      // Valid PR number, keep it in env for app.jsx to read
+      process.env.GHUI_PR = String(prNum)
+    } else {
+      // Invalid — clear it to prevent app initialization issues
+      delete process.env.GHUI_PR
+    }
+  }
+
+  // Validate GHUI_VIEW if set
+  const validViews = ['diff', 'comments', 'checks']
+  const viewStr = process.env.GHUI_VIEW
+  if (viewStr && !validViews.includes(viewStr)) {
+    delete process.env.GHUI_VIEW
+  }
+
   // Step 4 — hand off to Ink
   if (typeof renderApp === 'function') {
     renderApp()

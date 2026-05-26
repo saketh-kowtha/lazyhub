@@ -88,10 +88,10 @@ function M.open_pr()
             local fallback_num = ok and type(parsed) == 'table' and parsed[1] and parsed[1].number
 
             if fallback_num then
-              -- lazyhub not running — spawn with GHUI_PR env for initial navigation
-              -- Note: lazyhub bootstrap will honour GHUI_PR once that env var is wired;
+              -- lazyhub not running — spawn with GHUI_PR and GHUI_VIEW env for initial navigation to diff view
+              -- Note: lazyhub bootstrap will honour GHUI_PR and GHUI_VIEW once those env vars are wired;
               -- until then it opens normally (graceful degradation per invariant 2).
-              _float().open_float('GHUI_PR=' .. tostring(fallback_num) .. ' lazyhub')
+              _float().open_float('GHUI_PR=' .. tostring(fallback_num) .. ' GHUI_VIEW=diff lazyhub')
             else
               -- No PR for this branch — open lazyhub on the PR list
               M.open()

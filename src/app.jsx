@@ -47,6 +47,10 @@ import { THEME_NAMES } from './theme.js'
 
 const _config = loadConfig()
 
+// ─── Valid views for GHUI_VIEW env var (used by bootstrap for pre-navigation) ──
+
+const validViews = ['diff', 'comments', 'checks']
+
 // ─── Pane registry ───────────────────────────────────────────────────────────
 
 const PANES = _config.panes
@@ -445,8 +449,15 @@ function App({ repo }) {
     }
   }, [mouseEnabled])
 
-  const [pane, setPane]             = useState(_config.defaultPane)
-  const [view, setView]             = useState('list')
+  // GHUI_PR / GHUI_VIEW env handling: if set during bootstrap, pre-navigate to the PR
+  // Used by nvim :LazyHubPR fallback path when lazyhub isn't already running.
+  // Set pane to 'prs' and initialize selectedItem with minimal data so PR detail/diff loads.
+  const initPRRef = useRef(process.env.GHUI_PR ? parseInt(process.env.GHUI_PR, 10) : null)
+  const initializedRef = useRef(false)
+
+  // Initialize pane/view/selectedItem, honoring GHUI_PR and GHUI_VIEW env vars for bootstrap navigation
+  const [pane, setPane]             = useState(initPRRef.current ? 'prs' : _config.defaultPane)
+  const [view, setView]             = useState(process.env.GHUI_VIEW ? (validViews.includes(process.env.GHUI_VIEW) ? process.env.GHUI_VIEW : 'list') : 'list')
   const [selectedItem, setSelectedItem] = useState(null)
   const [showHelp, setShowHelp]         = useState(false)
   const [showAI, setShowAI]             = useState(false)
@@ -475,6 +486,16 @@ function App({ repo }) {
   const openAI       = useCallback(() => setShowAI(true), [])
 
   const appCtx = { notifyDialog, openHelp, openAI, setMouseEnabled, addToast, paneStateMap: paneStateMapRef.current }
+
+  // ─── GHUI_PR bootstrap navigation ──────────────────────────────────────────
+  // If a PR number was passed via GHUI_PR env (from nvim :LazyHubPR fallback),
+  // set up initial selectedItem so PRDetail/PRDiff can load the data.
+  useEffect(() => {
+    if (initPRRef.current && !initializedRef.current && pane === 'prs') {
+      initializedRef.current = true
+      setSelectedItem({ number: initPRRef.current })
+    }
+  }, [pane])
 
   // ─── IPC state broadcast ──────────────────────────────────────────────────
   useEffect(() => {
