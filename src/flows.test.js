@@ -861,12 +861,14 @@ describe('Collaborator flow', () => {
 // ─── GH HOST FLOWS ───────────────────────────────────────────────────────────
 
 describe('GH_HOST env var support', () => {
-  it('prepends --hostname when GH_HOST is set', async () => {
+  // gh CLI honors GH_HOST via env inheritance for `--repo OWNER/REPO` calls.
+  // --hostname is invalid on `gh pr list` / `gh issue list` (valid only on
+  // `gh api`, `gh auth *`, `gh repo *`).
+  it('does not prepend --hostname when GH_HOST is set (env inheritance)', async () => {
     process.env.GH_HOST = 'github.example.com'
     ok([])
     await listPRs('owner/repo')
-    expect(args()).toContain('--hostname')
-    expect(args()).toContain('github.example.com')
+    expect(args()).not.toContain('--hostname')
     delete process.env.GH_HOST
   })
 
