@@ -18,7 +18,7 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { AIReviewPane } from '../../components/AIReviewPane.jsx'
-import { getAICodeReview, AIError } from '../../ai.js'
+import { getAICodeReview, AIError } from '../../ai/index.js'
 import { loadConfig } from '../../config.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
@@ -1037,19 +1037,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         setTimeout(() => setAiReviewError(null), 3000)
         return
       }
-      const apiKey = config.ai?.anthropicApiKey
-      if (!apiKey) {
-        setAiReviewError('No API key — set Anthropic API key in Settings (s)')
-        setTimeout(() => setAiReviewError(null), 4000)
-        return
-      }
       setAiReviewLoading(true)
       setAiReviewError(null)
       getAICodeReview({
         diff:     diffText || '',
         prTitle:  sanitize(prMeta?.title || `PR #${prNumber}`),
         prBody:   sanitize((prMeta?.body || '').slice(0, 500)),
-        apiKey,
       })
         .then(result => { setAiReview(result) })
         .catch(err => {
