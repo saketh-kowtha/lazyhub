@@ -19,17 +19,24 @@
  *   state                          → current lazyhub state snapshot
  *   navigate  { view, prNumber, issueNumber }  → navigate the TUI
  *   open-file { file, line }       → open file in editor from IDE side
+ *   pr-for-branch { branch, repo? }
+ *                                  → { prNumber, prState?, ciStatus?, unresolvedThreads? }
+ *                                     or { prNumber: null } if no PR for the branch
  *
- * Events emitted to all clients:
- *   cursor-changed  { view, prNumber, file, line }
- *   view-changed    { view }
- *   pr-merged       { prNumber }
+ * Events emitted to all clients (via emitIPC):
+ *   cursor-changed    { view, prNumber, file, line }
+ *   view-changed      { view }
+ *   pr-merged         { prNumber }
+ *   pr-state-changed  { branch, prNumber, ciStatus, unresolvedThreads }
+ *     — broadcast helper provided; triggers (CI refresh, merge) ship in later phases.
+ *       Call emitIPC('pr-state-changed', payload) from any refresh path.
  */
 
 import { createServer } from 'net'
 import { join } from 'path'
 import { homedir } from 'os'
 import { writeFileSync, unlinkSync, existsSync } from 'fs'
+import { getPRStateForBranch as _defaultGetPRStateForBranch } from './executor.js'
 
 const SOCKET_POINTER = join(homedir(), '.lazyhub-socket')
 
@@ -37,6 +44,7 @@ let _server = null
 let _clients = new Set()
 let _stateGetter = () => ({})
 let _navigateHandler = null
+let _prForBranchHandler = _defaultGetPRStateForBranch
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -87,6 +95,20 @@ function handleMessage(socket, raw) {
       break
     }
 
+    case 'pr-for-branch': {
+      // nvim statusline / smart :LazyHubPR — look up PR for a branch
+      const branch = msg.branch
+      if (!branch) {
+        sendResponse(socket, id, { prNumber: null })
+        break
+      }
+      // Async handler — respond when the executor call resolves
+      ;(_prForBranchHandler(branch, msg.repo || null))
+        .then(result => sendResponse(socket, id, result))
+        .catch(() => sendResponse(socket, id, { prNumber: null }))
+      break
+    }
+
     default:
       sendResponse(socket, id, { error: `unknown type: ${type}` })
   }
@@ -98,15 +120,18 @@ function handleMessage(socket, raw) {
  * Start the IPC server.
  *
  * @param {object} opts
- * @param {Function} opts.getState      - returns current lazyhub state object
- * @param {Function} opts.onNavigate    - called when IDE sends a navigate request
+ * @param {Function} opts.getState         - returns current lazyhub state object
+ * @param {Function} opts.onNavigate       - called when IDE sends a navigate request
+ * @param {Function} [opts.onPRForBranch]  - async (branch, repo) => { prNumber, ... }
+ *                                           defaults to executor.getPRStateForBranch
  * @returns {string} socket path
  */
-export function startIPC({ getState, onNavigate } = {}) {
+export function startIPC({ getState, onNavigate, onPRForBranch } = {}) {
   if (_server) return socketPath()
 
-  if (getState)   _stateGetter     = getState
-  if (onNavigate) _navigateHandler = onNavigate
+  if (getState)        _stateGetter        = getState
+  if (onNavigate)      _navigateHandler    = onNavigate
+  if (onPRForBranch)   _prForBranchHandler = onPRForBranch
 
   const path = socketPath()
 
