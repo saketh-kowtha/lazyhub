@@ -402,7 +402,9 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const [dialog, setDialog] = useState(null)
   const [mergeOptions, setMergeOptions] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
-  const [popoverOpen, setPopoverOpen] = useState(false)
+  // Popover is auto-shown for the focused row. ESC dismisses it for the
+  // current row; any cursor change clears the dismissal so it reappears.
+  const [popoverDismissed, setPopoverDismissed] = useState(false)
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
 
@@ -436,6 +438,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
   const moveCursor = useCallback((delta) => {
     const next = Math.max(0, Math.min(items.length - 1, cursor + delta))
+    if (next !== cursor) setPopoverDismissed(false)
     setCursor(next)
     if (next < scrollOffset) setScrollOffset(next)
     if (next >= scrollOffset + effectiveHeight) setScrollOffset(next - effectiveHeight + 1)
@@ -444,7 +447,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     }
   }, [cursor, items.length, scrollOffset, effectiveHeight, loading])
 
-  const openDialog = useCallback((name) => { setDialog(name); setPopoverOpen(false) }, [])
+  const openDialog = useCallback((name) => { setDialog(name) }, [])
   const closeDialog = useCallback(() => setDialog(null), [])
 
   useInput((input, key) => {
@@ -565,11 +568,6 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       return
     }
 
-    // p — toggle PR detail popover
-    if (input === 'p') {
-      setPopoverOpen(v => !v)
-      return
-    }
   })
 
   // ── Dialogs ───────────────────────────────────────────────────────────────
@@ -793,7 +791,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
         {loading && items.length > 0 && <Text color={t.ui.dim}>⟳</Text>}
         {statusMsg
           ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
-          : <Text color={t.ui.dim}>[{FK.filterOpen}]open [{FK.filterClosed}]closed [{FK.filterMerged}]merged [s]scope [@]author [p]detail</Text>
+          : <Text color={t.ui.dim}>[{FK.filterOpen}]open [{FK.filterClosed}]closed [{FK.filterMerged}]merged [s]scope [@]author</Text>
         }
         {items.length >= _cfg.pageSize && (
           <Text color={t.ui.dim}> ({items.length})</Text>
@@ -845,8 +843,10 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
         </Box>
       )}
 
-      {/* Floating PR detail popover — position: absolute, no layout shift */}
-      {popoverOpen && selectedPR && (
+      {/* Floating PR detail popover — auto-shown for focused row; position:
+          absolute means no layout shift. ESC dismisses for current row;
+          moving the cursor re-shows. */}
+      {selectedPR && !dialog && !popoverDismissed && (
         <Popover
           anchor={popoverAnchor}
           popoverWidth={effectivePopoverWidth}
@@ -854,7 +854,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
           termCols={termCols}
           termRows={termRows}
           preferredSide="right"
-          onClose={() => setPopoverOpen(false)}
+          onClose={() => setPopoverDismissed(true)}
         >
           <PRDetailPopoverContentMemo
             pr={selectedPR}
