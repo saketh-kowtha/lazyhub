@@ -12,6 +12,13 @@
 import { useContext, useRef, useCallback } from 'react'
 import { AppContext } from '../context.js'
 
+/**
+ * usePaneState — read/write persisted pane view state from AppContext.
+ *
+ * @param {string} paneId - Unique pane identifier (e.g. 'prs', 'issues')
+ * @param {object} defaults - Default state values used on first mount
+ * @returns {[object, Function]} Tuple of [currentState, setStateFn]
+ */
 export function usePaneState(paneId, defaults) {
   const ctx = useContext(AppContext)
   const mapRef = ctx.paneStateMap  // Map<string, object> on AppContext

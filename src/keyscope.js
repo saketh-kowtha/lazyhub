@@ -35,6 +35,12 @@ const KeyScopeContext = createContext({
   claim: (_scope) => () => {},
 })
 
+/**
+ * KeyScopeProvider — context provider that manages the active keyboard scope stack.
+ *
+ * @param {{ children: import('react').ReactNode }} props - React children
+ * @returns {import('react').ReactElement} Provider element wrapping children
+ */
 export function KeyScopeProvider({ children }) {
   const [, forceRender] = useState(0)
   const stackRef = useRef([{ id: 'root', scope: 'global' }])
@@ -59,6 +65,10 @@ export function KeyScopeProvider({ children }) {
  * Claim a keyboard scope for this component.
  * Pass active=false to not claim (useful for conditional input modes).
  * Returns { isActive } — true iff this component's scope is the top of stack.
+ *
+ * @param {string} scope - Scope name from SCOPE_LEVEL (global/pane/view/overlay/dialog/input)
+ * @param {boolean} [active=true] - When false, scope is not claimed and isActive is always false
+ * @returns {{ isActive: boolean, activeScope: string }} current scope activation state
  */
 export function useKeyScope(scope, active = true) {
   const ctx = useContext(KeyScopeContext)

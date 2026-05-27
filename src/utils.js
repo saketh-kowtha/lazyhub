@@ -574,6 +574,13 @@ const _AUTHOR_COLOR_PALETTE = [
   '#7dcfff', '#7aa2f7', '#bb9af7', '#f7768e',
   '#9ece6a', '#e0af68', '#73daca', '#ff9e64',
 ]
+/**
+ * authorColor — deterministic accent color derived from a GitHub login string.
+ * Returns one of 8 palette colors, stable across renders for the same login.
+ *
+ * @param {string} login - GitHub username / login handle
+ * @returns {string|undefined} Hex color string, or undefined if login is falsy
+ */
 export function authorColor(login) {
   if (!login) return undefined
   const h = [...String(login)].reduce((a, c) => a + c.charCodeAt(0), 0)

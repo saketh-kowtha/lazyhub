@@ -17,7 +17,18 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      # Workaround for npm's optional-deps bug
+      # (https://github.com/npm/cli/issues/4828). Lockfiles generated on macOS
+      # omit Linux-specific native bindings for rollup/rolldown, so `npm ci`
+      # fails on ubuntu-latest. Even `npm install` respects the existing
+      # lockfile and skips the missing platform bindings. Removing the lockfile
+      # first forces a fresh resolution that includes the Linux bindings.
+      # Trade-off: CI no longer enforces lockfile determinism. Acceptable for a
+      # single-maintainer OSS project until npm 11+ ships the upstream fix.
+      - name: Install dependencies (lockfile-free)
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
 
       - name: Lint
         run: npm run lint
