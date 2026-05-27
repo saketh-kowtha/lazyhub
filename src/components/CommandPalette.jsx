@@ -1,200 +1,188 @@
 /**
- * CommandPalette.jsx — `:` command palette overlay.
+ * CommandPalette.jsx — fuzzy command palette overlay.
+ *
+ * Triggered by `:` or `<space><space>` from app.jsx.
+ * Fuzzy-searches every action available for the current view context.
+ *
  * Props:
- *   context  { pane, selectedItem, repo }
- *   onClose  ()
+ *   context   { pane, view, selectedItem, repo, themeName }
+ *   onClose   ()
  *   onNavigate  ({ pane, view, itemNumber, filter })
- *   onTheme  (themeName)
- *   themes   string[]
+ *   onTheme   (themeName)
+ *   onQuit    ()
+ *   themes    string[]
  */
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
-import { useTheme } from '../theme.js'
+import { useTheme }   from '../theme.js'
 import { useKeyScope } from '../keyscope.js'
-import {
-  mergePR, checkoutBranch, closePR, reviewPR,
-  addLabels, removeLabels, requestReviewers,
-} from '../executor.js'
-
-// ─── Command registry ─────────────────────────────────────────────────────────
-// Each command: { name, description, args?, needsPR?, fn(context, args) → Promise|void }
-
-function buildCommands({ pane, selectedItem, repo, onNavigate, onTheme, themes, onClose }) {
-  const pr = selectedItem
-  const hasPR = pane === 'prs' && pr != null
-
-  const cmds = []
-
-  // Navigation
-  cmds.push({
-    name: 'goto pr',
-    description: 'Go to PR by number  (e.g. :goto pr 42)',
-    args: '<number>',
-    fn: (_, args) => {
-      const num = parseInt(args, 10)
-      if (!isNaN(num)) onNavigate({ pane: 'prs', view: 'detail', itemNumber: num })
-    },
-  })
-  cmds.push({
-    name: 'goto issue',
-    description: 'Go to issue by number  (e.g. :goto issue 17)',
-    args: '<number>',
-    fn: (_, args) => {
-      const num = parseInt(args, 10)
-      if (!isNaN(num)) onNavigate({ pane: 'issues', view: 'detail', itemNumber: num })
-    },
-  })
-
-  // Filter
-  for (const f of ['open', 'closed', 'merged', 'all']) {
-    cmds.push({
-      name: `filter ${f}`,
-      description: `Filter ${pane === 'prs' ? 'PRs' : 'items'} to ${f}`,
-      fn: () => onNavigate({ pane, filter: f }),
-    })
-  }
-
-  // Theme
-  for (const t of (themes || [])) {
-    cmds.push({
-      name: `theme ${t}`,
-      description: `Switch to ${t} theme`,
-      fn: () => onTheme(t),
-    })
-  }
-
-  // PR-specific (only shown when a PR is selected)
-  if (hasPR) {
-    for (const strategy of ['merge', 'squash', 'rebase']) {
-      cmds.push({
-        name: `merge ${strategy}`,
-        description: `Merge PR #${pr.number} via --${strategy}`,
-        fn: () => mergePR(repo, pr.number, strategy),
-      })
-    }
-    cmds.push({
-      name: 'checkout',
-      description: `Checkout branch ${pr.headRefName || ''}`,
-      fn: () => checkoutBranch(repo, pr.number),
-    })
-    cmds.push({
-      name: 'approve',
-      description: `Approve PR #${pr.number}`,
-      fn: () => reviewPR(repo, pr.number, 'APPROVE'),
-    })
-    cmds.push({
-      name: 'close',
-      description: `Close PR #${pr.number}`,
-      fn: () => closePR(repo, pr.number),
-    })
-  }
-
-  // Pane navigation
-  for (const p of ['prs', 'issues', 'branches', 'actions', 'notifications']) {
-    cmds.push({
-      name: `pane ${p}`,
-      description: `Switch to ${p} pane`,
-      fn: () => onNavigate({ pane: p }),
-    })
-  }
-
-  return cmds
-}
+import { buildActions, filterActions, resolveContext } from '../ui/actions.js'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function CommandPalette({ context, onClose, onNavigate, onTheme, themes }) {
+/**
+ * @param {object} props
+ * @param {{ pane: string, view: string, selectedItem: object|null, repo: string, themeName?: string }} props.context
+ * @param {() => void} props.onClose
+ * @param {(opts: object) => void} props.onNavigate
+ * @param {(name: string) => void} props.onTheme
+ * @param {() => void} [props.onQuit]
+ * @param {string[]} props.themes
+ */
+export function CommandPalette({ context, onClose, onNavigate, onTheme, onQuit, themes }) {
   useKeyScope('dialog')
   const { t } = useTheme()
-  const [input, setInput] = useState('')
+  const [query, setQuery]   = useState('')
   const [cursor, setCursor] = useState(0)
   const [status, setStatus] = useState(null)
 
-  const commands = useMemo(
-    () => buildCommands({ ...context, onNavigate, onTheme, themes, onClose }),
-    [context, onNavigate, onTheme, themes, onClose]
-  )
+  const { pane, view = 'list', selectedItem, repo, themeName } = context || {}
+  const activeContext = useMemo(() => resolveContext(pane, view), [pane, view])
 
-  // Split input into command-prefix and trailing args
+  // Build the full action list once (callbacks are stable via onClose/onNavigate refs)
+  const allActions = useMemo(() => buildActions({
+    onNavigate: onNavigate || (() => {}),
+    onTheme:    onTheme    || (() => {}),
+    onClose:    onClose    || (() => {}),
+    onQuit:     onQuit     || (() => {}),
+    themes:     themes     || [],
+  }), [onNavigate, onTheme, onClose, onQuit, themes]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Resolve the leading "#<n>" shorthand before fuzzy scoring
+  // e.g. "pr 42" → navigate to PR #42; "issue 17" → issue #17
+  const handleNumberShorthand = useCallback((q) => {
+    const prMatch    = q.match(/^(?:pr\s+|#)(\d+)$/)
+    const issueMatch = q.match(/^(?:issue\s+|i\s*)(\d+)$/)
+    if (prMatch)    { onNavigate?.({ pane: 'prs',    view: 'detail', itemNumber: parseInt(prMatch[1],    10) }); onClose(); return true }
+    if (issueMatch) { onNavigate?.({ pane: 'issues', view: 'detail', itemNumber: parseInt(issueMatch[1], 10) }); onClose(); return true }
+    return false
+  }, [onNavigate, onClose])
+
   const filtered = useMemo(() => {
-    if (!input.trim()) return commands.slice(0, 8)
-    const q = input.toLowerCase()
-    return commands.filter(c => c.name.includes(q) || c.description.toLowerCase().includes(q)).slice(0, 8)
-  }, [input, commands])
+    return filterActions(allActions, query, activeContext, 9)
+  }, [allActions, query, activeContext])
+
+  // Keep cursor in bounds when filtered list changes length
+  const clampedCursor = Math.min(cursor, Math.max(0, filtered.length - 1))
 
   useInput((raw, key) => {
     if (key.escape) { onClose(); return }
-    if (key.upArrow) { setCursor(c => Math.max(0, c - 1)); return }
-    if (key.downArrow) { setCursor(c => Math.min(filtered.length - 1, c + 1)); return }
-    if (key.tab) {
-      // Autocomplete command name into input
-      if (filtered[cursor]) setInput(filtered[cursor].name + ' ')
+
+    if (key.upArrow || (key.ctrl && raw === 'p')) {
+      setCursor(c => Math.max(0, c - 1))
       return
     }
-    if (key.return) {
-      const cmd = filtered[cursor]
-      if (!cmd) return
-      // Extract args = everything after the command name
-      const argsPart = input.slice(cmd.name.length).trim()
-      try {
-        const result = cmd.fn(context, argsPart)
-        if (result && typeof result.then === 'function') {
-          setStatus('Running…')
-          result
-            .then(() => { setStatus('✓ Done'); setTimeout(onClose, 800) })
-            .catch(err => { setStatus(`✗ ${err.message}`); setTimeout(onClose, 2000) })
-        } else {
-          onClose()
-        }
-      } catch (err) {
-        setStatus(`✗ ${err.message}`)
-        setTimeout(onClose, 2000)
+    if (key.downArrow || (key.ctrl && raw === 'n')) {
+      setCursor(c => Math.min(filtered.length - 1, c + 1))
+      return
+    }
+
+    if (key.tab) {
+      // Autocomplete: fill query with selected action label
+      if (filtered[clampedCursor]) {
+        setQuery(filtered[clampedCursor].label + ' ')
+        setCursor(0)
       }
       return
     }
+
+    if (key.return) {
+      // Number shorthand — fast path
+      if (handleNumberShorthand(query.trim())) return
+
+      const action = filtered[clampedCursor]
+      if (!action) return
+
+      // Pass any trailing text after the action label as _args
+      const argsText = query.trim().startsWith(action.label.toLowerCase())
+        ? query.trim().slice(action.label.length).trim()
+        : ''
+
+      try {
+        const result = action.run({ ...context, themeName, _args: argsText })
+        if (result && typeof result.then === 'function') {
+          setStatus('Running…')
+          result
+            .then(() => { setStatus('✓ Done'); setTimeout(onClose, 600) })
+            .catch(err => { setStatus(`✗ ${err.message ?? String(err)}`); setTimeout(onClose, 2500) })
+        }
+        // If run() already called onClose() (most navigation actions do), we're done.
+        // If not (e.g. async exec actions), the status line will close us.
+      } catch (err) {
+        setStatus(`✗ ${err.message ?? String(err)}`)
+        setTimeout(onClose, 2500)
+      }
+      return
+    }
+
     if (key.backspace || key.delete) {
-      setInput(s => s.slice(0, -1))
+      setQuery(s => s.slice(0, -1))
       setCursor(0)
       return
     }
+
     if (raw && !key.ctrl && !key.meta) {
-      setInput(s => s + raw)
+      setQuery(s => s + raw)
       setCursor(0)
     }
   })
 
+  const MAX_VISIBLE = 9
+  const displayedActions = filtered.slice(0, MAX_VISIBLE)
+
   return (
-    <Box flexDirection="column" borderStyle="double" borderColor={t.ui.selected} paddingX={1}>
-      {/* Header + input */}
-      <Box gap={1}>
-        <Text color={t.ui.selected} bold>:</Text>
-        <Text color={t.ui.selected}>{input}</Text>
-        <Text color={t.ui.dim}>▍</Text>
-        {status && <Text color={status.startsWith('✓') ? t.ci.pass : t.ci.fail}>{status}</Text>}
+    <Box flexDirection="column" borderStyle="double" borderColor={t.ui.selected} paddingX={1} paddingY={0}>
+      {/* ── Header + query input ── */}
+      <Box gap={1} paddingY={0}>
+        <Text color={t.ui.selected} bold>▶</Text>
+        <Text color={t.ui.selected}>{query || ''}</Text>
+        <Text color={t.ui.muted}>▍</Text>
+        {status && (
+          <Text color={status.startsWith('✓') ? t.ci.pass : t.ci.fail}>{status}</Text>
+        )}
+        {!status && (
+          <Text color={t.ui.dim}>{activeContext}</Text>
+        )}
       </Box>
 
-      {/* Command list */}
-      {filtered.length > 0 && (
-        <Box flexDirection="column">
-          <Box><Text color={t.ui.dim}>{'─'.repeat(40)}</Text></Box>
-          {filtered.map((cmd, i) => {
-            const isCursor = i === cursor
-            return (
-              <Box key={cmd.name} gap={1}>
-                <Text color={isCursor ? t.ui.selected : t.ui.muted}>{isCursor ? '▶' : ' '}</Text>
-                <Text color={isCursor ? t.ui.selected : undefined} bold={isCursor} width={28}>
-                  {cmd.name}{cmd.args ? ` ${cmd.args}` : ''}
+      {/* ── Divider ── */}
+      <Box><Text color={t.ui.dim}>{'─'.repeat(46)}</Text></Box>
+
+      {/* ── Filtered action list ── */}
+      {displayedActions.length === 0 ? (
+        <Box paddingLeft={2}><Text color={t.ui.dim}>No matching actions</Text></Box>
+      ) : (
+        displayedActions.map((action, i) => {
+          const isCursor = i === clampedCursor
+          return (
+            <Box key={action.id} gap={1}>
+              <Text color={isCursor ? t.ui.selected : t.ui.dim}>{isCursor ? '▶' : ' '}</Text>
+              <Box width={32}>
+                <Text
+                  color={isCursor ? t.ui.selected : t.ui.muted}
+                  bold={isCursor}
+                  wrap="truncate"
+                >
+                  {action.label}
                 </Text>
-                <Text color={t.ui.dim}>{cmd.description}</Text>
               </Box>
-            )
-          })}
-        </Box>
+              {action.hint && (
+                <Text color={t.ui.dim} wrap="truncate">
+                  {action.hint}
+                </Text>
+              )}
+              {action.keys?.length > 0 && !action.hint && (
+                <Text color={t.ui.dim}>[{action.keys.join(', ')}]</Text>
+              )}
+            </Box>
+          )
+        })
       )}
 
-      <Box marginTop={0}>
-        <Text color={t.ui.dim}>[↑↓] nav  [Tab] complete  [Enter] run  [Esc] cancel</Text>
+      {/* ── Footer hint ── */}
+      <Box marginTop={0} paddingTop={0}>
+        <Text color={t.ui.dim}>[↑↓/Ctrl+np] nav  [Tab] fill  [Enter] run  [Esc] cancel</Text>
       </Box>
     </Box>
   )

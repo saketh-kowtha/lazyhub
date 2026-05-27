@@ -604,8 +604,16 @@ function App({ repo }) {
     }
 
     // Space — leader key (1500ms window)
+    // Second space within the window opens the command palette (<space><space>)
     if (input === ' ') {
-      if (leaderActive) return // already waiting — ignore double-space
+      if (leaderActive) {
+        // Double-space: open command palette
+        clearTimeout(leaderTimerRef.current)
+        setLeaderActive(false)
+        setShowPalette(true)
+        setAppMode('COMMAND')
+        return
+      }
       setLeaderActive(true)
       clearTimeout(leaderTimerRef.current)
       leaderTimerRef.current = setTimeout(() => {
@@ -695,13 +703,14 @@ function App({ repo }) {
           <Box flexDirection="row" flexGrow={1} overflow="hidden" justifyContent="center" alignItems="flex-start" paddingY={2}>
             <Box width={Math.min(columns - 4, 80)}>
               <CommandPalette
-                context={{ pane, selectedItem, repo }}
+                context={{ pane, view, selectedItem, repo, themeName: _config.theme }}
                 onClose={() => { setShowPalette(false); setAppMode('NORMAL') }}
                 onNavigate={(opts) => {
                   setShowPalette(false); setAppMode('NORMAL')
                   handleAINavigate(opts)
                 }}
                 onTheme={(name) => { setShowPalette(false); setAppMode('NORMAL'); setTheme(name) }}
+                onQuit={() => exit()}
                 themes={THEME_NAMES}
               />
             </Box>
