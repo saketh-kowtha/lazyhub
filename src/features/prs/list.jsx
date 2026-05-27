@@ -32,6 +32,7 @@ import { loadConfig, loadState, saveState } from '../../config.js'
 import { useTheme } from '../../theme/index.js'
 import { sanitize, TextInput, shortAge, authorColor, truncateToWidth, padEndWidth, padStartWidth } from '../../utils.js'
 import { PRListSkeleton } from '../../components/Skeleton.jsx'
+import { Popover } from '../../ui/Popover.jsx'
 
 const _cfg = loadConfig().pr
 
@@ -222,6 +223,117 @@ const MERGE_OPTIONS = [
   { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
 ]
 
+// ─── PR detail popover content ────────────────────────────────────────────────
+
+/** Default popover width in columns; clamped to terminal width at runtime. */
+const POPOVER_WIDTH = 52
+/** Height in rows: title(1) + meta(1) + divider(1) + body(6) + divider(1) + summary(1) + divider(1) + hint(1) + border(2) = 15 */
+const POPOVER_HEIGHT = 15
+
+/**
+ * Popover content component: shows PR title, meta, body excerpt, CI summary,
+ * unresolved thread count, and action hints.
+ *
+ * @param {object} props
+ * @param {object} props.pr  - PR object from the list (includes body, statusCheckRollup, etc.)
+ * @param {object} props.t   - Theme adapter object (schemeToT output).
+ * @param {object} props.scheme - Raw theme scheme from useTheme().
+ * @param {number} props.width  - Effective popover inner width (box width - 2 for borders).
+ */
+function PRDetailPopoverContent({ pr, t, scheme, width }) {
+  const innerW = Math.max(10, width - 2)  // subtract left+right border
+
+  // ── Meta line: state · @author → base · age
+  const stateLabel = pr.isDraft ? 'draft' : (pr.state || '').toLowerCase()
+  const stateColor = pr.isDraft ? t.pr.draft
+    : pr.state === 'OPEN'   ? t.pr.open
+    : pr.state === 'MERGED' ? t.pr.merged
+    : t.pr.closed
+  const author     = pr.author?.login || ''
+  const base       = pr.baseRefName || 'main'
+  const age        = shortAge(pr.updatedAt)
+
+  // ── Body excerpt: first ~6 non-empty lines, truncated
+  const bodyLines = (pr.body || '')
+    .split('\n')
+    .map(l => sanitize(l.trimEnd()))
+    .filter(l => l.length > 0)
+    .slice(0, 6)
+  while (bodyLines.length < 6) bodyLines.push('')
+
+  // ── CI summary
+  const checks   = pr.statusCheckRollup || []
+  const failing  = checks.filter(c => /failure|error/i.test(c.state || c.conclusion || '')).length
+  const pending  = checks.filter(c => /pending|in_progress|queued/i.test(c.state || c.conclusion || c.status || '')).length
+  const ciColor  = failing ? t.ci.fail : pending ? t.ci.pending : checks.length ? t.ci.pass : t.ui.dim
+  const ciLabel  = checks.length === 0 ? 'no checks'
+    : failing ? `✗ ${failing} failing`
+    : pending ? `● ${pending} pending`
+    : `✓ ci-pass`
+
+  // ── Unresolved threads (reviewThreads not in list payload; default 0)
+  const unresolvedCount = 0
+
+  const borderColor  = scheme.border.focused
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={borderColor}
+      width={width}
+    >
+      {/* Title */}
+      <Box paddingX={1}>
+        <Text color={scheme.fg.default} bold wrap="truncate">
+          {'#' + pr.number + ' ' + sanitize(pr.title || '')}
+        </Text>
+      </Box>
+      {/* Meta */}
+      <Box paddingX={1}>
+        <Text color={stateColor}>{stateLabel}</Text>
+        <Text color={t.ui.dim}> · </Text>
+        <Text color={t.ui.muted}>@{truncateToWidth(author, 12)}</Text>
+        <Text color={t.ui.dim}> → </Text>
+        <Text color={t.ui.muted}>{truncateToWidth(base, 16)}</Text>
+        <Text color={t.ui.dim}> · </Text>
+        <Text color={t.ui.dim}>{age}</Text>
+      </Box>
+      {/* Divider */}
+      <Box><Text color={t.ui.dim}>{'─'.repeat(innerW + 2)}</Text></Box>
+      {/* Body excerpt */}
+      {bodyLines.map((line, idx) => (
+        <Box key={idx} paddingX={1}>
+          <Text color={scheme.fg.default} wrap="truncate">
+            {line || ' '}
+          </Text>
+        </Box>
+      ))}
+      {/* Divider */}
+      <Box><Text color={t.ui.dim}>{'─'.repeat(innerW + 2)}</Text></Box>
+      {/* Summary */}
+      <Box paddingX={1}>
+        <Text color={ciColor}>{ciLabel}</Text>
+        <Text color={t.ui.dim}> · </Text>
+        <Text color={unresolvedCount > 0 ? t.ci.pending : t.ui.dim}>
+          {unresolvedCount} unresolved
+        </Text>
+      </Box>
+      {/* Divider */}
+      <Box><Text color={t.ui.dim}>{'─'.repeat(innerW + 2)}</Text></Box>
+      {/* Hint bar */}
+      <Box paddingX={1}>
+        <Text color={t.ui.dim} wrap="truncate">
+          {truncateToWidth('↩ open · a approve · m merge · [p] close', innerW)}
+        </Text>
+      </Box>
+    </Box>
+  )
+}
+
+// Prevent rerenders when other rows change focus (only rerender on PR data change)
+const PRDetailPopoverContentMemo = memo(PRDetailPopoverContent)
+
 // ─── PRList ───────────────────────────────────────────────────────────────────
 
 export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDiff, onPaneState }) {
@@ -231,6 +343,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const termRows = stdout?.rows || 24
+  const termCols = stdout?.columns || 80
   const height = listHeight || Math.max(3, termRows - 5)
   // Reserve rows for the expanded detail block; disable on tiny terminals
   const EXPAND_ROWS = 5
@@ -289,6 +402,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const [dialog, setDialog] = useState(null)
   const [mergeOptions, setMergeOptions] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
+  const [popoverOpen, setPopoverOpen] = useState(false)
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
 
@@ -330,7 +444,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     }
   }, [cursor, items.length, scrollOffset, effectiveHeight, loading])
 
-  const openDialog = useCallback((name) => setDialog(name), [])
+  const openDialog = useCallback((name) => { setDialog(name); setPopoverOpen(false) }, [])
   const closeDialog = useCallback(() => setDialog(null), [])
 
   useInput((input, key) => {
@@ -448,6 +562,12 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
         const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
         execa(cmd, [pr.url]).catch(() => {})
       })
+      return
+    }
+
+    // p — toggle PR detail popover
+    if (input === 'p') {
+      setPopoverOpen(v => !v)
       return
     }
   })
@@ -632,6 +752,21 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
   const visiblePRs = items.slice(scrollOffset, scrollOffset + effectiveHeight)
 
+  // Popover anchor coordinates:
+  //   Row 0 = filter/header bar.
+  //   Row 1..N = visible PR rows.
+  //   The selected row is at visual index (cursor - scrollOffset), 0-based.
+  //   +1 for the header bar above the rows.
+  const popoverRowIndex = cursor - scrollOffset
+  const popoverAnchor = {
+    x: 1,
+    y: 1 + popoverRowIndex,
+    width: innerWidth ? innerWidth - 2 : termCols - 2,
+    height: 1,
+  }
+  const effectivePopoverWidth  = Math.min(POPOVER_WIDTH, termCols - 4)
+  const effectivePopoverHeight = POPOVER_HEIGHT
+
   return (
     <Box flexDirection="column" flexGrow={1}>
       <Box paddingX={1} gap={1} overflow="hidden">
@@ -658,7 +793,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
         {loading && items.length > 0 && <Text color={t.ui.dim}>⟳</Text>}
         {statusMsg
           ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
-          : <Text color={t.ui.dim}>[{FK.filterOpen}]open [{FK.filterClosed}]closed [{FK.filterMerged}]merged [s]scope [@]author</Text>
+          : <Text color={t.ui.dim}>[{FK.filterOpen}]open [{FK.filterClosed}]closed [{FK.filterMerged}]merged [s]scope [@]author [p]detail</Text>
         }
         {items.length >= _cfg.pageSize && (
           <Text color={t.ui.dim}> ({items.length})</Text>
@@ -708,6 +843,26 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
             <Text color={t.ui.dim}>scroll down for more</Text>
           )}
         </Box>
+      )}
+
+      {/* Floating PR detail popover — position: absolute, no layout shift */}
+      {popoverOpen && selectedPR && (
+        <Popover
+          anchor={popoverAnchor}
+          popoverWidth={effectivePopoverWidth}
+          popoverHeight={effectivePopoverHeight}
+          termCols={termCols}
+          termRows={termRows}
+          preferredSide="right"
+          onClose={() => setPopoverOpen(false)}
+        >
+          <PRDetailPopoverContentMemo
+            pr={selectedPR}
+            t={t}
+            scheme={scheme}
+            width={effectivePopoverWidth}
+          />
+        </Popover>
       )}
     </Box>
   )
