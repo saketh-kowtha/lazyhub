@@ -61,7 +61,7 @@
     "eslint-plugin-jsdoc": "^62.8.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "ink-testing-library": "^4.0.0",
-    "knip": "^6.1.0",
+    "knip": "^6.14.2",
     "vite": "^8.0.0",
     "vitest": "^4.1.3"
   }
