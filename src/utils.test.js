@@ -105,6 +105,18 @@ describe('displayWidth', () => {
     // e + combining acute = 1 visible char
     expect(displayWidth('é')).toBe(1)
   })
+
+  it('handles ZWJ family emoji (treated as single wide character)', () => {
+    // 👨‍👩‍👧‍👦 is a multi-code-point ZWJ sequence but renders as a single emoji
+    // string-width treats it as width 2
+    expect(displayWidth('👨‍👩‍👧‍👦')).toBe(2)
+  })
+
+  it('handles regional indicator flag emoji (2 columns)', () => {
+    // 🇺🇸 is two regional indicator code points but renders as one flag
+    // string-width treats it as width 2
+    expect(displayWidth('🇺🇸')).toBe(2)
+  })
 })
 
 describe('truncateToWidth', () => {

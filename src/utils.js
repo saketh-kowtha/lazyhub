@@ -11,6 +11,7 @@ import { join, isAbsolute, dirname } from 'path'
 import { homedir } from 'os'
 import chalk from 'chalk'
 import hljs from 'highlight.js'
+import stringWidth from 'string-width'
 import { useTheme } from './theme.js'
 
 const LOG_FILE = join(homedir(), '.config', 'lazyhub', 'debug.log')
@@ -512,59 +513,15 @@ export function TextInput({ value = '', onChange, placeholder, focus, mask, onEn
  * characters (CJK ideographs, emoji, etc. which occupy 2 columns each) and
  * zero-width characters (combiners, ZWJ, VS-16, etc. which occupy 0 columns).
  *
- * This is a lightweight implementation that covers the cases GitHub API text
- * is likely to contain.  For full Unicode compliance use the `string-width`
- * package, but that requires an async import in ESM; this sync version is
- * sufficient for padding/truncation in list rows.
+ * Delegates to the `string-width` npm package for full Unicode compliance,
+ * including ZWJ family emoji, regional indicator flags, and variation selectors.
  *
  * @param {string} str
  * @returns {number} Visual column width
  */
 export function displayWidth(str) {
   if (!str) return 0
-  let width = 0
-  for (const char of str) {
-    const cp = char.codePointAt(0)
-    if (cp === undefined) continue
-    // Zero-width: control chars, ZWJ (0x200D), VS-16 (0xFE0F), combiners, etc.
-    if (cp === 0 || cp === 0x200B || cp === 0x200C || cp === 0x200D ||
-        cp === 0xFEFF || cp === 0xFE0F ||
-        (cp >= 0x0300 && cp <= 0x036F) ||   // Combining diacritics
-        (cp >= 0x1AB0 && cp <= 0x1AFF) ||   // Extended combining
-        (cp >= 0x1DC0 && cp <= 0x1DFF) ||   // Supplemental combining
-        (cp >= 0x20D0 && cp <= 0x20FF) ||   // Combining for symbols
-        (cp >= 0xFE20 && cp <= 0xFE2F)) {   // Combining half marks
-      continue
-    }
-    // Wide (2-column): CJK Unified, Katakana/Hiragana full-width, Emoji, etc.
-    if (
-      (cp >= 0x1100 && cp <= 0x115F) ||    // Hangul Jamo
-      cp === 0x2329 || cp === 0x232A ||
-      (cp >= 0x2E80 && cp <= 0x303E) ||    // CJK Radicals + Kangxi
-      (cp >= 0x3041 && cp <= 0x33BF) ||    // Hiragana/Katakana/CJK symbols
-      (cp >= 0x33FF && cp <= 0xA4C6) ||
-      (cp >= 0xA960 && cp <= 0xA97C) ||
-      (cp >= 0xAC00 && cp <= 0xD7A3) ||    // Hangul syllables
-      (cp >= 0xF900 && cp <= 0xFAFF) ||    // CJK Compatibility Ideographs
-      (cp >= 0xFE10 && cp <= 0xFE19) ||
-      (cp >= 0xFE30 && cp <= 0xFE6F) ||
-      (cp >= 0xFF01 && cp <= 0xFF60) ||    // Full-width ASCII
-      (cp >= 0xFFE0 && cp <= 0xFFE6) ||
-      (cp >= 0x1B000 && cp <= 0x1B001) ||
-      (cp >= 0x1F004 && cp <= 0x1F0CF) ||
-      (cp >= 0x1F18E && cp <= 0x1F251) ||
-      (cp >= 0x1F300 && cp <= 0x1F9FF) ||  // Misc symbols, emoji
-      (cp >= 0x1FA00 && cp <= 0x1FA6F) ||
-      (cp >= 0x1FA70 && cp <= 0x1FAFF) ||
-      (cp >= 0x20000 && cp <= 0x2FFFD) ||  // CJK Extension B–F
-      (cp >= 0x30000 && cp <= 0x3FFFD)
-    ) {
-      width += 2
-    } else {
-      width += 1
-    }
-  }
-  return width
+  return stringWidth(str)
 }
 
 /**
