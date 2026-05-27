@@ -279,6 +279,33 @@ export function loadConfig() {
   }
 }
 
+// ─── state.json — lightweight cross-session UI state (filter, scope, etc.) ───
+
+const STATE_PATH = join(homedir(), '.config', 'lazyhub', 'state.json')
+
+/**
+ * Load the persisted UI state file (creates it if missing).
+ * @returns {Object} The parsed state object (never throws).
+ */
+export function loadState() {
+  try {
+    if (existsSync(STATE_PATH)) return JSON.parse(readFileSync(STATE_PATH, 'utf8'))
+  } catch { /* ignore */ }
+  return {}
+}
+
+/**
+ * Persist a partial UI state patch to state.json.
+ * @param {Object} patch - Keys to merge into the current state.
+ */
+export function saveState(patch) {
+  try {
+    const current = loadState()
+    mkdirSync(dirname(STATE_PATH), { recursive: true })
+    writeFileSync(STATE_PATH, JSON.stringify({ ...current, ...patch }, null, 2) + '\n', 'utf8')
+  } catch { /* ignore — state is advisory */ }
+}
+
 // ─── saveConfig — persists partial or full config to disk ────────────────────
 
 /**

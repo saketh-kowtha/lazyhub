@@ -12,10 +12,11 @@ import chalk from 'chalk'
 import hljs from 'highlight.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
-import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo } from '../../executor.js'
+import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo, reviewPR } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
+import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { AIReviewPane } from '../../components/AIReviewPane.jsx'
 import { getAICodeReview, AIError } from '../../ai/index.js'
@@ -437,6 +438,8 @@ const FOOTER_KEYS_UNIFIED = [
   { key: 'c',    label: 'comment' },
   { key: 'r/e/d', label: 'reply/edit/delete thread' },
   { key: 'n/N',  label: 'next/prev thread or match' },
+  { key: 'a',    label: 'approve' },
+  { key: 'x',    label: 'request changes' },
   { key: 'A',    label: 'AI review' },
   { key: 'v',    label: 'comments' },
   { key: 's',    label: 'split view' },
@@ -456,6 +459,8 @@ const FOOTER_KEYS_SPLIT = [
   { key: 'c',    label: 'comment' },
   { key: 'r/e/d', label: 'reply/edit/delete thread' },
   { key: 'n/N',  label: 'next/prev thread or match' },
+  { key: 'a',    label: 'approve' },
+  { key: 'x',    label: 'request changes' },
   { key: 'A',    label: 'AI review' },
   { key: 'v',    label: 'comments' },
   { key: 's',    label: 'unified view' },
@@ -905,6 +910,8 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     if (dialog) return
 
     if (input === 'm' && prMeta?.state === 'OPEN') { setDialog('merge'); return }
+    if (input === 'a' && prMeta?.state === 'OPEN') { setDialog('approve-body'); return }
+    if (input === 'x' && prMeta?.state === 'OPEN') { setDialog('reqchanges-body'); return }
 
     // E — open current file at current line in editor
     if (input === 'E') {
@@ -1183,6 +1190,48 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
             })
         }}
         onCancel={() => setDialog('merge-admin')}
+      />
+    )
+  }
+
+  if (dialog === 'approve-body') {
+    return (
+      <FormCompose
+        title={`Approve PR #${prNumber}`}
+        fields={[{ name: 'body', label: 'Comment (optional)', type: 'text' }]}
+        onSubmit={async (values) => {
+          setDialog(null)
+          try {
+            await reviewPR(repo, prNumber, 'approve', values.body || '')
+            setCommentStatus(`✓ Approved PR #${prNumber}`)
+            setTimeout(() => setCommentStatus(null), 3000)
+          } catch (err) {
+            setCommentStatus(`✗ ${err.message}`)
+            setTimeout(() => setCommentStatus(null), 5000)
+          }
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
+  if (dialog === 'reqchanges-body') {
+    return (
+      <FormCompose
+        title={`Request changes on PR #${prNumber}`}
+        fields={[{ name: 'body', label: 'Describe the changes needed', type: 'text' }]}
+        onSubmit={async (values) => {
+          setDialog(null)
+          try {
+            await reviewPR(repo, prNumber, 'request-changes', values.body || '')
+            setCommentStatus(`✓ Requested changes on PR #${prNumber}`)
+            setTimeout(() => setCommentStatus(null), 3000)
+          } catch (err) {
+            setCommentStatus(`✗ ${err.message}`)
+            setTimeout(() => setCommentStatus(null), 5000)
+          }
+        }}
+        onCancel={() => setDialog(null)}
       />
     )
   }
