@@ -8,13 +8,32 @@ updates:
     versioning-strategy: increase
     # Security alerts open separately and are auto-opened by GitHub regardless.
     ignore:
-      # React majors must be coordinated with an Ink major bump.
-      # Ink 4 → 6 is its own upgrade project. Until then, stay on React 18.
+      # Block dev-tooling major bumps that have broken us before. Each of these
+      # requires a coordinated, manual upgrade — Dependabot bumping them blindly
+      # has caused real breakage (React 19 broke Ink reconciler; ESLint 10
+      # broke .eslintrc config; vitest 4 broke CI via rolldown's optional-deps
+      # native-binding bug). Re-enable individually only after a verified
+      # migration plan is ready.
+
+      # React 19 broke ink@4 reconciler. Tied to ink majors.
       - dependency-name: react
         update-types: [version-update:semver-major]
       - dependency-name: '@types/react'
         update-types: [version-update:semver-major]
       - dependency-name: ink
+        update-types: [version-update:semver-major]
+
+      # ESLint 9+ requires flat config (eslint.config.js); migration is its own project.
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      - dependency-name: eslint-plugin-jsdoc
+        update-types: [version-update:semver-major]
+      - dependency-name: eslint-plugin-react-hooks
+        update-types: [version-update:semver-major]
+
+      # Vitest 4 switched to rolldown which has cross-platform lockfile issues
+      # (https://github.com/npm/cli/issues/4828). Locking to 3.x.
+      - dependency-name: vitest
         update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
