@@ -67,7 +67,8 @@ function M.open_pr()
     return
   end
 
-  -- Ask IPC for the PR associated with this branch
+  -- Ask IPC for the PR associated with this branch.
+  -- IPC request has a short timeout; if lazyhub is not running, resp will be nil.
   _ipc().request({ type = 'pr-for-branch', branch = branch }, function(resp)
     local pr_num = resp and resp.prNumber
 
@@ -77,7 +78,7 @@ function M.open_pr()
         M.open()
       end)
     else
-      -- IPC unavailable or no PR: fall back to gh pr list directly
+      -- IPC unavailable or no PR found via IPC — fall back to gh pr list directly
       vim.fn.jobstart(
         { 'gh', 'pr', 'list', '--head', branch, '--json', 'number', '--limit', '1' },
         {
@@ -88,18 +89,24 @@ function M.open_pr()
             local fallback_num = ok and type(parsed) == 'table' and parsed[1] and parsed[1].number
 
             if fallback_num then
-              -- lazyhub not running — spawn with GHUI_PR env for initial navigation
-              -- Note: lazyhub bootstrap will honour GHUI_PR once that env var is wired;
-              -- until then it opens normally (graceful degradation per invariant 2).
-              _float().open_float('GHUI_PR=' .. tostring(fallback_num) .. ' lazyhub')
+              -- PR found — spawn lazyhub with GHUI_PR + GHUI_VIEW so bootstrap
+              -- can open directly to the diff view (bootstrap.js reads GHUI_PR /
+              -- GHUI_VIEW and passes them to app.jsx via env).
+              _float().open_float(
+                'GHUI_PR=' .. tostring(fallback_num) .. ' GHUI_VIEW=diff lazyhub'
+              )
             else
-              -- No PR for this branch — open lazyhub on the PR list
+              -- No PR for this branch — notify and open lazyhub on home/PR list
+              vim.notify(
+                '[lazyhub] No open PR for branch `' .. branch .. '`',
+                vim.log.levels.INFO
+              )
               M.open()
             end
           end,
           on_exit = function(_, code)
             if code ~= 0 then
-              -- gh not available or error — just open lazyhub normally
+              -- gh not available or returned an error — open lazyhub normally
               M.open()
             end
           end,

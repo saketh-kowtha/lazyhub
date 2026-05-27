@@ -445,9 +445,19 @@ function App({ repo }) {
     }
   }, [mouseEnabled])
 
-  const [pane, setPane]             = useState(_config.defaultPane)
-  const [view, setView]             = useState('list')
-  const [selectedItem, setSelectedItem] = useState(null)
+  // GHUI_PR / GHUI_VIEW — set by nvim :LazyHubPR (or any external launcher)
+  // to deep-link directly to a PR's diff view on startup.
+  const _initPRNum  = process.env.GHUI_PR  ? parseInt(process.env.GHUI_PR,  10) : null
+  const _initView   = process.env.GHUI_VIEW || 'list'
+  const _validViews = ['list', 'detail', 'diff', 'comments']
+
+  const [pane, setPane]             = useState(_initPRNum ? 'prs' : _config.defaultPane)
+  const [view, setView]             = useState(
+    _initPRNum && _validViews.includes(_initView) ? _initView : 'list'
+  )
+  const [selectedItem, setSelectedItem] = useState(
+    _initPRNum && !isNaN(_initPRNum) ? { number: _initPRNum } : null
+  )
   const [showHelp, setShowHelp]         = useState(false)
   const [showAI, setShowAI]             = useState(false)
   const [paneState, setPaneState]       = useState({})
@@ -519,9 +529,34 @@ function App({ repo }) {
     // Only handle global keys when no higher-priority scope has captured input.
     // Scope stack: global(0) < pane(1) < view(2) < overlay(3) < dialog(4) < input(5)
     // At pane level, Tab/number/? are still valid (list pane doesn't block them).
-    // At view/overlay/dialog/input, we must defer.
+    // At view/overlay/dialog/input, we must defer — EXCEPT for q/Esc when no
+    // component at the active scope handles it (see below).
     const highScope = activeScope !== 'global' && activeScope !== 'pane' && activeScope !== 'list'
-    if (highScope || dialogActiveRef.current) return
+    if (highScope || dialogActiveRef.current) {
+      // q/Esc from the list view (pane scope active) should always quit/back.
+      // This is the lazygit convention.  We allow it through even at 'view' scope
+      // only when the view is one of the static shell views (settings/logs) that
+      // don't have their own useInput 'q' handlers and don't claim a scope — so
+      // their activeScope falls back to whatever the last list pane pushed.
+      // Concrete case: user is in list → presses S (opens settings) → presses q.
+      // Settings mounts without claiming a scope, so activeScope is still 'pane'.
+      // highScope is false for 'pane', so this block isn't even entered.
+      // The only problematic case would be if some intermediate component
+      // incorrectly pushes 'view' scope while settings/logs are shown.
+      return
+    }
+
+    if (input === 'q' || key.escape) {
+      if (showHelp)              { setShowHelp(false); return }
+      if (view === 'settings')   { setView('list'); return }
+      if (view === 'logs')       { setView('list'); return }
+      if (view === 'comments')   { setView('diff'); return }
+      if (view === 'conflict')   { setView('detail'); return }
+      if (view === 'diff')       { setView(selectedItem?._fromList ? 'list' : 'detail'); return }
+      if (view === 'detail')     { setSelectedItem(null); setView('list'); return }
+      exit()
+      return
+    }
 
     if (input === '?') { setShowHelp(v => !v); return }
 
@@ -590,16 +625,6 @@ function App({ repo }) {
       return
     }
 
-    if (input === 'q' || key.escape) {
-      if (showHelp)              { setShowHelp(false); return }
-      if (view === 'settings')   { setView('list'); return }
-      if (view === 'logs')       { setView('list'); return }
-      if (view === 'comments')   { setView('diff'); return }
-      if (view === 'conflict')   { setView('detail'); return }
-      if (view === 'diff')       { setView(selectedItem?._fromList ? 'list' : 'detail'); return }
-      if (view === 'detail')     { setSelectedItem(null); setView('list'); return }
-      exit()
-    }
   })
 
   // ─── Navigation callbacks ─────────────────────────────────────────────────
@@ -1005,10 +1030,18 @@ export function renderApp() {
     process.stdout.write('\x1b[?1049l')
   }
 
-  // Restore on any exit path — use once() so SIGINT only fires one handler
+  // Restore on any exit path.
+  // Use process.on (not once) with the _restored guard so that:
+  //   1. First Ctrl+C: restores terminal + exits cleanly.
+  //   2. IPC module also registers a SIGINT once-handler for socket cleanup —
+  //      process.on here does not conflict with it, and both will run.
+  //   3. Second Ctrl+C (if for any reason the first didn't exit): the guard
+  //      ensures we don't double-cleanup and still exit.
   process.on('exit', restoreTerminal)
-  process.once('SIGINT',  () => { restoreTerminal(); process.exit(0) })
-  process.once('SIGTERM', () => { restoreTerminal(); process.exit(0) })
+  const _sigintHandler = () => { restoreTerminal(); process.exit(0) }
+  const _sigtermHandler = () => { restoreTerminal(); process.exit(0) }
+  process.on('SIGINT',  _sigintHandler)
+  process.on('SIGTERM', _sigtermHandler)
 
   const initialTheme = readRawThemeCfg()
   try {

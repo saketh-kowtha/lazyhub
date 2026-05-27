@@ -28,9 +28,9 @@ import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { NewPRDialog } from './NewPRDialog.jsx'
 import { AppContext } from '../../context.js'
 import { usePaneState } from '../../hooks/usePaneState.js'
-import { loadConfig } from '../../config.js'
+import { loadConfig, loadState, saveState } from '../../config.js'
 import { useTheme } from '../../theme.js'
-import { sanitize, TextInput, shortAge, authorColor } from '../../utils.js'
+import { sanitize, TextInput, shortAge, authorColor, truncateToWidth, padEndWidth, padStartWidth } from '../../utils.js'
 import { PRListSkeleton } from '../../components/Skeleton.jsx'
 
 const _cfg = loadConfig().pr
@@ -134,9 +134,11 @@ function PRExpandedDetail({ pr, t }) {
 }
 
 const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded }) => {
-  const authorLogin = String(pr.author?.login || '').slice(0, 11).padEnd(11)
+  // Use display-width-aware helpers so CJK/emoji authors don't break borders
+  const rawLogin    = String(pr.author?.login || '')
+  const authorLogin = padEndWidth(truncateToWidth(rawLogin, 11), 11)
   const authorClr   = authorColor(pr.author?.login)
-  const ageStr      = shortAge(pr.updatedAt).padStart(4)
+  const ageStr      = padStartWidth(shortAge(pr.updatedAt), 4)
   const timeColor   = ageColor(pr.updatedAt, t)
   const tw          = Math.max(8, titleWidth || 20)
 
@@ -186,10 +188,13 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const expansionEnabled = termRows >= 20
   const effectiveHeight = expansionEnabled ? Math.max(3, height - EXPAND_ROWS) : height
 
-  // Preserve filter/cursor/scroll across back-navigation from detail/diff
+  // Preserve filter/cursor/scroll across back-navigation from detail/diff.
+  // Seed scope from persisted state.json so it survives across sessions;
+  // fall back to config default (typically 'own') for first-ever launch.
+  const _persistedScope = loadState().prScope
   const [savedState, setSavedState] = usePaneState('prs', {
     filterStates: [_cfg.defaultFilter],
-    scope: _cfg.defaultScope,
+    scope: _persistedScope || _cfg.defaultScope,
     sortMode: 'default',
     authorFilter: '',
     limit: _cfg.pageSize,
@@ -226,7 +231,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     setFilterStatesArr(arr)
     setSavedState({ filterStates: arr })
   }
-  const setScope = (v) => { setScopeRaw(v); setSavedState({ scope: v }) }
+  const setScope = (v) => { setScopeRaw(v); setSavedState({ scope: v }); saveState({ prScope: v }) }
   const setSortMode = (v) => { setSortModeRaw(v); setSavedState({ sortMode: v }) }
   const setAuthorFilter = (v) => { setAuthorFilterRaw(v); setSavedState({ authorFilter: v }) }
   const setLimit = (v) => { setLimitRaw(v); setSavedState({ limit: typeof v === 'function' ? v(limit) : v }) }
@@ -612,8 +617,17 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       </Box>
 
       {!loading && !error && items.length === 0 && (
-        <Box paddingX={2} paddingY={1}>
-          <Text color={t.ui.muted}>No {[...filterStates].join('/')} pull requests. [f] change filter  [r] refresh</Text>
+        <Box paddingX={2} paddingY={1} flexDirection="column" gap={0}>
+          <Text color={t.ui.muted}>
+            No {[...filterStates].join('/')} pull requests
+            {scope === 'own' ? ' by you' : scope === 'reviewing' ? ' assigned for your review' : ''}.
+          </Text>
+          {scope === 'own' && (
+            <Text color={t.ui.dim}>[s] show all open PRs  [r] refresh</Text>
+          )}
+          {scope !== 'own' && (
+            <Text color={t.ui.dim}>[f] change filter  [s] change scope  [r] refresh</Text>
+          )}
         </Box>
       )}
 

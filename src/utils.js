@@ -118,12 +118,32 @@ export function stripAnsi(str) {
 }
 
 /**
- * Sanitize untrusted text for rendering by stripping ANSI codes.
+ * Decode HTML character entities (e.g. &amp; &#39; &lt; &gt; &quot;).
+ * Only decode the 5 common XML/HTML entities plus numeric decimal refs that
+ * GitHub's API is known to emit.  Do NOT use a full HTML parser here — we only
+ * need to undo what GitHub's REST/GraphQL serialiser escapes.
+ * @param {string} str - String possibly containing HTML entities.
+ * @returns {string} String with entities decoded.
+ */
+export function decodeHtmlEntities(str) {
+  if (typeof str !== 'string') return String(str || '')
+  return str
+    .replace(/&amp;/g,  '&')
+    .replace(/&lt;/g,   '<')
+    .replace(/&gt;/g,   '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g,  "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(parseInt(code, 10)))
+}
+
+/**
+ * Sanitize untrusted text for rendering by stripping ANSI codes and decoding
+ * HTML entities that GitHub's API may emit in text fields.
  * @param {string} str - The untrusted string from API.
  * @returns {string} A safe string for Ink rendering.
  */
 export function sanitize(str) {
-  return stripAnsi(String(str || '')).replace(/[\r\n\t]/g, ' ')
+  return stripAnsi(decodeHtmlEntities(String(str || ''))).replace(/[\r\n\t]/g, ' ')
 }
 
 /**
@@ -485,6 +505,111 @@ export function TextInput({ value = '', onChange, placeholder, focus, mask, onEn
       )}
     </Box>
   )
+}
+
+/**
+ * Return the display width of a string in a terminal, accounting for wide
+ * characters (CJK ideographs, emoji, etc. which occupy 2 columns each) and
+ * zero-width characters (combiners, ZWJ, VS-16, etc. which occupy 0 columns).
+ *
+ * This is a lightweight implementation that covers the cases GitHub API text
+ * is likely to contain.  For full Unicode compliance use the `string-width`
+ * package, but that requires an async import in ESM; this sync version is
+ * sufficient for padding/truncation in list rows.
+ *
+ * @param {string} str
+ * @returns {number} Visual column width
+ */
+export function displayWidth(str) {
+  if (!str) return 0
+  let width = 0
+  for (const char of str) {
+    const cp = char.codePointAt(0)
+    if (cp === undefined) continue
+    // Zero-width: control chars, ZWJ (0x200D), VS-16 (0xFE0F), combiners, etc.
+    if (cp === 0 || cp === 0x200B || cp === 0x200C || cp === 0x200D ||
+        cp === 0xFEFF || cp === 0xFE0F ||
+        (cp >= 0x0300 && cp <= 0x036F) ||   // Combining diacritics
+        (cp >= 0x1AB0 && cp <= 0x1AFF) ||   // Extended combining
+        (cp >= 0x1DC0 && cp <= 0x1DFF) ||   // Supplemental combining
+        (cp >= 0x20D0 && cp <= 0x20FF) ||   // Combining for symbols
+        (cp >= 0xFE20 && cp <= 0xFE2F)) {   // Combining half marks
+      continue
+    }
+    // Wide (2-column): CJK Unified, Katakana/Hiragana full-width, Emoji, etc.
+    if (
+      (cp >= 0x1100 && cp <= 0x115F) ||    // Hangul Jamo
+      cp === 0x2329 || cp === 0x232A ||
+      (cp >= 0x2E80 && cp <= 0x303E) ||    // CJK Radicals + Kangxi
+      (cp >= 0x3041 && cp <= 0x33BF) ||    // Hiragana/Katakana/CJK symbols
+      (cp >= 0x33FF && cp <= 0xA4C6) ||
+      (cp >= 0xA960 && cp <= 0xA97C) ||
+      (cp >= 0xAC00 && cp <= 0xD7A3) ||    // Hangul syllables
+      (cp >= 0xF900 && cp <= 0xFAFF) ||    // CJK Compatibility Ideographs
+      (cp >= 0xFE10 && cp <= 0xFE19) ||
+      (cp >= 0xFE30 && cp <= 0xFE6F) ||
+      (cp >= 0xFF01 && cp <= 0xFF60) ||    // Full-width ASCII
+      (cp >= 0xFFE0 && cp <= 0xFFE6) ||
+      (cp >= 0x1B000 && cp <= 0x1B001) ||
+      (cp >= 0x1F004 && cp <= 0x1F0CF) ||
+      (cp >= 0x1F18E && cp <= 0x1F251) ||
+      (cp >= 0x1F300 && cp <= 0x1F9FF) ||  // Misc symbols, emoji
+      (cp >= 0x1FA00 && cp <= 0x1FA6F) ||
+      (cp >= 0x1FA70 && cp <= 0x1FAFF) ||
+      (cp >= 0x20000 && cp <= 0x2FFFD) ||  // CJK Extension B–F
+      (cp >= 0x30000 && cp <= 0x3FFFD)
+    ) {
+      width += 2
+    } else {
+      width += 1
+    }
+  }
+  return width
+}
+
+/**
+ * Truncate a string to at most `maxWidth` display columns, accounting for
+ * wide characters.  Does NOT add ellipsis — callers can append if needed.
+ * @param {string} str
+ * @param {number} maxWidth
+ * @returns {string}
+ */
+export function truncateToWidth(str, maxWidth) {
+  if (!str || maxWidth <= 0) return ''
+  let width = 0
+  let result = ''
+  for (const char of str) {
+    const cw = displayWidth(char)
+    if (width + cw > maxWidth) break
+    result += char
+    width += cw
+  }
+  return result
+}
+
+/**
+ * Pad a string on the right to exactly `targetWidth` display columns.
+ * Uses spaces to fill.  Wide chars are counted correctly.
+ * @param {string} str
+ * @param {number} targetWidth
+ * @returns {string}
+ */
+export function padEndWidth(str, targetWidth) {
+  const w = displayWidth(str)
+  if (w >= targetWidth) return str
+  return str + ' '.repeat(targetWidth - w)
+}
+
+/**
+ * Pad a string on the left to exactly `targetWidth` display columns.
+ * @param {string} str
+ * @param {number} targetWidth
+ * @returns {string}
+ */
+export function padStartWidth(str, targetWidth) {
+  const w = displayWidth(str)
+  if (w >= targetWidth) return str
+  return ' '.repeat(targetWidth - w) + str
 }
 
 // Deterministic color from author login — 8 accent buckets, stable across renders

@@ -241,14 +241,20 @@ export function startIPC({ getState, onNavigate, onPRForBranch, onReviewComments
 
   _server.on('error', () => { /* ignore EADDRINUSE etc */ })
 
-  // Cleanup on exit
+  // Cleanup on exit.
+  // NOTE: Do NOT call process.exit() here — that is the app's responsibility.
+  // Registering process.once('SIGINT') here would conflict with app.jsx's
+  // process.on('SIGINT') handler: the first Ctrl+C would consume this once-
+  // handler AND app's persistent handler, causing the second Ctrl+C to have no
+  // handler at all (raw mode never restored).  Instead, just clean up the
+  // socket files on exit and rely on app.jsx to handle the signal exit.
   const cleanup = () => {
     try { unlinkSync(path) } catch { /* ignore */ }
     try { unlinkSync(SOCKET_POINTER) } catch { /* ignore */ }
   }
-  process.once('exit',    cleanup)
-  process.once('SIGINT',  () => { cleanup(); process.exit(0) })
-  process.once('SIGTERM', () => { cleanup(); process.exit(0) })
+  process.on('exit',   cleanup)
+  process.once('SIGINT',  cleanup)
+  process.once('SIGTERM', cleanup)
 
   return path
 }
