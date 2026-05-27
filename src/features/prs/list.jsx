@@ -29,11 +29,59 @@ import { NewPRDialog } from './NewPRDialog.jsx'
 import { AppContext } from '../../context.js'
 import { usePaneState } from '../../hooks/usePaneState.js'
 import { loadConfig, loadState, saveState } from '../../config.js'
-import { useTheme } from '../../theme.js'
+import { useTheme } from '../../theme/index.js'
 import { sanitize, TextInput, shortAge, authorColor, truncateToWidth, padEndWidth, padStartWidth } from '../../utils.js'
 import { PRListSkeleton } from '../../components/Skeleton.jsx'
 
 const _cfg = loadConfig().pr
+
+// ─── Theme adapter ────────────────────────────────────────────────────────────
+// Maps the new token scheme (src/theme/index.js) to the legacy `t.*` shape
+// consumed by every sub-component in this file.  All token values are 1:1
+// with the lazyhub-dark scheme values that existed before this migration.
+//
+// Token map:
+//   t.ui.muted    → scheme.fg.muted      (#768390 muted secondary text)
+//   t.ui.dim      → scheme.fg.subtle     (#545d68 tertiary/separator text)
+//   t.ui.selected → scheme.accent.primary (#539bf5 focused row / active)
+//   t.pr.*        → scheme.pr.*          (open/draft/merged/closed indicators)
+//   t.ci.*        → scheme.ci.*          (pass/fail/pending/skipped)
+//   t.review.*    → mapped to ci.pass/ci.fail (same semantic)
+//   t.pr.conflict → scheme.ci.pending    (amber; identical value in old theme)
+/**
+ * Maps a new-style token scheme object (src/theme/index.js) to the legacy
+ * `t.*` shape consumed by PR list sub-components.
+ *
+ * @param {object} scheme - Active scheme from useTheme().scheme
+ * @returns {{ ui: object, pr: object, ci: object, review: object }}
+ */
+export function schemeToT(scheme) {
+  return {
+    ui: {
+      muted:    scheme.fg.muted,
+      dim:      scheme.fg.subtle,
+      selected: scheme.accent.primary,
+    },
+    pr: {
+      open:     scheme.pr.open,
+      draft:    scheme.pr.draft,
+      merged:   scheme.pr.merged,
+      closed:   scheme.pr.closed,
+      // conflict had no token; old theme used ci.pending amber — keep that.
+      conflict: scheme.ci.pending,
+    },
+    ci: {
+      pass:    scheme.ci.pass,
+      fail:    scheme.ci.fail,
+      pending: scheme.ci.pending,
+      skipped: scheme.ci.skipped,
+    },
+    review: {
+      approved: scheme.ci.pass,
+      changes:  scheme.ci.fail,
+    },
+  }
+}
 
 // ─── Age colour ───────────────────────────────────────────────────────────────
 
@@ -178,7 +226,8 @@ const MERGE_OPTIONS = [
 
 export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDiff, onPaneState }) {
   useKeyScope('pane')
-  const { t } = useTheme()
+  const { scheme } = useTheme()
+  const t = schemeToT(scheme)
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const termRows = stdout?.rows || 24
@@ -667,7 +716,8 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 // ─── Sub-dialogs ──────────────────────────────────────────────────────────────
 
 function LabelDialog({ repo, pr, onClose }) {
-  const { t } = useTheme()
+  const { scheme } = useTheme()
+  const t = schemeToT(scheme)
   const { data: allLabels, loading } = useGh(listLabels, [repo])
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading labels…</Text></Box>
 
@@ -697,7 +747,8 @@ function LabelDialog({ repo, pr, onClose }) {
 }
 
 function AssigneeDialog({ repo, pr, onClose }) {
-  const { t } = useTheme()
+  const { scheme } = useTheme()
+  const t = schemeToT(scheme)
   const { data: collabs, loading } = useGh(listCollaborators, [repo])
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators…</Text></Box>
 
@@ -727,7 +778,8 @@ function AssigneeDialog({ repo, pr, onClose }) {
 
 // Simple inline author-search box
 function AuthorSearchDialog({ current, onSubmit, onCancel }) {
-  const { t } = useTheme()
+  const { scheme } = useTheme()
+  const t = schemeToT(scheme)
   const [text, setText] = useState(current || '')
   useKeyScope('dialog')
 
@@ -751,7 +803,8 @@ function AuthorSearchDialog({ current, onSubmit, onCancel }) {
 }
 
 function ReviewerDialog({ repo, pr, onClose }) {
-  const { t } = useTheme()
+  const { scheme } = useTheme()
+  const t = schemeToT(scheme)
   const { data: collabs, loading } = useGh(listCollaborators, [repo])
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators…</Text></Box>
 
