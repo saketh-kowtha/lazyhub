@@ -24,6 +24,7 @@ import { loadConfig } from '../../config.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
 import { TextInput, colorChalk, bgColorChalk, applyThemeStyle, sanitize, shortAge } from '../../utils.js'
+import { parseDiff, flattenFiles } from './diff-parser.js'
 import { CommentThread } from '../../components/CommentThread.jsx'
 import { Spinner } from '../../components/Spinner.jsx'
 import { openInEditor } from '../../editor.js'
@@ -189,55 +190,6 @@ function syntaxHighlight(code, lang, bgColor, t) {
   return result
 }
 
-// ─── Diff parser ──────────────────────────────────────────────────────────────
-
-function parseDiff(diffText) {
-  if (!diffText) return []
-  const files = []
-  let currentFile = null
-  let oldLine = 0
-  let newLine = 0
-
-  for (const raw of diffText.split('\n')) {
-    if (raw.startsWith('diff --git')) {
-      currentFile = { header: raw, filename: '', addCount: 0, delCount: 0, lines: [] }
-      files.push(currentFile)
-      oldLine = 0; newLine = 0
-    } else if (raw.startsWith('+++ ') && currentFile) {
-      currentFile.filename = raw.slice(4).replace(/^b\//, '')
-    } else if (raw.startsWith('@@') && currentFile) {
-      const m = raw.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
-      if (m) { oldLine = parseInt(m[1], 10); newLine = parseInt(m[2], 10) }
-      currentFile.lines.push({ type: 'hunk', text: raw, oldLine: null, newLine: null })
-    } else if (currentFile) {
-      if (raw.startsWith('+')) {
-        currentFile.lines.push({ type: 'add', text: raw.slice(1), oldLine: null, newLine: newLine++ })
-        currentFile.addCount++
-      } else if (raw.startsWith('-')) {
-        currentFile.lines.push({ type: 'del', text: raw.slice(1), oldLine: oldLine++, newLine: null })
-        currentFile.delCount++
-      } else {
-        currentFile.lines.push({
-          type: 'ctx',
-          text: raw.startsWith(' ') ? raw.slice(1) : raw,
-          oldLine: oldLine++,
-          newLine: newLine++,
-        })
-      }
-    }
-  }
-  return files
-}
-
-function flattenFiles(files) {
-  const rows = []
-  for (const file of files) {
-    rows.push({ type: 'file-header', filename: file.filename, addCount: file.addCount, delCount: file.delCount })
-    for (const line of file.lines) rows.push({ ...line, filename: file.filename })
-  }
-  return rows
-}
-
 // ─── File tree builder ────────────────────────────────────────────────────────
 
 function buildTreeRows(files) {
@@ -317,6 +269,8 @@ const DiffLine = React.memo(({ row, isSelected, lang, isMatch, t }) => {
     cur = ' '
   }
 
+  // Gutter: oldLn(4) │ newLn(4) sign(2) code
+  // · · · ·  — blank slots use spaces so columns stay aligned
   const gutterOld = row.oldLine != null ? String(row.oldLine).padStart(4) : '    '
   const gutterNew = row.newLine != null ? String(row.newLine).padStart(4) : '    '
 
@@ -332,7 +286,7 @@ const DiffLine = React.memo(({ row, isSelected, lang, isMatch, t }) => {
   if (row.type === 'hunk') {
     return (
       <Text wrap="truncate">
-        {cur + applyThemeStyle(`${gutterOld}${gutterNew}   ${row.text}`, t.diff.hunkFg, t.diff.hunkBg)}
+        {cur + applyThemeStyle(`${gutterOld}│${gutterNew}   ${row.text}`, t.diff.hunkFg, t.diff.hunkBg)}
       </Text>
     )
   }
@@ -340,21 +294,21 @@ const DiffLine = React.memo(({ row, isSelected, lang, isMatch, t }) => {
   if (row.type === 'add') {
     const signFg = isSelected ? '#ffffff' : t.diff.addSign
     const sign   = isSelected ? '▶' : '+'
-    const gutter = applyThemeStyle(`${gutterOld}${gutterNew} ${sign} `, signFg, t.diff.addBg)
+    const gutter = applyThemeStyle(`${gutterOld}│${gutterNew} ${sign} `, signFg, t.diff.addBg)
     return <Text wrap="truncate">{cur + gutter + syntaxHighlight(row.text, lang, t.diff.addBg, t)}</Text>
   }
 
   if (row.type === 'del') {
     const signFg = isSelected ? '#ffffff' : t.diff.delSign
     const sign   = isSelected ? '▶' : '-'
-    const gutter = applyThemeStyle(`${gutterOld}${gutterNew} ${sign} `, signFg, t.diff.delBg)
+    const gutter = applyThemeStyle(`${gutterOld}│${gutterNew} ${sign} `, signFg, t.diff.delBg)
     return <Text wrap="truncate">{cur + gutter + syntaxHighlight(row.text, lang, t.diff.delBg, t)}</Text>
   }
 
-  // ctx — highlight the full gutter+code with cursor bg when selected
+  // ctx — both old and new line numbers visible with │ separator between them
   const bgGutter = isSelected
-    ? applyThemeStyle(`${gutterOld}${gutterNew}   `, t.ui.selected, t.diff.cursorBg)
-    : colorChalk(t.ui.dim)(`${gutterOld}${gutterNew}   `)
+    ? applyThemeStyle(`${gutterOld}│${gutterNew}   `, t.ui.selected, t.diff.cursorBg)
+    : colorChalk(t.ui.dim)(`${gutterOld}│${gutterNew}   `)
   const code = syntaxHighlight(row.text, lang, isSelected ? t.diff.cursorBg : null, t)
   return <Text wrap="truncate">{cur + bgGutter + code}</Text>
 })
@@ -499,7 +453,7 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
     if (row.type === 'ctx') {
       const lang = langCache.get(row.filename)
       const code = syntaxHighlight(row.text, lang, null, t)
-      const gutter = colorChalk(t.ui.dim)(`${String(row.oldLine ?? '').padStart(4)}${String(row.newLine ?? '').padStart(4)}   `)
+      const gutter = colorChalk(t.ui.dim)(`${String(row.oldLine ?? '').padStart(4)}│${String(row.newLine ?? '').padStart(4)}   `)
       const line = isSelected ? applyThemeStyle(gutter + code, null, t.diff.cursorBg) : gutter + code
       result.push(
         <Box key={idx}>
@@ -518,14 +472,14 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
       const lang = langCache.get(row.filename)
 
       const delCur    = isSelected ? applyThemeStyle('▶', '#ffffff', t.diff.cursorBg) : ' '
-      const delGutter = applyThemeStyle(`${String(row.oldLine ?? '').padStart(4)}     - `, isSelected ? '#ffffff' : t.diff.delSign, isSelected ? t.diff.cursorBg : t.diff.delBg)
+      const delGutter = applyThemeStyle(`${String(row.oldLine ?? '').padStart(4)}│     - `, isSelected ? '#ffffff' : t.diff.delSign, isSelected ? t.diff.cursorBg : t.diff.delBg)
       const delCode   = syntaxHighlight(row.text, lang, isSelected ? t.diff.cursorBg : t.diff.delBg, t)
       const delLine   = delCur + delGutter + delCode
 
       if (nextRow && nextRow.type === 'add') {
         const addSelected = idx === cursor || (scrollOffset + i + 1) === cursor
         const addCur    = addSelected ? applyThemeStyle('▶', '#ffffff', t.diff.cursorBg) : ' '
-        const addGutter = applyThemeStyle(`    ${String(nextRow.newLine ?? '').padStart(4)} + `, addSelected ? '#ffffff' : t.diff.addSign, addSelected ? t.diff.cursorBg : t.diff.addBg)
+        const addGutter = applyThemeStyle(`    │${String(nextRow.newLine ?? '').padStart(4)} + `, addSelected ? '#ffffff' : t.diff.addSign, addSelected ? t.diff.cursorBg : t.diff.addBg)
         const addCode   = syntaxHighlight(nextRow.text, langCache.get(nextRow.filename), addSelected ? t.diff.cursorBg : t.diff.addBg, t)
         const addLine   = addCur + addGutter + addCode
 
@@ -554,7 +508,7 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
       // Unpaired add
       const lang    = langCache.get(row.filename)
       const addCur  = isSelected ? applyThemeStyle('▶', '#ffffff', t.diff.cursorBg) : ' '
-      const addGutter = applyThemeStyle(`    ${String(row.newLine ?? '').padStart(4)} + `, isSelected ? '#ffffff' : t.diff.addSign, isSelected ? t.diff.cursorBg : t.diff.addBg)
+      const addGutter = applyThemeStyle(`    │${String(row.newLine ?? '').padStart(4)} + `, isSelected ? '#ffffff' : t.diff.addSign, isSelected ? t.diff.cursorBg : t.diff.addBg)
       const addCode   = syntaxHighlight(row.text, lang, isSelected ? t.diff.cursorBg : t.diff.addBg, t)
       const addLine   = addCur + addGutter + addCode
 
