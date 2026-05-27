@@ -3,7 +3,7 @@
  * Max 10 entries per type. Entries: { type: 'pr'|'issue', repo, number, title, updatedAt }
  */
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
@@ -26,6 +26,12 @@ function saveRecent(entries) {
   } catch {}
 }
 
+/**
+ * useRecent — manage a typed list of recently viewed items persisted to disk.
+ *
+ * @param {'pr'|'issue'} [type='pr'] - Item type to filter and persist
+ * @returns {{ entries: Array<object>, addRecent: Function, clearRecent: Function }} recent state and mutators
+ */
 export function useRecent(type = 'pr') {
   const [entries, setEntries] = useState(() => loadRecent().filter(e => e.type === type))
 

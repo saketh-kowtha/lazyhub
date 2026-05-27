@@ -17,6 +17,12 @@ const BREAKPOINTS = [
   { name: 'ultrawide', minCols: 180, sidebarWidth: 22, previewWidth: 44, aiPanelWidth: 48 },
 ]
 
+/**
+ * useLayout hook — returns current layout measurements derived from terminal size.
+ * Applies config overrides on top of the matched breakpoint defaults.
+ *
+ * @returns {{ mode: string, cols: number, rows: number, sidebarWidth: number, previewWidth: number, aiPanelWidth: number, borderStyle: string|undefined, compactFooter: boolean, showSidebar: boolean, showPreview: boolean, showAIPanel: boolean, listHeight: number }} layout object
+ */
 export function useLayout() {
   const { stdout } = useStdout()
   const cols = stdout?.columns || 80

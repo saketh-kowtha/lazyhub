@@ -17,6 +17,9 @@ import { parseDiff, flattenFiles } from './diff-parser.js'
  * Note: the `--- a/file` header line begins with `-` so parseDiff (faithfully)
  * treats it as a del row. We omit it here to keep fixtures unambiguous; in
  * production the `--- ` line is harmless noise rendered as a dim deleted row.
+ *
+ * @param {string} codeLine - The added-line content to inject into the fixture.
+ * @returns {string} A unified-diff string containing the codeLine as a + row.
  */
 function makeDiff(codeLine) {
   return [
