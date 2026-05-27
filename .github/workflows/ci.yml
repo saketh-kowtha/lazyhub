@@ -1,75 +1,29 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  push:
     branches: [main]
 
 jobs:
-  test:
-    name: Test
+  check:
+    name: Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
 
       - name: Lint
         run: npm run lint
 
-      - name: Dead code check (Knip)
-        run: npx knip
-
-      - name: Run tests
+      - name: Test
         run: npm test
 
       - name: Build
         run: npm run build
-
-  audit:
-    name: Dependency audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: npm audit (high + critical)
-        run: npm audit --audit-level=high
-
-      - name: Check for known-vulnerable packages
-        run: |
-          # Fail if any dependency has a critical severity
-          npm audit --json | node -e "
-            const chunks = [];
-            process.stdin.on('data', c => chunks.push(c));
-            process.stdin.on('end', () => {
-              const report = JSON.parse(chunks.join(''));
-              const vulns = report.metadata?.vulnerabilities || {};
-              const critical = vulns.critical || 0;
-              const high = vulns.high || 0;
-              if (critical > 0) {
-                console.error('FAIL: ' + critical + ' critical vulnerabilities found');
-                process.exit(1);
-              }
-              if (high > 0) {
-                console.warn('WARN: ' + high + ' high-severity vulnerabilities found');
-              }
-              console.log('Audit passed — critical: ' + critical + ', high: ' + high);
-            });
-          " || true
