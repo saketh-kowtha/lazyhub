@@ -50,7 +50,7 @@
     "execa": "^8.0.1",
     "highlight.js": "^11.9.0",
     "ink": "^4.4.1",
-    "react": "^18.2.0",
+    "react": "^19.2.6",
     "timeago.js": "^4.0.2"
   },
   "devDependencies": {
