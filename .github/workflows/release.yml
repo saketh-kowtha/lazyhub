@@ -86,7 +86,7 @@ jobs:
 
       - name: Push Homebrew formula
         if: steps.check_tap.outputs.present == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           VERSION: ${{ steps.sha.outputs.version }}
           SHA256:  ${{ steps.sha.outputs.sha }}
