@@ -7,6 +7,15 @@ updates:
     open-pull-requests-limit: 5
     versioning-strategy: increase
     # Security alerts open separately and are auto-opened by GitHub regardless.
+    ignore:
+      # React majors must be coordinated with an Ink major bump.
+      # Ink 4 → 6 is its own upgrade project. Until then, stay on React 18.
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: '@types/react'
+        update-types: [version-update:semver-major]
+      - dependency-name: ink
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
