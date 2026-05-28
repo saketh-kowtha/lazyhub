@@ -1,4 +1,3 @@
-/** lazyhub-light.js — Default light color scheme for terminal readability. */
 /**
  * lazyhub-light.js — Light color scheme (daylight counterpart to lazyhub-dark).
  *

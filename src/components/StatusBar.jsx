@@ -1,4 +1,5 @@
 /** StatusBar.jsx — Application status bar showing context and global state. */
+
 import React, { useState, useEffect } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useTheme } from '../theme.js'

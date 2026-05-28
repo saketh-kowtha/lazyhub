@@ -1,4 +1,3 @@
-/** prompt.js — Pure prompt-building helpers and system templates for AI. */
 /**
  * src/ai/prompt.js — Pure prompt-building helpers.
  *

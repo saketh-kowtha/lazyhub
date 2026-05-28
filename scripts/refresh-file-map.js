@@ -58,11 +58,11 @@ function getCategory(filePath) {
   return null; // Uncategorized
 }
 
-// Extract JSDoc header from first 10 lines
+// Extract JSDoc header from first 100 lines
 async function extractDescription(filePath) {
   try {
     const content = await readFile(filePath, 'utf8');
-    const lines = content.split('\n').slice(0, 10);
+    const lines = content.split('\n').slice(0, 100);
     const joined = lines.join('\n');
 
     // Match JSDoc pattern: /** ... */
@@ -79,8 +79,10 @@ async function extractDescription(filePath) {
       .join(' ')
       .trim();
 
-    // Remove filename prefix (everything before — or -)
-    text = text.replace(/^[^—-]*[—-]\s*/, '').trim();
+    // Remove filename prefix (everything before em-dash). Only em-dash, NOT
+    // hyphen — filenames like bg-detect.js or catppuccin-latte.js contain
+    // hyphens, so stripping on hyphen would chop the filename itself.
+    text = text.replace(/^[^—]*—\s*/, '').trim();
 
     return text || `(no header — inferred: ${basename(filePath, extname(filePath))})`;
   } catch {

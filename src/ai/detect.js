@@ -1,4 +1,3 @@
-/** detect.js — AI provider auto-detection and selection logic. */
 /**
  * src/ai/detect.js — Provider auto-detection and selection.
  *

@@ -1,4 +1,3 @@
-/** bg-detect.js — Terminal background brightness detection for theme selection. */
 /**
  * bg-detect.js — Terminal background brightness detection.
  *
@@ -22,12 +21,6 @@
  *   We extract the LAST numeric segment to get the bg value.
  *
  * @param {NodeJS.ProcessEnv} [env] — injectable for testing; defaults to process.env
- * @returns {'dark' | 'light' | 'unknown'}
- */
-/**
- * Detect terminal background brightness from environment variables.
- *
- * @param {NodeJS.ProcessEnv} [env=process.env]
  * @returns {'dark' | 'light' | 'unknown'}
  */
 export function detectBackground(env = process.env) {

@@ -1,4 +1,3 @@
-/** ConflictView.jsx — Pull request merge-conflict resolution view. */
 /**
  * src/features/prs/ConflictView.jsx — GitHub PR merge-conflict resolution
  *

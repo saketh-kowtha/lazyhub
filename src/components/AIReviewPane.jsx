@@ -1,4 +1,3 @@
-/** AIReviewPane.jsx — Interactive step-through UI for AI code reviews. */
 /**
  * src/components/AIReviewPane.jsx — Interactive step-through AI code review
  *
