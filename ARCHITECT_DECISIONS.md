@@ -126,10 +126,15 @@ sessions don't need conversation history to know them.
 | Doc | Purpose | Read when |
 |---|---|---|
 | `ARCHITECT_DECISIONS.md` (this file) | Locked cross-cutting decisions | Every fresh session |
+| `ARCHITECTURE.md` | High-level codebase architecture | Onboarding to the codebase; before any cross-cutting refactor |
+| `GLOSSARY.md` | Authoritative definitions for every domain term | Whenever an unfamiliar term appears |
+| `FILE_MAP.md` | Concept → owning files crosswalk | Before greping; answers "where is X?" |
 | `DESIGN_REVAMP.md` | Visual design system, theme tokens, screen layouts | Any UI / theme issue |
 | `CI_SIMPLIFICATION.md` | Phase D CI design | Touching `.github/workflows/` |
 | `MANUAL_TEST_PLAN.md` | Pre-release smoke test steps | Before tagging a release |
 | `POLISH.md` | UX polish backlog | Phase H, Phase C step 8 |
+
+**Reading order for a cold session:** this file → `GLOSSARY.md` (skim) → `FILE_MAP.md` (skim) → the issue body → any doc the issue cites.
 
 ## Roles (orchestration rules)
 
