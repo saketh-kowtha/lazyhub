@@ -33,3 +33,13 @@ Architect specs, decisions, and reference material. Start here if you're picking
 - Cross-references **from the issue board, README, or any path outside `docs/`** use the `docs/` prefix.
 - If you add a new architect doc, update the table above and the doc map in `ARCHITECT_DECISIONS.md`.
 - `TEST_PLAN.md` predates `MANUAL_TEST_PLAN.md` — flagged for the maintainer to dedupe or delete.
+
+## Maintenance
+
+Regenerate `FILE_MAP.md` after any major source refactor:
+
+```bash
+npm run docs:refresh
+```
+
+This walks `src/`, reads each file's JSDoc header, and rewrites `FILE_MAP.md`. Commit the result alongside the refactor.
