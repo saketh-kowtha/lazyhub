@@ -1,3 +1,4 @@
+/** lazyhub-dark.js — Default dark color scheme for terminal readability. */
 /**
  * lazyhub-dark.js — Default dark color scheme.
  *

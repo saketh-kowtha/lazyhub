@@ -1,3 +1,4 @@
+/** CommandPalette.jsx — fuzzy command palette overlay for executing actions. */
 /**
  * CommandPalette.jsx — fuzzy command palette overlay.
  *

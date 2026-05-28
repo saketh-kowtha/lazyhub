@@ -1,3 +1,4 @@
+/** tokens.js — Token taxonomy schema for the design system. */
 /**
  * tokens.js — Token taxonomy schema for lazyhub's design system.
  *

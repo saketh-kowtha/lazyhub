@@ -1,3 +1,4 @@
+/** index.js — Public API for AI code review and provider management. */
 /**
  * src/ai/index.js — Public API for AI-powered code review.
  *

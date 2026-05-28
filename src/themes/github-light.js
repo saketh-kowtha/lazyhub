@@ -1,3 +1,4 @@
+/** github-light.js — GitHub Light color scheme. */
 export default {
   pr:    { open: '#1a7f37', merged: '#8250df', closed: '#cf222e', draft: '#6e7781', conflict: '#9a6700' },
   issue: { open: '#1a7f37', closed: '#6e7781' },

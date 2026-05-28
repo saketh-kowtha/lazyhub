@@ -1,3 +1,4 @@
+/** index.js — Public API for the theme system and React context. */
 /**
  * src/theme/index.js — Public API for the lazyhub theme system.
  *

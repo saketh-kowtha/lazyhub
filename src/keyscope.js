@@ -1,3 +1,4 @@
+/** keyscope.js — Keyboard focus and input scope management for Ink TUI. */
 /**
  * keyscope.js — keyboard scope isolation for Ink TUI.
  *

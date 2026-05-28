@@ -1,3 +1,4 @@
+/** tokyo-night.js — Tokyo Night color scheme. */
 export default {
   pr:    { open: '#9ece6a', merged: '#bb9af7', closed: '#f7768e', draft: '#565f89', conflict: '#e0af68' },
   issue: { open: '#9ece6a', closed: '#565f89' },

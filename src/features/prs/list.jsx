@@ -1,3 +1,4 @@
+/** list.jsx — Pull request list pane with filtering and navigation. */
 /**
  * src/features/prs/list.jsx — PR list pane
  *

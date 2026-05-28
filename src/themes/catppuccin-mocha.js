@@ -1,3 +1,4 @@
+/** catppuccin-mocha.js — Catppuccin Mocha (dark) color scheme. */
 export default {
   pr:    { open: '#a6e3a1', merged: '#cba6f7', closed: '#f38ba8', draft: '#6c7086', conflict: '#f9e2af' },
   issue: { open: '#a6e3a1', closed: '#6c7086' },
