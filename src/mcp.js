@@ -1,4 +1,3 @@
-/** mcp.js — Model Context Protocol (MCP) server for AI tool-use. */
 /**
  * src/mcp.js — MCP (Model Context Protocol) server mode
  *

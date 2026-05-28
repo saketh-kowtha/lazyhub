@@ -1,4 +1,3 @@
-/** useVirtualList.js — React hook for efficient virtualized rendering of long lists. */
 /**
  * src/hooks/useVirtualList.js
  *

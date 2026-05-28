@@ -1,4 +1,3 @@
-/** CustomPane.jsx — Generic pane renderer for user-defined tabs. */
 /**
  * CustomPane.jsx — generic pane renderer for user-defined tabs.
  *
