@@ -12,6 +12,7 @@
     "start": "node build.js && node dist/lazyhub.js",
     "lint": "eslint src/",
     "test": "vitest run",
+    "docs:refresh": "node scripts/refresh-file-map.js",
     "prepublishOnly": "npm run build && npm test"
   },
   "files": [
