@@ -121,6 +121,45 @@ sessions don't need conversation history to know them.
 8. **ESLint pinned to ^8.** ESLint 9+ requires flat config migration; out of V1 scope.
 9. **vitest pinned to ^3.** vitest 4 breaks via rolldown's npm optional-deps bug.
 
+## Spec discipline for fresh sessions
+
+Every issue body is a spec. If you are an AI agent (Claude, Gemini, Codex, Cursor, or otherwise) picking up an issue cold, treat these as **hard rules** alongside the issue's own acceptance criteria. They prevent the most common literal-executor failure modes that bit us in PR #162 (duplicate JSDoc blocks because the spec didn't say "don't duplicate").
+
+### 1. Don't duplicate
+
+If the file, section, JSDoc block, function, config key, route, or any other named thing **already exists in some form**, modify it in place. Do not add a parallel/duplicate copy.
+
+- Adding a JSDoc header? Check if one already exists at the top of the file. If yes, edit its first line; don't add a second block.
+- Adding a config key? Check the existing TOML schema. If a similar key exists, extend it; don't shadow it.
+- Adding a CLI flag? Check the existing flag parser; don't register the same flag twice.
+- Adding a test file? Check the existing test file alongside the source; extend it; don't create `foo.test2.js`.
+
+When in doubt: read the current state, then decide. Never add without checking.
+
+### 2. Verify the current state before assuming
+
+Before modifying any file, read it. Don't assume "the spec says it has X" — confirm. Codebases drift. If the spec and the code disagree, the **code is the ground truth**; flag the spec discrepancy back in the issue thread.
+
+### 3. Idempotency check
+
+Whatever you ship, ask: "if a second person ran this same spec from scratch on the result of my work, would they produce zero diff?" If yes, you're idempotent. If no, you've made the spec unrepeatable — fix that before claiming done.
+
+### 4. Explicit negative constraints win
+
+If the issue body says "do X," also obey the implicit "don't do Y" rules for the file you're touching: don't reformat unrelated code, don't bump versions, don't rename adjacent symbols, don't add features the spec didn't ask for. Stay in scope.
+
+### 5. Ask, don't guess
+
+If the issue body is ambiguous on an "if X already exists" branch, or any other case that materially affects the result, **comment on the issue thread asking for clarification**. Do not pick the path that looks easier and hope. A guess that wastes 100 lines is more expensive than a question that delays an hour.
+
+### 6. No optimistic claims
+
+If a build or test or script doesn't run cleanly to completion, the work is not done. Don't write "✅ shipped" in the PR description if the verification step output a warning you didn't read. Don't claim a fix without re-running the failing reproduction.
+
+### 7. No mock-implementations
+
+If the spec says "implement X," ship the real thing or open a follow-up issue explaining what's missing. Do not ship a function that returns a hardcoded value, a UI that renders placeholder text, or a config layer that doesn't actually read the config — and then claim the issue is done.
+
 ## Doc map
 
 | Doc | Purpose | Read when |
