@@ -1,3 +1,4 @@
+/** catppuccin-latte.js — Catppuccin Latte (light) color scheme. */
 export default {
   pr:    { open: '#40a02b', merged: '#8839ef', closed: '#d20f39', draft: '#9ca0b0', conflict: '#df8e1d' },
   issue: { open: '#40a02b', closed: '#9ca0b0' },

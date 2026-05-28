@@ -1,3 +1,4 @@
+/** github-dark.js — GitHub Dark color scheme. */
 export default {
   pr:    { open: '#3fb950', merged: '#a371f7', closed: '#f85149', draft: '#8b949e', conflict: '#d29922' },
   issue: { open: '#3fb950', closed: '#8b949e' },

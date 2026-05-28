@@ -1,3 +1,4 @@
+/** actions.js — Central action registry for the command palette. */
 /**
  * src/ui/actions.js — Central action registry for the command palette.
  *

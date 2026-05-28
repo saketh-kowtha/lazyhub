@@ -1,3 +1,4 @@
+/** Sidebar.jsx — Navigation sidebar for switching between feature views. */
 import React from 'react'
 import { Box, Text } from 'ink'
 import { useTheme } from '../theme.js'

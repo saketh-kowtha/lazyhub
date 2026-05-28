@@ -1,3 +1,4 @@
+/** Popover.jsx — Floating popover primitive for overlays and tooltips. */
 /**
  * src/ui/Popover.jsx — Floating popover primitive for lazyhub.
  *

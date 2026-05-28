@@ -1,3 +1,4 @@
+/** config.js — manages application configuration and user settings. */
 /**
  * config.js — loads ~/.config/lazyhub/config.json
  *

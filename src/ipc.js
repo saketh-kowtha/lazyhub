@@ -1,3 +1,4 @@
+/** ipc.js — Inter-process communication for external editor integrations. */
 /**
  * src/ipc.js — IPC Unix-socket server for IDE integrations
  *

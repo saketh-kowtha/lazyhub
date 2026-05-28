@@ -1,3 +1,4 @@
+/** app.jsx — Root Ink layout and application entry point. */
 /**
  * app.jsx — root Ink layout + renderApp() entry point.
  *
