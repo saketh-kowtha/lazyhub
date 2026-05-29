@@ -5,6 +5,7 @@ import { join } from 'path'
 import { parse } from 'smol-toml'
 import { loadConfig, fetchRemoteConfig, formatError } from './loader.js'
 import { DEFAULT_CONFIG, BUILTIN_SCOPES } from './schema.js'
+import { logger } from '../utils.js'
 
 let dir
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'lazyhub-cfg-')) })
@@ -90,6 +91,36 @@ m = "pr.merge-mac"
   })
 })
 
+describe('loadConfig — schema_version handling (acceptance #7)', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('warns but keeps the config when schema_version differs', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const p = writeCfg(`
+[meta]
+schema_version = "2.0"
+
+[ui]
+density = "comfortable"
+`)
+    const cfg = loadConfig({ configPath: p })
+    expect(cfg.meta.schema_version).toBe('2.0')
+    expect(cfg.ui.density).toBe('comfortable') // rest of config still applied
+    expect(cfg.ui.show_hints).toBe(DEFAULT_CONFIG.ui.show_hints)
+    expect(warn.mock.calls.some(([m]) => /schema_version/.test(m))).toBe(true)
+  })
+
+  it('does not warn when schema_version matches', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const p = writeCfg(`
+[meta]
+schema_version = "1.0"
+`)
+    loadConfig({ configPath: p })
+    expect(warn.mock.calls.some(([m]) => /schema_version/.test(m))).toBe(false)
+  })
+})
+
 describe('loadConfig — invalid TOML recovery', () => {
   it('falls back to defaults on a syntax error instead of throwing', () => {
     const p = writeCfg('this is = = not valid toml [[[')
@@ -154,6 +185,28 @@ describe('fetchRemoteConfig', () => {
     expect(result).toEqual({ ui: { density: 'comfortable' } })
     expect(existsSync(cachePath)).toBe(true)
     expect(readFileSync(cachePath, 'utf8')).toBe(REMOTE)
+  })
+
+  it('refuses an over-cap body (by content-length) without reading it', async () => {
+    const cachePath = join(dir, '.config-cache.toml')
+    writeFileSync(cachePath, REMOTE, 'utf8')
+    const text = vi.fn()
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true, status: 200, headers: { get: () => String(2 * 1024 * 1024) }, text,
+    })
+    const result = await fetchRemoteConfig('https://example.com/c.toml', { cachePath, fetchImpl })
+    expect(text).not.toHaveBeenCalled()
+    expect(result).toEqual({ ui: { density: 'comfortable' } }) // cache
+  })
+
+  it('refuses an over-cap body (by actual size) and does not overwrite the cache', async () => {
+    const cachePath = join(dir, '.config-cache.toml')
+    writeFileSync(cachePath, REMOTE, 'utf8')
+    const huge = 'x = "' + 'y'.repeat(300 * 1024) + '"\n'
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => huge })
+    const result = await fetchRemoteConfig('https://example.com/c.toml', { cachePath, fetchImpl })
+    expect(result).toEqual({ ui: { density: 'comfortable' } }) // cache
+    expect(readFileSync(cachePath, 'utf8')).toBe(REMOTE) // cache untouched
   })
 
   it('falls back to cache when the network throws', async () => {

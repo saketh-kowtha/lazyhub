@@ -43,6 +43,9 @@ export const USER_CONFIG_PATH = join(CONFIG_DIR, 'lazyhub.toml')
 export const CACHE_PATH = join(CONFIG_DIR, '.config-cache.toml')
 
 const REMOTE_TIMEOUT_MS = 5000
+// Cap remote config size. A config file is tiny; this stops a malicious or
+// misconfigured config_url from filling the disk via the cache write (or RAM).
+const MAX_REMOTE_BYTES = 256 * 1024
 
 /**
  * Build a friendly one-line error string for a failed config load.
@@ -159,7 +162,16 @@ export async function fetchRemoteConfig(url, opts = {}) {
       logger.warn(`config: config_url returned HTTP ${res.status} — using cache`)
       return readCache(cachePath)
     }
+    const declared = Number(res.headers?.get?.('content-length'))
+    if (Number.isFinite(declared) && declared > MAX_REMOTE_BYTES) {
+      logger.warn(`config: config_url declares ${declared} bytes (> ${MAX_REMOTE_BYTES}) — using cache`)
+      return readCache(cachePath)
+    }
     const text = await res.text()
+    if (Buffer.byteLength(text, 'utf8') > MAX_REMOTE_BYTES) {
+      logger.warn(`config: config_url body exceeds ${MAX_REMOTE_BYTES} bytes — using cache`)
+      return readCache(cachePath)
+    }
     const parsed = parse(text) // validates TOML syntax; throws → caught below
     try {
       mkdirSync(dirname(cachePath), { recursive: true })
