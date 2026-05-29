@@ -21,7 +21,7 @@ function getCategory(filePath) {
   if (rel === 'app.jsx' || rel === 'bootstrap.js') {
     return 'Top-level entry points';
   }
-  if (rel === 'executor.js') {
+  if (rel === 'executor.js' || rel.startsWith('executor/')) {
     return 'GitHub interface (the gh chokepoint)';
   }
   if (rel === 'ai-assistant.js' || rel === 'ai.js' || rel.startsWith('ai/')) {
@@ -48,7 +48,7 @@ function getCategory(filePath) {
   if (rel.startsWith('hooks/')) {
     return 'Hooks';
   }
-  if (rel === 'config.js' || rel === 'context.js') {
+  if (rel === 'config.js' || rel === 'context.js' || rel.startsWith('config/')) {
     return 'Configuration & Context';
   }
   if (['editor.js', 'ipc.js', 'keyscope.js', 'mcp.js', 'utils.js'].includes(basename(filePath))) {

@@ -15,7 +15,8 @@
 
 | File | Purpose |
 |---|---|
-| `src/executor.js` | the ONLY place `gh` CLI is invoked in lazyhub. All calls go through run(args), which handles JSON parsing and error typing. |
+| `src/executor.js` | the ONLY place the `gh` CLI is invoked in lazyhub. `runGh(args, opts)` is the single chokepoint: every exported function routes through it. That gives one place to mock in tests, one place to type errors (GhError), and one place to instrument (timeout, future retry/observability). |
+| `src/executor/gh-error.js` | the error type thrown by `runGh()` in executor.js. Carries the sanitized stderr, exit code, and args so callers can render an actionable message without re-parsing gh output. Lives in its own module so the executor and its tests (and future contract tests) share one definition. |
 
 ## AI provider abstraction
 
@@ -130,6 +131,9 @@
 | File | Purpose |
 |---|---|
 | `src/config.js` | loads ~/.config/lazyhub/config.json ── Theme field ─────────────────────────────────────────────────────────────── Built-in theme names (use any as a plain string): "github-dark"       — default dark theme (GitHub-inspired) "github-light"      — light theme (GitHub-inspired) "catppuccin-mocha"  — extra dark pastel (Catppuccin Mocha) "catppuccin-latte"  — light pastel (Catppuccin Latte) "tokyo-night"       — dark blue/purple (Tokyo Night) Theme override formats: "theme": "github-dark" → use a named built-in theme "theme": "/absolute/path/to/theme.json" "theme": "~/my-theme.json" "theme": "my-theme.json"   (resolved from ~/.config/lazyhub/) → load a full custom theme from a JSON file "theme": { "name": "tokyo-night", "overrides": { "ui": { "selected": "#ff9900" } } } → use a named theme with deep per-key overrides "theme": { "ui": { "selected": "#ff9900" } } → legacy: plain overrides applied on top of github-dark ───────────────────────────────────────────────────────────────────────────── Full example: { "panes": ["prs", "issues", "branches", "actions", "notifications"], "defaultPane": "prs", "theme": "github-dark", "customPanes": { "my-deploys": { "label": "Deployments", "icon": "▶", "command": "gh api repos/{repo}/deployments --jq '[.[] | {title:.environment,number:.id,state:.task,updatedAt:.created_at,url:.url}]'", "actions": { "o": "open" } } }, "pr": { "defaultFilter": "open", "defaultScope": "all", "pageSize": 100, "keys": { "filterOpen":   "O", "filterClosed": "C", "filterMerged": "M" } }, "issues": { "defaultFilter": "open", "pageSize": 50, "keys": { "filterOpen":   "O", "filterClosed": "C" } }, "actions": { "pageSize": 30 }, "diff": { "defaultView": "unified", "syntaxHighlight": true, "maxLines": 2000 } } Built-in pane ids: prs, issues, branches, actions, notifications Custom pane ids:   any string NOT matching a built-in id Command placeholders: {repo}, {owner}, {name} Expected output: JSON array; recommended fields: title, number, state, updatedAt, url |
+| `src/config/index.js` | React context for the TOML user-config layer (issue #130). Phase E1 ships the plumbing only: `<ConfigProvider>` loads and exposes the merged config, and `useConfig()` reads it — but no feature consumes it yet (keymaps E3 #132, settings writes E2 #131, custom tabs E4 #66, etc.). The provider loads the local config synchronously for first render. If `[meta].config_url` is set, it fetches the remote config once (HTTPS-only, cached, fallback-on-failure) and merges it on top — "remote wins". |
+| `src/config/loader.js` | file + network I/O for the TOML user-config layer (issue #130). Pipeline (synchronous local path): defaultConfig.toml (or DEFAULT_CONFIG fallback) → merge user ~/.config/lazyhub/lazyhub.toml (validated, invalid keys dropped) → fold platform keymap sub-sections for the current OS → expand ~ in path fields Remote config (`[meta].config_url`) is fetched asynchronously by the ConfigProvider via `fetchRemoteConfig()` — HTTPS-only, cached locally, with the cache as the fallback when the network/remote fails. See acceptance #6. Security invariants (issue Hard rules): - TOML is data only; smol-toml never executes code from the file. - `~` is expanded with Node homedir(), never via a shell. - config_url uses Node `fetch` with a timeout; never curl/wget. HTTP is refused. |
+| `src/config/schema.js` | TOML config schema, defaults, validation, and merge logic. This is the pure (no I/O) core of the V1 user-config layer (issue #130, Phase E1). `loader.js` handles all file/network I/O and calls into here. Exports: - SCHEMA_VERSION      current schema version string - BUILTIN_SCOPES      the six built-in permission scopes (ARCHITECT_DECISIONS §7) - DEFAULT_CONFIG      full JS defaults — emergency fallback + canonical shape. Values MUST mirror defaultConfig.toml (enforced by a test). - validateConfig(raw) → { config, warnings }  type-checks a parsed TOML object, drops invalid/unknown keys (never throws), collects warnings. - mergeConfig(a, b)   deep merge (b wins); plain objects merge, arrays/scalars replace. - mergePlatformKeymaps(keymaps, platform)  fold [keymaps.ctx.<platform>] onto base. - expandConfigPaths(config)  expand leading ~ to homedir() for known path fields. Validation philosophy (issue acceptance #2): - unknown key  → warn, ignore that key (don't crash) - wrong type   → warn, ignore that key (default fills in via merge) - valid value  → keep |
 | `src/context.js` | shared React contexts Kept separate from app.jsx so feature components don't create circular imports by reaching back into the root layout module. |
 
 ## Utilities & Infrastructure
@@ -151,9 +155,10 @@ Test file counts by directory:
 | `src/` | 5 |
 | `src/ai/` | 3 |
 | `src/ai/providers/` | 3 |
+| `src/config/` | 2 |
 | `src/features/prs/` | 2 |
 | `src/theme/` | 1 |
 | `src/ui/` | 2 |
 
-**Total non-test source files:** 78
-**Total test files:** 16
+**Total non-test source files:** 82
+**Total test files:** 18

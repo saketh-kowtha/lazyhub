@@ -12,7 +12,7 @@ vi.mock('execa', () => ({ execa: vi.fn() }))
 
 import { execa } from 'execa'
 import {
-  GhError, run,
+  GhError, runGh,
   // PR
   listPRs, getPR, mergePR, closePR, markPRReady, convertPRToDraft,
   editPRBase, reviewPR, addPRComment, getPRDiff, createPR,
@@ -915,7 +915,7 @@ describe('Error handling flows', () => {
   it('redacts long tokens in error args', async () => {
     fail('bad credentials')
     try {
-      await run(['api', 'repos/owner/repo', '--header', 'Authorization: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'])
+      await runGh(['api', 'repos/owner/repo', '--header', 'Authorization: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'])
     } catch (err) {
       expect(err.args.join(' ')).not.toContain('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890')
     }
