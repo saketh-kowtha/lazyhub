@@ -4,9 +4,14 @@
  * using esbuild. node_modules are kept as external (not bundled).
  */
 import * as esbuild from 'esbuild'
-import { mkdir } from 'fs/promises'
+import { mkdir, copyFile } from 'fs/promises'
 
 await mkdir('dist', { recursive: true })
+
+// Non-JS assets read at runtime via fs (not bundled by esbuild) must be copied
+// into dist/ so they ship in the package (package.json "files" includes dist/).
+// loader.js resolves defaultConfig.toml relative to its own module dir.
+await copyFile('src/config/defaultConfig.toml', 'dist/defaultConfig.toml')
 
 const watch = process.argv.includes('--watch')
 
