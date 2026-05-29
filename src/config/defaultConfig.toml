@@ -1,0 +1,115 @@
+# lazyhub default configuration — shipped with the package.
+#
+# Copy any section into ~/.config/lazyhub/lazyhub.toml to override it.
+# User values are merged on top of these defaults (per-key); anything you omit
+# keeps the default below. See `docs/` for the full schema reference.
+#
+# NOTE: the values here MUST stay in sync with DEFAULT_CONFIG in schema.js
+# (a unit test asserts they parse to the same object).
+
+# Custom tabs (Phase E4 #66 wires these up). This bare top-level key MUST stay
+# above the first [section] header — TOML assigns trailing bare keys to the last
+# opened table otherwise.
+tabs = []
+
+# ── Meta ─────────────────────────────────────────────────────────────────
+[meta]
+schema_version = "1.0"   # bumped on breaking schema changes
+config_url     = ""      # optional HTTPS URL to pull config from; remote wins, local becomes cache
+
+# ── Theme ────────────────────────────────────────────────────────────────
+[theme]
+name = "lazyhub-dark"    # lazyhub-dark | lazyhub-light | lazyhub-high-contrast | <user>-<repo>
+
+[theme.overrides]        # optional partial token overrides, e.g. "accent.primary" = "#ff7eb6"
+
+# ── Defaults ─────────────────────────────────────────────────────────────
+[defaults]
+pr_scope    = "mine"          # mine | reviewing | all
+ai_provider = "claude-code"   # claude-code | codex | gemini-cli | anthropic-api
+
+# ── UI ───────────────────────────────────────────────────────────────────
+[ui]
+density       = "compact"   # compact | comfortable
+show_hints    = true
+no_color      = false       # respects $NO_COLOR
+high_contrast = false
+
+# ── Keymaps ──────────────────────────────────────────────────────────────
+[keymaps.global]
+":"              = "command-palette.open"
+"<space><space>" = "command-palette.open"
+","              = "settings.open"
+"q"              = "app.quit"
+"?"              = "help.show"
+
+[keymaps.pr-list]
+"j"     = "cursor.down"
+"k"     = "cursor.up"
+"enter" = "pr.open-selected"
+"a"     = "pr.approve"
+"m"     = "pr.merge"
+"r"     = "pr.refresh"
+
+# ── Agent settings (ARCHITECT_DECISIONS §3–7) ───────────────────────────
+[agent]
+auto_spawn_daemon = true
+mcp_auto_register = false
+default_scope     = "full"
+require_confirm   = false
+audit_log_path    = "~/.config/lazyhub/audit.log"
+
+[daemon]
+idle_timeout_minutes = 30
+socket_path          = "~/.config/lazyhub/daemon.sock"
+pid_file             = "~/.config/lazyhub/daemon.pid"
+
+# ── Built-in permission scopes (ARCHITECT_DECISIONS §7) ─────────────────
+# Override or extend by adding your own [scopes.<name>] blocks in your config.
+[scopes.full]
+allow_reads     = true
+allow_writes    = true
+allow_approvals = true
+allow_merges    = true
+allow_comments  = true
+
+[scopes.read-only]
+allow_reads     = true
+allow_writes    = false
+allow_approvals = false
+allow_merges    = false
+allow_comments  = false
+
+[scopes.review-only]
+allow_reads     = true
+allow_writes    = false
+allow_approvals = true
+allow_merges    = false
+allow_comments  = true
+
+[scopes.comment-only]
+allow_reads     = true
+allow_writes    = false
+allow_approvals = false
+allow_merges    = false
+allow_comments  = true
+
+[scopes.no-merge]
+allow_reads     = true
+allow_writes    = true
+allow_approvals = true
+allow_merges    = false
+allow_comments  = true
+
+[scopes.triage-only]
+allow_reads     = true
+allow_writes    = false
+allow_approvals = false
+allow_merges    = false
+allow_comments  = true
+
+# ── AI budget (Phase L8 #153 enforces; schema slot reserved in V1) ───────
+[ai.budget]
+monthly_usd_cap  = 0     # 0 = unlimited
+per_call_usd_cap = 0     # 0 = unlimited
+on_cap_exceeded  = "warn"  # warn | block

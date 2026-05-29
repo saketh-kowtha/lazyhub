@@ -17,6 +17,7 @@ import { render, Box, Text, useInput, useApp, useStdout } from 'ink'
 import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
 import { KeyScopeProvider, useActiveScope, useKeyScope } from './keyscope.js'
 import { loadConfig, CONFIG_PATH } from './config.js'
+import { ConfigProvider } from './config/index.js'
 import { useLayout } from './hooks/useLayout.js'
 import { AppContext } from './context.js'
 import { logger } from './utils.js'
@@ -1055,11 +1056,13 @@ export function renderApp() {
   const initialTheme = readRawThemeCfg()
   try {
     const { unmount } = render(
-      <ThemeProvider initialTheme={initialTheme}>
-        <KeyScopeProvider>
-          <App repo={repo} />
-        </KeyScopeProvider>
-      </ThemeProvider>
+      <ConfigProvider>
+        <ThemeProvider initialTheme={initialTheme}>
+          <KeyScopeProvider>
+            <App repo={repo} />
+          </KeyScopeProvider>
+        </ThemeProvider>
+      </ConfigProvider>
     )
 
     // When Ink exits (useApp().exit() called), also restore terminal

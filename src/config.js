@@ -77,6 +77,18 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { homedir } from 'os'
 
+// ── New TOML user-config layer (issue #130, Phase E1) ──────────────────────────
+// This file remains the legacy JSON config module that the app still consumes.
+// The issue's spec-correction asked to replace this file's body with a single
+// re-export, but that was written assuming config.js was minimal — it is in fact
+// the live JSON config (loadConfig/CONFIG_PATH/loadState/saveConfig/…) imported
+// across the app, and a wholesale replacement would break the build, contradicting
+// E1's "no behavior wiring yet" rule. Instead we re-export the new React surface
+// here so `./config.js` is still the single import site, and migrate consumers to
+// the TOML config in later phases (E2–E5). The TOML loadConfig lives in
+// `./config/loader.js` to avoid colliding with the legacy loadConfig below.
+export { ConfigContext, ConfigProvider, useConfig } from './config/index.js'
+
 export const BUILTIN_PANES = ['prs', 'issues', 'branches', 'actions', 'notifications']
 
 export const CONFIG_PATH = join(homedir(), '.config', 'lazyhub', 'config.json')
