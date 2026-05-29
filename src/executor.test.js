@@ -14,7 +14,7 @@ vi.mock('execa', () => {
 import { execa } from 'execa'
 import {
   GhError,
-  run,
+  runGh,
   listPRs,
   getPR,
   mergePR,
@@ -41,6 +41,7 @@ import {
   markNotificationRead,
   getPRDiff,
   addPRComment,
+  addPRLineComment,
   listPRComments,
   resolveThread,
   createPR,
@@ -86,37 +87,37 @@ describe('GhError', () => {
   })
 })
 
-// ─── run() ───────────────────────────────────────────────────────────────────
+// ─── runGh() ───────────────────────────────────────────────────────────────────
 
-describe('run()', () => {
+describe('runGh()', () => {
   it('parses JSON stdout on success', async () => {
     mockSuccess([{ number: 1, title: 'PR 1' }])
-    const result = await run(['pr', 'list', '--repo', 'owner/repo', '--json', 'number'])
+    const result = await runGh(['pr', 'list', '--repo', 'owner/repo', '--json', 'number'])
     expect(result).toEqual([{ number: 1, title: 'PR 1' }])
   })
 
   it('returns null when stdout is empty', async () => {
     execa.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
-    const result = await run(['pr', 'merge', '1'])
+    const result = await runGh(['pr', 'merge', '1'])
     expect(result).toBeNull()
   })
 
   it('returns raw string for non-JSON output (e.g. diff)', async () => {
     const diff = 'diff --git a/file.js b/file.js\n+added line'
     execa.mockResolvedValue({ exitCode: 0, stdout: diff, stderr: '' })
-    const result = await run(['pr', 'diff', '1'])
+    const result = await runGh(['pr', 'diff', '1'])
     expect(result).toBe(diff)
   })
 
   it('throws GhError on non-zero exit code', async () => {
     mockFailure('repository not found', 1)
-    await expect(run(['pr', 'list'])).rejects.toThrow(GhError)
+    await expect(runGh(['pr', 'list'])).rejects.toThrow(GhError)
   })
 
   it('throws GhError with rate limit message on rate-limit stderr', async () => {
     mockFailure('API rate limit exceeded', 1)
     try {
-      await run(['pr', 'list'])
+      await runGh(['pr', 'list'])
     } catch (err) {
       expect(err).toBeInstanceOf(GhError)
       expect(err.message).toContain('rate limit')
@@ -125,7 +126,7 @@ describe('run()', () => {
 
   it('throws GhError when execa itself throws', async () => {
     execa.mockRejectedValue(Object.assign(new Error('spawn gh ENOENT'), { exitCode: 127 }))
-    await expect(run(['pr', 'list'])).rejects.toThrow(GhError)
+    await expect(runGh(['pr', 'list'])).rejects.toThrow(GhError)
   })
 })
 
@@ -760,5 +761,85 @@ describe('resolvePRReviewThread', () => {
   it('propagates GhError on gh failure', async () => {
     mockFailure('not found', 1)
     await expect(resolvePRReviewThread('PRRT_bad')).rejects.toBeInstanceOf(Error)
+  })
+})
+
+// ─── runGh() opts: json / stdin / timeout ────────────────────────────────────
+
+describe('runGh() opts', () => {
+  it('passes the default 30s timeout to execa', async () => {
+    mockSuccess([])
+    await runGh(['pr', 'list'])
+    const [, , execaOpts] = execa.mock.calls[0]
+    expect(execaOpts).toMatchObject({ reject: false, timeout: 30000 })
+  })
+
+  it('honors an explicit timeout override', async () => {
+    mockSuccess([])
+    await runGh(['pr', 'list'], { timeout: 5000 })
+    const [, , execaOpts] = execa.mock.calls[0]
+    expect(execaOpts).toMatchObject({ timeout: 5000 })
+  })
+
+  it('returns raw stdout (never parses) when json is false', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: '{"a":1}', stderr: '' })
+    const result = await runGh(['api', 'something'], { json: false })
+    expect(result).toBe('{"a":1}')
+  })
+
+  it('parses JSON when json is true', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: '{"a":1}', stderr: '' })
+    const result = await runGh(['api', 'something'], { json: true })
+    expect(result).toEqual({ a: 1 })
+  })
+
+  it('throws a GhError with a timeout message when execa reports timedOut', async () => {
+    execa.mockResolvedValue({ exitCode: 1, stdout: '', stderr: '', timedOut: true })
+    await expect(runGh(['pr', 'list'], { timeout: 1000 })).rejects.toMatchObject({
+      name: 'GhError',
+      message: expect.stringContaining('timed out'),
+    })
+  })
+})
+
+// ─── addPRLineComment routes stdin through runGh ──────────────────────────────
+
+describe('addPRLineComment()', () => {
+  it('pipes the JSON payload via stdin (never argv) through the chokepoint', async () => {
+    const writes = []
+    const proc = {
+      stdin: { write: v => writes.push(v), end: () => {} },
+      then: (res) => res({ exitCode: 0, stdout: '{"id":1}', stderr: '' }),
+    }
+    execa.mockReturnValue(proc)
+    const result = await addPRLineComment('owner/repo', 7, {
+      body: 'nit', path: 'src/foo.js', line: 10, commitId: 'abc',
+    })
+    const [cmd, args] = execa.mock.calls[0]
+    expect(cmd).toBe('gh')
+    expect(args).toContain('--input')
+    expect(args).toContain('-')
+    // the comment body must be on stdin, not in argv
+    expect(args.some(a => String(a).includes('nit'))).toBe(false)
+    expect(writes.join('')).toContain('"body":"nit"')
+    expect(result).toEqual({ id: 1 })
+  })
+})
+
+// ─── GHES (GH_HOST) regression ────────────────────────────────────────────────
+
+describe('GHES regression (GH_HOST=ghe.example.com)', () => {
+  // Sept 2024 bug: a curated env stripped GH_TOKEN/GH_HOST, breaking GHES auth.
+  // runGh must inherit process.env (no env override) and add no --hostname flag.
+  it('does not strip env and adds no --hostname when targeting a GHES host', async () => {
+    process.env.GH_HOST = 'ghe.example.com'
+    mockSuccess([])
+    await runGh(['pr', 'list', '--repo', 'owner/repo'])
+    const [cmd, args, execaOpts] = execa.mock.calls[0]
+    expect(cmd).toBe('gh')
+    expect(args).not.toContain('--hostname')
+    // No `env` key → execa inherits process.env, so gh reads GH_HOST/GH_TOKEN.
+    expect(execaOpts).not.toHaveProperty('env')
+    delete process.env.GH_HOST
   })
 })

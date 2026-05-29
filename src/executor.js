@@ -1,56 +1,69 @@
 /**
- * executor.js — the ONLY place `gh` CLI is invoked in lazyhub.
- * All calls go through run(args), which handles JSON parsing and error typing.
+ * executor.js — the ONLY place the `gh` CLI is invoked in lazyhub.
+ *
+ * `runGh(args, opts)` is the single chokepoint: every exported function routes
+ * through it. That gives one place to mock in tests, one place to type errors
+ * (GhError), and one place to instrument (timeout, future retry/observability).
  */
 
 import { execa } from 'execa'
+import { GhError } from './executor/gh-error.js'
 
-// ─── GhError ─────────────────────────────────────────────────────────────────
+// Re-exported so `import { GhError } from './executor.js'` keeps working.
+export { GhError }
+
+// ─── runGh() — the gh chokepoint ──────────────────────────────────────────────
+
+/** Default per-call timeout for the gh CLI (ms). Override via opts.timeout. */
+const GH_TIMEOUT = 30_000
 
 /**
+ * The ONLY function that spawns the `gh` CLI. All executor functions route here.
  *
+ * On exit code 0: returns parsed JSON, or the raw stdout string when the body
+ * is not JSON (e.g. a diff). On non-zero exit, timeout, or spawn failure: throws
+ * a GhError carrying sanitized stderr, the exit code, and the args.
+ *
+ * @param {string[]} args            argv to pass to gh
+ * @param {object}   [opts]
+ * @param {number}   [opts.timeout]  per-call timeout in ms (default 30s)
+ * @param {boolean}  [opts.json]     false → never JSON.parse (return raw text);
+ *                                   true/undefined → parse JSON, fall back to raw
+ * @param {string}   [opts.stdin]    optional payload written to the gh stdin
+ * @returns {Promise<any>}           parsed JSON or raw string (null if empty)
+ * @throws {GhError}                 on non-zero exit, timeout, or spawn failure
  */
-export class GhError extends Error {
-  /**
-   *
-   * @param root0
-   * @param root0.message
-   * @param root0.stderr
-   * @param root0.exitCode
-   * @param root0.args
-   */
-  constructor({ message, stderr, exitCode, args }) {
-    super(message)
-    this.name = 'GhError'
-    this.stderr = stderr
-    this.exitCode = exitCode
-    this.args = args
-  }
-}
-
-// ─── Internal run() helper ───────────────────────────────────────────────────
-
-/**
- * run(args) — executes `gh` with the given args.
- * On exit code 0: parses stdout as JSON and returns.
- * On non-zero: throws GhError.
- * If stdout is not JSON (e.g. plain text diff), returns raw stdout string.
- * @param args
- */
-export async function run(args) {
-  // GH_HOST is inherited by the child process from process.env. gh CLI honors
-  // it for `--repo OWNER/REPO`-style invocations. We deliberately do NOT pass
-  // --hostname here: it's a per-subcommand flag (valid on `gh api`, `gh auth *`,
+export async function runGh(args, opts = {}) {
+  const { timeout = GH_TIMEOUT, json, stdin } = opts
+  // GH_HOST / GH_TOKEN are inherited by the child process from process.env
+  // (we pass no curated env here — see ARCHITECT_DECISIONS invariant 4, which
+  // scopes env-stripping to AI provider subprocesses, NOT gh). gh CLI honors
+  // GH_HOST for `--repo OWNER/REPO`-style invocations. We deliberately do NOT
+  // pass --hostname: it's a per-subcommand flag (valid on `gh api`, `gh auth *`,
   // `gh repo *`) and is rejected globally by `gh pr list`, `gh issue list`, etc.
   let result
   try {
-    result = await execa('gh', args, { reject: false })
+    const proc = execa('gh', args, { reject: false, timeout })
+    if (stdin !== undefined && proc.stdin) {
+      proc.stdin.write(stdin)
+      proc.stdin.end()
+    }
+    result = await proc
   } catch (err) {
     throw new GhError({
       message: err.message,
       stderr: err.stderr || '',
       exitCode: err.exitCode ?? 1,
       args,
+    })
+  }
+
+  if (result.timedOut) {
+    throw new GhError({
+      message: `gh ${args.slice(0, 3).join(' ')} timed out after ${timeout}ms`,
+      stderr: (result.stderr || '').replace(/[a-zA-Z0-9_-]{20,}/g, '[REDACTED]'),
+      exitCode: result.exitCode ?? 1,
+      args: args.map(arg => typeof arg === 'string' ? arg.replace(/[a-zA-Z0-9_-]{40,}/g, '[REDACTED]') : arg),
     })
   }
 
@@ -77,6 +90,8 @@ export async function run(args) {
 
   const stdout = result.stdout?.trim()
   if (!stdout) return null
+
+  if (json === false) return stdout // caller wants raw text (diff, logs, …)
 
   try {
     return JSON.parse(stdout)
@@ -117,10 +132,10 @@ export async function listPRs(repo, filter = {}) {
   // Try with all fields first; fall back to a reduced set for GHE instances
   // where statusCheckRollup / mergeable are not in the GraphQL schema.
   try {
-    return await run([...base, '--json', 'number,title,state,author,labels,reviewRequests,statusCheckRollup,reviewDecision,updatedAt,isDraft,headRefName,baseRefName,assignees,body,mergeable,url'])
+    return await runGh([...base, '--json', 'number,title,state,author,labels,reviewRequests,statusCheckRollup,reviewDecision,updatedAt,isDraft,headRefName,baseRefName,assignees,body,mergeable,url'])
   } catch (err) {
     if (!/unknown|field|not found/i.test(err.message)) throw err
-    return run([...base, '--json', 'number,title,state,author,labels,reviewRequests,reviewDecision,updatedAt,isDraft,headRefName,baseRefName,assignees,body,url'])
+    return runGh([...base, '--json', 'number,title,state,author,labels,reviewRequests,reviewDecision,updatedAt,isDraft,headRefName,baseRefName,assignees,body,url'])
   }
 }
 
@@ -135,7 +150,7 @@ export async function getPR(repo, number) {
     '--repo', getRepo(repo),
     '--json', 'number,title,state,author,body,labels,reviewRequests,reviews,statusCheckRollup,updatedAt,isDraft,headRefName,baseRefName,headRefOid,assignees,files,additions,deletions,changedFiles,mergeStateStatus,mergeable,autoMergeRequest,url',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -160,7 +175,7 @@ export async function mergePR(repo, number, strategy = 'merge', commitMessage) {
     args.push(`--${strategy}`)
   }
   if (commitMessage) args.push('--subject', commitMessage)
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -170,7 +185,7 @@ export async function mergePR(repo, number, strategy = 'merge', commitMessage) {
  */
 export async function closePR(repo, number) {
   const args = ['pr', 'close', String(number), '--repo', getRepo(repo)]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -180,7 +195,7 @@ export async function closePR(repo, number) {
  */
 export async function markPRReady(repo, number) {
   const args = ['pr', 'ready', String(number), '--repo', getRepo(repo)]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -190,7 +205,7 @@ export async function markPRReady(repo, number) {
  */
 export async function convertPRToDraft(repo, number) {
   const args = ['pr', 'ready', '--undo', String(number), '--repo', getRepo(repo)]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -201,7 +216,7 @@ export async function convertPRToDraft(repo, number) {
  */
 export async function editPRBase(repo, number, newBase) {
   const args = ['pr', 'edit', String(number), '--repo', getRepo(repo), '--base', newBase]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -219,7 +234,7 @@ export async function reviewPR(repo, number, event, body = '') {
     `--${event}`,
   ]
   if (body) args.push('--body', body)
-  return run(args)
+  return runGh(args)
 }
 
 // ─── Issue functions ──────────────────────────────────────────────────────────
@@ -244,10 +259,10 @@ export async function listIssues(repo, filter = {}) {
   // Try with comments field; fall back without it for GHE instances where
   // the field is not available in the issue list GraphQL query.
   try {
-    return await run([...base, '--json', 'number,title,state,author,labels,assignees,updatedAt,body,milestone,comments,url'])
+    return await runGh([...base, '--json', 'number,title,state,author,labels,assignees,updatedAt,body,milestone,comments,url'])
   } catch (err) {
     if (!/unknown|field|not found/i.test(err.message)) throw err
-    return run([...base, '--json', 'number,title,state,author,labels,assignees,updatedAt,body,milestone,url'])
+    return runGh([...base, '--json', 'number,title,state,author,labels,assignees,updatedAt,body,milestone,url'])
   }
 }
 
@@ -262,7 +277,7 @@ export async function getIssue(repo, number) {
     '--repo', getRepo(repo),
     '--json', 'number,title,state,author,body,labels,assignees,updatedAt,milestone,comments,url',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -285,7 +300,7 @@ export async function createIssue(repo, { title, body, labels = [], assignees = 
   if (labels.length) args.push('--label', labels.join(','))
   if (assignees.length) args.push('--assignee', assignees.join(','))
   if (milestone) args.push('--milestone', milestone)
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -298,7 +313,7 @@ export async function closeIssue(repo, number) {
     'issue', 'close', String(number),
     '--repo', getRepo(repo),
   ]
-  return run(args)
+  return runGh(args)
 }
 
 // ─── Label functions ──────────────────────────────────────────────────────────
@@ -314,7 +329,7 @@ export async function listLabels(repo) {
     '--json', 'name,color,description',
     '--limit', '100',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -331,7 +346,7 @@ export async function addLabels(repo, number, labels, type = 'issue') {
     '--repo', getRepo(repo),
     '--add-label', labels.join(','),
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -348,7 +363,7 @@ export async function removeLabels(repo, number, labels, type = 'issue') {
     '--repo', getRepo(repo),
     '--remove-label', labels.join(','),
   ]
-  return run(args)
+  return runGh(args)
 }
 
 // ─── Collaborator / reviewer functions ───────────────────────────────────────
@@ -363,7 +378,7 @@ export async function listCollaborators(repo) {
     'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/collaborators`,
     '--jq', '[.[] | {login: .login, name: .name}]',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -378,7 +393,7 @@ export async function requestReviewers(repo, number, reviewers) {
     '--repo', getRepo(repo),
     '--add-reviewer', reviewers.join(','),
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -393,7 +408,7 @@ export async function removeReviewers(repo, number, reviewers) {
     '--repo', getRepo(repo),
     '--remove-reviewer', reviewers.join(','),
   ]
-  return run(args)
+  return runGh(args)
 }
 
 // ─── Branch functions ─────────────────────────────────────────────────────────
@@ -408,7 +423,7 @@ export async function listBranches(repo) {
     'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches?per_page=100`,
     '--jq', '[.[] | {name: .name, protected: .protected, commit: {sha: .commit.sha}}]',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -418,7 +433,7 @@ export async function listBranches(repo) {
  */
 export async function checkoutBranch(repo, number) {
   const args = ['pr', 'checkout', String(number), '--repo', getRepo(repo)]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -432,7 +447,7 @@ export async function deleteBranch(repo, branchName) {
     'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/git/refs/heads/${encodeURIComponent(branchName)}`,
     '--method', 'DELETE',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 // ─── Actions / runs functions ─────────────────────────────────────────────────
@@ -452,7 +467,7 @@ export async function listRuns(repo, filter = {}) {
   if (filter.workflow) args.push('--workflow', filter.workflow)
   if (filter.branch) args.push('--branch', filter.branch)
   if (filter.status) args.push('--status', filter.status)
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -466,7 +481,7 @@ export async function getRunLogs(repo, runId) {
     '--repo', getRepo(repo),
     '--log',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -480,7 +495,7 @@ export async function rerunRun(repo, runId) {
     '--repo', getRepo(repo),
     '--failed-only',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -493,7 +508,7 @@ export async function cancelRun(repo, runId) {
     'run', 'cancel', String(runId),
     '--repo', getRepo(repo),
   ]
-  return run(args)
+  return runGh(args)
 }
 
 // ─── Release functions ────────────────────────────────────────────────────────
@@ -509,7 +524,7 @@ export async function listReleases(repo) {
     '--json', 'name,tagName,isPrerelease,isDraft,publishedAt,url',
     '--limit', '20',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 // ─── Notification functions ───────────────────────────────────────────────────
@@ -526,14 +541,14 @@ export async function listNotifications(filter = {}) {
   if (filter.all) {
     args.push('-f', 'all=true')
   }
-  return run(args)
+  return runGh(args)
 }
 
 /**
  * Mark all notifications as read in a single API call.
  */
 export async function markAllNotificationsRead() {
-  return run(['api', 'notifications', '--method', 'PUT', '--field', 'read=true'])
+  return runGh(['api', 'notifications', '--method', 'PUT', '--field', 'read=true'])
 }
 
 /**
@@ -545,7 +560,7 @@ export async function markNotificationRead(notificationId) {
     'api', `notifications/threads/${encodeURIComponent(notificationId)}`,
     '--method', 'PATCH',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 // ─── PR diff and comment functions ───────────────────────────────────────────
@@ -560,7 +575,7 @@ export async function getPRDiff(repo, number) {
     'pr', 'diff', String(number),
     '--repo', getRepo(repo),
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -575,7 +590,7 @@ export async function addPRComment(repo, number, body) {
     '--repo', getRepo(repo),
     '--body', body,
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -590,7 +605,7 @@ export async function addIssueComment(repo, number, body) {
     '--repo', getRepo(repo),
     '--body', body,
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -601,7 +616,7 @@ export async function addIssueComment(repo, number, body) {
  */
 export async function addPRAssignees(repo, number, assignees) {
   const args = ['pr', 'edit', String(number), '--repo', getRepo(repo), '--add-assignee', assignees.join(',')]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -612,7 +627,7 @@ export async function addPRAssignees(repo, number, assignees) {
  */
 export async function removePRAssignees(repo, number, assignees) {
   const args = ['pr', 'edit', String(number), '--repo', getRepo(repo), '--remove-assignee', assignees.join(',')]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -623,7 +638,7 @@ export async function removePRAssignees(repo, number, assignees) {
  */
 export async function addIssueAssignees(repo, number, assignees) {
   const args = ['issue', 'edit', String(number), '--repo', getRepo(repo), '--add-assignee', assignees.join(',')]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -634,7 +649,7 @@ export async function addIssueAssignees(repo, number, assignees) {
  */
 export async function removeIssueAssignees(repo, number, assignees) {
   const args = ['issue', 'edit', String(number), '--repo', getRepo(repo), '--remove-assignee', assignees.join(',')]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -656,24 +671,9 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
     '--method', 'POST',
     '--input', '-',
   ]
-  const proc = execa('gh', args, { reject: false })
-  proc.stdin.write(payload)
-  proc.stdin.end()
-  const result = await proc
-
-  if (result.exitCode !== 0) {
-    throw new GhError({
-      message: (result.stderr?.split('\n')[0] || 'Failed to add line comment').replace(/[a-zA-Z0-9_-]{20,}/g, '[REDACTED]'),
-      stderr: (result.stderr || '').replace(/[a-zA-Z0-9_-]{20,}/g, '[REDACTED]'),
-      exitCode: result.exitCode,
-      args: args.map(arg => typeof arg === 'string' ? arg.replace(/[a-zA-Z0-9_-]{40,}/g, '[REDACTED]') : arg),
-    })
-  }
-  try {
-    return JSON.parse(result.stdout)
-  } catch {
-    return result.stdout
-  }
+  // Routes through the runGh chokepoint; the JSON body is piped via stdin
+  // (never argv) per the subprocess-discipline invariant.
+  return runGh(args, { stdin: payload })
 }
 
 /**
@@ -720,7 +720,7 @@ export async function listPRComments(repo, number) {
       }
     }
   `
-  const result = await run([
+  const result = await runGh([
     'api', 'graphql',
     '-f', `owner=${owner}`,
     '-f', `name=${name}`,
@@ -764,7 +764,7 @@ export async function replyToComment(repo, prNumber, commentId, body) {
     '--method', 'POST',
     '--raw-field', `body=${body}`,
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -783,7 +783,7 @@ export async function editPRComment(repo, commentId, body) {
     '--method', 'PATCH',
     '--raw-field', `body=${body}`,
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -800,7 +800,7 @@ export async function deletePRComment(repo, commentId) {
     'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/comments/${encodeURIComponent(commentId)}`,
     '--method', 'DELETE',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -815,7 +815,7 @@ export async function resolveThread(threadId) {
     '-f', `query=${query}`,
     '-f', `threadId=${threadId}`,
   ]
-  return run(args)
+  return runGh(args)
 }
 
 // ─── IPC-facing review functions (Phase 2) ───────────────────────────────────
@@ -858,7 +858,7 @@ export async function getPRReviewComments(repo, prNumber) {
       }
     }
   `
-  const result = await run([
+  const result = await runGh([
     'api', 'graphql',
     '-f', `owner=${owner}`,
     '-f', `name=${name}`,
@@ -890,7 +890,7 @@ export async function getPRReviewComments(repo, prNumber) {
 export async function addPRReviewThreadReply(threadId, body) {
   // threadId is a GraphQL node ID (ID!); body is a String!
   const mutation = 'mutation($threadId: ID!, $body: String!) { addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $threadId, body: $body }) { comment { databaseId } } }'
-  const result = await run([
+  const result = await runGh([
     'api', 'graphql',
     '-f', `query=${mutation}`,
     '-f', `threadId=${threadId}`,
@@ -908,7 +908,7 @@ export async function addPRReviewThreadReply(threadId, body) {
  */
 export async function resolvePRReviewThread(threadId) {
   const mutation = 'mutation($threadId: ID!) { resolveReviewThread(input: { threadId: $threadId }) { thread { id isResolved } } }'
-  await run([
+  await runGh([
     'api', 'graphql',
     '-f', `query=${mutation}`,
     '-f', `threadId=${threadId}`,
@@ -948,7 +948,7 @@ export async function getPRStateForBranch(branch, repo) {
 
   let results
   try {
-    results = await run(args)
+    results = await runGh(args)
   } catch {
     // If the call fails (e.g. no remote, rate-limit), degrade gracefully.
     return { prNumber: null }
@@ -1006,7 +1006,7 @@ export async function getRemoteBranch(repo, branch) {
   if (!branch) return null
   try {
     const r = getRepo(repo)
-    return await run(['api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches/${encodeURIComponent(branch)}`])
+    return await runGh(['api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches/${encodeURIComponent(branch)}`])
   } catch {
     return null
   }
@@ -1023,7 +1023,7 @@ export async function compareBranches(repo, base, head) {
   if (!base || !head) return null
   try {
     const r = getRepo(repo)
-    return await run(['api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`])
+    return await runGh(['api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`])
   } catch {
     return null
   }
@@ -1105,7 +1105,7 @@ export async function createPR(repo, { title, body, head, base, draft = false, l
   if (labels.length) args.push('--label', labels.join(','))
   if (assignees.length) args.push('--assignee', assignees.join(','))
   if (reviewers.length) args.push('--reviewer', reviewers.join(','))
-  return run(args)
+  return runGh(args)
 }
 
 // ─── Repo info / branch protection functions ─────────────────────────────────
@@ -1119,7 +1119,7 @@ export async function getRepoInfo(repo) {
     'repo', 'view', getRepo(repo),
     '--json', 'name,owner,defaultBranchRef,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed,deleteBranchOnMerge,viewerPermission',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -1131,7 +1131,7 @@ export async function getPRChecks(repo, number) {
   const r = getRepo(repo)
   // Use the PR view to get the head SHA first, then fetch checks
   try {
-    const pr = await run([
+    const pr = await runGh([
       'pr', 'view', String(number),
       '--repo', r,
       '--json', 'headRefOid',
@@ -1141,7 +1141,7 @@ export async function getPRChecks(repo, number) {
       'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/commits/${encodeURIComponent(pr.headRefOid)}/check-runs`,
       '--jq', '[.check_runs[] | {id: .id, name: .name, status: .status, conclusion: .conclusion, appName: .app.name, url: .html_url}]',
     ]
-    return run(checkArgs)
+    return runGh(checkArgs)
   } catch {
     return []
   }
@@ -1154,7 +1154,7 @@ export async function getPRChecks(repo, number) {
  */
 export async function rerunCheckRun(repo, checkRunId) {
   const r = getRepo(repo)
-  return run([
+  return runGh([
     'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/check-runs/${checkRunId}/rerequest`,
     '--method', 'POST',
   ])
@@ -1168,7 +1168,7 @@ export async function rerunCheckRun(repo, checkRunId) {
 export async function getCheckRunAnnotations(repo, checkRunId) {
   const r = getRepo(repo)
   try {
-    return await run([
+    return await runGh([
       'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/check-runs/${checkRunId}/annotations`,
       '--jq', '[.[] | {path: .path, line: .start_line, level: .annotation_level, message: .message, title: .title}]',
     ])
@@ -1190,7 +1190,7 @@ export async function getBranchProtection(repo, branch) {
     '--jq', '{requiredReviews: (.required_pull_request_reviews.required_approving_review_count // 0), requireCodeOwnerReviews: (.required_pull_request_reviews.require_code_owner_reviews // false), requireStatusChecks: (.required_status_checks != null), requiredChecks: ([(.required_status_checks.contexts // []), (.required_status_checks.checks // [] | map(.context))] | add // [])}',
   ]
   try {
-    return run(args)
+    return runGh(args)
   } catch {
     return null
   }
@@ -1209,7 +1209,7 @@ export async function enableAutoMerge(repo, number, mergeMethod = 'merge') {
     `--${mergeMethod}`,
     '--auto',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -1224,7 +1224,7 @@ export async function disableAutoMerge(repo, number) {
     '--method', 'PATCH',
     '-f', 'auto_merge=',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 /**
@@ -1238,7 +1238,7 @@ export async function getPRDiffStats(repo, number) {
     '--repo', getRepo(repo),
     '--json', 'additions,deletions,changedFiles',
   ]
-  return run(args)
+  return runGh(args)
 }
 
 // ─── Gist functions ───────────────────────────────────────────────────────────
@@ -1247,7 +1247,7 @@ export async function getPRDiffStats(repo, number) {
  * List the authenticated user's gists.
  */
 export async function listGists() {
-  return run(['gist', 'list', '--json', 'id,description,public,updatedAt,files', '--limit', '30'])
+  return runGh(['gist', 'list', '--json', 'id,description,public,updatedAt,files', '--limit', '30'])
 }
 
 /**
@@ -1255,7 +1255,7 @@ export async function listGists() {
  * @param id
  */
 export async function getGist(id) {
-  return run(['gist', 'view', id, '--raw'])
+  return runGh(['gist', 'view', id, '--raw'])
 }
 
 /**
@@ -1263,7 +1263,7 @@ export async function getGist(id) {
  * @param id
  */
 export async function deleteGist(id) {
-  return run(['gist', 'delete', id, '--yes'])
+  return runGh(['gist', 'delete', id, '--yes'])
 }
 
 // ─── Git conflict-resolution helpers ─────────────────────────────────────────
