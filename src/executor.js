@@ -76,8 +76,12 @@ export async function runGh(args, opts = {}) {
     } else if (stderr.includes('not found') || stderr.includes('Could not resolve') || /HTTP\s*404/i.test(stderr)) {
       message = 'Resource not found'
     } else if (stderr) {
-      // Basic sanitization of stderr to prevent leaking potentially sensitive data in error messages
-      message = stderr.split('\n')[0].trim().replace(/[a-zA-Z0-9_-]{20,}/g, '[REDACTED]')
+      // Sanitize the user-facing message: redact only token-length runs (40+
+      // chars — the length of a gh PAT like `ghp_…`). The char class excludes
+      // `/` and `.`, so repo names (myorg/very-long-repo-name) and branch names
+      // (feature/jira-XYZ-123-…) survive intact. The full `stderr` field below
+      // stays more aggressive (20+) since it's diagnostic, not user-facing.
+      message = stderr.split('\n')[0].trim().replace(/[a-zA-Z0-9_-]{40,}/g, '[REDACTED]')
     }
 
     throw new GhError({

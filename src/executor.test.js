@@ -843,3 +843,38 @@ describe('GHES regression (GH_HOST=ghe.example.com)', () => {
     delete process.env.GH_HOST
   })
 })
+
+// ─── Error message redaction (no over-redaction of repo/branch names) ─────────
+
+describe('error message redaction', () => {
+  it('keeps long repo names intact in the user-facing message', async () => {
+    mockFailure('failed to access myorg/very-long-repo-name-here', 1)
+    try {
+      await runGh(['repo', 'view'])
+    } catch (err) {
+      expect(err.message).toContain('myorg/very-long-repo-name-here')
+      expect(err.message).not.toContain('[REDACTED]')
+    }
+  })
+
+  it('keeps long branch names intact in the user-facing message', async () => {
+    mockFailure('cannot push to feature/jira-XYZ-123-stack-rewrite-attempt-2', 1)
+    try {
+      await runGh(['pr', 'create'])
+    } catch (err) {
+      expect(err.message).toContain('feature/jira-XYZ-123-stack-rewrite-attempt-2')
+      expect(err.message).not.toContain('[REDACTED]')
+    }
+  })
+
+  it('still redacts token-length secrets (40+ chars) in the message', async () => {
+    // ghp_ + 36 chars = 40, the length of a real gh personal access token.
+    mockFailure('bad credentials: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 1)
+    try {
+      await runGh(['api', 'user'])
+    } catch (err) {
+      expect(err.message).toContain('[REDACTED]')
+      expect(err.message).not.toContain('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
+    }
+  })
+})
