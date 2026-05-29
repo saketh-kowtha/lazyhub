@@ -15,6 +15,7 @@ Architect specs, decisions, and reference material. Start here if you're picking
 | Doc | Purpose | Read when |
 |---|---|---|
 | `ARCHITECT_DECISIONS.md` | Locked cross-cutting decisions | Every fresh session |
+| `ROADMAP.md` | V1 execution order — which issue to pick next, what blocks what | Before opening a fresh issue |
 | `ARCHITECTURE.md` | High-level codebase architecture | Onboarding to the codebase; before cross-cutting refactors |
 | `GLOSSARY.md` | Authoritative definitions for every domain term | Whenever an unfamiliar term appears |
 | `FILE_MAP.md` | Concept → owning files crosswalk | Before greping; answers "where is X?" |
