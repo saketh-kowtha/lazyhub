@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { schemeToT } from './list.jsx'
+import { canToggleAutoMergeFromList, schemeToT } from './list.jsx'
 import lazyhubDark from '../../theme/schemes/lazyhub-dark.js'
 import lazyhubLight from '../../theme/schemes/lazyhub-light.js'
 import { themes } from '../../theme/index.js'
@@ -150,5 +150,17 @@ describe('ThemeProvider context wiring', () => {
         expect(val.length, `t.${group}.${key} must not be empty`).toBeGreaterThan(0)
       }
     }
+  })
+})
+
+describe('canToggleAutoMergeFromList', () => {
+  it('allows focused open non-draft PRs to claim the M key', () => {
+    expect(canToggleAutoMergeFromList({ state: 'OPEN', isDraft: false })).toBe(true)
+  })
+
+  it('leaves M available for the merged filter outside eligible PRs', () => {
+    expect(canToggleAutoMergeFromList({ state: 'OPEN', isDraft: true })).toBe(false)
+    expect(canToggleAutoMergeFromList({ state: 'MERGED', isDraft: false })).toBe(false)
+    expect(canToggleAutoMergeFromList(null)).toBe(false)
   })
 })

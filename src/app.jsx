@@ -970,7 +970,7 @@ function App({ repo }) {
     // Group 1: navigation  Group 2: actions  Group 3: meta (? handled separately)
     const g1 = [{ key: 'j/k', label: 'nav', group: 1 }, { key: 'Tab', label: 'pane', group: 1 }]
     const g3 = [{ key: 'r', label: 'refresh', group: 3 }, { key: 'S', label: 'settings', group: 3 }, { key: '?', label: 'help' }]
-    if (pane === 'prs')    return [...g1, { key: 'Enter', label: 'open', group: 2 }, { key: 'd', label: 'diff', group: 2 }, { key: 'f', label: 'filter', group: 2 }, { key: 'm', label: 'merge', group: 2 }, ...g3]
+    if (pane === 'prs')    return [...g1, { key: 'Enter', label: 'open', group: 2 }, { key: 'd', label: 'diff', group: 2 }, { key: 'f', label: 'filter', group: 2 }, { key: 'm', label: 'merge', group: 2 }, { key: 'M', label: 'auto-merge', group: 2 }, ...g3]
     if (pane === 'issues') return [...g1, { key: 'Enter', label: 'open', group: 2 }, { key: 'n', label: 'new', group: 2 }, ...g3]
     if (pane === 'branches') return [...g1, { key: 'Enter', label: 'checkout', group: 2 }, { key: 'n', label: 'new', group: 2 }, { key: 'D', label: 'delete', group: 2 }, ...g3]
     if (pane === 'actions') return [...g1, { key: 'Enter', label: 'logs', group: 2 }, { key: 'R', label: 're-run', group: 2 }, ...g3]

@@ -16,7 +16,7 @@ import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
   listPRs, listLabels, listCollaborators,
-  mergePR, closePR, checkoutBranch, addLabels, removeLabels,
+  enableAutoMerge, disableAutoMerge, mergePR, closePR, checkoutBranch, addLabels, removeLabels,
   requestReviewers, removeReviewers, reviewPR, getRepoInfo,
   addPRAssignees, removePRAssignees,
 } from '../../executor.js'
@@ -223,6 +223,10 @@ const MERGE_OPTIONS = [
   { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
 ]
 
+export function canToggleAutoMergeFromList(pr) {
+  return pr?.state === 'OPEN' && !pr?.isDraft
+}
+
 // ─── PR detail popover content ────────────────────────────────────────────────
 
 /** Default popover width in columns; clamped to terminal width at runtime. */
@@ -382,6 +386,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   // Single state → pass it directly; multi-state → fetch 'all' and filter client-side
   const apiState = filterStates.size === 1 ? [...filterStates][0] : 'all'
   const { data: prs, loading, error, refetch } = useGh(listPRs, [repo, { state: apiState, scope, author: authorFilter || undefined, limit }])
+  const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000 })
 
   const [cursor, setCursorRaw] = useState(savedState.cursor)
   const [scrollOffset, setScrollOffsetRaw] = useState(savedState.scrollOffset)
@@ -481,6 +486,20 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     if (input === 'k' || key.upArrow)   { moveCursor(-1); return }
     if (input === 'r') { refetch(); return }
     if (input === '/') { openDialog('fuzzy'); return }
+
+    const focusedPR = !loading && items.length > 0 ? items[cursor] : null
+    if (input === 'M' && canToggleAutoMergeFromList(focusedPR)) {
+      if (focusedPR.autoMergeRequest) {
+        disableAutoMerge(repo, focusedPR.number)
+          .then(() => { showStatus('✓ Auto-merge disabled'); refetch() })
+          .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
+      } else {
+        enableAutoMerge(repo, focusedPR.number, repoInfo?.squashMergeAllowed ? 'squash' : 'merge')
+          .then(() => { showStatus('⟳ Auto-merge enabled'); refetch() })
+          .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
+      }
+      return
+    }
 
     // Filter state toggles (defaults: O/C/M) — press to toggle state in/out of active set
     if (FK.filterOpen && input === FK.filterOpen) {

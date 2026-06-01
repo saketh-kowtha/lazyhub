@@ -160,6 +160,14 @@ describe('listPRs()', () => {
     expect(args).toContain('--author')
     expect(args).toContain('alice')
   })
+
+  it('requests autoMergeRequest so list view can toggle auto-merge', async () => {
+    mockSuccess([])
+    await listPRs('owner/repo')
+    const [, args] = execa.mock.calls[0]
+    const jsonFields = args[args.indexOf('--json') + 1].split(',')
+    expect(jsonFields).toContain('autoMergeRequest')
+  })
 })
 
 describe('getPR()', () => {
