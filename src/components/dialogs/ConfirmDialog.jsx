@@ -7,6 +7,7 @@ import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useTheme } from '../../theme.js'
 import { useKeyScope } from '../../keyscope.js'
+import { matchesAction } from '../../config/actions.js'
 
 export function ConfirmDialog({ message, destructive = false, onConfirm, onCancel, requireText }) {
   useKeyScope('dialog')
@@ -19,16 +20,16 @@ export function ConfirmDialog({ message, destructive = false, onConfirm, onCance
   const canConfirm = !requireText || typed === requireText
 
   useInput((input, key) => {
-    if (key.escape) { onCancel(); return }
+    if (matchesAction('dialog.cancel', input, key)) { onCancel(); return }
     if (key.leftArrow) { setCursor(0); return }
     if (key.rightArrow) { setCursor(1); return }
     if (key.upArrow) { setCursor(0); return }
     if (key.downArrow) { setCursor(1); return }
     // Only use j/k for selection when no text-typing mode — otherwise branch
     // names / confirm strings containing j or k would be unreachable.
-    if (!requireText && input === 'k') { setCursor(0); return }
-    if (!requireText && input === 'j') { setCursor(1); return }
-    if (key.return) {
+    if (!requireText && matchesAction('dialog.up', input, key)) { setCursor(0); return }
+    if (!requireText && matchesAction('dialog.down', input, key)) { setCursor(1); return }
+    if (matchesAction('dialog.confirm', input, key)) {
       if (cursor === 0 && canConfirm) {
         onConfirm()
       } else {

@@ -4,12 +4,12 @@
  */
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { useKeyScope } from '../../keyscope.js'
+import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
   listPRComments, resolveThread,
@@ -143,7 +143,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   }, [action, actionText, repo, prNumber, flash, refetch])
 
   // ── Keyboard ──────────────────────────────────────────────────────────────
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     // ── Action mode ──
     if (action) {
       if (action.type === 'delete') {

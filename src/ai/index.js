@@ -48,7 +48,7 @@ export async function getAICodeReview({ diff, prTitle, prBody, apiKey: _apiKey, 
       system,
       user,
       maxTokens:  MAX_TOKENS,
-      model:      model || DEFAULT_MODEL,
+      model,
       timeoutMs,
     })
     tokensIn  = result.tokensIn
@@ -57,7 +57,7 @@ export async function getAICodeReview({ diff, prTitle, prBody, apiKey: _apiKey, 
   } finally {
     logAiUsage({
       provider:  provider.id,
-      model:     model || DEFAULT_MODEL,
+      model:     result?.modelUsed || model || DEFAULT_MODEL,
       tokensIn,
       tokensOut,
       latencyMs: Date.now() - startMs,

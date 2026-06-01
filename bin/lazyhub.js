@@ -13,10 +13,15 @@ if (process.argv.includes('--mcp')) {
   process.exit(0)
 }
 
-import { bootstrap } from '../src/bootstrap.js'
-import { renderApp } from '../src/app.jsx'
-import { loadConfig } from '../src/config.js'
-import { startIPC } from '../src/ipc.js'
+if (process.argv[2] === 'doctor') {
+  const { runDoctor } = await import('../src/cli/doctor/index.js')
+  process.exit(await runDoctor(process.argv.slice(3)))
+}
+
+const { bootstrap } = await import('../src/bootstrap.js')
+const { renderApp } = await import('../src/app.jsx')
+const { loadConfig } = await import('../src/config.js')
+const { startIPC } = await import('../src/ipc.js')
 
 const cfg = loadConfig()
 

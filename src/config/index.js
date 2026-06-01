@@ -10,11 +10,12 @@
  * cached, fallback-on-failure) and merges it on top — "remote wins".
  */
 
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'
 import { loadConfig, fetchRemoteConfig } from './loader.js'
+import { writeConfig } from './writer.js'
 import { DEFAULT_CONFIG, validateConfig, mergeConfig } from './schema.js'
 
-export const ConfigContext = createContext(DEFAULT_CONFIG)
+export const ConfigContext = createContext({ ...DEFAULT_CONFIG, write: () => DEFAULT_CONFIG })
 
 /**
  * Provides the merged user config to the React tree.
@@ -41,7 +42,16 @@ export function ConfigProvider({ children, initialConfig }) {
     return () => { cancelled = true }
   }, [configUrl])
 
-  return React.createElement(ConfigContext.Provider, { value: config }, children)
+  const write = useCallback((patch) => {
+    writeConfig(patch)
+    const next = loadConfig()
+    setConfig(next)
+    return next
+  }, [])
+
+  const value = useMemo(() => ({ ...config, write }), [config, write])
+
+  return React.createElement(ConfigContext.Provider, { value }, children)
 }
 
 /**

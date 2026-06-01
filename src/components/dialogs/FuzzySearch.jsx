@@ -11,6 +11,7 @@ import { TextInput } from '../../utils.js'
 import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { useState } from 'react'
 import { useKeyScope } from '../../keyscope.js'
+import { matchesAction } from '../../config/actions.js'
 
 function matchesQuery(item, query, searchFields) {
   if (!query) return true
@@ -42,17 +43,17 @@ export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['t
     useVirtualList({ items: filtered, height: listHeight })
 
   useInput((input, key) => {
-    if (key.escape) { onCancel(); return }
-    if (key.return) {
+    if (matchesAction('dialog.cancel', input, key)) { onCancel(); return }
+    if (matchesAction('dialog.confirm', input, key)) {
       if (filtered[cursor]) onSubmit(filtered[cursor])
       return
     }
-    if (key.upArrow   || (key.ctrl && input === 'k')) { moveCursor(cursor - 1); return }
-    if (key.downArrow || (key.ctrl && input === 'j')) { moveCursor(cursor + 1); return }
+    if (matchesAction('dialog.filter-up', input, key)) { moveCursor(cursor - 1); return }
+    if (matchesAction('dialog.filter-down', input, key)) { moveCursor(cursor + 1); return }
     // Plain g/G would hijack characters typed into the search query (e.g.
     // filtering PRs by "bug" or author "greg"). Scope jumps to Ctrl+g / Ctrl+G.
-    if (key.ctrl && input === 'g') { jumpTop();    return }
-    if (key.ctrl && input === 'G') { jumpBottom(); return }
+    if (matchesAction('dialog.filter-top', input, key)) { jumpTop();    return }
+    if (matchesAction('dialog.filter-bottom', input, key)) { jumpBottom(); return }
   })
 
   return (

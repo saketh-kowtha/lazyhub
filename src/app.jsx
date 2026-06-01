@@ -18,6 +18,7 @@ import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
 import { KeyScopeProvider, useActiveScope, useKeyScope } from './keyscope.js'
 import { loadConfig, CONFIG_PATH } from './config.js'
 import { ConfigProvider } from './config/index.js'
+import { migrateStateJsonToToml } from './config/migrate.js'
 import { useLayout } from './hooks/useLayout.js'
 import { AppContext } from './context.js'
 import { logger } from './utils.js'
@@ -40,11 +41,13 @@ import { SettingsPane } from './features/settings/index.jsx'
 import { LogPane } from './features/logs/index.jsx'
 import { NotificationList } from './features/notifications/index.jsx'
 import { CustomPane } from './components/CustomPane.jsx'
+import { TabView } from './features/tabs/view.jsx'
 import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 import { AIAssistant } from './components/AIAssistant.jsx'
 import { CommandPalette } from './components/CommandPalette.jsx'
 import { openInEditor } from './editor.js'
 import { THEME_NAMES } from './theme.js'
+import { actionHints, matchesAction } from './config/actions.js'
 
 const _config = loadConfig()
 
@@ -52,74 +55,44 @@ const _config = loadConfig()
 
 const PANES = _config.panes
 
-const BUILTIN_PANE_LABELS = {
-  prs:           'Pull Requests',
-  issues:        'Issues',
-  branches:      'Branches',
-  actions:       'Actions',
-  notifications: 'Notifications',
-}
-
-const BUILTIN_PANE_ICONS = {
-  prs:           '⎇',
-  issues:        '◎',
-  branches:      '⑂',
-  actions:       '⚡',
-  notifications: '◈',
-}
-
-
 // Merge built-in + custom so label/icon lookups work uniformly
-const PANE_LABELS = { ...BUILTIN_PANE_LABELS }
-const PANE_ICONS  = { ...BUILTIN_PANE_ICONS }
-for (const [id, def] of Object.entries(_config.customPanes || {})) {
-  PANE_LABELS[id] = def.label
-  PANE_ICONS[id]  = def.icon
+const PANE_LABELS = {}
+const PANE_ICONS  = {}
+for (const [id, def] of Object.entries(_config.toml?.panes || {})) {
+  PANE_LABELS[id] = def.label || id
+  PANE_ICONS[id]  = def.icon || ''
+}
+for (const [id, def] of Object.entries(_config.customTabs || {})) {
+  PANE_LABELS[id] = def.label || id
+  PANE_ICONS[id] = def.icon || '▣'
 }
 
 // ─── Keyboard reference — shown by ? in every view ───────────────────────────
 
-const GLOBAL_KEYS = [
-  { key: 'Ctrl+A',           label: 'AI assistant' },
-  { key: 'Tab / Shift+Tab', label: 'cycle panes forward / back' },
-  { key: 'r',               label: 'refresh (bypass cache)' },
-  { key: 'o',               label: 'open current item in browser' },
-  { key: '/',               label: 'fuzzy search current list' },
-  { key: '?',               label: 'toggle this help overlay' },
-  { key: 'S',               label: 'settings' },
-  { key: 'q / Esc',         label: 'back one level / quit at root' },
-]
+const GLOBAL_KEYS = actionHints([
+  'app.ai-assistant',
+  'app.next-pane',
+  'list.refresh',
+  'pr.open-browser',
+  'list.search',
+  'app.help',
+  'app.settings',
+  'app.back',
+], _config.toml)
 
 // Per-pane keys shown when view === 'list'
 const PANE_KEYS = {
-  prs: [
-    { key: 'j / k  ↑↓',     label: 'navigate rows' },
-    { key: 'gg / G',         label: 'jump to top / bottom' },
-    { key: 'Enter',          label: 'open PR detail' },
-    { key: 'd',              label: 'open diff view' },
-    { key: 'f',              label: 'cycle filter: open → closed → merged' },
-    { key: 'm',              label: 'merge  (pick --merge/--squash/--rebase)' },
-    { key: 'a',              label: 'approve PR' },
-    { key: 'x',              label: 'request changes' },
-    { key: 'l',              label: 'edit labels' },
-    { key: 'A',              label: 'edit assignees' },
-    { key: 'R',              label: 'request reviewers' },
-    { key: 'c',              label: 'checkout branch locally' },
-    { key: 'y',              label: 'copy PR URL to clipboard' },
-    { key: 'o',              label: 'open in browser' },
-  ],
-  issues: [
-    { key: 'j / k  ↑↓',     label: 'navigate rows' },
-    { key: 'gg / G',         label: 'jump to top / bottom' },
-    { key: 'Enter',          label: 'open issue detail' },
-    { key: 'f',              label: 'cycle filter: open → closed' },
-    { key: 'n',              label: 'create new issue' },
-    { key: 'x',              label: 'close issue (confirm dialog)' },
-    { key: 'l',              label: 'edit labels' },
-    { key: 'A',              label: 'edit assignees' },
-    { key: 'y',              label: 'copy issue URL to clipboard' },
-    { key: 'o',              label: 'open in browser' },
-  ],
+  prs: actionHints([
+    'cursor.down', 'cursor.top', 'pr.open-selected', 'pr.diff',
+    'pr.filter-cycle', 'pr.merge', 'pr.auto-merge', 'pr.approve',
+    'pr.request-changes', 'pr.labels', 'pr.assignees', 'pr.reviewers',
+    'pr.checkout', 'pr.copy-url', 'pr.open-browser',
+  ], _config.toml),
+  issues: actionHints([
+    'cursor.down', 'cursor.top', 'issue.open-selected', 'issue.filter-cycle',
+    'issue.new', 'issue.close', 'issue.labels', 'issue.assignees',
+    'issue.copy-url', 'issue.open-browser',
+  ], _config.toml),
   branches: [
     { key: 'j / k  ↑↓',     label: 'navigate rows' },
     { key: 'gg / G',         label: 'jump to top / bottom' },
@@ -186,49 +159,13 @@ const VIEW_KEYS = {
 
 // Dialog-specific hints appended when a dialog is active
 const DIALOG_KEYS = {
-  fuzzy: [
-    { key: 'type',           label: 'filter in real-time' },
-    { key: '↑↓ / j k',      label: 'navigate results' },
-    { key: 'Enter',          label: 'select item' },
-    { key: 'Esc',            label: 'cancel' },
-  ],
-  merge: [
-    { key: '↑↓ / j k',      label: 'pick merge strategy' },
-    { key: 'Enter',          label: 'confirm strategy' },
-    { key: 'Tab',            label: 'next field (commit message)' },
-    { key: 'Ctrl+G',         label: 'execute merge' },
-    { key: 'Esc',            label: 'cancel' },
-  ],
-  multiselect: [
-    { key: 'type',           label: 'filter options' },
-    { key: '↑↓ / j k',      label: 'navigate' },
-    { key: 'Space',          label: 'toggle selection' },
-    { key: 'Enter',          label: 'confirm' },
-    { key: 'Esc',            label: 'cancel' },
-  ],
-  confirm: [
-    { key: 'y / Enter',      label: 'confirm action' },
-    { key: 'n / Esc',        label: 'cancel' },
-  ],
-  compose: [
-    { key: 'Tab',            label: 'next field' },
-    { key: 'Ctrl+E',         label: 'open $EDITOR for body' },
-    { key: 'Ctrl+G',         label: 'submit' },
-    { key: 'Esc',            label: 'cancel' },
-  ],
-  logs: [
-    { key: 'j / k',          label: 'scroll' },
-    { key: 'gg / G',         label: 'top / bottom' },
-    { key: 'f',              label: 'filter by step name' },
-    { key: 'R',              label: 're-run workflow' },
-    { key: 'Esc',            label: 'close log viewer' },
-  ],
-  comment: [
-    { key: '←→',             label: 'pick comment type' },
-    { key: 'Ctrl+E',         label: 'open $EDITOR for body' },
-    { key: 'Ctrl+G',         label: 'submit comment' },
-    { key: 'Esc',            label: 'cancel' },
-  ],
+  fuzzy: actionHints(['dialog.type', 'dialog.filter-down', 'dialog.confirm', 'dialog.cancel'], _config.toml),
+  merge: actionHints(['dialog.down', 'dialog.confirm', 'dialog.next-field', 'dialog.submit', 'dialog.cancel'], _config.toml),
+  multiselect: actionHints(['dialog.type', 'dialog.filter-down', 'dialog.toggle', 'dialog.confirm', 'dialog.cancel'], _config.toml),
+  confirm: actionHints(['dialog.yes', 'dialog.no'], _config.toml),
+  compose: actionHints(['dialog.next-field', 'dialog.editor', 'dialog.submit', 'dialog.cancel'], _config.toml),
+  logs: actionHints(['cursor.down', 'cursor.top', 'log.filter', 'workflow.rerun', 'dialog.cancel'], _config.toml),
+  comment: actionHints(['dialog.next-field', 'dialog.editor', 'dialog.submit', 'dialog.cancel'], _config.toml),
 }
 
 // ─── Help overlay — shown on ? from any view ─────────────────────────────────
@@ -239,7 +176,9 @@ function HelpOverlay({ pane, view, onClose }) {
   const { stdout } = useStdout()
   const cols = stdout?.columns || 80
   useInput((input, key) => {
-    if (key.escape || key.return || input === '?') onClose()
+    if (matchesAction('dialog.cancel', input, key, _config.toml) ||
+        matchesAction('dialog.confirm', input, key, _config.toml) ||
+        matchesAction('app.help', input, key, _config.toml)) onClose()
   })
 
   const isListView = view === 'list'
@@ -299,7 +238,7 @@ function HelpOverlay({ pane, view, onClose }) {
       <Box marginTop={1} flexDirection="column" paddingTop={1} borderStyle="single" borderBottom={false} borderLeft={false} borderRight={false} borderColor={t.ui.border}>
         <Box gap={1}>
           <Text color={t.ui.dim}>Config:</Text>
-          <Text color={t.ui.selected}>~/.config/lazyhub/config.json</Text>
+          <Text color={t.ui.selected}>~/.config/lazyhub/lazyhub.toml</Text>
           {!narrow && <Box flexGrow={1} />}
           {!narrow && <Text color={t.ui.dim}>Docs:</Text>}
           {!narrow && <Text color={t.ui.selected}>https://saketh-kowtha.github.io/lgh</Text>}
@@ -519,7 +458,7 @@ function App({ repo }) {
   // ─── Global key handler ───────────────────────────────────────────────────
   useInput((input, key) => {
     // Ctrl+A: open AI assistant (always fires regardless of scope)
-    if (key.ctrl && input === 'a') { setShowAI(true); return }
+    if (matchesAction('app.ai-assistant', input, key, _config.toml)) { setShowAI(true); return }
 
     // Dismiss sticky error toasts on any key
     if (toasts.some(t => t.variant === 'error')) {
@@ -547,7 +486,7 @@ function App({ repo }) {
       return
     }
 
-    if (input === 'q' || key.escape) {
+    if (matchesAction('app.back', input, key, _config.toml)) {
       if (showHelp)              { setShowHelp(false); return }
       if (view === 'settings')   { setView('list'); return }
       if (view === 'logs')       { setView('list'); return }
@@ -559,14 +498,14 @@ function App({ repo }) {
       return
     }
 
-    if (input === '?') { setShowHelp(v => !v); return }
+    if (matchesAction('app.help', input, key, _config.toml)) { setShowHelp(v => !v); return }
 
     // Help overlay eats everything else
     if (showHelp) { setShowHelp(false); return }
 
-    if (key.tab) {
+    if (matchesAction('app.next-pane', input, key, _config.toml) || matchesAction('app.prev-pane', input, key, _config.toml)) {
       const idx = PANES.indexOf(pane)
-      setPane(PANES[key.shift
+      setPane(PANES[matchesAction('app.prev-pane', input, key, _config.toml)
         ? (idx - 1 + PANES.length) % PANES.length
         : (idx + 1) % PANES.length
       ])
@@ -587,18 +526,18 @@ function App({ repo }) {
       return
     }
 
-    if (input === 'S') { setView('settings'); setSelectedItem(null); return }
-    if (input === 'E') { openInEditor(CONFIG_PATH, 1, _config.editor).catch(() => {}); return }
-    if (input === 'L' && process.env.LAZYHUB_DEBUG === '1') { setView('logs'); setSelectedItem(null); return }
+    if (matchesAction('app.settings', input, key, _config.toml)) { setView('settings'); setSelectedItem(null); return }
+    if (matchesAction('app.open-config', input, key, _config.toml)) { openInEditor(CONFIG_PATH, 1, _config.editor).catch(() => {}); return }
+    if (matchesAction('app.logs', input, key, _config.toml) && process.env.LAZYHUB_DEBUG === '1') { setView('logs'); setSelectedItem(null); return }
 
     // V — toggle visual (batch-select) mode skeleton
-    if (input === 'V' && view === 'list') {
+    if (matchesAction('app.visual-toggle', input, key, _config.toml) && view === 'list') {
       setAppMode(m => m === 'VISUAL' ? 'NORMAL' : 'VISUAL')
       return
     }
 
     // : — command palette
-    if (input === ':') {
+    if (matchesAction('command-palette.open', input, key, _config.toml)) {
       setShowPalette(true)
       setAppMode('COMMAND')
       return
@@ -606,7 +545,7 @@ function App({ repo }) {
 
     // Space — leader key (1500ms window)
     // Second space within the window opens the command palette (<space><space>)
-    if (input === ' ') {
+    if (matchesAction('app.leader', input, key, _config.toml)) {
       if (leaderActive) {
         // Double-space: open command palette
         clearTimeout(leaderTimerRef.current)
@@ -627,10 +566,10 @@ function App({ repo }) {
     if (leaderActive) {
       clearTimeout(leaderTimerRef.current)
       setLeaderActive(false)
-      if (input === 't') { setShowPalette(true); setAppMode('COMMAND'); return }
-      if (input === 'a') { setShowAI(true); return }
-      if (input === '?') { setShowHelp(true); return }
-      if (input === 'r') { /* recent PRs — future */ return }
+      if (matchesAction('app.leader-theme', input, key, _config.toml)) { setShowPalette(true); setAppMode('COMMAND'); return }
+      if (matchesAction('app.leader-ai', input, key, _config.toml)) { setShowAI(true); return }
+      if (matchesAction('app.leader-help', input, key, _config.toml)) { setShowHelp(true); return }
+      if (matchesAction('app.leader-recent', input, key, _config.toml)) { /* recent PRs — future */ return }
       return
     }
 
@@ -936,6 +875,10 @@ function App({ repo }) {
         if (customDef) {
           return <CustomPane paneDef={customDef} repo={repo} listHeight={listHeight} onPaneState={onPaneState} />
         }
+        const customTab = (_config.customTabs || {})[pane]
+        if (customTab) {
+          return <TabView tab={customTab} repo={repo} />
+        }
         return <Box paddingX={1}><Text color={t.ui.muted}>Unknown pane: {pane}</Text></Box>
       }
     }
@@ -1029,6 +972,7 @@ function App({ repo }) {
 
 export function renderApp() {
   const repo = process.env.GHUI_REPO || ''
+  migrateStateJsonToToml()
 
   // Enter alternate screen buffer — terminal restores on exit (like lazygit / vim)
   process.stdout.write('\x1b[?1049h\x1b[H')

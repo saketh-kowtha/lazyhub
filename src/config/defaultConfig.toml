@@ -7,10 +7,19 @@
 # NOTE: the values here MUST stay in sync with DEFAULT_CONFIG in schema.js
 # (a unit test asserts they parse to the same object).
 
-# Custom tabs (Phase E4 #66 wires these up). This bare top-level key MUST stay
-# above the first [section] header — TOML assigns trailing bare keys to the last
-# opened table otherwise.
-tabs = []
+# Custom tabs (Phase E4 #66). These bare top-level tables MUST stay above the
+# first [section] header — TOML assigns trailing bare keys to the last opened
+# table otherwise.
+[[tabs]]
+id    = "focus"
+label = "Focus"
+order = 0
+key   = "<space>0"
+panes = [
+  { kind = "prs",    filter = { reviewer = "@me", state = "open" }, title = "Review requested", limit = 25 },
+  { kind = "prs",    filter = { author = "@me", state = "open" }, title = "My open PRs", limit = 25 },
+  { kind = "issues", filter = { assignee = "@me", state = "open" }, title = "Assigned issues", limit = 25 },
+]
 
 # ── Meta ─────────────────────────────────────────────────────────────────
 [meta]
@@ -26,7 +35,72 @@ name = "lazyhub-dark"    # lazyhub-dark | lazyhub-light | lazyhub-high-contrast 
 # ── Defaults ─────────────────────────────────────────────────────────────
 [defaults]
 pr_scope    = "mine"          # mine | reviewing | all
-ai_provider = "claude-code"   # claude-code | codex | gemini-cli | anthropic-api
+ai_provider = "claude-code"   # claude-code | codex | gemini-cli | anthropic-api | openai-compatible
+
+# ── App registry and pane metadata ───────────────────────────────────────
+[app]
+active_panes      = ["focus", "prs", "issues", "branches", "actions", "notifications"]
+default_pane      = "focus"
+mouse             = false
+ai_review_enabled = true
+
+[panes.prs]
+label       = "Pull Requests"
+icon        = "⎇"
+description = "Review and manage pull requests"
+
+[panes.issues]
+label       = "Issues"
+icon        = "◎"
+description = "Triage repository issues"
+
+[panes.branches]
+label       = "Branches"
+icon        = "⑂"
+description = "Inspect and checkout branches"
+
+[panes.actions]
+label       = "Actions"
+icon        = "⚡"
+description = "Inspect workflow runs"
+
+[panes.notifications]
+label       = "Notifications"
+icon        = "◈"
+description = "Review GitHub notifications"
+
+# ── Feature defaults consumed by legacy call sites through config.js ─────
+[features.prs]
+default_filter = "open"
+default_scope  = "mine"
+page_size      = 100
+
+[features.issues]
+default_filter = "open"
+page_size      = 50
+
+[features.actions]
+page_size = 30
+
+[layout]
+sidebar_width  = 24
+sidebar        = true
+preview_panel  = true
+preview_width  = 40
+border_style   = "round"
+compact_footer = false
+
+[diff]
+default_view     = "unified"
+syntax_highlight = true
+max_lines        = 2000
+
+[editor]
+command        = "auto"
+custom_command = ""
+
+[ipc]
+enabled = true
 
 # ── UI ───────────────────────────────────────────────────────────────────
 [ui]
@@ -50,6 +124,655 @@ high_contrast = false
 "a"     = "pr.approve"
 "m"     = "pr.merge"
 "r"     = "pr.refresh"
+
+# ── Action registry: key bindings + human/AI documentation metadata ─────
+[actions."app.ai-assistant"]
+keys = ["Ctrl+A"]
+hint = "Ctrl+A"
+label = "AI assistant"
+description = "Open the AI assistant overlay"
+scope = "global"
+group = "global"
+
+[actions."app.next-pane"]
+keys = ["Tab"]
+hint = "Tab"
+label = "pane"
+description = "Cycle panes forward"
+scope = "global"
+group = "nav"
+
+[actions."app.prev-pane"]
+keys = ["Shift+Tab"]
+hint = "Shift+Tab"
+label = "previous pane"
+description = "Cycle panes backward"
+scope = "global"
+group = "nav"
+
+[actions."app.help"]
+keys = ["?"]
+hint = "?"
+label = "help"
+description = "Toggle contextual help"
+scope = "global"
+group = "meta"
+
+[actions."app.settings"]
+keys = ["S"]
+hint = "S"
+label = "settings"
+description = "Open settings"
+scope = "global"
+group = "meta"
+
+[actions."app.open-config"]
+keys = ["E"]
+hint = "E"
+label = "edit config"
+description = "Open lazyhub.toml in the editor"
+scope = "global"
+group = "meta"
+
+[actions."app.back"]
+keys = ["q", "Esc"]
+hint = "q / Esc"
+label = "back"
+description = "Back one level, or quit at root"
+scope = "global"
+group = "global"
+
+[actions."command-palette.open"]
+keys = [":", "<space><space>"]
+hint = ":"
+label = "command palette"
+description = "Open the command palette"
+scope = "global"
+group = "global"
+
+[actions."app.visual-toggle"]
+keys = ["V"]
+hint = "V"
+label = "visual"
+description = "Toggle visual selection mode"
+scope = "global"
+group = "global"
+
+[actions."app.logs"]
+keys = ["L"]
+hint = "L"
+label = "logs"
+description = "Open debug logs when LAZYHUB_DEBUG=1"
+scope = "global"
+group = "debug"
+
+[actions."app.leader"]
+keys = ["Space"]
+hint = "<Space>"
+label = "leader"
+description = "Start a leader-key chord"
+scope = "global"
+group = "global"
+
+[actions."app.leader-theme"]
+keys = ["t"]
+hint = "t"
+label = "theme"
+description = "Open theme controls from leader mode"
+scope = "global"
+group = "leader"
+
+[actions."app.leader-ai"]
+keys = ["a"]
+hint = "a"
+label = "AI"
+description = "Open AI assistant from leader mode"
+scope = "global"
+group = "leader"
+
+[actions."app.leader-help"]
+keys = ["?"]
+hint = "?"
+label = "help"
+description = "Open help from leader mode"
+scope = "global"
+group = "leader"
+
+[actions."app.leader-recent"]
+keys = ["r"]
+hint = "r"
+label = "recent"
+description = "Open recently viewed items from leader mode"
+scope = "global"
+group = "leader"
+
+[actions."cursor.down"]
+keys = ["j", "Down"]
+hint = "j/k"
+label = "nav"
+description = "Move the cursor down"
+scope = "list"
+group = "nav"
+
+[actions."cursor.up"]
+keys = ["k", "Up"]
+hint = "j/k"
+label = "nav"
+description = "Move the cursor up"
+scope = "list"
+group = "nav"
+
+[actions."cursor.top"]
+keys = ["gg"]
+hint = "gg / G"
+label = "top/bottom"
+description = "Jump to the top"
+scope = "list"
+group = "nav"
+
+[actions."cursor.bottom"]
+keys = ["G"]
+hint = "gg / G"
+label = "top/bottom"
+description = "Jump to the bottom"
+scope = "list"
+group = "nav"
+
+[actions."list.refresh"]
+keys = ["r"]
+hint = "r"
+label = "refresh"
+description = "Refresh the active list"
+scope = "list"
+group = "meta"
+
+[actions."list.search"]
+keys = ["/"]
+hint = "/"
+label = "search"
+description = "Search the active list"
+scope = "list"
+group = "meta"
+
+[actions."log.filter"]
+keys = ["f"]
+hint = "f"
+label = "filter"
+description = "Filter log output"
+scope = "dialog"
+group = "filter"
+
+[actions."dialog.cancel"]
+keys = ["Esc"]
+hint = "Esc"
+label = "cancel"
+description = "Cancel or close the active dialog"
+scope = "dialog"
+group = "dialog"
+
+[actions."dialog.confirm"]
+keys = ["Enter"]
+hint = "Enter"
+label = "confirm"
+description = "Confirm the current dialog action"
+scope = "dialog"
+group = "dialog"
+
+[actions."dialog.down"]
+keys = ["j", "Down"]
+hint = "j/k"
+label = "navigate"
+description = "Move down in a dialog list"
+scope = "dialog"
+group = "nav"
+
+[actions."dialog.up"]
+keys = ["k", "Up"]
+hint = "j/k"
+label = "navigate"
+description = "Move up in a dialog list"
+scope = "dialog"
+group = "nav"
+
+[actions."dialog.top"]
+keys = ["g", "Ctrl+G"]
+hint = "g"
+label = "top"
+description = "Jump to the top of a dialog list"
+scope = "dialog"
+group = "nav"
+
+[actions."dialog.bottom"]
+keys = ["G", "Ctrl+G"]
+hint = "G"
+label = "bottom"
+description = "Jump to the bottom of a dialog list"
+scope = "dialog"
+group = "nav"
+
+[actions."dialog.toggle"]
+keys = ["Space"]
+hint = "Space"
+label = "toggle"
+description = "Toggle current selection"
+scope = "dialog"
+group = "dialog"
+
+[actions."dialog.submit"]
+keys = ["Ctrl+G"]
+hint = "Ctrl+G"
+label = "submit"
+description = "Submit composed form content"
+scope = "dialog"
+group = "dialog"
+
+[actions."dialog.editor"]
+keys = ["Ctrl+E"]
+hint = "Ctrl+E"
+label = "editor"
+description = "Open the current field in $EDITOR"
+scope = "dialog"
+group = "dialog"
+
+[actions."dialog.type"]
+keys = ["type"]
+hint = "type"
+label = "filter"
+description = "Type to filter in real time"
+scope = "dialog"
+group = "dialog"
+
+[actions."dialog.next-field"]
+keys = ["Tab"]
+hint = "Tab"
+label = "next field"
+description = "Move to the next form field"
+scope = "dialog"
+group = "dialog"
+
+[actions."dialog.yes"]
+keys = ["y", "Enter"]
+hint = "y / Enter"
+label = "confirm"
+description = "Confirm a prompt"
+scope = "dialog"
+group = "dialog"
+
+[actions."dialog.no"]
+keys = ["n", "Esc"]
+hint = "n / Esc"
+label = "cancel"
+description = "Cancel a prompt"
+scope = "dialog"
+group = "dialog"
+
+[actions."dialog.filter-up"]
+keys = ["Up", "Ctrl+K"]
+hint = "↑ / Ctrl+K"
+label = "navigate"
+description = "Move up while typing in a filter dialog"
+scope = "dialog"
+group = "nav"
+
+[actions."dialog.filter-down"]
+keys = ["Down", "Ctrl+J"]
+hint = "↓ / Ctrl+J"
+label = "navigate"
+description = "Move down while typing in a filter dialog"
+scope = "dialog"
+group = "nav"
+
+[actions."dialog.filter-top"]
+keys = ["Ctrl+G"]
+hint = "Ctrl+G"
+label = "top"
+description = "Jump to top while typing in a filter dialog"
+scope = "dialog"
+group = "nav"
+
+[actions."dialog.filter-bottom"]
+keys = ["Ctrl+Shift+G"]
+hint = "Ctrl+Shift+G"
+label = "bottom"
+description = "Jump to bottom while typing in a filter dialog"
+scope = "dialog"
+group = "nav"
+
+[actions."pr.open-selected"]
+keys = ["Enter"]
+hint = "Enter"
+label = "open"
+description = "Open PR detail"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.diff"]
+keys = ["d"]
+hint = "d"
+label = "diff"
+description = "Open PR diff"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.merge"]
+keys = ["m"]
+hint = "m"
+label = "merge"
+description = "Merge selected PR"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.auto-merge"]
+keys = ["M"]
+hint = "M"
+label = "auto-merge"
+description = "Toggle auto-merge for selected PR"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.approve"]
+keys = ["a"]
+hint = "a"
+label = "approve"
+description = "Approve selected PR"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.request-changes"]
+keys = ["x"]
+hint = "x"
+label = "request changes"
+description = "Request changes on selected PR"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.close"]
+keys = ["X"]
+hint = "X"
+label = "close"
+description = "Close selected PR"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.labels"]
+keys = ["l"]
+hint = "l"
+label = "labels"
+description = "Edit PR labels"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.assignees"]
+keys = ["A"]
+hint = "A"
+label = "assignees"
+description = "Edit PR assignees"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.reviewers"]
+keys = ["R"]
+hint = "R"
+label = "reviewers"
+description = "Request PR reviewers"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.checkout"]
+keys = ["c"]
+hint = "c"
+label = "checkout"
+description = "Checkout PR branch locally"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.copy-url"]
+keys = ["y"]
+hint = "y"
+label = "copy URL"
+description = "Copy PR URL to clipboard"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.open-browser"]
+keys = ["o"]
+hint = "o"
+label = "browser"
+description = "Open PR in browser"
+scope = "pr-list"
+group = "action"
+
+[actions."pr.filter-cycle"]
+keys = ["f"]
+hint = "f"
+label = "filter"
+description = "Cycle PR filter state"
+scope = "pr-list"
+group = "filter"
+
+[actions."pr.filter-open"]
+keys = ["O"]
+hint = "O"
+label = "open"
+description = "Toggle open PRs"
+scope = "pr-list"
+group = "filter"
+
+[actions."pr.filter-closed"]
+keys = ["C"]
+hint = "C"
+label = "closed"
+description = "Toggle closed PRs"
+scope = "pr-list"
+group = "filter"
+
+[actions."pr.filter-merged"]
+keys = ["M"]
+hint = "M"
+label = "merged"
+description = "Toggle merged PRs when auto-merge is unavailable"
+scope = "pr-list"
+group = "filter"
+
+[actions."pr.scope-cycle"]
+keys = ["s"]
+hint = "s"
+label = "scope"
+description = "Cycle PR list scope"
+scope = "pr-list"
+group = "filter"
+
+[actions."pr.author-filter"]
+keys = ["@"]
+hint = "@"
+label = "author"
+description = "Filter PRs by author"
+scope = "pr-list"
+group = "filter"
+
+[actions."pr.new"]
+keys = ["N"]
+hint = "N"
+label = "new PR"
+description = "Create a new PR"
+scope = "pr-list"
+group = "action"
+
+[actions."issue.open-selected"]
+keys = ["Enter"]
+hint = "Enter"
+label = "open"
+description = "Open issue detail"
+scope = "issue-list"
+group = "action"
+
+[actions."issue.new"]
+keys = ["n"]
+hint = "n"
+label = "new"
+description = "Create an issue"
+scope = "issue-list"
+group = "action"
+
+[actions."issue.close"]
+keys = ["x"]
+hint = "x"
+label = "close"
+description = "Close selected issue"
+scope = "issue-list"
+group = "action"
+
+[actions."issue.labels"]
+keys = ["l"]
+hint = "l"
+label = "labels"
+description = "Edit issue labels"
+scope = "issue-list"
+group = "action"
+
+[actions."issue.assignees"]
+keys = ["A"]
+hint = "A"
+label = "assignees"
+description = "Edit issue assignees"
+scope = "issue-list"
+group = "action"
+
+[actions."issue.copy-url"]
+keys = ["y"]
+hint = "y"
+label = "copy URL"
+description = "Copy issue URL"
+scope = "issue-list"
+group = "action"
+
+[actions."issue.open-browser"]
+keys = ["o"]
+hint = "o"
+label = "browser"
+description = "Open issue in browser"
+scope = "issue-list"
+group = "action"
+
+[actions."issue.filter-cycle"]
+keys = ["f"]
+hint = "f"
+label = "filter"
+description = "Cycle issue filter state"
+scope = "issue-list"
+group = "filter"
+
+[actions."issue.filter-open"]
+keys = ["O"]
+hint = "O"
+label = "open"
+description = "Toggle open issues"
+scope = "issue-list"
+group = "filter"
+
+[actions."issue.filter-closed"]
+keys = ["C"]
+hint = "C"
+label = "closed"
+description = "Toggle closed issues"
+scope = "issue-list"
+group = "filter"
+
+[actions."issue.sort-cycle"]
+keys = ["s"]
+hint = "s"
+label = "sort"
+description = "Cycle issue sort order"
+scope = "issue-list"
+group = "filter"
+
+[actions."branch.checkout"]
+keys = ["Space", "Enter"]
+hint = "Space / Enter"
+label = "checkout"
+description = "Checkout selected branch"
+scope = "branch-list"
+group = "action"
+
+[actions."branch.new"]
+keys = ["n"]
+hint = "n"
+label = "new"
+description = "Create a new branch"
+scope = "branch-list"
+group = "action"
+
+[actions."branch.delete"]
+keys = ["D"]
+hint = "D"
+label = "delete"
+description = "Delete selected branch"
+scope = "branch-list"
+group = "action"
+
+[actions."branch.push"]
+keys = ["p"]
+hint = "p"
+label = "push"
+description = "Push current branch"
+scope = "branch-list"
+group = "action"
+
+[actions."workflow.logs"]
+keys = ["Enter", "l"]
+hint = "Enter / l"
+label = "logs"
+description = "Open workflow run logs"
+scope = "workflow-list"
+group = "action"
+
+[actions."workflow.rerun"]
+keys = ["R"]
+hint = "R"
+label = "re-run"
+description = "Re-run selected workflow run"
+scope = "workflow-list"
+group = "action"
+
+[actions."workflow.cancel"]
+keys = ["X"]
+hint = "X"
+label = "cancel"
+description = "Cancel selected workflow run"
+scope = "workflow-list"
+group = "action"
+
+[actions."workflow.clear-filter"]
+keys = ["x"]
+hint = "x"
+label = "clear filter"
+description = "Clear workflow branch filter"
+scope = "workflow-list"
+group = "filter"
+
+[actions."notification.open"]
+keys = ["Enter"]
+hint = "Enter"
+label = "open"
+description = "Open selected notification target"
+scope = "notification-list"
+group = "action"
+
+[actions."notification.mark-read"]
+keys = ["m"]
+hint = "m"
+label = "mark read"
+description = "Mark selected notification as read"
+scope = "notification-list"
+group = "action"
+
+[actions."notification.mark-all"]
+keys = ["M"]
+hint = "M"
+label = "mark all"
+description = "Mark all notifications as read"
+scope = "notification-list"
+group = "action"
 
 # ── Agent settings (ARCHITECT_DECISIONS §3–7) ───────────────────────────
 [agent]
@@ -109,7 +832,28 @@ allow_merges    = false
 allow_comments  = true
 
 # ── AI budget (Phase L8 #153 enforces; schema slot reserved in V1) ───────
+[ai]
+provider          = "anthropic"
+model             = ""
+anthropic_api_key = ""
+openai_api_key    = ""
+openai_base_url   = "https://api.openai.com/v1"
+
+[ai.openai_compatible]
+# Ollama: http://localhost:11434/v1
+# LM Studio: http://localhost:1234/v1
+# Groq: https://api.groq.com/openai/v1
+# OpenRouter: https://openrouter.ai/api/v1
+# vLLM: http://your-vllm-host:8000/v1
+base_url   = "http://localhost:11434/v1"
+api_key    = ""
+model      = "qwen2.5-coder:32b"
+timeout_ms = 60000
+
 [ai.budget]
 monthly_usd_cap  = 0     # 0 = unlimited
 per_call_usd_cap = 0     # 0 = unlimited
 on_cap_exceeded  = "warn"  # warn | block
+
+# ── Auto-managed runtime state (Phase E2 #131) ───────────────────────────
+[state]

@@ -1,376 +1,203 @@
 /**
- * config.js — loads ~/.config/lazyhub/config.json
+ * config.js — compatibility shim over lazyhub.toml.
  *
- * ── Theme field ───────────────────────────────────────────────────────────────
- * Built-in theme names (use any as a plain string):
- *   "github-dark"       — default dark theme (GitHub-inspired)
- *   "github-light"      — light theme (GitHub-inspired)
- *   "catppuccin-mocha"  — extra dark pastel (Catppuccin Mocha)
- *   "catppuccin-latte"  — light pastel (Catppuccin Latte)
- *   "tokyo-night"       — dark blue/purple (Tokyo Night)
- *
- * Theme override formats:
- *   "theme": "github-dark"
- *     → use a named built-in theme
- *
- *   "theme": "/absolute/path/to/theme.json"
- *   "theme": "~/my-theme.json"
- *   "theme": "my-theme.json"   (resolved from ~/.config/lazyhub/)
- *     → load a full custom theme from a JSON file
- *
- *   "theme": { "name": "tokyo-night", "overrides": { "ui": { "selected": "#ff9900" } } }
- *     → use a named theme with deep per-key overrides
- *
- *   "theme": { "ui": { "selected": "#ff9900" } }
- *     → legacy: plain overrides applied on top of github-dark
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * Full example:
- * {
- *   "panes": ["prs", "issues", "branches", "actions", "notifications"],
- *   "defaultPane": "prs",
- *   "theme": "github-dark",
- *   "customPanes": {
- *     "my-deploys": {
- *       "label": "Deployments",
- *       "icon": "▶",
- *       "command": "gh api repos/{repo}/deployments --jq '[.[] | {title:.environment,number:.id,state:.task,updatedAt:.created_at,url:.url}]'",
- *       "actions": { "o": "open" }
- *     }
- *   },
- *   "pr": {
- *     "defaultFilter": "open",
- *     "defaultScope": "all",
- *     "pageSize": 100,
- *     "keys": {
- *       "filterOpen":   "O",
- *       "filterClosed": "C",
- *       "filterMerged": "M"
- *     }
- *   },
- *   "issues": {
- *     "defaultFilter": "open",
- *     "pageSize": 50,
- *     "keys": {
- *       "filterOpen":   "O",
- *       "filterClosed": "C"
- *     }
- *   },
- *   "actions": {
- *     "pageSize": 30
- *   },
- *   "diff": {
- *     "defaultView": "unified",
- *     "syntaxHighlight": true,
- *     "maxLines": 2000
- *   }
- * }
- *
- * Built-in pane ids: prs, issues, branches, actions, notifications
- * Custom pane ids:   any string NOT matching a built-in id
- *
- * Command placeholders: {repo}, {owner}, {name}
- * Expected output: JSON array; recommended fields: title, number, state, updatedAt, url
+ * The runtime source of truth is `~/.config/lazyhub/lazyhub.toml`, loaded by
+ * `src/config/loader.js`. This module keeps the historical `loadConfig()`
+ * shape alive for older call sites while projecting every value from TOML.
  */
 
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs'
-import { join, dirname } from 'path'
-import { homedir } from 'os'
+import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
+import { ConfigContext, ConfigProvider, useConfig } from './config/index.js'
+import { loadConfig as loadTomlConfig, USER_CONFIG_PATH } from './config/loader.js'
+import { DEFAULT_CONFIG } from './config/schema.js'
+import { readState as readTomlState, writeConfig as writeTomlConfig, writeState as writeTomlState } from './config/writer.js'
 
-// ── New TOML user-config layer (issue #130, Phase E1) ──────────────────────────
-// This file remains the legacy JSON config module that the app still consumes.
-// The issue's spec-correction asked to replace this file's body with a single
-// re-export, but that was written assuming config.js was minimal — it is in fact
-// the live JSON config (loadConfig/CONFIG_PATH/loadState/saveConfig/…) imported
-// across the app, and a wholesale replacement would break the build, contradicting
-// E1's "no behavior wiring yet" rule. Instead we re-export the new React surface
-// here so `./config.js` is still the single import site, and migrate consumers to
-// the TOML config in later phases (E2–E5). The TOML loadConfig lives in
-// `./config/loader.js` to avoid colliding with the legacy loadConfig below.
-export { ConfigContext, ConfigProvider, useConfig } from './config/index.js'
+export { ConfigContext, ConfigProvider, useConfig }
 
 export const BUILTIN_PANES = ['prs', 'issues', 'branches', 'actions', 'notifications']
+export const CONFIG_PATH = USER_CONFIG_PATH
+const DEFAULT_CONFIG_TOML_PATH = join(dirname(fileURLToPath(import.meta.url)), 'config', 'defaultConfig.toml')
 
-export const CONFIG_PATH = join(homedir(), '.config', 'lazyhub', 'config.json')
-
-// ─── Section defaults ─────────────────────────────────────────────────────────
-
-const DEFAULT_PR = {
-  defaultFilter: 'open',   // 'open' | 'closed' | 'merged'
-  defaultScope:  'own',    // 'all' | 'own' | 'reviewing'
-  pageSize:      100,
-  keys: {
-    filterOpen:   'O',
-    filterClosed: 'C',
-    filterMerged: 'M',
-  },
+function firstActionKey(actions, id, fallback) {
+  const key = actions?.[id]?.keys?.[0]
+  return typeof key === 'string' ? key : fallback
 }
 
-const DEFAULT_ISSUES = {
-  defaultFilter: 'open',   // 'open' | 'closed'
-  pageSize:      50,
-  keys: {
-    filterOpen:   'O',
-    filterClosed: 'C',
-  },
+function scopeFromToml(scope) {
+  return scope === 'mine' ? 'own' : scope
 }
 
-const DEFAULT_ACTIONS = {
-  pageSize: 30,
+function camelAi(ai = {}) {
+  return {
+    provider:        ai.provider || 'anthropic',
+    model:           ai.model || '',
+    anthropicApiKey: ai.anthropic_api_key || process.env.ANTHROPIC_API_KEY || '',
+    openaiApiKey:    ai.openai_api_key || process.env.OPENAI_API_KEY || '',
+    openaiBaseUrl:   ai.openai_base_url || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    openaiCompatible: ai.openai_compatible || {},
+  }
 }
 
-const DEFAULT_DIFF = {
-  defaultView:      'unified',  // 'unified' | 'split'
-  syntaxHighlight:  true,
-  maxLines:         2000,
-}
-
-const DEFAULT_EDITOR = {
-  command:       'auto',   // 'auto' | 'vscode' | 'cursor' | 'nvim' | 'vim' | 'idea' | 'webstorm' | 'goland' | 'pycharm' | 'zed' | 'windsurf' | 'emacs' | 'nano' | 'custom'
-  customCommand: null,     // used when command is 'custom', e.g. "code --goto {file}:{line}"
-}
-
-const DEFAULT_IPC = {
-  enabled: true,           // start IPC socket server for IDE integrations
-}
-
-const DEFAULT_AI = {
-  provider:        'anthropic',                   // 'anthropic' | 'openai'
-  model:           '',                            // empty = use provider default
-  anthropicApiKey: '',
-  openaiApiKey:    '',
-  openaiBaseUrl:   'https://api.openai.com/v1',  // override for Azure / Ollama / Groq / etc.
-}
-
-const DEFAULT_LAYOUT = {
-  // Sidebar
-  sidebarWidth:   24,      // columns (min 16, max 40)
-  sidebar:        true,    // false = always hide even on wide terminals
-
-  // Right preview panel (shown on prs list when terminal is wide enough)
-  previewPanel:   true,    // false = always hide
-  previewWidth:   40,      // columns (min 24, max 80)
-
-  // Border style for sidebar + main pane box
-  // Options: 'round' | 'single' | 'double' | 'bold' | 'classic' | 'none'
-  borderStyle:    'round',
-
-  // Compact mode: hide footer key hints bar (saves 2 rows on small terminals)
-  compactFooter:  false,
-}
-
-const DEFAULTS = {
-  panes:       BUILTIN_PANES,
-  defaultPane: 'prs',
-  theme:       'github-dark',
-  customPanes: {},
-  layout:      DEFAULT_LAYOUT,
-  pr:          DEFAULT_PR,
-  issues:      DEFAULT_ISSUES,
-  actions:     DEFAULT_ACTIONS,
-  diff:        DEFAULT_DIFF,
-  editor:      DEFAULT_EDITOR,
-  ipc:         DEFAULT_IPC,
-  ai:          DEFAULT_AI,
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function mergeSection(defaults, user) {
-  if (!user || typeof user !== 'object' || Array.isArray(user)) return defaults
-  const merged = { ...defaults }
-  for (const [k, v] of Object.entries(user)) {
-    if (k in defaults) {
-      if (Array.isArray(defaults[k])) {
-        if (Array.isArray(v)) merged[k] = v
-      } else if (typeof defaults[k] === 'object' && defaults[k] !== null) {
-        if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
-          merged[k] = { ...defaults[k], ...v }
-        }
-      } else if (typeof v === typeof defaults[k]) {
-        merged[k] = v
-      }
+function customPanesFromToml(toml) {
+  const custom = {}
+  for (const [id, pane] of Object.entries(toml.panes || {})) {
+    if (BUILTIN_PANES.includes(id) || !pane?.command) continue
+    custom[id] = {
+      id,
+      label: pane.label || id,
+      icon: pane.icon || '◈',
+      command: pane.command,
+      actions: pane.actions || {},
     }
   }
-  return merged
+  return custom
 }
 
-function validateCustomPane(id, def) {
-  if (!def || typeof def !== 'object') return null
-  if (!def.command || typeof def.command !== 'string') return null
+function tabsFromToml(toml) {
+  const tabs = {}
+  for (const tab of toml.tabs || []) {
+    if (!tab?.id) continue
+    tabs[tab.id] = {
+      id: tab.id,
+      label: tab.label || tab.id,
+      icon: '▣',
+      panes: Array.isArray(tab.panes) ? tab.panes : [],
+      key: tab.key || '',
+      order: Number.isInteger(tab.order) ? tab.order : 999,
+    }
+  }
+  return tabs
+}
+
+function legacyFromToml(toml) {
+  const customPanes = customPanesFromToml(toml)
+  const customTabs = tabsFromToml(toml)
+  const knownPanes = [...Object.keys(customTabs), ...BUILTIN_PANES, ...Object.keys(customPanes)]
+  const panes = (toml.app?.active_panes || DEFAULT_CONFIG.app.active_panes)
+    .filter(p => knownPanes.includes(p))
+  if (panes.length === 0) panes.push('prs')
+
+  const prFeature = toml.features?.prs || DEFAULT_CONFIG.features.prs
+  const issueFeature = toml.features?.issues || DEFAULT_CONFIG.features.issues
+  const actionFeature = toml.features?.actions || DEFAULT_CONFIG.features.actions
+  const layout = toml.layout || DEFAULT_CONFIG.layout
+  const diff = toml.diff || DEFAULT_CONFIG.diff
+  const editor = toml.editor || DEFAULT_CONFIG.editor
+
   return {
-    id,
-    label:   typeof def.label === 'string' ? def.label : id,
-    icon:    typeof def.icon  === 'string' ? def.icon  : '◈',
-    command: def.command,
-    actions: (typeof def.actions === 'object' && !Array.isArray(def.actions))
-      ? def.actions : {},
+    panes,
+    defaultPane: panes.includes(toml.app?.default_pane) ? toml.app.default_pane : panes[0],
+    theme: { name: toml.theme?.name || DEFAULT_CONFIG.theme.name, overrides: toml.theme?.overrides || {} },
+    mouse: toml.app?.mouse === true,
+    aiReviewEnabled: toml.app?.ai_review_enabled !== false,
+    customPanes,
+    customTabs,
+    layout: {
+      sidebarWidth:  layout.sidebar_width,
+      sidebar:       layout.sidebar,
+      previewPanel:  layout.preview_panel,
+      previewWidth:  layout.preview_width,
+      borderStyle:   layout.border_style,
+      compactFooter: layout.compact_footer,
+    },
+    pr: {
+      defaultFilter: prFeature.default_filter,
+      defaultScope:  scopeFromToml(prFeature.default_scope),
+      pageSize:      prFeature.page_size,
+      keys: {
+        filterOpen:   firstActionKey(toml.actions, 'pr.filter-open', 'O'),
+        filterClosed: firstActionKey(toml.actions, 'pr.filter-closed', 'C'),
+        filterMerged: firstActionKey(toml.actions, 'pr.filter-merged', 'M'),
+      },
+    },
+    issues: {
+      defaultFilter: issueFeature.default_filter,
+      pageSize:      issueFeature.page_size,
+      keys: {
+        filterOpen:   firstActionKey(toml.actions, 'issue.filter-open', 'O'),
+        filterClosed: firstActionKey(toml.actions, 'issue.filter-closed', 'C'),
+      },
+    },
+    actions: { pageSize: actionFeature.page_size },
+    diff: {
+      defaultView:     diff.default_view,
+      syntaxHighlight: diff.syntax_highlight,
+      maxLines:        diff.max_lines,
+    },
+    editor: {
+      command:       editor.command,
+      customCommand: editor.custom_command || null,
+    },
+    ipc: { enabled: toml.ipc?.enabled !== false },
+    ai: camelAi(toml.ai),
+    toml,
   }
 }
 
-// ─── loadConfig ───────────────────────────────────────────────────────────────
-
 /**
- *
+ * Load app config from lazyhub.toml and expose the legacy object shape.
+ * @returns {Object} compatibility config object
  */
 export function loadConfig() {
-  if (!existsSync(CONFIG_PATH)) {
-    const ai = { ...DEFAULT_AI }
-    if (process.env.ANTHROPIC_API_KEY)  ai.anthropicApiKey = process.env.ANTHROPIC_API_KEY
-    if (process.env.OPENAI_API_KEY)     ai.openaiApiKey    = process.env.OPENAI_API_KEY
-    if (process.env.OPENAI_BASE_URL)    ai.openaiBaseUrl   = process.env.OPENAI_BASE_URL
-    if (process.env.LAZYHUB_AI_PROVIDER) ai.provider       = process.env.LAZYHUB_AI_PROVIDER
-    if (process.env.LAZYHUB_AI_MODEL)   ai.model           = process.env.LAZYHUB_AI_MODEL
-    return { ...DEFAULTS, ai }
-  }
-  try {
-    const user = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'))
-
-    // Custom panes
-    const customPanes = {}
-    if (typeof user.customPanes === 'object' && !Array.isArray(user.customPanes)) {
-      for (const [id, def] of Object.entries(user.customPanes)) {
-        if (BUILTIN_PANES.includes(id)) continue
-        const valid = validateCustomPane(id, def)
-        if (valid) customPanes[id] = valid
-      }
-    }
-
-    const allKnown = [...BUILTIN_PANES, ...Object.keys(customPanes)]
-
-    const panes = Array.isArray(user.panes)
-      ? user.panes.filter(p => allKnown.includes(p))
-      : BUILTIN_PANES
-    if (panes.length === 0) panes.push('prs')
-
-    const defaultPane = panes.includes(user.defaultPane) ? user.defaultPane : panes[0]
-
-    // Pass theme through as-is — theme.js resolves all formats
-    const theme = user.theme != null ? user.theme : 'github-dark'
-    const aiReviewEnabled = user.aiReviewEnabled !== false
-
-    // Merge ai section; fall back to legacy top-level anthropicApiKey
-    const ai = mergeSection(DEFAULT_AI, user.ai)
-    if (!ai.anthropicApiKey && typeof user.anthropicApiKey === 'string' && user.anthropicApiKey) {
-      ai.anthropicApiKey = user.anthropicApiKey
-    }
-    // Env var fallbacks (config file takes priority; env vars fill gaps)
-    if (!ai.anthropicApiKey && process.env.ANTHROPIC_API_KEY) ai.anthropicApiKey = process.env.ANTHROPIC_API_KEY
-    if (!ai.openaiApiKey    && process.env.OPENAI_API_KEY)    ai.openaiApiKey    = process.env.OPENAI_API_KEY
-    if (!ai.openaiBaseUrl   && process.env.OPENAI_BASE_URL)   ai.openaiBaseUrl   = process.env.OPENAI_BASE_URL
-    if (!ai.provider        && process.env.LAZYHUB_AI_PROVIDER) ai.provider      = process.env.LAZYHUB_AI_PROVIDER
-    if (!ai.model           && process.env.LAZYHUB_AI_MODEL)  ai.model           = process.env.LAZYHUB_AI_MODEL
-
-    // Merge layout; clamp numeric fields to safe ranges
-    const layoutRaw = mergeSection(DEFAULT_LAYOUT, user.layout)
-    const layout = {
-      ...layoutRaw,
-      sidebarWidth:  Math.min(40, Math.max(16, layoutRaw.sidebarWidth)),
-      previewWidth:  Math.min(80, Math.max(24, layoutRaw.previewWidth)),
-      borderStyle:   ['round','single','double','bold','classic','none'].includes(layoutRaw.borderStyle)
-        ? layoutRaw.borderStyle : 'round',
-    }
-
-    return {
-      panes,
-      defaultPane,
-      theme,
-      aiReviewEnabled,
-      customPanes,
-      layout,
-      pr:      mergeSection(DEFAULT_PR,      user.pr),
-      issues:  mergeSection(DEFAULT_ISSUES,  user.issues),
-      actions: mergeSection(DEFAULT_ACTIONS, user.actions),
-      diff:    mergeSection(DEFAULT_DIFF,    user.diff),
-      editor:  mergeSection(DEFAULT_EDITOR,  user.editor),
-      ipc:     mergeSection(DEFAULT_IPC,     user.ipc),
-      ai,
-    }
-  } catch {
-    return { ...DEFAULTS }
-  }
+  return legacyFromToml(loadTomlConfig())
 }
 
-// ─── state.json — lightweight cross-session UI state (filter, scope, etc.) ───
-
-const STATE_PATH = join(homedir(), '.config', 'lazyhub', 'state.json')
-
 /**
- * Load the persisted UI state file (creates it if missing).
- * @returns {Object} The parsed state object (never throws).
+ * Load persisted UI state from [state].
+ * @returns {Object} state table
  */
 export function loadState() {
-  try {
-    if (existsSync(STATE_PATH)) return JSON.parse(readFileSync(STATE_PATH, 'utf8'))
-  } catch { /* ignore */ }
-  return {}
+  return readTomlState()
 }
 
 /**
- * Persist a partial UI state patch to state.json.
- * @param {Object} patch - Keys to merge into the current state.
+ * Persist a partial UI state patch to [state].
+ * @param {Object} patch state keys to merge
  */
 export function saveState(patch) {
-  try {
-    const current = loadState()
-    mkdirSync(dirname(STATE_PATH), { recursive: true })
-    writeFileSync(STATE_PATH, JSON.stringify({ ...current, ...patch }, null, 2) + '\n', 'utf8')
-  } catch { /* ignore — state is advisory */ }
+  writeTomlState(patch)
 }
 
-// ─── saveConfig — persists partial or full config to disk ────────────────────
+function patchToToml(patch) {
+  const out = {}
+  if ('theme' in patch) out.theme = typeof patch.theme === 'string' ? { name: patch.theme } : patch.theme
+  if ('aiReviewEnabled' in patch) out.app = { ...(out.app || {}), ai_review_enabled: patch.aiReviewEnabled !== false }
+  if ('mouse' in patch) out.app = { ...(out.app || {}), mouse: patch.mouse === true }
+  if ('panes' in patch) out.app = { ...(out.app || {}), active_panes: patch.panes }
+  if (patch.pr?.pageSize) out.features = { ...(out.features || {}), prs: { page_size: patch.pr.pageSize } }
+  if (patch.ai) {
+    out.ai = {
+      provider:          patch.ai.provider,
+      model:             patch.ai.model,
+      anthropic_api_key: patch.ai.anthropicApiKey,
+      openai_api_key:    patch.ai.openaiApiKey,
+      openai_base_url:   patch.ai.openaiBaseUrl,
+      openai_compatible: patch.ai.openaiCompatible,
+    }
+  }
+  return out
+}
 
 /**
- *
- * @param patch
+ * Persist settings-owned config to lazyhub.toml.
+ * @param {Object} patch legacy config-shaped patch
  */
 export function saveConfig(patch) {
-  try {
-    const current = existsSync(CONFIG_PATH) ? JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) : {}
-    const next = { ...current, ...patch }
-    mkdirSync(dirname(CONFIG_PATH), { recursive: true })
-    writeFileSync(CONFIG_PATH, JSON.stringify(next, null, 2) + '\n', 'utf8')
-  } catch (err) {
-    console.error('Failed to save config:', err)
-  }
+  writeTomlConfig(patchToToml(patch))
 }
 
-// ─── writeDefaultConfig — creates config file with comments if missing ────────
-
 /**
- *
+ * Create lazyhub.toml from bundled defaults if it does not exist.
  */
 export function writeDefaultConfig() {
-  if (existsSync(CONFIG_PATH)) return
   try {
-    mkdirSync(dirname(CONFIG_PATH), { recursive: true })
-    const template = {
-      panes: BUILTIN_PANES,
-      defaultPane: 'prs',
-      theme: 'github-dark',
-      layout: {
-        sidebarWidth:  22,
-        sidebar:       true,
-        previewPanel:  true,
-        previewWidth:  40,
-        borderStyle:   'round',
-        compactFooter: false,
-      },
-      pr: {
-        defaultFilter: 'open',
-        defaultScope: 'own',
-        pageSize: 100,
-        keys: { filterOpen: 'O', filterClosed: 'C', filterMerged: 'M' },
-      },
-      issues: {
-        defaultFilter: 'open',
-        pageSize: 50,
-        keys: { filterOpen: 'O', filterClosed: 'C' },
-      },
-      actions: { pageSize: 30 },
-      diff: { defaultView: 'unified', syntaxHighlight: true, maxLines: 2000 },
-      customPanes: {},
-    }
-    writeFileSync(CONFIG_PATH, JSON.stringify(template, null, 2) + '\n', 'utf8')
-  } catch { /* non-fatal */ }
+    readFileSync(CONFIG_PATH, 'utf8')
+  } catch {
+    try {
+      mkdirSync(dirname(CONFIG_PATH), { recursive: true })
+      writeFileSync(CONFIG_PATH, readFileSync(DEFAULT_CONFIG_TOML_PATH, 'utf8'), 'utf8')
+    } catch { /* non-fatal: defaults are bundled and loaded in-memory */ }
+  }
 }

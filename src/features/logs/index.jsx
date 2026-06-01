@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useMemo, useEffect, useContext } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { useKeymapInput } from '../../config/keymap.js'
 import { format } from 'timeago.js'
 import { getLogs, logger, TextInput, copyToClipboard } from '../../utils.js'
 import { useTheme } from '../../theme.js'
@@ -65,7 +65,7 @@ export function LogPane({ onBack }) {
   const visibleHeight = Math.max(5, rows - 6)
   const maxScroll = Math.max(0, filteredLogs.length - visibleHeight)
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (selectedLog) {
       if (input === 'y') { doCopy(selectedLog); return }
       if (key.escape || input === 'q') { setSelectedLog(null); return }

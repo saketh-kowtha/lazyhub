@@ -1,16 +1,15 @@
 /**
  * CustomPane.jsx — generic pane renderer for user-defined tabs.
  *
- * A custom pane is declared in ~/.config/lazyhub/config.json like:
+ * A custom pane is declared in ~/.config/lazyhub/lazyhub.toml like:
  *
- *   "customPanes": {
- *     "my-deploys": {
- *       "label": "Deployments",
- *       "icon": "▶",
- *       "command": "gh api repos/{repo}/deployments --jq '[.[] | {title:.environment,number:.id,state:.task,updatedAt:.created_at,url:.url}]'",
- *       "actions": { "o": "open" }
- *     }
- *   }
+ *   [panes.my-deploys]
+ *   label = "Deployments"
+ *   icon = "▶"
+ *   command = "gh api repos/{repo}/deployments --jq '[.[] | {title:.environment,number:.id,state:.task,updatedAt:.created_at,url:.url}]'"
+ *
+ *   [panes.my-deploys.actions]
+ *   "o" = "open"
  *
  * The command runs in a shell. Placeholders: {repo}, {owner}, {name}.
  * stdout must be a JSON array. Recommended item fields:
@@ -28,7 +27,7 @@
  *   y         copy .url to clipboard (if present)
  *   o         open .url in browser (if present)
  *
- * User-defined actions (via "actions" key):
+ * User-defined actions (via [panes.<id>.actions]):
  *   Supports action value: "open" (same as o), "copy" (same as y)
  */
 

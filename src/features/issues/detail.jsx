@@ -3,9 +3,9 @@
  */
 
 import React, { useState, useContext, useMemo, useCallback, useRef } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
-import { useKeyScope } from '../../keyscope.js'
+import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getIssue, addIssueComment, listLabels, listCollaborators, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
@@ -104,7 +104,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
       .catch(err => { setStatusMsg(`Failed: ${err.message}`); setTimeout(() => setStatusMsg(null), 5000) })
   }, [repo, issueNumber, replyText, refetch])
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (dialog) return
 
     if (replyMode) {

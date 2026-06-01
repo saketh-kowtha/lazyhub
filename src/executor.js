@@ -126,6 +126,7 @@ export async function listPRs(repo, filter = {}) {
   ]
   if (filter.state)    base.push('--state',    filter.state)
   if (filter.author)   base.push('--author',   filter.author)
+  if (filter.reviewer) base.push('--reviewer', filter.reviewer)
   if (filter.label)    base.push('--label',    filter.label)
   if (filter.assignee) base.push('--assignee', filter.assignee)
   if (!filter.author) {
