@@ -103,11 +103,12 @@ Defer until V1 is live and has a few weeks of real usage. Pick based on feedback
 | Agent contract depth | #150 L5, #151 L6, #152 L7, #153 L8, #154 L9, #155 L10, #156 L11 |
 | Enterprise foundation | #157 M1 (team server architecture spike) |
 | Editor integrations | #136 JetBrains, #142 J3 full integration tests, #143 J4 gh contract tests, #144 J6 AI contract tests |
+| BYO-LLM | **#168 Phase E6** — `openai-compatible` AI provider (covers Ollama / Groq / LM Studio / Azure OpenAI / OpenRouter / vLLM via one HTTP provider) |
 | Auxiliary features | #51, #57, #61 Raycast (V3), #63 watch mode, #64 desktop notifications, #67 auto-refresh (if not done in V1), #72 team view |
 
 ---
 
-## V3 — enterprise + marketplace
+## V3 — enterprise + marketplace + agentic depth
 
 Only if demand surfaces. Do not start until V2 ships AND you see real interest.
 
@@ -116,6 +117,8 @@ Only if demand surfaces. Do not start until V2 ships AND you see real interest.
 | **#158** | Phase M2 — hosted team server (enterprise tier) |
 | **#159** | Phase M3 — marketplace |
 | **#61** | Raycast extension |
+| **#169** | Phase G2 — NLS-B: natural language workspace search (`/` triggers AI-translated `gh search`) |
+| **#170** | Phase E7 — Full LiteLLM integration (gated — only if #168 + named providers are insufficient) |
 
 ---
 

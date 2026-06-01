@@ -100,6 +100,15 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
 - **Default:** `full` (matches today's behavior).
 - **Tracked in:** Phase L3 #148, Phase E1 #130.
 
+## Decision 8 — BYO-LLM strategy
+
+**Add one `openai-compatible` provider first. Treat LiteLLM as a last-resort escape hatch.**
+
+- **Why:** ~80% of "I want to use Ollama / Groq / LM Studio / Azure OpenAI / OpenRouter / vLLM" reduces to one HTTP shape — OpenAI `/v1/chat/completions` at a configurable URL + key. Adding one provider (~200 lines, no deps) covers the long tail. LiteLLM is a heavy abstraction that adds 100+ providers but pulls in telemetry hooks lazyhub would have to explicitly disable, plus its own dependency surface.
+- **Order:** ship `openai-compatible` (#168, V2). If post-launch, 3+ users request a provider with a NON-OpenAI-compatible API (native Cohere v1, native Mistral, native PaLM), THEN evaluate LiteLLM (#170, V3-gated).
+- **Never auto-enable LiteLLM's observability/telemetry features.** Lazyhub's "no telemetry, ever" invariant is non-negotiable. The LiteLLM provider's first job is to disable every built-in observability hook at config time.
+- **Tracked in:** #168 (Phase E6, V2 — openai-compatible), #170 (Phase E7, V3-gated — LiteLLM).
+
 ---
 
 ## Other locked-in invariants (do not violate)

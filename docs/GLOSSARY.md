@@ -12,7 +12,7 @@ Alphabetical. Cross-references in **bold**.
 
 **AI budget** — A user-defined ceiling on AI spend, configured under `[ai.budget]` in **user config**. Honored by every AI call routed through `logAiUsage()`. Two knobs: `monthly_usd_cap` and `per_call_usd_cap`. Enforcement lives in Phase L8 (V2).
 
-**AI provider** — A pluggable backend for AI features. Four shipped today: `claude-code`, `codex`, `gemini-cli`, `anthropic-api`. Selected via `[defaults].ai_provider` in **user config** or `--provider` flag. Lives in `src/ai/providers/`. The `anthropic-api` provider is the only one allowed to make Anthropic HTTP calls directly; the other three shell out to vendor CLIs.
+**AI provider** — A pluggable backend for AI features. Four shipped today: `claude-code`, `codex`, `gemini-cli`, `anthropic-api`. Selected via `[defaults].ai_provider` in **user config** or `--provider` flag. Lives in `src/ai/providers/`. The `anthropic-api` provider is the only one allowed to make Anthropic HTTP calls directly; the other three shell out to vendor CLIs. **openai-compatible** ships in V2 (#168) and full **LiteLLM** is V3-gated (#170).
 
 **Audit log** — Append-only NDJSON record of every state-changing operation, written to `~/.config/lazyhub/audit.log` per **ARCHITECT_DECISIONS §6**. Size-capped at 10 MB with 3-file rotation. Owned by the **daemon**.
 
@@ -20,7 +20,9 @@ Alphabetical. Cross-references in **bold**.
 
 ## B
 
-**Bring Your Own AI (BYO AI)** — The lazyhub differentiator: users plug in whichever AI provider they already pay for (Claude Code, Codex, Gemini CLI) or their own API key. lazyhub does not ship a hosted AI service. See also: **AI provider**.
+**Bring Your Own AI (BYO AI)** — The lazyhub differentiator: users plug in whichever AI provider they already pay for (Claude Code, Codex, Gemini CLI) or their own API key. lazyhub does not ship a hosted AI service. See also: **AI provider**, **BYO LLM**.
+
+**Bring Your Own LLM (BYO LLM / BYOLLM)** — The narrower extension of **BYO AI**: users point lazyhub at any LLM, including self-hosted (Ollama, vLLM, LM Studio), low-cost API (Groq, Together), enterprise (Azure OpenAI, Bedrock), or aggregator (OpenRouter). Implemented via the **openai-compatible** provider in V2 (#168) for ~80% of cases; the V3-gated **LiteLLM** provider (#170) is the escape hatch for the long tail of native non-OpenAI APIs.
 
 ---
 
@@ -106,9 +108,19 @@ Alphabetical. Cross-references in **bold**.
 
 ---
 
+## L
+
+**LiteLLM** — A third-party abstraction layer that wraps 100+ LLM provider APIs behind one interface. lazyhub treats LiteLLM as the **last-resort escape hatch** for **BYO LLM**: ships only as a V3 issue (#170), gated on the **openai-compatible** provider (#168) proving insufficient. Reason: LiteLLM is a heavy dep that brings observability hooks lazyhub must explicitly disable to preserve the no-telemetry invariant.
+
+---
+
 ## N
 
 **NDJSON streaming** — Newline-delimited JSON used for long-running operations that emit progress events (large diff fetch, AI completion). Phase L6 #151 (V2).
+
+**NLS** — Natural Language Search. Two variants — keep them straight:
+- **NLS-A** (in-context Q&A): "Why does this PR change the auth flow?" → AI answers with citations from the current PR's files/diff/comments. Phase G #68 (V1).
+- **NLS-B** (workspace search): "Show me PRs I commented on last week with failing CI" → AI translates to `gh search` query → results render as a normal PR list. Phase G2 #169 (V3). Same plumbing, different surface.
 
 **No telemetry** — Hard rule. No analytics, no crash reporting, no phone-home. Ever. Do not propose adding it.
 
@@ -118,6 +130,8 @@ Alphabetical. Cross-references in **bold**.
 
 **Onboarding tour** — 5-key first-launch overlay teaching the essential keymaps. `src/features/onboarding/`. Phase C step 5c #126.
 
+**openai-compatible** — A single lazyhub AI provider that targets any HTTP endpoint speaking the OpenAI `/v1/chat/completions` shape. Covers ~80% of **BYO LLM** use cases (Ollama, Groq, LM Studio, Azure OpenAI, OpenRouter, vLLM, Together AI, Anyscale) with zero new dependencies. Lives in `src/ai/providers/openai-compatible.js` after Phase E6 #168 (V2). Preferred over **LiteLLM**.
+
 **Opus / Sonnet / Haiku** — Model roles per the orchestration rules. Opus = architect (specs/decisions only, no code). Sonnet = senior engineer (complex logic, reviews Haiku). Haiku = junior (boilerplate, CRUD, tightly-scoped tasks).
 
 ---
@@ -126,7 +140,7 @@ Alphabetical. Cross-references in **bold**.
 
 **Pane** — A sub-region of a **tab**. A tab can host multiple panes (e.g. the Focus tab has a "review requested" pane + a "drafts" pane).
 
-**Phase** — A planning bucket: A (bug sweep), B (design manifesto), C (design system), D (CI), E (config), F (CLI args), G (AI Q&A), H (V1 polish), I (editor integrations), J (testing), K (daemon), L (agent contract L1–L11), M (enterprise/marketplace). Each phase = 1+ GitHub issues.
+**Phase** — A planning bucket: A (bug sweep), B (design manifesto), C (design system), D (CI), E (config — E1 #130 loader, E2 #131 writer, E3 #132 keymaps, E4 #66 custom tabs, E5 #133 doctor, **E6 #168 openai-compatible**, **E7 #170 LiteLLM**), F (CLI args), G (AI Q&A — **G2 #169 NLS-B**), H (V1 polish), I (editor integrations), J (testing), K (daemon), L (agent contract L1–L11), M (enterprise/marketplace). Each phase = 1+ GitHub issues.
 
 **Popover** — Absolute-positioned, non-blocking overlay attached to a focused list row. Auto-shows on focus, ESC-dismissible. `src/ui/Popover.jsx`. Distinct from **dialog**.
 
