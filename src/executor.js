@@ -136,7 +136,7 @@ export async function listPRs(repo, filter = {}) {
   // Try with all fields first; fall back to a reduced set for GHE instances
   // where statusCheckRollup / mergeable are not in the GraphQL schema.
   try {
-    return await runGh([...base, '--json', 'number,title,state,author,labels,reviewRequests,statusCheckRollup,reviewDecision,updatedAt,isDraft,headRefName,baseRefName,assignees,body,mergeable,url'])
+    return await runGh([...base, '--json', 'number,title,state,author,labels,reviewRequests,statusCheckRollup,reviewDecision,updatedAt,isDraft,headRefName,baseRefName,assignees,body,mergeable,autoMergeRequest,url'])
   } catch (err) {
     if (!/unknown|field|not found/i.test(err.message)) throw err
     return runGh([...base, '--json', 'number,title,state,author,labels,reviewRequests,reviewDecision,updatedAt,isDraft,headRefName,baseRefName,assignees,body,url'])
@@ -1385,4 +1385,3 @@ export async function getMergeCommitMessage() {
     return r.stdout.trim() || 'Merge conflict resolution'
   } catch { return 'Merge conflict resolution' }
 }
-

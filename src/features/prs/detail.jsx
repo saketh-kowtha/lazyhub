@@ -308,6 +308,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   const visibleHeight = Math.max(3, termRows - 8)
   const maxScroll     = Math.max(0, filteredRows.length - visibleHeight)
   const visibleRows   = filteredRows.slice(scrollY, scrollY + visibleHeight)
+  const autoMergeHint = pr?.state === 'OPEN' && !pr?.isDraft ? '  [M] auto-merge' : ''
 
   const openCheckInBrowser = (check) => {
     if (!check?.url) return
@@ -715,7 +716,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
           : checkCursor !== null
             ? <Text color={t.ui.selected}>[j/k] nav checks  [Enter/o] open  [l] annotations  [R] rerun  [Esc] exit checks</Text>
             : maxScroll > 0
-              ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  [j/k] scroll  [gg/G] top/bottom</Text>
+              ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  [j/k] scroll  [gg/G] top/bottom{autoMergeHint}</Text>
               : pr?.mergeable === 'CONFLICTING'
                 ? <Text color={t.pr.conflict || t.ci.pending}>[C] resolve conflicts  [c] checks  [d] diff  [m] merge  [l] labels  [A] assignees  [R] reviewers</Text>
                 : <Text color={t.ui.dim}>[d] diff  [E] editor  [m] merge  [M] auto-merge  [c] checks  [l] labels  [A] assignees  [R] reviewers</Text>
