@@ -3,9 +3,9 @@
  */
 
 import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
-import { useKeyScope } from '../../keyscope.js'
+import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { listIssues, listLabels, listCollaborators, closeIssue, createIssue, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees } from '../../executor.js'
 import { sanitize, truncateToWidth, padEndWidth } from '../../utils.js'
@@ -15,10 +15,13 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { AppContext } from '../../context.js'
 import { loadConfig } from '../../config.js'
+import { firstActionKey, matchesAction } from '../../config/actions.js'
 import { useTheme } from '../../theme.js'
 import { IssueListSkeleton } from '../../components/Skeleton.jsx'
 
-const _cfg = loadConfig().issues
+const _appConfig = loadConfig()
+const _cfg = _appConfig.issues
+const _actions = _appConfig.toml
 
 // ─── Age colour ───────────────────────────────────────────────────────────────
 
@@ -115,26 +118,27 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
     })
   }, [items.length, scrollOffset, visibleHeight])
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (statusMsg?.persist) { setStatusMsg(null) }
     if (dialog) return
 
     // gg → top
-    if (input === 'g') {
-      if (lastKeyRef.current === 'g') {
+    const topSequenceKey = firstActionKey('cursor.top', 'gg', _actions)[0]
+    if (input === topSequenceKey) {
+      if (lastKeyRef.current === topSequenceKey) {
         clearTimeout(lastKeyTimer.current)
         lastKeyRef.current = null
         setCursor(0); setScrollOffset(0)
         return
       }
-      lastKeyRef.current = 'g'
+      lastKeyRef.current = topSequenceKey
       lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
       return
     }
     lastKeyRef.current = null
 
     // G → bottom
-    if (input === 'G') {
+    if (matchesAction('cursor.bottom', input, key, _actions)) {
       if (items.length > 0) {
         const last = items.length - 1
         setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
@@ -142,17 +146,17 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
       return
     }
 
-    if (input === 'j' || key.downArrow) { moveCursor(1);  return }
-    if (input === 'k' || key.upArrow)   { moveCursor(-1); return }
-    if (input === 'r') { refetch(); return }
-    if (input === '/') { setDialog('fuzzy'); return }
-    if (input === 'n') { setDialog('new'); return }
+    if (matchesAction('cursor.down', input, key, _actions)) { moveCursor(1);  return }
+    if (matchesAction('cursor.up', input, key, _actions))   { moveCursor(-1); return }
+    if (matchesAction('list.refresh', input, key, _actions)) { refetch(); return }
+    if (matchesAction('list.search', input, key, _actions)) { setDialog('fuzzy'); return }
+    if (matchesAction('issue.new', input, key, _actions)) { setDialog('new'); return }
 
     // Direct filter keys from config (defaults: O=open, C=closed)
     if (FK.filterOpen   && input === FK.filterOpen   && filterState !== 'open')   { setFilterState('open');   showStatus('▸ open');   setCursor(0); setScrollOffset(0); return }
     if (FK.filterClosed && input === FK.filterClosed && filterState !== 'closed') { setFilterState('closed'); showStatus('▸ closed'); setCursor(0); setScrollOffset(0); return }
     // f still cycles as fallback
-    if (input === 'f') {
+    if (matchesAction('issue.filter-cycle', input, key, _actions)) {
       setFilterState(prev => {
         const next = STATE_CYCLE[(STATE_CYCLE.indexOf(prev) + 1) % STATE_CYCLE.length]
         showStatus(`▸ ${next}`)
@@ -163,7 +167,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
     }
 
     // s — cycle age sort
-    if (input === 's') {
+    if (matchesAction('issue.sort-cycle', input, key, _actions)) {
       setSortMode(prev => {
         const next = prev === 'default' ? 'oldest' : 'default'
         showStatus(next === 'oldest' ? 'sort: oldest first' : 'sort: default')
@@ -176,13 +180,13 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
     if (loading || items.length === 0) return
     const issue = items[cursor]
 
-    if (key.return) {
+    if (matchesAction('issue.open-selected', input, key, _actions)) {
       if (issue) onSelectIssue(issue)
       return
     }
 
     // y — copy issue URL
-    if (input === 'y' && issue?.url) {
+    if (matchesAction('issue.copy-url', input, key, _actions) && issue?.url) {
       import('execa').then(({ execa }) => {
         const [cmd, args] = process.platform === 'darwin'
           ? ['pbcopy', []]
@@ -194,22 +198,22 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
       return
     }
 
-    if (input === 'x') {
+    if (matchesAction('issue.close', input, key, _actions)) {
       if (issue) setDialog('close')
       return
     }
 
-    if (input === 'l') {
+    if (matchesAction('issue.labels', input, key, _actions)) {
       if (issue) setDialog('labels')
       return
     }
 
-    if (input === 'A') {
+    if (matchesAction('issue.assignees', input, key, _actions)) {
       if (issue) setDialog('assignees')
       return
     }
 
-    if (input === 'o' && issue?.url) {
+    if (matchesAction('issue.open-browser', input, key, _actions) && issue?.url) {
       import('execa').then(({ execa }) => {
         const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
         execa(cmd, [issue.url]).catch(() => {})

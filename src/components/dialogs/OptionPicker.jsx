@@ -9,6 +9,7 @@ import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
 import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { useKeyScope } from '../../keyscope.js'
+import { matchesAction } from '../../config/actions.js'
 
 export function OptionPicker({ options = [], onSubmit, onCancel, title, promptText }) {
   useKeyScope('dialog')
@@ -29,12 +30,12 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
 
   useInput((input, key) => {
     if (step === 'pick') {
-      if (key.escape)    { onCancel(); return }
-      if (key.upArrow   || input === 'k') { moveCursor(cursor - 1); return }
-      if (key.downArrow || input === 'j') { moveCursor(cursor + 1); return }
-      if (input === 'g') { jumpTop();    return }
-      if (input === 'G') { jumpBottom(); return }
-      if (key.return) {
+      if (matchesAction('dialog.cancel', input, key)) { onCancel(); return }
+      if (matchesAction('dialog.up', input, key)) { moveCursor(cursor - 1); return }
+      if (matchesAction('dialog.down', input, key)) { moveCursor(cursor + 1); return }
+      if (matchesAction('dialog.top', input, key)) { jumpTop();    return }
+      if (matchesAction('dialog.bottom', input, key)) { jumpBottom(); return }
+      if (matchesAction('dialog.confirm', input, key)) {
         const val = options[cursor]?.value
         if (val == null) return
         if (promptText) { setPickedValue(val); setStep('text') }
@@ -42,7 +43,7 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
         return
       }
     } else if (step === 'text') {
-      if (key.escape) { onCancel(); return }
+      if (matchesAction('dialog.cancel', input, key)) { onCancel(); return }
     }
   })
 

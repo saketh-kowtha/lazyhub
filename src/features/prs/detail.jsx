@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useContext, useMemo, useRef } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
-import { useKeyScope } from '../../keyscope.js'
+import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
   getPR, listLabels, listCollaborators, addLabels, removeLabels,
@@ -346,7 +346,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
     setCheckLogLoading(false)
   }
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (statusMsg?.persist) { setStatusMsg(null) }
 
     // Search mode captures all typing

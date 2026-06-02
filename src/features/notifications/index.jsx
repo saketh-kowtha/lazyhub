@@ -3,9 +3,9 @@
  */
 
 import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
-import { useKeyScope } from '../../keyscope.js'
+import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { listNotifications, markNotificationRead, markAllNotificationsRead } from '../../executor.js'
 import { sanitize } from '../../utils.js'
@@ -14,6 +14,7 @@ import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
 import { NotificationListSkeleton } from '../../components/Skeleton.jsx'
+import { firstActionKey, matchesAction } from '../../config/actions.js'
 
 export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneState }) {
   useKeyScope('pane')
@@ -69,30 +70,31 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
     })
   }, [items.length, scrollOffset, visibleHeight])
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (statusMsg?.persist) { setStatusMsg(null) }
     if (dialog) return
-    if (input === 'j' || key.downArrow) { moveCursor(1); return }
-    if (input === 'k' || key.upArrow)  { moveCursor(-1); return }
-    if (input === 'r') { refetch(); return }
-    if (input === '/') { setDialog('fuzzy'); return }
+    if (matchesAction('cursor.down', input, key)) { moveCursor(1); return }
+    if (matchesAction('cursor.up', input, key))  { moveCursor(-1); return }
+    if (matchesAction('list.refresh', input, key)) { refetch(); return }
+    if (matchesAction('list.search', input, key)) { setDialog('fuzzy'); return }
 
     // gg → top
-    if (input === 'g') {
-      if (lastKeyRef.current === 'g') {
+    const topSequenceKey = firstActionKey('cursor.top', 'gg')[0]
+    if (input === topSequenceKey) {
+      if (lastKeyRef.current === topSequenceKey) {
         clearTimeout(lastKeyTimer.current)
         lastKeyRef.current = null
         setCursor(0); setScrollOffset(0)
         return
       }
-      lastKeyRef.current = 'g'
+      lastKeyRef.current = topSequenceKey
       lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
       return
     }
     lastKeyRef.current = null
 
     // G → bottom
-    if (input === 'G') {
+    if (matchesAction('cursor.bottom', input, key)) {
       if (items.length > 0) {
         const last = items.length - 1
         setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
@@ -102,7 +104,7 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
 
     if (loading || items.length === 0) return
 
-    if (key.return) {
+    if (matchesAction('notification.open', input, key)) {
       const notif = items[cursor]
       if (notif && onNavigateTo) {
         // Mark as read and navigate
@@ -112,7 +114,7 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
       return
     }
 
-    if (input === 'm') {
+    if (matchesAction('notification.mark-read', input, key)) {
       const notif = items[cursor]
       if (notif) {
         markNotificationRead(notif.id)
@@ -122,7 +124,7 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
       return
     }
 
-    if (input === 'M') {
+    if (matchesAction('notification.mark-all', input, key)) {
       setDialog('markAll')
       return
     }

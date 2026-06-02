@@ -16,13 +16,15 @@ import * as claudeCode   from './providers/claude-code.js'
 import * as codex        from './providers/codex.js'
 import * as geminiCli    from './providers/gemini-cli.js'
 import * as anthropicApi from './providers/anthropic-api.js'
+import * as openaiCompatible from './providers/openai-compatible.js'
 import { AIError } from './error.js'
+import { loadConfig } from '../config/loader.js'
 
 // ── Phase 2 priority list ─────────────────────────────────────────────────────
 // Ordered: first available wins. CLI providers beat key-based so users with the
 // CLI logged in get zero-config behaviour.
 
-const PROVIDERS = [claudeCode, codex, geminiCli, anthropicApi]
+const PROVIDERS = [claudeCode, codex, geminiCli, anthropicApi, openaiCompatible]
 
 /**
  * @type {Array<{provider: object, result: {available: boolean, version?: string, reason?: string}}>|null}
@@ -66,26 +68,28 @@ async function detectAll() {
  */
 export async function selectProvider() {
   const envOverride = process.env.LAZYHUB_AI_PROVIDER
-  if (envOverride) {
-    const p = PROVIDERS.find(p => p.id === envOverride)
+  const configOverride = loadConfig().defaults?.ai_provider === 'openai-compatible' ? 'openai-compatible' : null
+  const forced = envOverride || configOverride
+  if (forced) {
+    const p = PROVIDERS.find(p => p.id === forced)
     if (!p) {
       throw new AIError(
-        `LAZYHUB_AI_PROVIDER="${envOverride}" is not a known provider (supported: ${PROVIDERS.map(p => p.id).join(', ')})`,
+        `AI provider "${forced}" is not known (supported: ${PROVIDERS.map(p => p.id).join(', ')})`,
         { code: 'no-provider' }
       )
     }
     const detection = await p.detect()
     if (!detection.available) {
       throw new AIError(
-        `Provider "${envOverride}" is not available: ${detection.reason || 'unknown reason'}`,
-        { code: 'provider-unavailable', provider: envOverride }
+        `Provider "${forced}" is not available: ${detection.reason || 'unknown reason'}`,
+        { code: 'provider-unavailable', provider: forced }
       )
     }
     return p
   }
 
   const allResults = await detectAll()
-  const winner = allResults.find(({ result }) => result.available)
+  const winner = allResults.find(({ provider, result }) => provider.id !== 'openai-compatible' && result.available)
   if (!winner) {
     throw new AIError(
       'No AI provider available. Install Claude Code, Codex, or Gemini CLI — or set ANTHROPIC_API_KEY.',

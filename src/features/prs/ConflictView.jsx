@@ -17,8 +17,8 @@
  */
 
 import React, { useState, useEffect, useCallback, useContext, useRef } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
-import { useKeyScope } from '../../keyscope.js'
+import { Box, Text, useStdout } from 'ink'
+import { useKeymapInput } from '../../config/keymap.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
 import { loadConfig } from '../../config.js'
@@ -128,7 +128,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
   useEffect(() => { probe() }, [probe])
 
   // ── Key handler ───────────────────────────────────────────────────────────
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (busy || dialog) return
     if (phase === PHASE.CHECKING || phase === PHASE.COMMITTING) return
 

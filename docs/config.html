@@ -91,10 +91,10 @@
   <h2>Config file location</h2>
 
   <pre><span class="comment"># macOS / Linux</span>
-~/.config/lazyhub/config.json
+~/.config/lazyhub/lazyhub.toml
 
 <span class="comment"># Windows</span>
-%APPDATA%\lazyhub\config.json</pre>
+%APPDATA%\lazyhub\lazyhub.toml</pre>
 
   <p>Create the file if it doesn't exist — lazyhub uses sensible defaults for any missing keys.</p>
 
@@ -173,13 +173,13 @@
 
   <h2>Editing the config live</h2>
 
-  <p>Changes to <code>config.json</code> take effect on the next launch. There is no hot-reload — exit lazyhub (<kbd>q</kbd>) and re-open.</p>
+  <p>Changes to <code>lazyhub.toml</code> take effect on the next launch. There is no hot-reload — exit lazyhub (<kbd>q</kbd>) and re-open.</p>
 
   <pre><span class="comment"># Quick edit</span>
-$EDITOR ~/.config/lazyhub/config.json
+$EDITOR ~/.config/lazyhub/lazyhub.toml
 
 <span class="comment"># Create the directory if it doesn't exist</span>
-mkdir -p ~/.config/lazyhub && $EDITOR ~/.config/lazyhub/config.json</pre>
+mkdir -p ~/.config/lazyhub && $EDITOR ~/.config/lazyhub/lazyhub.toml</pre>
 
   <h2>Validation</h2>
 

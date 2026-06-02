@@ -30,7 +30,7 @@ Confirm before starting. All later sections assume these.
   - [ ] `gh auth token` (no --hostname) prints a token OR errors cleanly
   - [ ] If GHE: `gh auth token --hostname <ghe-host>` prints a token
 - [ ] **Config**
-  - [ ] `~/.config/lazyhub/config.json` exists (or let the app create it)
+  - [ ] `~/.config/lazyhub/lazyhub.toml` exists (or let the app create it)
   - [ ] For AI tests, `ai.anthropicApiKey` is set (or `ANTHROPIC_API_KEY` env var)
 - [ ] **Terminal**
   - [ ] Start ≥ 120 columns × ≥ 30 rows. Resize tests will shrink later.
@@ -229,7 +229,7 @@ Watch stderr / DEBUG logs while doing this. Any "Cannot update a component while
 - [ ] The row labelled `(current)` matches the cursor row.
 
 #### T-271 — With an unknown theme in config, cursor falls back to row 0
-1. Edit `~/.config/lazyhub/config.json` to set `"theme": "not-a-real-theme"`.
+1. Edit `~/.config/lazyhub/lazyhub.toml` to set `"theme": "not-a-real-theme"`.
 2. Relaunch → `S` → Theme.
 - [ ] Cursor lands on row 0, no crash.
 - [ ] Revert your config change afterwards.
@@ -265,7 +265,7 @@ Already fixed previously (B-46). Verify still works.
 ### 2.10 — CustomPane: `G` on empty list doesn't crash
 
 #### T-290 — G on an empty custom pane
-**Pre:** Add a custom pane to `~/.config/lazyhub/config.json` that returns an empty array, e.g.:
+**Pre:** Add a custom pane to `~/.config/lazyhub/lazyhub.toml` that returns an empty array, e.g.:
 ```json
 "customPanes": {
   "empty-test": {

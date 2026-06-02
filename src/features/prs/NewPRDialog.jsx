@@ -10,8 +10,8 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
-import { useKeyScope } from '../../keyscope.js'
+import { Box, Text, useStdout } from 'ink'
+import { useKeymapInput } from '../../config/keymap.js'
 import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
@@ -28,7 +28,7 @@ const FIELDS = ['title', 'head', 'base', 'body']
 // ─── Screen components ────────────────────────────────────────────────────────
 
 function PushRequiredScreen({ branch, onPush, onBack }) {
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (key.escape || input === 'n') { onBack(); return }
     if (input === 'p' || input === 'y' || key.return) { onPush(); return }
   })
@@ -51,7 +51,7 @@ function PushRequiredScreen({ branch, onPush, onBack }) {
 }
 
 function UnpushedCommitsScreen({ branch, commits, onPush, onSkip, onBack }) {
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (key.escape) { onBack(); return }
     if (input === 'p' || input === 'y') { onPush(); return }
     if (input === 'n') { onSkip(); return }
@@ -95,7 +95,7 @@ function PushingScreen({ branch }) {
 }
 
 function NoDiffScreen({ head, base, onBack }) {
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (key.escape || input === 'q') onBack()
   })
   return (
@@ -327,7 +327,7 @@ export function NewPRDialog({ repo, onClose, onCreated }) {
 
   // ── Keyboard ──────────────────────────────────────────────────────────────────
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     // Sub-screens handled by their own components — only handle form screen here
     if (screen !== 'form' && screen !== 'submitting') return
 

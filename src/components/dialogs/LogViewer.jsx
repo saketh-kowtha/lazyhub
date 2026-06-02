@@ -7,6 +7,7 @@ import React, { useState, useMemo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import { useTheme } from '../../theme.js'
 import { useKeyScope } from '../../keyscope.js'
+import { firstActionKey, matchesAction } from '../../config/actions.js'
 
 const STEP_HEADER_RE = /^(##\s+|Step \d+|^\d{4}-\d{2}-\d{2}.*\s+(##|step)|\s*\d+\.\d+\s)/i
 
@@ -36,7 +37,7 @@ export function LogViewer({ lines = [], onClose }) {
 
   useInput((input, key) => {
     if (filtering) {
-      if (key.escape || key.return) {
+      if (matchesAction('dialog.cancel', input, key) || matchesAction('dialog.confirm', input, key)) {
         setFiltering(false)
         return
       }
@@ -50,14 +51,15 @@ export function LogViewer({ lines = [], onClose }) {
       return
     }
 
-    if (key.escape) { onClose(); return }
+    if (matchesAction('dialog.cancel', input, key)) { onClose(); return }
 
-    if (input === 'f') {
+    if (matchesAction('log.filter', input, key)) {
       setFiltering(true)
       return
     }
 
-    if (input === 'g') {
+    const topSequenceKey = firstActionKey('cursor.top', 'gg')[0]
+    if (input === topSequenceKey) {
       if (gPressed) {
         setScrollOffset(0)
         setGPressed(false)
@@ -68,17 +70,17 @@ export function LogViewer({ lines = [], onClose }) {
       return
     }
 
-    if (input === 'G') {
+    if (matchesAction('cursor.bottom', input, key)) {
       setScrollOffset(maxScroll)
       return
     }
 
-    if (input === 'j' || key.downArrow) {
+    if (matchesAction('cursor.down', input, key)) {
       setScrollOffset(s => Math.min(maxScroll, s + 1))
       return
     }
 
-    if (input === 'k' || key.upArrow) {
+    if (matchesAction('cursor.up', input, key)) {
       setScrollOffset(s => Math.max(0, s - 1))
       return
     }

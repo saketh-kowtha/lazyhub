@@ -3,8 +3,8 @@
  */
 
 import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
-import { useKeyScope } from '../../keyscope.js'
+import { Box, Text, useStdout } from 'ink'
+import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { listBranches, deleteBranch, listPRs } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
@@ -13,6 +13,7 @@ import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
 import { BranchListSkeleton } from '../../components/Skeleton.jsx'
+import { firstActionKey, matchesAction } from '../../config/actions.js'
 
 const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t }) => {
   return (
@@ -95,35 +96,36 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
     pr => pr.headRefName === selectedBranch.name && pr.state === 'OPEN'
   )
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (statusMsg?.persist) { setStatusMsg(null); return }
     if (dialog === 'new-branch') {
       if (key.escape) { setDialog(null); setNewBranchName(''); return }
       return
     }
     if (dialog) return
-    if (input === 'j' || key.downArrow) { moveCursor(1); return }
-    if (input === 'k' || key.upArrow)  { moveCursor(-1); return }
-    if (input === 'r') { refetch(); return }
-    if (input === '/') { setDialog('fuzzy'); return }
-    if (input === 'n') { setNewBranchName(''); setDialog('new-branch'); return }
+    if (matchesAction('cursor.down', input, key)) { moveCursor(1); return }
+    if (matchesAction('cursor.up', input, key))  { moveCursor(-1); return }
+    if (matchesAction('list.refresh', input, key)) { refetch(); return }
+    if (matchesAction('list.search', input, key)) { setDialog('fuzzy'); return }
+    if (matchesAction('branch.new', input, key)) { setNewBranchName(''); setDialog('new-branch'); return }
 
     // gg → top
-    if (input === 'g') {
-      if (lastKeyRef.current === 'g') {
+    const topSequenceKey = firstActionKey('cursor.top', 'gg')[0]
+    if (input === topSequenceKey) {
+      if (lastKeyRef.current === topSequenceKey) {
         clearTimeout(lastKeyTimer.current)
         lastKeyRef.current = null
         setCursor(0); setScrollOffset(0)
         return
       }
-      lastKeyRef.current = 'g'
+      lastKeyRef.current = topSequenceKey
       lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
       return
     }
     lastKeyRef.current = null
 
     // G → bottom
-    if (input === 'G') {
+    if (matchesAction('cursor.bottom', input, key)) {
       if (items.length > 0) {
         const last = items.length - 1
         setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
@@ -133,7 +135,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
 
     if (loading || items.length === 0) return
 
-    if (input === ' ' || key.return) {
+    if (matchesAction('branch.checkout', input, key)) {
       if (selectedBranch) {
         if (selectedBranch.name === currentBranch) {
           showStatus(`Already on "${selectedBranch.name}"`)
@@ -144,12 +146,12 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
       return
     }
 
-    if (input === 'D') {
+    if (matchesAction('branch.delete', input, key)) {
       if (selectedBranch) setDialog('delete')
       return
     }
 
-    if (input === 'p') {
+    if (matchesAction('branch.push', input, key)) {
       // Push current branch
       import('execa').then(({ execa }) => {
         execa('git', ['push', 'origin', 'HEAD'], { cwd: process.cwd() })

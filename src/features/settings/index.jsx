@@ -3,18 +3,19 @@
  */
 
 import React, { useState, useContext } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { useKeymapInput } from '../../config/keymap.js'
 import { THEME_NAMES, useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
 import { loadConfig, saveConfig, BUILTIN_PANES } from '../../config.js'
 import { logger, TextInput } from '../../utils.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 
-const PROVIDERS = ['anthropic', 'openai', 'ollama']
+const PROVIDERS = ['anthropic', 'openai', 'ollama', 'openai-compatible']
 const PROVIDER_LABELS = {
   anthropic: 'Anthropic (Claude)',
   openai:    'OpenAI-compatible',
   ollama:    'Ollama (local)',
+  'openai-compatible': 'OpenAI-compatible HTTP',
 }
 
 export function SettingsPane({ onBack }) {
@@ -82,7 +83,7 @@ export function SettingsPane({ onBack }) {
     updateConfig({ ai: { ...(config.ai || {}), ...aiPatch } })
   }
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (dialog) return
     if (key.escape || input === 'q') { onBack(); return }
     if (input === 'j' || key.downArrow) { setCursor(c => (c + 1) % OPTIONS.length); return }
@@ -241,7 +242,7 @@ function AIProviderEditor({ ai, onSave, onCancel }) {
     return v || '(not set)'
   }
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (editing) return
 
     if (key.escape) { onCancel(); return }
@@ -323,7 +324,7 @@ function FieldEditor({ label, hint, value, mask, onSave, onCancel }) {
   const { t } = useTheme()
   const [v, setV] = useState(value)
 
-  useInput((_, key) => {
+  useKeymapInput((_, key) => {
     if (key.escape) onCancel()
   })
 
@@ -357,7 +358,7 @@ function ThemePicker({ current, onSelect, onCancel }) {
     return idx >= 0 ? idx : 0
   })
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (key.escape) { onCancel(); return }
     if (input === 'j' || key.downArrow) { setCursor(c => (c + 1) % THEME_NAMES.length); return }
     if (input === 'k' || key.upArrow)   { setCursor(c => (c - 1 + THEME_NAMES.length) % THEME_NAMES.length); return }

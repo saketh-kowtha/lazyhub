@@ -168,6 +168,17 @@ describe('validateConfig — keymaps with platform sub-section', () => {
   })
 })
 
+describe('validateConfig — openai-compatible provider', () => {
+  it('warns when selected provider has an empty base_url', () => {
+    const { warnings } = validateConfig({
+      defaults: { ai_provider: 'openai-compatible' },
+      ai: { openai_compatible: { base_url: '', model: 'qwen' } },
+    })
+
+    expect(warnings.join('\n')).toContain('[ai.openai_compatible].base_url')
+  })
+})
+
 describe('mergeConfig', () => {
   it('deep-merges objects and replaces arrays/scalars', () => {
     const base = { a: { x: 1, y: 2 }, list: [1, 2], n: 5 }

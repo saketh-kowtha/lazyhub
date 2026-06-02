@@ -4,7 +4,6 @@
 
 /* eslint-disable-next-line no-unused-vars */
 import React, { createContext, useContext, useState, useMemo, useCallback } from 'react'
-import { readFileSync, existsSync } from 'fs'
 import { join, isAbsolute } from 'path'
 import { homedir } from 'os'
 
@@ -16,8 +15,11 @@ import tokyoNight      from './themes/tokyo-night.js'
 import ansi16          from './themes/ansi-16.js'
 import auroraDark      from './themes/aurora-dark.js'
 import auroraLight     from './themes/aurora-light.js'
+import { loadConfig as loadTomlConfig } from './config/loader.js'
 
 export const BUILTIN_THEMES = {
+  'lazyhub-dark':      githubDark,
+  'lazyhub-light':     githubLight,
   'github-dark':      githubDark,
   'github-light':     githubLight,
   'catppuccin-mocha': catppuccinMocha,
@@ -172,9 +174,8 @@ export function resolveTheme(cfg) {
  */
 export function readRawThemeCfg() {
   try {
-    const cfgPath = join(homedir(), '.config', 'lazyhub', 'config.json')
-    if (!existsSync(cfgPath)) return null
-    return JSON.parse(readFileSync(cfgPath, 'utf8'))?.theme ?? null
+    const cfg = loadTomlConfig()
+    return cfg.theme?.name ? { name: cfg.theme.name, overrides: cfg.theme.overrides || {} } : null
   } catch { return null }
 }
 

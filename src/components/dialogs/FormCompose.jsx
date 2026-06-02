@@ -13,6 +13,7 @@ import { join } from 'path'
 import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
 import { useKeyScope } from '../../keyscope.js'
+import { matchesAction } from '../../config/actions.js'
 
 export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
   useKeyScope('dialog')
@@ -47,7 +48,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
   }, [values])
 
   useInput((input, key) => {
-    if (key.escape) { onCancel(); return }
+    if (matchesAction('dialog.cancel', input, key)) { onCancel(); return }
 
     if (key.tab && key.shift) {
       setActiveField(f => (f - 1 + fields.length) % fields.length)
@@ -58,7 +59,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
       return
     }
 
-    if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) {
+    if ((key.return && key.ctrl) || matchesAction('dialog.submit', input, key)) {
       onSubmit(values)
       return
     }
@@ -67,7 +68,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
     if (!field) return
 
     // Use Ctrl+E for editor to avoid 'e' key hijacking
-    if (field.type === 'multiline' && key.ctrl && input === 'e') {
+    if (field.type === 'multiline' && matchesAction('dialog.editor', input, key)) {
       openEditor(field.name)
       return
     }

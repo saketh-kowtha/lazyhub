@@ -3,14 +3,14 @@
  */
 
 import React, { useState, useMemo, useRef, useCallback, useContext, useEffect } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import chalk from 'chalk'
 import hljs from 'highlight.js'
-import { useKeyScope } from '../../keyscope.js'
+import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo, reviewPR } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
@@ -671,7 +671,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     }
   }
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     // Large diff warning intercept
     if (isLargeDiff && !diffWarningAck) {
       if (key.return) { setDiffWarningAck(true); return }

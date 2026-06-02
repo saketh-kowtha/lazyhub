@@ -11,8 +11,8 @@
  */
 
 import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
-import { useKeyScope } from '../../keyscope.js'
+import { Box, Text, useStdout } from 'ink'
+import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
   listPRs, listLabels, listCollaborators,
@@ -29,12 +29,15 @@ import { NewPRDialog } from './NewPRDialog.jsx'
 import { AppContext } from '../../context.js'
 import { usePaneState } from '../../hooks/usePaneState.js'
 import { loadConfig, loadState, saveState } from '../../config.js'
+import { firstActionKey, matchesAction } from '../../config/actions.js'
 import { useTheme } from '../../theme/index.js'
 import { sanitize, TextInput, shortAge, authorColor, truncateToWidth, padEndWidth, padStartWidth } from '../../utils.js'
 import { PRListSkeleton } from '../../components/Skeleton.jsx'
 import { Popover } from '../../ui/Popover.jsx'
 
-const _cfg = loadConfig().pr
+const _appConfig = loadConfig()
+const _cfg = _appConfig.pr
+const _actions = _appConfig.toml
 
 // ─── Theme adapter ────────────────────────────────────────────────────────────
 // Maps the new token scheme (src/theme/index.js) to the legacy `t.*` shape
@@ -355,7 +358,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const effectiveHeight = expansionEnabled ? Math.max(3, height - EXPAND_ROWS) : height
 
   // Preserve filter/cursor/scroll across back-navigation from detail/diff.
-  // Seed scope from persisted state.json so it survives across sessions;
+  // Seed scope from persisted [state] so it survives across sessions;
   // fall back to config default (typically 'own') for first-ever launch.
   const _persistedScope = loadState().prScope
   const [savedState, setSavedState] = usePaneState('prs', {
@@ -455,26 +458,27 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const openDialog = useCallback((name) => { setDialog(name) }, [])
   const closeDialog = useCallback(() => setDialog(null), [])
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (statusMsg?.persist) { setStatusMsg(null) }
     if (dialog) return
 
     // gg → top
-    if (input === 'g') {
-      if (lastKeyRef.current === 'g') {
+    const topSequenceKey = firstActionKey('cursor.top', 'gg', _actions)[0]
+    if (input === topSequenceKey) {
+      if (lastKeyRef.current === topSequenceKey) {
         clearTimeout(lastKeyTimer.current)
         lastKeyRef.current = null
         setCursor(0); setScrollOffset(0)
         return
       }
-      lastKeyRef.current = 'g'
+      lastKeyRef.current = topSequenceKey
       lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
       return
     }
     lastKeyRef.current = null
 
     // G → bottom
-    if (input === 'G') {
+    if (matchesAction('cursor.bottom', input, key, _actions)) {
       if (items.length > 0) {
         const last = items.length - 1
         setCursor(last); setScrollOffset(Math.max(0, last - effectiveHeight + 1))
@@ -482,13 +486,13 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       return
     }
 
-    if (input === 'j' || key.downArrow) { moveCursor(1);  return }
-    if (input === 'k' || key.upArrow)   { moveCursor(-1); return }
-    if (input === 'r') { refetch(); return }
-    if (input === '/') { openDialog('fuzzy'); return }
+    if (matchesAction('cursor.down', input, key, _actions)) { moveCursor(1);  return }
+    if (matchesAction('cursor.up', input, key, _actions))   { moveCursor(-1); return }
+    if (matchesAction('list.refresh', input, key, _actions)) { refetch(); return }
+    if (matchesAction('list.search', input, key, _actions)) { openDialog('fuzzy'); return }
 
     const focusedPR = !loading && items.length > 0 ? items[cursor] : null
-    if (input === 'M' && canToggleAutoMergeFromList(focusedPR)) {
+    if (matchesAction('pr.auto-merge', input, key, _actions) && canToggleAutoMergeFromList(focusedPR)) {
       if (focusedPR.autoMergeRequest) {
         disableAutoMerge(repo, focusedPR.number)
           .then(() => { showStatus('✓ Auto-merge disabled'); refetch() })
@@ -515,7 +519,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       setCursor(0); setScrollOffset(0); return
     }
     // f cycles single-state sets: open → closed → merged → open
-    if (input === 'f') {
+    if (matchesAction('pr.filter-cycle', input, key, _actions)) {
       setFilterStates(prev => {
         const current = prev.size === 1 ? [...prev][0] : 'open'
         const next = STATE_CYCLE[(STATE_CYCLE.indexOf(current) + 1) % STATE_CYCLE.length]
@@ -527,7 +531,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     }
 
     // s — cycle scope then age sort
-    if (input === 's') {
+    if (matchesAction('pr.scope-cycle', input, key, _actions)) {
       const CYCLE = ['all', 'own', 'reviewing', 'oldest']
       const current = sortMode === 'oldest' ? 'oldest' : scope
       const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length]
@@ -545,29 +549,29 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     }
 
     // @ — search PRs by author username
-    if (input === '@') { openDialog('author-search'); return }
+    if (matchesAction('pr.author-filter', input, key, _actions)) { openDialog('author-search'); return }
 
     // N — new PR
-    if (input === 'N') { openDialog('new-pr'); return }
+    if (matchesAction('pr.new', input, key, _actions)) { openDialog('new-pr'); return }
 
     if (loading || items.length === 0) return
     const pr = items[cursor]
     if (!pr) return
 
-    if (key.return) { onSelectPR(pr); return }
-    if (input === 'd') { onOpenDiff(pr); return }
-    if (input === 'm') { openDialog('merge'); return }
-    if (input === 'l') { openDialog('labels'); return }
-    if (input === 'A') { openDialog('assignees'); return }
-    if (input === 'R') { openDialog('reviewers'); return }
-    if (input === 'a') { openDialog('approve-body'); return }
-    if (input === 'x') { openDialog('reqchanges-body'); return }
-    if (input === 'X') { openDialog('close-pr'); return }
+    if (matchesAction('pr.open-selected', input, key, _actions)) { onSelectPR(pr); return }
+    if (matchesAction('pr.diff', input, key, _actions)) { onOpenDiff(pr); return }
+    if (matchesAction('pr.merge', input, key, _actions)) { openDialog('merge'); return }
+    if (matchesAction('pr.labels', input, key, _actions)) { openDialog('labels'); return }
+    if (matchesAction('pr.assignees', input, key, _actions)) { openDialog('assignees'); return }
+    if (matchesAction('pr.reviewers', input, key, _actions)) { openDialog('reviewers'); return }
+    if (matchesAction('pr.approve', input, key, _actions)) { openDialog('approve-body'); return }
+    if (matchesAction('pr.request-changes', input, key, _actions)) { openDialog('reqchanges-body'); return }
+    if (matchesAction('pr.close', input, key, _actions)) { openDialog('close-pr'); return }
 
-    if (input === 'c') { openDialog('checkout'); return }
+    if (matchesAction('pr.checkout', input, key, _actions)) { openDialog('checkout'); return }
 
     // y — copy PR URL to clipboard
-    if (input === 'y' && pr.url) {
+    if (matchesAction('pr.copy-url', input, key, _actions) && pr.url) {
       import('execa').then(({ execa }) => {
         const [cmd, args] = process.platform === 'darwin'
           ? ['pbcopy', []]
@@ -579,7 +583,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       return
     }
 
-    if (input === 'o' && pr.url) {
+    if (matchesAction('pr.open-browser', input, key, _actions) && pr.url) {
       import('execa').then(({ execa }) => {
         const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
         execa(cmd, [pr.url]).catch(() => {})
@@ -957,7 +961,7 @@ function AuthorSearchDialog({ current, onSubmit, onCancel }) {
   const [text, setText] = useState(current || '')
   useKeyScope('dialog')
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (key.escape) { onCancel(); return }
     if (key.return) { onSubmit(text.trim()); return }
   })

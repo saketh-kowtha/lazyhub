@@ -3,9 +3,9 @@
  */
 
 import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
-import { useKeyScope } from '../../keyscope.js'
+import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { listRuns, getRunLogs, rerunRun, cancelRun } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
@@ -14,6 +14,7 @@ import { AppContext } from '../../context.js'
 import { useTheme } from '../../theme.js'
 import { Spinner } from '../../components/Spinner.jsx'
 import { ActionListSkeleton } from '../../components/Skeleton.jsx'
+import { firstActionKey, matchesAction } from '../../config/actions.js'
 
 function StatusBadge({ run }) {
   const { t } = useTheme()
@@ -114,30 +115,31 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
     setLogLoading(false)
   }, [items, cursor, repo])
 
-  useInput((input, key) => {
+  useKeymapInput((input, key) => {
     if (statusMsg?.persist) { setStatusMsg(null) }
     if (dialog) return
-    if (input === 'j' || key.downArrow) { moveCursor(1); return }
-    if (input === 'k' || key.upArrow)  { moveCursor(-1); return }
-    if (input === 'r') { refetch(); return }
-    if (input === 'x' && branchFilter) { setBranchFilter(null); setCursor(0); setScrollOffset(0); return }
+    if (matchesAction('cursor.down', input, key)) { moveCursor(1); return }
+    if (matchesAction('cursor.up', input, key))  { moveCursor(-1); return }
+    if (matchesAction('list.refresh', input, key)) { refetch(); return }
+    if (matchesAction('workflow.clear-filter', input, key) && branchFilter) { setBranchFilter(null); setCursor(0); setScrollOffset(0); return }
 
     // gg → top
-    if (input === 'g') {
-      if (lastKeyRef.current === 'g') {
+    const topSequenceKey = firstActionKey('cursor.top', 'gg')[0]
+    if (input === topSequenceKey) {
+      if (lastKeyRef.current === topSequenceKey) {
         clearTimeout(lastKeyTimer.current)
         lastKeyRef.current = null
         setCursor(0); setScrollOffset(0)
         return
       }
-      lastKeyRef.current = 'g'
+      lastKeyRef.current = topSequenceKey
       lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
       return
     }
     lastKeyRef.current = null
 
     // G → bottom
-    if (input === 'G') {
+    if (matchesAction('cursor.bottom', input, key)) {
       if (items.length > 0) {
         const last = items.length - 1
         setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
@@ -145,12 +147,12 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
       return
     }
 
-    if (key.return || input === 'l') {
+    if (matchesAction('workflow.logs', input, key)) {
       openLogs()
       return
     }
 
-    if (input === 'R') {
+    if (matchesAction('workflow.rerun', input, key)) {
       const run = items[cursor]
       if (run) {
         rerunRun(repo, run.databaseId)
@@ -160,7 +162,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
       return
     }
 
-    if (input === 'X') {
+    if (matchesAction('workflow.cancel', input, key)) {
       if (items[cursor]) setDialog('cancel')
       return
     }
