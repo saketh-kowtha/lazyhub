@@ -351,7 +351,7 @@ function PaneHeader({ pane, count, loading, error }) {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
-function App({ repo }) {
+export function App({ repo }) {
   const { t, setTheme } = useTheme()
   const { exit } = useApp()
   const activeScope = useActiveScope()

@@ -15,6 +15,7 @@ import {
   listPRComments, resolveThread,
   replyToComment, editPRComment, deletePRComment,
 } from '../../executor.js'
+import { useKeyScope } from '../../keyscope.js'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { useTheme } from '../../theme.js'
 import { TextInput, sanitize, shortAge } from '../../utils.js'
