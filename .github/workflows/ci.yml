@@ -70,13 +70,22 @@ jobs:
       - name: Collect base branch coverage
         if: github.event_name == 'pull_request'
         working-directory: .base-coverage
+        continue-on-error: true
         run: npx vitest run --coverage.enabled true --coverage.provider v8 --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=html --coverage.reportsDirectory=coverage
 
       - name: Report coverage in PR
-        if: always() && github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request' && hashFiles('.base-coverage/coverage/coverage-summary.json') != ''
         uses: davelosert/vitest-coverage-report-action@v2
         with:
           json-summary-path: coverage/coverage-summary.json
           json-final-path: coverage/coverage-final.json
           json-summary-compare-path: .base-coverage/coverage/coverage-summary.json
+          file-coverage-mode: changes-affected
+
+      - name: Report coverage in PR (no base compare)
+        if: always() && github.event_name == 'pull_request' && hashFiles('.base-coverage/coverage/coverage-summary.json') == ''
+        uses: davelosert/vitest-coverage-report-action@v2
+        with:
+          json-summary-path: coverage/coverage-summary.json
+          json-final-path: coverage/coverage-final.json
           file-coverage-mode: changes-affected

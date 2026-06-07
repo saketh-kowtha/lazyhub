@@ -18,7 +18,7 @@ import {
 import { getAICodeReview } from './ai/index.js'
 import { PRDetail } from './features/prs/detail.jsx'
 import { PRDiff } from './features/prs/diff.jsx'
-import { renderWithProviders, flush, cleanup } from './test/test-helpers.jsx'
+import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
 const inputHandlers = vi.hoisted(() => new Set())
 
@@ -306,9 +306,10 @@ describe('PR detail and diff E2E flows', () => {
       </>
     )
 
-    await flush(220)
+    await waitForExpectation(() => {
+      expect(closePR).toHaveBeenCalledWith('owner/repo', 42)
+    }, { timeout: 1500 })
     expect(closeView.lastFrame()).not.toContain('Close PR #42')
-    expect(closePR).toHaveBeenCalledWith('owner/repo', 42)
     closeView.unmount()
   })
 
