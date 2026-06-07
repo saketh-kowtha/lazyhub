@@ -60,11 +60,11 @@ If any of these fail, stop and report — the app is broken at the foundation.
 ### S-01 — Launch from a github.com repo clone
 Run `cd /path/to/R-GHCOM && npx lazyhub` (or your launcher).
 - [ ] App renders within ~2 s, no stack trace in stderr.
-- [ ] Sidebar shows 5 panes; PRs active; repo name in status bar.
+- [ ] On default config, sidebar shows 6 panes (`Focus`, `PRs`, `Issues`, `Branches`, `Actions`, `Notifications`), `Focus` is active first, and repo name appears in the status bar.
 
 ### S-02 — Pane cycling
-Press `Tab` five times.
-- [ ] PRs → Issues → Branches → Actions → Notifications → PRs (wraps).
+Press `Tab` six times.
+- [ ] Focus → PRs → Issues → Branches → Actions → Notifications → Focus (wraps).
 
 ### S-03 — PR detail → diff → back
 `Enter` on first PR → `d` → `Esc` → `Esc` → back at PR list.
@@ -76,9 +76,9 @@ Press `q` at the PR list.
 
 ---
 
-## Section 2 — NEW fixes from this session (HIGH priority)
+## Section 2 — Current high-risk regressions (HIGH priority)
 
-These are the changes made in the recent bug-hunt + the GHE auth fix. Regressions here are most likely.
+These are the areas that changed most across the recent stability passes: host detection, dialog/input behavior, TOML-backed settings, editor handoff, custom panes, and PR workflows. Regressions here are most likely.
 
 ### 2.1 — GHE auth auto-detection (bootstrap)
 
@@ -174,7 +174,7 @@ With the labels dialog still open and a filtered list:
 ### 2.5 — AIAssistant: scroll keys don't hijack typing
 
 #### T-240 — Type a prompt containing j/k/g/G
-**Pre:** AI provider configured (anthropic / openai / ollama). If not, skip.
+**Pre:** Any AI provider path is configured or detectable (`claude-code`, `codex`, `gemini-cli`, `anthropic-api`, or `openai-compatible`). If not, skip.
 1. From any view press `Ctrl+A`.
 2. Type: `merge pr #42 gently, thanks` (contains `g`, `k`, `j` depending on wording).
 - [ ] Every letter lands in the prompt; message history does **not** scroll as you type.
@@ -240,7 +240,11 @@ Watch stderr / DEBUG logs while doing this. Any "Cannot update a component while
 - [ ] The row labelled `(current)` matches the cursor row.
 
 #### T-271 — With an unknown theme in config, cursor falls back to row 0
-1. Edit `~/.config/lazyhub/lazyhub.toml` to set `"theme": "not-a-real-theme"`.
+1. Edit `~/.config/lazyhub/lazyhub.toml` to:
+```toml
+[theme]
+name = "not-a-real-theme"
+```
 2. Relaunch → `S` → Theme.
 - [ ] Cursor lands on row 0, no crash.
 - [ ] Revert your config change afterwards.
@@ -277,16 +281,16 @@ Already fixed previously (B-46). Verify still works.
 
 #### T-290 — G on an empty custom pane
 **Pre:** Add a custom pane to `~/.config/lazyhub/lazyhub.toml` that returns an empty array, e.g.:
-```json
-"customPanes": {
-  "empty-test": {
-    "label": "Empty",
-    "icon": "∅",
-    "command": "gh api repos/{repo}/deployments --jq '[]'"
-  }
-}
+```toml
+[panes.empty-test]
+label = "Empty"
+icon = "∅"
+command = "gh api repos/{repo}/deployments --jq '[]'"
+
+[app]
+active_panes = ["focus", "prs", "issues", "branches", "actions", "notifications", "empty-test"]
 ```
-And ensure `"empty-test"` is in `"panes"`. Restart.
+Restart.
 1. Tab to the Empty pane → press `G`.
 - [ ] App does not crash; cursor stays valid (doesn't become -1).
 - [ ] Press `j` / `k` — no crash.
@@ -335,6 +339,18 @@ And ensure `"empty-test"` is in `"panes"`. Restart.
 ## Section 3 — Regression sweep of existing features (MEDIUM priority)
 
 One pass through the core flows to confirm nothing obvious broke.
+
+### 3.0 — App shell / focus tab
+
+#### T-300 — Default config lands on Focus first
+- [ ] First pane is `Focus`, not PR list.
+- [ ] Focus view shows the tab label and the declared pane count.
+- [ ] At ≥ 120 columns the panes render side-by-side; below that they stack vertically without overlap.
+
+#### T-300A — Settings "Active Panes" matches current registry
+1. Press `S` → open **Active Panes**.
+- [ ] Built-ins include `focus`, `prs`, `issues`, `branches`, `actions`, `notifications`.
+- [ ] Any TOML-defined custom panes also appear.
 
 ### 3.1 — PR list
 
@@ -546,8 +562,8 @@ Try each: `my branch`, `my~branch`, `my:branch`, `my?branch`, `my[branch`, `..hi
 #### T-391 — Theme persists across restart
 - [ ] Relaunch → same theme.
 
-#### T-392 — AI Provider editor: Anthropic / OpenAI / Ollama
-- [ ] Each cycle shows correct fields.
+#### T-392 — AI Provider editor: Anthropic / OpenAI / Ollama / OpenAI-compatible
+- [ ] Each cycle shows the correct fields and helper text for the selected mode.
 - [ ] `s` saves; `Esc` cancels.
 - [ ] API key fields masked on display.
 
@@ -571,9 +587,10 @@ Try each: `my branch`, `my~branch`, `my:branch`, `my?branch`, `my[branch`, `..hi
 ### T-405 — UNKNOWN mergeable state
 - [ ] Badge = `●` (open) not `⚡`; `C` does nothing (doesn't open conflict view).
 
-### T-406 — Config with invalid JSON
+### T-406 — Config with invalid TOML
 1. Corrupt the config file.
 - [ ] App launches on defaults.
+- [ ] A warning is surfaced cleanly; no crash or stack trace flood.
 - [ ] Restore your config afterwards.
 
 ### T-407 — Terminal resize during use
