@@ -40,6 +40,26 @@ export async function flush(ms = 0) {
   await new Promise(resolve => setTimeout(resolve, ms))
 }
 
+export async function waitForExpectation(assertion, {
+  timeout = 1500,
+  interval = 25,
+} = {}) {
+  const deadline = Date.now() + timeout
+  let lastError
+
+  while (Date.now() < deadline) {
+    try {
+      assertion()
+      return
+    } catch (error) {
+      lastError = error
+      await flush(interval)
+    }
+  }
+
+  throw lastError
+}
+
 export function pressEnter(stdin) {
   stdin.write('\r')
 }

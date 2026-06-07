@@ -9,6 +9,9 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v6
 
@@ -36,5 +39,53 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Test with coverage
+        run: npm run test:coverage
+
       - name: Build
         run: npm run build
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+
+      - name: Checkout base branch for coverage diff
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .base-coverage
+
+      - name: Install base branch dependencies (lockfile-free)
+        if: github.event_name == 'pull_request'
+        working-directory: .base-coverage
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+          npm install --no-audit --no-fund -D @vitest/coverage-v8@3.2.6
+
+      - name: Collect base branch coverage
+        if: github.event_name == 'pull_request'
+        working-directory: .base-coverage
+        continue-on-error: true
+        run: npx vitest run --coverage.enabled true --coverage.provider v8 --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=html --coverage.reportsDirectory=coverage
+
+      - name: Report coverage in PR
+        if: always() && github.event_name == 'pull_request' && hashFiles('.base-coverage/coverage/coverage-summary.json') != ''
+        uses: davelosert/vitest-coverage-report-action@v2
+        with:
+          json-summary-path: coverage/coverage-summary.json
+          json-final-path: coverage/coverage-final.json
+          json-summary-compare-path: .base-coverage/coverage/coverage-summary.json
+          file-coverage-mode: changes-affected
+
+      - name: Report coverage in PR (no base compare)
+        if: always() && github.event_name == 'pull_request' && hashFiles('.base-coverage/coverage/coverage-summary.json') == ''
+        uses: davelosert/vitest-coverage-report-action@v2
+        with:
+          json-summary-path: coverage/coverage-summary.json
+          json-final-path: coverage/coverage-final.json
+          file-coverage-mode: changes-affected

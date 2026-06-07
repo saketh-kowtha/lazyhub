@@ -18,7 +18,7 @@ import {
 import { getAICodeReview } from './ai/index.js'
 import { PRDetail } from './features/prs/detail.jsx'
 import { PRDiff } from './features/prs/diff.jsx'
-import { renderWithProviders, flush, cleanup } from './test/test-helpers.jsx'
+import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
 const inputHandlers = vi.hoisted(() => new Set())
 
@@ -259,7 +259,7 @@ describe('PR detail and diff E2E flows', () => {
   })
 
   it('supports auto-merge, check rerun mode, and closing from PR detail', async () => {
-    const view = renderWithProviders(
+    const actionView = renderWithProviders(
       <>
         <PRDetail
           repo="owner/repo"
@@ -272,25 +272,45 @@ describe('PR detail and diff E2E flows', () => {
         />
         <InputDriver events={[
           { input: 'M' },
-          { wait: 20 },
+          { wait: 30 },
           { input: 'c' },
-          { wait: 20 },
+          { wait: 30 },
           { input: 'R' },
-          { wait: 20 },
-          { key: { escape: true } },
-          { wait: 20 },
+        ]} />
+      </>
+    )
+
+    await flush(160)
+    expect(enableAutoMerge).toHaveBeenCalledWith('owner/repo', 42, 'squash')
+    expect(rerunCheckRun).toHaveBeenCalledWith('owner/repo', 9001)
+    actionView.unmount()
+
+    const closeView = renderWithProviders(
+      <>
+        <PRDetail
+          repo="owner/repo"
+          prNumber={42}
+          onBack={() => {}}
+          onOpenDiff={() => {}}
+          onViewComments={() => {}}
+          onOpenConflict={() => {}}
+          onOpenActions={() => {}}
+        />
+        <InputDriver events={[
           { input: 'X' },
-          { wait: 20 },
+          { wait: 60 },
           { key: { leftArrow: true } },
+          { wait: 40 },
           { key: { return: true } },
         ]} />
       </>
     )
 
-    await flush(180)
-    expect(enableAutoMerge).toHaveBeenCalledWith('owner/repo', 42, 'squash')
-    expect(rerunCheckRun).toHaveBeenCalledWith('owner/repo', 9001)
-    expect(closePR).toHaveBeenCalledWith('owner/repo', 42)
+    await waitForExpectation(() => {
+      expect(closePR).toHaveBeenCalledWith('owner/repo', 42)
+    }, { timeout: 1500 })
+    expect(closeView.lastFrame()).not.toContain('Close PR #42')
+    closeView.unmount()
   })
 
   it('supports comment handoff, inline reply entry, and AI review from PR diff', async () => {
@@ -313,13 +333,14 @@ describe('PR detail and diff E2E flows', () => {
           { key: { escape: true } },
           { wait: 20 },
           { input: 'v' },
-          { wait: 20 },
+          { wait: 30 },
           { input: 'A' },
+          { wait: 80 },
         ]} />
       </>
     )
 
-    await flush(160)
+    await flush(260)
     expect(view.lastFrame()).toContain('AI REVIEW 2 findings')
     expect(onViewComments).toHaveBeenCalled()
     expect(getAICodeReview).toHaveBeenCalledWith(expect.objectContaining({

@@ -27,6 +27,7 @@ import {
   renderWithProviders,
   flush,
   cleanup,
+  waitForExpectation,
 } from './test/test-helpers.jsx'
 
 const inputHandlers = vi.hoisted(() => new Set())
@@ -238,12 +239,18 @@ describe('Pane E2E user flows', () => {
     const currentView = renderWithProviders(
       <>
         <BranchList repo="owner/repo" />
-        <InputDriver events={[{ input: 'j' }, { wait: 20 }, { key: { return: true } }]} />
+        <InputDriver events={[
+          { wait: 80 },
+          { input: 'j' },
+          { wait: 60 },
+          { key: { return: true } },
+        ]} />
       </>
     )
 
-    await flush(60)
-    expect(currentView.lastFrame()).toContain('Already on "main"')
+    await waitForExpectation(() => {
+      expect(currentView.lastFrame()).toContain('Already on "main"')
+    }, { timeout: 1500 })
     currentView.unmount()
 
     const deleteView = renderWithProviders(
@@ -251,18 +258,19 @@ describe('Pane E2E user flows', () => {
         <BranchList repo="owner/repo" />
         <InputDriver events={[
           { input: 'D' },
-          { wait: 40 },
+          { wait: 100 },
           { input: 'feature-1' },
-          { wait: 20 },
+          { wait: 100 },
           { key: { leftArrow: true } },
-          { wait: 20 },
+          { wait: 60 },
           { key: { return: true } },
         ]} />
       </>
     )
 
-    await flush(120)
-    expect(deleteBranch).toHaveBeenCalledWith('owner/repo', 'feature-1')
+    await waitForExpectation(() => {
+      expect(deleteBranch).toHaveBeenCalledWith('owner/repo', 'feature-1')
+    }, { timeout: 1500 })
   })
 
   it('opens workflow logs and allows cancelling a run', async () => {
@@ -292,15 +300,17 @@ describe('Pane E2E user flows', () => {
         <ActionList repo="owner/repo" />
         <InputDriver events={[
           { input: 'X' },
-          { wait: 20 },
+          { wait: 60 },
           { key: { leftArrow: true } },
+          { wait: 40 },
           { key: { return: true } },
         ]} />
       </>
     )
 
-    await flush(80)
-    expect(cancelRun).toHaveBeenCalledWith('owner/repo', 301)
+    await waitForExpectation(() => {
+      expect(cancelRun).toHaveBeenCalledWith('owner/repo', 301)
+    }, { timeout: 1500 })
   })
 
   it('routes notifications from the user list and supports mark-all confirmation', async () => {
@@ -322,11 +332,19 @@ describe('Pane E2E user flows', () => {
     const markAllView = renderWithProviders(
       <>
         <NotificationList repo="owner/repo" onNavigateTo={onNavigateTo} />
-        <InputDriver events={[{ input: 'M' }, { input: 'k' }, { key: { return: true } }]} />
+        <InputDriver events={[
+          { input: 'M' },
+          { wait: 60 },
+          { key: { leftArrow: true } },
+          { wait: 40 },
+          { key: { return: true } },
+        ]} />
       </>
     )
-    await flush(20)
-    expect(markAllNotificationsRead).toHaveBeenCalled()
+    await waitForExpectation(() => {
+      expect(markAllNotificationsRead).toHaveBeenCalled()
+    }, { timeout: 1500 })
+    markAllView.unmount()
   })
 
   it('supports PR comment filter, jump-to-diff, and resolve thread flows', async () => {

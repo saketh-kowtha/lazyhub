@@ -19,5 +19,26 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.{test,spec}.{jsx,js}'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary', 'json', 'html'],
+      reportsDirectory: 'coverage',
+      reportOnFailure: true,
+      all: true,
+      include: ['src/**/*.{js,jsx}'],
+      exclude: [
+        'src/**/*.{test,spec}.{js,jsx}',
+        'src/test/**',
+        'node_modules/**',
+        'bin/**',
+        'integrations/nvim/**',
+      ],
+      thresholds: {
+        statements: 48,
+        branches: 58,
+        functions: 45,
+        lines: 48,
+      },
+    },
   },
 })
