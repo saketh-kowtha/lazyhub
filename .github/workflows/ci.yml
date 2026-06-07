@@ -65,11 +65,12 @@ jobs:
         run: |
           rm -f package-lock.json
           npm install --no-audit --no-fund
+          npm install --no-audit --no-fund -D @vitest/coverage-v8@3.2.6
 
       - name: Collect base branch coverage
         if: github.event_name == 'pull_request'
         working-directory: .base-coverage
-        run: npm run test:coverage
+        run: npx vitest run --coverage.enabled true --coverage.provider v8 --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=html --coverage.reportsDirectory=coverage
 
       - name: Report coverage in PR
         if: always() && github.event_name == 'pull_request'

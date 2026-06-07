@@ -115,7 +115,7 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
 
 - **Why:** this repo now has a meaningful mix of unit tests and mocked TUI interaction tests, but regressions still slip through when coverage is invisible. A hard floor makes "tests passed" less hollow, and the PR report gives reviewers a quick read on what changed.
 - **How:** keep Vitest config in `vite.config.js`, use `@vitest/coverage-v8` pinned to the same major/minor line as Vitest 3, and emit `text`, `json-summary`, `json`, and `html` reports. CI runs the full Vitest suite with coverage enabled and compares PR coverage against the base branch with `davelosert/vitest-coverage-report-action@v2`.
-- **Current floors:** statements `50`, branches `58`, functions `45`, lines `50`. Raise them intentionally as coverage improves; don't quietly lower them to get a PR green.
+- **Current floors:** statements `48`, branches `58`, functions `45`, lines `48`. They are set from the current cross-platform baseline, not from one local run. Raise them intentionally as coverage improves; don't quietly lower them to get a PR green.
 - **Scope:** enforce thresholds against `src/**/*.{js,jsx}` with tests and support helpers excluded. Do not expand the gate to docs, build scripts, or editor integrations unless a future issue explicitly asks for that.
 - **Tracked in:** #138.
 

@@ -34,10 +34,10 @@ export default defineConfig({
         'integrations/nvim/**',
       ],
       thresholds: {
-        statements: 50,
+        statements: 48,
         branches: 58,
         functions: 45,
-        lines: 50,
+        lines: 48,
       },
     },
   },

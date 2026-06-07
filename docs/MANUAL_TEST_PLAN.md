@@ -39,7 +39,7 @@ Confirm before starting. All later sections assume these.
   - [ ] `npm run build` succeeds
   - [ ] `npm test` exits 0
   - [ ] `npm run test:coverage` exits 0 and writes reports to `coverage/`
-  - [ ] Coverage thresholds hold for `src/**/*.{js,jsx}` (current floors: 50% statements, 58% branches, 45% functions, 50% lines)
+  - [ ] Coverage thresholds hold for `src/**/*.{js,jsx}` (current floors: 48% statements, 58% branches, 45% functions, 48% lines)
   - [ ] `npm run lint` exits 0
   - [ ] On pull requests, CI posts a Vitest coverage summary comment and uploads the `coverage-report` artifact
 

@@ -259,7 +259,7 @@ describe('PR detail and diff E2E flows', () => {
   })
 
   it('supports auto-merge, check rerun mode, and closing from PR detail', async () => {
-    const view = renderWithProviders(
+    const actionView = renderWithProviders(
       <>
         <PRDetail
           repo="owner/repo"
@@ -276,11 +276,29 @@ describe('PR detail and diff E2E flows', () => {
           { input: 'c' },
           { wait: 30 },
           { input: 'R' },
-          { wait: 30 },
-          { key: { escape: true } },
-          { wait: 60 },
+        ]} />
+      </>
+    )
+
+    await flush(160)
+    expect(enableAutoMerge).toHaveBeenCalledWith('owner/repo', 42, 'squash')
+    expect(rerunCheckRun).toHaveBeenCalledWith('owner/repo', 9001)
+    actionView.unmount()
+
+    const closeView = renderWithProviders(
+      <>
+        <PRDetail
+          repo="owner/repo"
+          prNumber={42}
+          onBack={() => {}}
+          onOpenDiff={() => {}}
+          onViewComments={() => {}}
+          onOpenConflict={() => {}}
+          onOpenActions={() => {}}
+        />
+        <InputDriver events={[
           { input: 'X' },
-          { wait: 80 },
+          { wait: 60 },
           { key: { leftArrow: true } },
           { wait: 40 },
           { key: { return: true } },
@@ -288,10 +306,10 @@ describe('PR detail and diff E2E flows', () => {
       </>
     )
 
-    await flush(360)
-    expect(enableAutoMerge).toHaveBeenCalledWith('owner/repo', 42, 'squash')
-    expect(rerunCheckRun).toHaveBeenCalledWith('owner/repo', 9001)
+    await flush(220)
+    expect(closeView.lastFrame()).not.toContain('Close PR #42')
     expect(closePR).toHaveBeenCalledWith('owner/repo', 42)
+    closeView.unmount()
   })
 
   it('supports comment handoff, inline reply entry, and AI review from PR diff', async () => {
