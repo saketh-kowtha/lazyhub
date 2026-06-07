@@ -109,6 +109,15 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
 - **Never auto-enable LiteLLM's observability/telemetry features.** Lazyhub's "no telemetry, ever" invariant is non-negotiable. The LiteLLM provider's first job is to disable every built-in observability hook at config time.
 - **Tracked in:** #168 (Phase E6, V2 — openai-compatible), #170 (Phase E7, V3-gated — LiteLLM).
 
+## Decision 9 — Coverage gate in CI
+
+**CI runs Vitest with V8 coverage enabled, enforces hard floors, uploads the HTML/JSON artifact, and comments the PR with a diff-aware report.**
+
+- **Why:** this repo now has a meaningful mix of unit tests and mocked TUI interaction tests, but regressions still slip through when coverage is invisible. A hard floor makes "tests passed" less hollow, and the PR report gives reviewers a quick read on what changed.
+- **How:** keep Vitest config in `vite.config.js`, use `@vitest/coverage-v8` pinned to the same major/minor line as Vitest 3, and emit `text`, `json-summary`, `json`, and `html` reports. CI runs the full Vitest suite with coverage enabled and compares PR coverage against the base branch with `davelosert/vitest-coverage-report-action@v2`.
+- **Scope:** enforce thresholds against `src/**/*.{js,jsx}` with tests and support helpers excluded. Do not expand the gate to docs, build scripts, or editor integrations unless a future issue explicitly asks for that.
+- **Tracked in:** #138.
+
 ---
 
 ## Other locked-in invariants (do not violate)
@@ -128,7 +137,8 @@ sessions don't need conversation history to know them.
    This is a hard line; do not propose adding it.
 7. **React pinned to ^18.** Ink 4 is incompatible with React 19. Do not bump.
 8. **ESLint pinned to ^8.** ESLint 9+ requires flat config migration; out of V1 scope.
-9. **vitest pinned to ^3.** vitest 4 breaks via rolldown's npm optional-deps bug.
+9. **Vitest pinned to ^3.** Vitest 4 still breaks here via rolldown's npm optional-deps bug.
+10. **Coverage plugin version must track Vitest's line.** If Vitest stays on 3.x, `@vitest/coverage-v8` stays on 3.x too.
 
 ## Spec discipline for fresh sessions
 

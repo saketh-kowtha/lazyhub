@@ -1,8 +1,8 @@
 # lazyhub — Manual Test Plan
 
-> **Purpose:** Verify every bug fix from the recent session + regression-sweep
-> the existing features. Tests are ordered by priority and blast radius — a
-> failure in Section 2 is more urgent than a failure in Section 5.
+> **Purpose:** Verify the current `main` branch before a release candidate or
+> after a broad bug-fix/testing pass. Tests are ordered by priority and blast
+> radius — a failure in Section 2 is more urgent than a failure in Section 5.
 >
 > **How to use:** run top to bottom. Tick `[x]` for pass, `[FAIL]` with a one-line
 > note for fail. When you finish, reply with just the failed items.
@@ -37,8 +37,19 @@ Confirm before starting. All later sections assume these.
 - [ ] **Build artifact**
   - [ ] `npm install` clean
   - [ ] `npm run build` succeeds
-  - [ ] `npm test` shows 228 passing, 0 failing
+  - [ ] `npm test` exits 0
+  - [ ] `npm run test:coverage` exits 0 and writes reports to `coverage/`
+  - [ ] Coverage thresholds hold for `src/**/*.{js,jsx}` (current floors: 50% statements, 58% branches, 45% functions, 50% lines)
   - [ ] `npm run lint` exits 0
+  - [ ] On pull requests, CI posts a Vitest coverage summary comment and uploads the `coverage-report` artifact
+
+- [ ] **Automated baseline on `main`**
+  - [ ] Core unit/integration suites are present under `src/**/*.test.js`
+  - [ ] Mocked TUI flow suites are present in:
+    - `src/app.e2e.test.jsx`
+    - `src/pane-flows.e2e.test.jsx`
+    - `src/pr-workflows.e2e.test.jsx`
+    - `src/settings-pane.e2e.test.jsx`
 
 ---
 

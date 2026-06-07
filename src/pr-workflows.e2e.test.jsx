@@ -272,22 +272,23 @@ describe('PR detail and diff E2E flows', () => {
         />
         <InputDriver events={[
           { input: 'M' },
-          { wait: 20 },
+          { wait: 30 },
           { input: 'c' },
-          { wait: 20 },
+          { wait: 30 },
           { input: 'R' },
-          { wait: 20 },
+          { wait: 30 },
           { key: { escape: true } },
-          { wait: 20 },
+          { wait: 60 },
           { input: 'X' },
-          { wait: 20 },
+          { wait: 80 },
           { key: { leftArrow: true } },
+          { wait: 40 },
           { key: { return: true } },
         ]} />
       </>
     )
 
-    await flush(180)
+    await flush(360)
     expect(enableAutoMerge).toHaveBeenCalledWith('owner/repo', 42, 'squash')
     expect(rerunCheckRun).toHaveBeenCalledWith('owner/repo', 9001)
     expect(closePR).toHaveBeenCalledWith('owner/repo', 42)
@@ -313,13 +314,14 @@ describe('PR detail and diff E2E flows', () => {
           { key: { escape: true } },
           { wait: 20 },
           { input: 'v' },
-          { wait: 20 },
+          { wait: 30 },
           { input: 'A' },
+          { wait: 80 },
         ]} />
       </>
     )
 
-    await flush(160)
+    await flush(260)
     expect(view.lastFrame()).toContain('AI REVIEW 2 findings')
     expect(onViewComments).toHaveBeenCalled()
     expect(getAICodeReview).toHaveBeenCalledWith(expect.objectContaining({
