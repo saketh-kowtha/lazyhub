@@ -251,17 +251,17 @@ describe('Pane E2E user flows', () => {
         <BranchList repo="owner/repo" />
         <InputDriver events={[
           { input: 'D' },
-          { wait: 40 },
+          { wait: 100 },
           { input: 'feature-1' },
-          { wait: 20 },
+          { wait: 100 },
           { key: { leftArrow: true } },
-          { wait: 20 },
+          { wait: 60 },
           { key: { return: true } },
         ]} />
       </>
     )
 
-    await flush(120)
+    await flush(320)
     expect(deleteBranch).toHaveBeenCalledWith('owner/repo', 'feature-1')
   })
 
@@ -322,11 +322,18 @@ describe('Pane E2E user flows', () => {
     const markAllView = renderWithProviders(
       <>
         <NotificationList repo="owner/repo" onNavigateTo={onNavigateTo} />
-        <InputDriver events={[{ input: 'M' }, { input: 'k' }, { key: { return: true } }]} />
+        <InputDriver events={[
+          { input: 'M' },
+          { wait: 60 },
+          { key: { leftArrow: true } },
+          { wait: 40 },
+          { key: { return: true } },
+        ]} />
       </>
     )
-    await flush(20)
+    await flush(160)
     expect(markAllNotificationsRead).toHaveBeenCalled()
+    markAllView.unmount()
   })
 
   it('supports PR comment filter, jump-to-diff, and resolve thread flows', async () => {
