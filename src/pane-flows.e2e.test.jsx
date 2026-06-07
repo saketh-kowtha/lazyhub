@@ -290,12 +290,17 @@ describe('Pane E2E user flows', () => {
     const cancelView = renderWithProviders(
       <>
         <ActionList repo="owner/repo" />
-        <InputDriver events={[{ input: 'X' }, { input: 'k' }, { key: { return: true } }]} />
+        <InputDriver events={[
+          { input: 'X' },
+          { wait: 20 },
+          { key: { leftArrow: true } },
+          { key: { return: true } },
+        ]} />
       </>
     )
 
-    await flush(20)
-    expect(cancelView.lastFrame()).toContain('Run cancelled')
+    await flush(80)
+    expect(cancelRun).toHaveBeenCalledWith('owner/repo', 301)
   })
 
   it('routes notifications from the user list and supports mark-all confirmation', async () => {
