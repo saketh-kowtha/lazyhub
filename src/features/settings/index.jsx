@@ -3,9 +3,11 @@
  */
 
 import React, { useState, useContext } from 'react'
+import { Box, Text } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { THEME_NAMES, useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
+import { useKeyScope } from '../../keyscope.js'
 import { loadConfig, saveConfig, BUILTIN_PANES } from '../../config.js'
 import { logger, TextInput } from '../../utils.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
