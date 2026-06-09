@@ -1,165 +1,148 @@
-# Roadmap — V1 execution order
+# Roadmap — execution order
 
 > Which issue do I pick next? This file answers that. Read top-to-bottom.
+> Synced with `DRAFT_PLAN.md` (the full strategy doc) on **2026-06-10**.
 >
-> **Conventions:**
-> - **Tier N** = serial dependency layer. Don't start Tier N+1 until Tier N's blocking items merge.
-> - **(parallel)** = issues in this tier can run concurrently across separate sessions.
-> - **Block on #N** = wait for #N before starting.
+> **Operating rule that overrides all tiering:** Stabilize → Speed up → Beautify →
+> Differentiate → Launch. No feature work while its phase's exit criteria are unmet.
+> Issues carry **GitHub milestones** matching the phases below — `gh issue list
+> --milestone "Phase N — ..."` is the authoritative "what's next" query.
+>
+> Every issue is a self-contained spec (template: ARCHITECT_DECISIONS.md → "Issue
+> spec template"). Dependencies are stated as verifiable preconditions inside each
+> issue body — check them there, not here.
 
 ## TL;DR — what to start now
 
-If you have **one** session: **#130 (Phase E1 — TOML config loader).** It is the keystone; ~10 other issues block on it.
-
-If you have **multiple** sessions running in parallel: **#130 + #139 + #145 + any Phase C UI step.** Those four tracks have no inter-dependency and unblock the largest downstream surface.
-
----
-
-## V1 — the path to launch
-
-### Tier 0 — Foundation (do FIRST, alone)
-
-| # | Title | Why it's first |
-|---|---|---|
-| **#130** | Phase E1 — TOML config loader | Every config-aware feature blocks on this. Ship it first. |
-
-After #130 merges, four parallel tracks open up.
+**#186 (npm audit)** — it's a required CI check; everything is blocked behind it.
+Then the rest of Phase 0, then Phase 1.
 
 ---
 
-### Tier 1 — Core unlockers (4 parallel tracks)
+## Shipped (do not pick up — kept for drift control)
 
-| Track | # | Title | Blocks |
-|---|---|---|---|
-| Config writer | **#131** | Phase E2 — Settings TOML round-trip | #70 (wizard), #132 |
-| Testability | **#139** | Phase J2 — `executor.js` `runGh` refactor | #138, #140 |
-| Daemon | **#145** | Phase K — `lazyhub serve` daemon | #146, #147, #148, #149, #67 |
-| UI polish (any) | **#126**, **#127**, **#128**, **#129** | Phase C steps 5c, 6, 7, 8 | #134 (the polish bundle references these) |
+#130 TOML loader · #131 TOML writer/migration · #139 runGh() refactor ·
+#138 coverage gate · #168 openai-compatible provider · #45 auto-merge footer ·
+#137 ZWJ flake · #124 command palette · #123 popover primitive
 
-UI Polish steps are independent of each other AND of the other Tier-1 tracks — perfect for parallel sessions on a quiet day.
+## Parked (closed, reopen at ~5k MAU / demonstrated demand)
 
----
-
-### Tier 2 — Build on Tier 1 (parallel after Tier 1 merges)
-
-| Depends on | # | Title |
-|---|---|---|
-| #130 | **#132** | Phase E3 — wire keymaps through TOML |
-| #130 | **#66** | Phase E4 — custom tabs |
-| #130 | **#133** | Phase E5 — `lazyhub doctor --config` |
-| #130, #131 | **#70** | First-run setup wizard |
-| #145 | **#146** | Phase L1 — error code catalog |
-| #145 | **#147** | Phase L2 — idempotency |
-| #145, #130 | **#148** | Phase L3 — permission scopes |
-| #145, #148 | **#149** | Phase L4 — `--dry-run` |
-| #139 | **#138** | Phase J1 — vitest coverage in CI |
-| #139 | **#140** | Phase J3 V1 — top-5 flow integration tests |
+#157/#158 team server · #159 marketplace · #136 JetBrains · #61 Raycast · #169 NLS-B
 
 ---
 
-### Tier 3 — Features (mostly parallel)
-
-These have weaker dependencies — pick whatever delivers most user value next.
-
-| # | Title | Notes |
-|---|---|---|
-| **#62** | Phase F — CLI args for state resumption | Standalone; unblocks #135 |
-| **#68** | Phase G — AI Q&A tab | Becomes an MCP tool via #145 |
-| **#65** | PR template auto-fill + draft toggle | Standalone |
-| **#69** | Share AI review (copy / post) | Standalone |
-| **#73** | CI checks interactive in PR detail | Standalone |
-| **#71** | PR & issue age color coding | Trivial |
-| **#45** | Auto-merge M-key footer fix | Half-shipped; small remaining scope |
-| **#137** | ZWJ test flake | Bug, low priority |
-| **#67** | Background auto-refresh | Needs #145 (daemon) |
-| **#141** | Phase J5 — pre-publish smoke test | Independent CI tooling |
-
----
-
-### Tier 4 — Editor integration
-
-| # | Title | Block on |
-|---|---|---|
-| **#135** | Phase I.1 — VSCode extension | #62, #128 (embedded mode), ideally #145 |
-
----
-
-### Tier 5 — Polish bundle (LAST in V1)
-
-| # | Title | Why last |
-|---|---|---|
-| **#134** | Phase H — V1 polish bundle (README, license, distribution, theme install, FUNDING.yml) | The dual-audience README needs to reflect what actually shipped. Do this once everything above is in. |
-
-After #134 merges → **cut V1 release**.
-
----
-
-## V2 — depth (after V1 launches)
-
-Defer until V1 is live and has a few weeks of real usage. Pick based on feedback.
-
-| Bucket | Issues |
-|---|---|
-| Agent contract depth | #150 L5, #151 L6, #152 L7, #153 L8, #154 L9, #155 L10, #156 L11 |
-| Enterprise foundation | #157 M1 (team server architecture spike) |
-| Editor integrations | #136 JetBrains, #142 J3 full integration tests, #143 J4 gh contract tests, #144 J6 AI contract tests |
-| BYO-LLM | **#168 Phase E6** — `openai-compatible` AI provider (covers Ollama / Groq / LM Studio / Azure OpenAI / OpenRouter / vLLM via one HTTP provider) |
-| Auxiliary features | #51, #57, #61 Raycast (V3), #63 watch mode, #64 desktop notifications, #67 auto-refresh (if not done in V1), #72 team view |
-
----
-
-## V3 — enterprise + marketplace + agentic depth
-
-Only if demand surfaces. Do not start until V2 ships AND you see real interest.
+## Phase 0 — Unbreak (exit: CI green on main, lint catches undefined identifiers, docs match reality)
 
 | # | Title |
 |---|---|
-| **#158** | Phase M2 — hosted team server (enterprise tier) |
-| **#159** | Phase M3 — marketplace |
-| **#61** | Raycast extension |
-| **#169** | Phase G2 — NLS-B: natural language workspace search (`/` triggers AI-translated `gh search`) |
-| **#170** | Phase E7 — Full LiteLLM integration (gated — only if #168 + named providers are insufficient) |
+| **#186** | npm audit failures (REQUIRED CHECK — first) |
+| **#188** | missing useKeyScope imports + enable ESLint `no-undef` (see scope-correction comment) |
+| **#187** | knip cleanup |
+| **#185** | settings theme/provider regressions |
+| **#197** | tsc --checkJs static checking in CI |
+
+## Phase 1 — Bug-Zero (exit: two consecutive 15-min dogfood sessions, zero new bugs; every advertised key works)
+
+| # | Title |
+|---|---|
+| **#132** | keymap registry through TOML — kills the key-desync bug class (launch blocker) |
+| **#193** | PTY E2E harness (real binary, stubbed gh, tmux included) |
+| **#194** | crash handler — always restore the terminal |
+| **#195** | --debug-state dump + bug-report template |
+| **#180** | degraded-state / gh-failure status indicator |
+| **#196** | god-file split (mechanical, parallel-friendly) |
+
+Plus: daily dogfood sessions file bugs; every fix follows repro-first
+(ARCHITECT_DECISIONS §9).
+
+## Phase 2 — Performance (exit: keystroke <33ms, warm pane switch <100ms perceived, "faster than the browser" verdict)
+
+| # | Title |
+|---|---|
+| **#198** | LAZYHUB_PERF instrumentation + baseline report (do first in this phase) |
+| **#199** | stale-while-revalidate disk cache — spinner-free warm paths |
+| **#200** | one GraphQL call for PR list + N+1 audit |
+| **#145** | daemon, K-lite slice only: cache + background refresh (see re-scope comment; Windows transport decision first) |
+
+## Phase 3 — Design (exit: every screen matches a committed mockup the maintainer picked)
+
+| # | Title |
+|---|---|
+| **#201** | DESIGN_REFERENCES.md + per-screen mockup variants (docs only — human picks; do first) |
+| **#202** | golden render snapshots per screen |
+| **#127** | diff view redesign (implements its chosen mockup) |
+| **#129** | polish: hint bars, error formatter, loading states, NO_COLOR, high-contrast |
+| **#128** | embedded mode + drafts persistence |
+| **#126** | onboarding tour |
+
+## Phase 4 — Wedge + Contract (the differentiation; mostly parallel)
+
+**Wedge features (priority order):**
+
+| # | Title |
+|---|---|
+| **#175** | Tripwires — hero feature (see expanded-scope comment) |
+| **#178** | multi-state filter for PRs/Issues |
+| **#203** | Triage Flow — inbox-zero review mode |
+| **#177** | review-queue sections (Needs My Review / Mine / Involved) |
+| **#179** | global cross-status PR search |
+| **#174** | EPIC: Agent PR Cockpit (assembles #175/#177/#178/#203) |
+| **#204** | Agent Scoreboard |
+| **#205** | cross-model second opinion |
+| **#206** | ambient mode (tmux/starship status) — precondition: #199 |
+| **#176** | dispatch issue/PR to a coding agent (can trail launch) |
+
+**Contract (the timeless core — outranks cockpit breadth per DRAFT_PLAN Part 5):**
+
+| # | Title |
+|---|---|
+| **#208** | CONTRACT.md + COMPATIBILITY.md covenant |
+| **#146** | stable error code catalog |
+| **#150** | schema_version in JSON/MCP output (pulled forward from V2) |
+| **#147** | idempotency on state-changing ops |
+| **#148** | permission scopes |
+| **#149** | --dry-run on destructive ops |
+| **#152** | rate-limit awareness in JSON output (pulled forward from V2) |
+
+**Config completion + standalone features:**
+
+| # | Title |
+|---|---|
+| **#66** | custom tabs · **#133** doctor --config · **#70** setup wizard (unblocked) |
+| **#62** | CLI deep links · **#68** AI Q&A tab · **#65** PR template auto-fill · **#69** share AI review · **#71** age colors · **#73** interactive CI checks (verify against F-12 first — see comment) |
+
+## Phase 5 — Launch (exit: shipped, announced, soaked)
+
+| # | Title |
+|---|---|
+| **#140** | top-5 flow integration tests (launch blocker) |
+| **#141** | pre-publish live smoke test (launch blocker) |
+| **#207** | staged npm releases (next → soak → latest) |
+| **#134** | polish bundle: VHS demo GIF, wedge-led README, comparison table, FUNDING (see scope-additions comment) |
+| **#209** | distribution: scoop / winget / nix / mise |
+| **#135** | VSCode extension (fast-follow; not a launch blocker) |
+
+Launch week: coordinated HN / r/commandline / lobste.rs / newsletters push —
+AFTER Phase 1 exit criteria still hold on the release candidate.
 
 ---
 
-## Recommended weekly cadence (for solo maintainer)
+## V2+ (defer until launch feedback exists)
 
-| Week | Focus |
-|---|---|
-| 1 | #130 (E1 TOML loader) |
-| 2 | #131 (E2 writer) + #139 (executor refactor) in parallel |
-| 3 | #145 (daemon) + #126–#129 polish steps in parallel |
-| 4 | Tier 2 config (#132, #66, #133) + Tier 2 agent contract (#146, #147, #148, #149) |
-| 5 | Tier 3 features by user-value priority (#62, #68, #65, #69, #73, #71) |
-| 6 | #70 wizard + #138 coverage + #140 flow tests + #141 smoke test |
-| 7 | #135 VSCode extension |
-| 8 | #134 polish bundle + cut V1 release |
-
-That's an 8-week V1 if executed serially. Aggressive parallel execution via multiple AI sessions could compress to 4–5 weeks.
+Agent contract depth (#151 L6 NDJSON, #153 L8 cost surface, #154 L9 agent-test,
+#155 L10 sandboxing, #156 L11 concurrency) · test depth (#142 J3-full, #143 J4
+gh contract matrix, #144 J6 AI contract tests) · #72 team view · #63 watch mode ·
+#64 desktop notifications · #67 auto-refresh · #170 LiteLLM (gated).
 
 ---
 
 ## How to use this with fresh sessions
 
-For any AI session picking up an issue:
-
-1. Read **this file first** to confirm the issue isn't blocked by something open.
-2. Then read the **`> Before you start:`** header in the issue body.
-3. Then the issue body itself.
-4. Then any architect doc the issue cites.
-
-If you find an issue claims "block on #N" but #N is actually merged (or vice versa), update **this file** alongside your PR. ROADMAP drifts faster than ARCHITECT_DECISIONS — keep it honest.
-
----
-
-## Out of scope for V1
-
-For clarity, V1 explicitly does NOT include (these are V2+):
-- Multi-org team view
-- Live CI streaming
-- Desktop notifications
-- JetBrains plugin
-- Raycast extension
-- Hosted team server
-- Theme/extension marketplace
-- Any paid tier
+1. `gh issue list --milestone "Phase N — ..."` for the current phase (lowest
+   incomplete phase wins).
+2. Read the issue body — it is the complete spec. Check its **Preconditions**
+   section (verifiable commands) instead of trusting this file's ordering blindly.
+3. Read `docs/ARCHITECT_DECISIONS.md` (always) + any doc the issue cites.
+4. If this file disagrees with reality (issue closed, blocker merged), update
+   this file in the same PR. ROADMAP drifts faster than ARCHITECT_DECISIONS —
+   keep it honest.
