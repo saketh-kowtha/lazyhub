@@ -79,7 +79,76 @@ To prevent merge conflicts and "branch drift":
 
 ## 21. Complete bug fix log (reference)
 
-... [Previous B-01 through B-14 content preserved] ...
+### B-01 — comments.jsx: `useTheme` not imported
+- **Symptom:** App crashes when navigating to PR comments view
+- **Root cause:** `import { t } from '../../theme.js'` imports the static constant, but `const { t } = useTheme()` on the next line calls `useTheme` which was never imported → `ReferenceError`
+- **Fix:** Changed import to `import { useTheme } from '../../theme.js'`
+
+### B-02 — FuzzySearch: helper functions missing
+- **Symptom:** `/` search in any list pane crashes; `f` file jump in diff crashes
+- **Root cause:** `matchesQuery`, `getDisplayText`, `highlightMatch` were placeholder comments (`// ... (highlightMatch and matchesQuery)`), never implemented
+- **Fix:** Implemented all three functions at the top of `FuzzySearch.jsx`
+
+### B-03 — diff.jsx: `getLang` not defined
+- **Symptom:** Diff view crashes on open
+- **Root cause:** `getLang(f.filename)` called in `useMemo` for `langCache` but function was a placeholder comment
+- **Fix:** Implemented `getLang(filename)` with extension→language map
+
+### B-04 — diff.jsx: `openEditorSync` not defined
+- **Symptom:** Pressing `e` in diff compose mode crashes
+- **Root cause:** `openEditorSync(compose.body)` called but function was a placeholder comment
+- **Fix:** Implemented `openEditorSync` using `spawnSync` + temp file
+
+### B-05 — diff.jsx: `sanitize` not imported
+- **Symptom:** Crash when a diff line has an inline comment thread
+- **Root cause:** `sanitize()` used in `renderThreads()` but not in the import from `../../utils.js`
+- **Fix:** Added `sanitize` to the utils import line
+
+### B-06 — issues/detail.jsx: `IssueLabelDialog` uses `t` without `useTheme`
+- **Symptom:** Crash when opening label edit dialog on an issue
+- **Root cause:** `IssueLabelDialog` rendered `<Text color={t.ui.muted}>` but `t` was never in scope — no `const { t } = useTheme()` call in that function
+- **Fix:** Added `const { t } = useTheme()` at the top of `IssueLabelDialog`
+
+### B-07 — executor.js: GraphQL `number` variable wrong flag
+- **Symptom:** `listPRComments` fails with GraphQL type error (`Int!` expected, got String)
+- **Root cause:** `-f number=${number}` passes the value as a string. GraphQL schema declares `$number: Int!` which requires `-F` (non-string flag)
+- **Fix:** Changed to `-F number=${number}`
+- **Note:** This was a regression from commit `525cb32` which incorrectly changed `-F` back to `-f`
+
+### B-08 — FuzzySearch: string items don't match
+- **Symptom:** `f` key in diff view opens file search dialog but shows nothing and matches nothing
+- **Root cause:** `items={files.map(f => f.filename)}` passes plain strings. `matchesQuery` reads `item.title`/`item.name` which are `undefined` on a string
+- **Fix:** Changed to `items={files.map(f => ({ name: f.filename }))}` with `searchFields={['name']}`
+
+### B-09 — Mouse: null character in keypress emit
+- **Symptom:** Mouse scroll enabled (`LAZYHUB_MOUSE=1`) but scrolling does nothing
+- **Root cause:** `process.stdin.emit('keypress', null, { name: 'k' })` — `null` as first arg means Ink's `useInput` receives `input = null`. Every handler checks `input === 'j'` / `input === 'k'` which always fails
+- **Fix:** Changed to `process.stdin.emit('keypress', 'k', { name: 'k', sequence: 'k', ctrl: false, meta: false, shift: false })`
+
+### B-10 — Mouse: settings toggle disconnected from App
+- **Symptom:** Toggling Mouse Support in Settings saves to config but mouse remains inactive
+- **Root cause:** `App` checked `process.env.LAZYHUB_MOUSE !== '1'` (env var only). Settings saved `config.mouse` to disk. The two systems never communicated
+- **Fix:** `App` holds `mouseEnabled` in `useState` (seeded from `_config.mouse || env`). `setMouseEnabled` exposed via `AppContext`. Settings calls it on toggle
+
+### B-11 — Mouse: listener order allows readline to parse mouse bytes
+- **Symptom:** Mouse events sometimes trigger spurious Esc keypresses
+- **Root cause:** `process.stdin.on('data', ...)` (appended) — our handler runs after readline's, which may attempt to parse the raw mouse escape sequence
+- **Fix:** Changed to `process.stdin.prependListener('data', ...)` so we detect and handle mouse bytes first
+
+### B-12 — settings/index.jsx: `logger` used but not imported
+- **Symptom:** Crash on any settings save (`updateConfig` calls `logger.info`)
+- **Root cause:** `logger` called in `updateConfig` but never imported
+- **Fix:** Added `import { logger } from '../../utils.js'`
+
+### B-13 — release.yml: curl retry doesn't cover HTTP errors
+- **Symptom:** Pipeline fails or commits SHA256 of empty string (`e3b0c44...`) to Homebrew tap during npm CDN propagation
+- **Root cause:** `sleep 5` unreliable for CDN propagation (can take 30-120s). `--retry` alone only retries network-level failures, not HTTP 4xx/5xx. Under `-f`, a 404 causes curl to exit non-zero and pipes empty input to `sha256sum`
+- **Fix:** Polling loop (18 × 10s), `--retry-all-errors`, empty SHA guard before writing `GITHUB_OUTPUT`
+
+### B-14 — release.yml: getContent swallows all errors
+- **Symptom:** TAP_TOKEN permission errors (403) silently swallowed, `createOrUpdateFileContents` called without `sha`, causing a confusing downstream error
+- **Root cause:** `catch {}` swallows all exceptions including permission errors
+- **Fix:** `catch (err) { if (err.status !== 404) throw err }`
 
 **B-15 — CI checks missing `await` in `getCheckRunAnnotations`**
 - Root cause: `return run([...])` without `await` inside `try/catch` — the promise rejection escaped the catch block.

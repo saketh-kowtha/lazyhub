@@ -129,8 +129,9 @@ sessions don't need conversation history to know them.
 1. **`gh` is the only GitHub interface.** All GitHub calls go through
    `src/executor.js`. No `octokit`, no raw HTTP, no other CLI.
 2. **`src/ai/providers/anthropic-api.js` is the only file that makes Anthropic HTTP calls.**
-3. **Subprocess discipline:** `execFile` only. Never `exec` / shell-interpolate.
-   Prompts via stdin, never argv.
+3. **Subprocess discipline:** `execa` only, args always as arrays. Never shell
+   strings / shell interpolation. Prompts via stdin, never argv. All `gh` calls
+   go through `runGh()` in `src/executor.js` (the single chokepoint).
 4. **Curated env for AI subprocesses:** PATH / HOME / USER only. Never leak
    `ANTHROPIC_API_KEY` or `GH_TOKEN` to non-Anthropic CLIs.
 5. **Every AI call goes through `logAiUsage()`** for cost tracking and audit.
@@ -181,6 +182,56 @@ If a build or test or script doesn't run cleanly to completion, the work is not 
 ### 7. No mock-implementations
 
 If the spec says "implement X," ship the real thing or open a follow-up issue explaining what's missing. Do not ship a function that returns a hardcoded value, a UI that renders placeholder text, or a config layer that doesn't actually read the config — and then claim the issue is done.
+
+### 8. Mockup-first for UI (added 2026-06-10)
+
+No UI change without a committed ASCII mockup it implements (`docs/mockups/`).
+If asked to "improve the design" with no mockup, produce 2–3 mockup variants for
+the maintainer to choose from — do not freestyle visual design in code.
+
+### 9. Repro-first for bugs (added 2026-06-10)
+
+No bug-fix PR without a failing test written FIRST that reproduces the bug. If you
+cannot reproduce it, the deliverable is the minimal repro question back on the
+issue thread — not a speculative fix.
+
+### 10. Verified-by-running (added 2026-06-10)
+
+Every PR touching `src/features/` or `src/components/` states in its body the exact
+manual steps run against the built binary (`npm run build && node dist/lazyhub.js`),
+or the flow/PTY test that covers the change.
+
+### 11. Sibling-surface sweep (added 2026-06-10)
+
+A bug fixed in one pane (PRs / Issues / Branches / Actions / Notifications) must be
+checked for and fixed in all sibling panes in the same PR. History shows defects
+here always come in sibling sets.
+
+## Issue spec template (mandatory for all new issues)
+
+Every issue is a complete, self-contained prompt for a cold LLM session.
+Required sections, in order:
+
+```markdown
+> **Spec for a cold session.** Read docs/ARCHITECT_DECISIONS.md first. This body +
+> that doc = full context. Verify current code state before assuming; if code and
+> spec disagree, code wins — flag the discrepancy in an issue comment.
+
+## Goal            — one sentence
+## Why             — 2–4 lines of context
+## Preconditions   — verifiable checks (commands), not bare issue references
+## Files to touch  — explicit list
+## Files NOT to touch
+## Acceptance criteria — testable bullets; machine-checkable (command + expected output) wherever possible
+## Test plan       — exact commands/flows that prove it works, incl. the gate:
+                     npm run lint && npm test && npm run build
+## Constraints     — patterns to follow, things to avoid
+```
+
+Independence rule: issues must be executable in any order unless a precondition
+says otherwise. Express dependencies as *verifiable preconditions*
+("`grep -q runGh src/executor.js` must succeed") so a session can self-check
+instead of needing conversation history.
 
 ## Doc map
 
