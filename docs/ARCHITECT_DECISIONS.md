@@ -139,7 +139,7 @@ sessions don't need conversation history to know them.
    This is a hard line; do not propose adding it.
 7. **React pinned to ^18.** Ink 4 is incompatible with React 19. Do not bump.
 8. **ESLint pinned to ^8.** ESLint 9+ requires flat config migration; out of V1 scope.
-9. **Vitest pinned to ^3.** Vitest 4 still breaks here via rolldown's npm optional-deps bug.
+9. **Vitest pinned to ^3.** Vitest 4.1.8 passes the suite but changes V8 coverage remapping enough to break the current coverage floors. Keep Vitest 3.x and use npm overrides for patched transitive Vite/esbuild until the coverage gate is intentionally recalibrated.
 10. **Coverage plugin version must track Vitest's line.** If Vitest stays on 3.x, `@vitest/coverage-v8` stays on 3.x too.
 11. **User config examples must use TOML.** The runtime source of truth is `~/.config/lazyhub/lazyhub.toml`; do not document `settings.json` or root-level JSON config snippets as current behavior.
 12. **Default shell assumptions matter in docs/tests.** On default config, the app starts on `focus` and the active panes are `focus`, `prs`, `issues`, `branches`, `actions`, `notifications` unless a spec explicitly overrides them.
