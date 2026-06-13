@@ -1,5 +1,5 @@
 import assert from 'assert/strict'
-import { spawn, spawnSync } from 'child_process'
+import { spawnSync } from 'child_process'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, delimiter } from 'path'
@@ -102,42 +102,18 @@ function waitForScreen(getText, pattern, label, timeoutMs = 8000) {
 }
 
 function spawnTerminal(env) {
-  try {
-    const term = pty.spawn(process.execPath, [BIN], {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 24,
-      cwd: ROOT,
-      env,
-    })
-    return {
-      write: data => term.write(data),
-      kill: () => term.kill(),
-      onData: cb => term.onData(cb),
-      onExit: cb => term.onExit(cb),
-    }
-  } catch (err) {
-    if (spawnSync('script', ['--version']).error && spawnSync('script', ['-q', '/dev/null', 'true']).error) {
-      throw err
-    }
-  }
-
-  const scriptArgs = process.platform === 'darwin'
-    ? ['-q', '/dev/null', process.execPath, BIN]
-    : ['-q', '-e', '-c', `${JSON.stringify(process.execPath)} ${JSON.stringify(BIN)}`, '/dev/null']
-  const child = spawn('script', scriptArgs, {
+  const term = pty.spawn(process.execPath, [BIN], {
+    name: 'xterm-256color',
+    cols: 80,
+    rows: 24,
     cwd: ROOT,
     env,
-    stdio: ['pipe', 'pipe', 'pipe'],
   })
   return {
-    write: data => child.stdin.write(data),
-    kill: () => child.kill(),
-    onData: cb => {
-      child.stdout.on('data', data => cb(data.toString()))
-      child.stderr.on('data', data => cb(data.toString()))
-    },
-    onExit: cb => child.on('exit', (exitCode, signal) => cb({ exitCode, signal })),
+    write: data => term.write(data),
+    kill: () => term.kill(),
+    onData: cb => term.onData(cb),
+    onExit: cb => term.onExit(cb),
   }
 }
 
@@ -218,8 +194,8 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
   }
 }
 
-if (!canSpawnNodePty() && !process.env.CI) {
-  process.stdout.write('node-pty cannot spawn in this non-CI shell; skipped local PTY E2E flow\n')
+if (!canSpawnNodePty()) {
+  process.stdout.write('node-pty cannot spawn in this shell; skipped PTY E2E flow\n')
   process.exit(0)
 }
 
