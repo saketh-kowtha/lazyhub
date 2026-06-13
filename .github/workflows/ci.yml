@@ -36,6 +36,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Test
         run: npm test
 
@@ -89,3 +92,31 @@ jobs:
           json-summary-path: coverage/coverage-summary.json
           json-final-path: coverage/coverage-final.json
           file-coverage-mode: changes-affected
+
+  pty:
+    name: PTY E2E (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (lockfile-free)
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: PTY E2E
+        run: npm run test:pty

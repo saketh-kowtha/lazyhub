@@ -161,10 +161,17 @@ describe('validateConfig — theme overrides', () => {
 describe('validateConfig — keymaps with platform sub-section', () => {
   it('keeps base bindings and a darwin sub-section as a nested table', () => {
     const { config, warnings } = validateConfig({
-      keymaps: { 'pr-list': { j: 'cursor.down', darwin: { m: 'pr.merge-mac' } } },
+      keymaps: { 'pr-list': { j: 'cursor.down', darwin: { m: 'pr.merge' } } },
     })
-    expect(config.keymaps['pr-list']).toEqual({ j: 'cursor.down', darwin: { m: 'pr.merge-mac' } })
+    expect(config.keymaps['pr-list']).toEqual({ j: 'cursor.down', darwin: { m: 'pr.merge' } })
     expect(warnings).toEqual([])
+  })
+
+  it('warns when a keymap points at an unknown action id', () => {
+    const { warnings } = validateConfig({
+      keymaps: { global: { ',': 'settings.open' } },
+    })
+    expect(warnings.join('\n')).toContain('unknown action "settings.open"')
   })
 })
 

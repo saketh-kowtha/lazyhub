@@ -48,6 +48,7 @@ import { CommandPalette } from './components/CommandPalette.jsx'
 import { openInEditor } from './editor.js'
 import { THEME_NAMES } from './theme.js'
 import { actionHints, matchesAction } from './config/actions.js'
+import { writeDebugState } from './debug-state.js'
 
 const _config = loadConfig()
 
@@ -77,6 +78,7 @@ const GLOBAL_KEYS = actionHints([
   'list.search',
   'app.help',
   'app.settings',
+  'debug.dump-state',
   'app.back',
 ], _config.toml)
 
@@ -403,15 +405,17 @@ export function App({ repo }) {
   const [paneState, setPaneState]       = useState({})
   const [appMode, setAppMode]           = useState('NORMAL')
   const [toasts, setToasts]             = useState([])
+  const [recentStatus, setRecentStatus] = useState([])
   const [showPalette, setShowPalette]   = useState(false)
   const [leaderActive, setLeaderActive] = useState(false)
   const leaderTimerRef = useRef(null)
 
-  const addToast = useCallback(({ message, variant = 'info' }) => {
+  const addToast = useCallback(({ message, variant = 'info', durationMs }) => {
     const id = Date.now() + Math.random()
+    setRecentStatus(prev => [...prev.slice(-4), { message, variant, at: new Date().toISOString() }])
     setToasts(prev => [...prev.slice(-2), { id, message, variant }])
     if (variant !== 'error') {
-      const ttl = variant === 'success' ? 2500 : variant === 'warning' ? 4000 : 3000
+      const ttl = durationMs ?? (variant === 'success' ? 2500 : variant === 'warning' ? 4000 : 3000)
       setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), ttl)
     }
   }, [])
@@ -425,6 +429,28 @@ export function App({ repo }) {
   const openAI       = useCallback(() => setShowAI(true), [])
 
   const appCtx = { notifyDialog, openHelp, openAI, setMouseEnabled, addToast, paneStateMap: paneStateMapRef.current }
+
+  const dumpDebugState = useCallback(() => {
+    try {
+      const { path } = writeDebugState({
+        activePane: pane,
+        view,
+        itemNumber: selectedItem?.number ?? null,
+        filters: paneState.filters || paneState.filter || {},
+        cursors: {
+          selectedIndex: paneState.selectedIndex ?? null,
+          cursor: paneState.cursor ?? null,
+          count: paneState.count ?? null,
+        },
+        dialog: paneState.dialogHint || (dialogActiveRef.current ? 'active' : null),
+        mode: appMode,
+        recentStatus,
+      })
+      addToast({ message: `Debug state written: ${path}`, variant: 'success', durationMs: 5000 })
+    } catch (err) {
+      addToast({ message: `Debug state failed: ${err.message}`, variant: 'error' })
+    }
+  }, [addToast, appMode, pane, paneState, recentStatus, selectedItem, view])
 
   // ─── IPC state broadcast ──────────────────────────────────────────────────
   useEffect(() => {
@@ -459,6 +485,7 @@ export function App({ repo }) {
   useInput((input, key) => {
     // Ctrl+A: open AI assistant (always fires regardless of scope)
     if (matchesAction('app.ai-assistant', input, key, _config.toml)) { setShowAI(true); return }
+    if (matchesAction('debug.dump-state', input, key, _config.toml)) { dumpDebugState(); return }
 
     // Dismiss sticky error toasts on any key
     if (toasts.some(t => t.variant === 'error')) {

@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a lazyhub bug with enough state to reproduce it.
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: List the exact terminal actions or commands that trigger the bug.
+      placeholder: |
+        1. Run `lazyhub`
+        2. Press ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include screenshots or terminal output when helpful.
+    validations:
+      required: true
+  - type: textarea
+    id: debug_state
+    attributes:
+      label: Debug state
+      description: Press Ctrl+D in lazyhub, or run `lazyhub --debug-state`, then paste the JSON or file path here. Remove repository-specific content if needed.
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: lazyhub_version
+    attributes:
+      label: lazyhub version
+      placeholder: "26.6.2"
+    validations:
+      required: true
+  - type: input
+    id: node_version
+    attributes:
+      label: Node.js version
+      placeholder: "v22.x"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform and terminal
+      placeholder: "macOS 15, iTerm2, zsh"
+    validations:
+      required: true

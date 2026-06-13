@@ -11,7 +11,7 @@ import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { useKeyScope } from '../../keyscope.js'
 import { matchesAction } from '../../config/actions.js'
 
-export function MultiSelect({ items = [], onSubmit, onCancel, title }) {
+export function MultiSelect({ items = [], onSubmit, onCancel, title = '' }) {
   useKeyScope('dialog')
   const { t } = useTheme()
   const { stdout } = useStdout()
