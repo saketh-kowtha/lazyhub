@@ -202,7 +202,7 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
     term.write('k')
     await waitForScreen(() => output, /PTY harness fixture PR/, 'k navigation')
     term.write('\r')
-    await waitForScreen(() => output, /Fixture body|PTY harness fixture PR/, 'Enter detail')
+    await waitForScreen(() => output, /Fixture body/, 'Enter detail')
     term.write('\x1b')
     await waitForScreen(() => output, /Pull Requests|PTY harness fixture PR/, 'Esc back')
     term.write('?')
