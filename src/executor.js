@@ -16,6 +16,28 @@ export { GhError }
 
 /** Default per-call timeout for the gh CLI (ms). Override via opts.timeout. */
 const GH_TIMEOUT = 30_000
+const GH_HISTORY_LIMIT = 20
+const ghCallHistory = []
+
+function pushGhCall(entry) {
+  ghCallHistory.push({
+    args: Array.isArray(entry.args) ? entry.args.map(arg => String(arg)) : [],
+    durationMs: Math.max(0, Math.round(entry.durationMs || 0)),
+    exitCode: Number.isInteger(entry.exitCode) ? entry.exitCode : 1,
+    ...(entry.error ? { error: String(entry.error).slice(0, 240) } : {}),
+  })
+  if (ghCallHistory.length > GH_HISTORY_LIMIT) {
+    ghCallHistory.splice(0, ghCallHistory.length - GH_HISTORY_LIMIT)
+  }
+}
+
+/**
+ * Return a sanitized copy of the recent gh CLI call history.
+ * @returns {{args:string[],durationMs:number,exitCode:number,error?:string}[]}
+ */
+export function getGhCallHistory() {
+  return ghCallHistory.map(entry => ({ ...entry, args: [...entry.args] }))
+}
 
 /**
  * The ONLY function that spawns the `gh` CLI. All executor functions route here.
@@ -35,6 +57,7 @@ const GH_TIMEOUT = 30_000
  */
 export async function runGh(args, opts = {}) {
   const { timeout = GH_TIMEOUT, json, stdin } = opts
+  const started = Date.now()
   // GH_HOST / GH_TOKEN are inherited by the child process from process.env
   // (we pass no curated env here — see ARCHITECT_DECISIONS invariant 4, which
   // scopes env-stripping to AI provider subprocesses, NOT gh). gh CLI honors
@@ -50,6 +73,12 @@ export async function runGh(args, opts = {}) {
     }
     result = await proc
   } catch (err) {
+    pushGhCall({
+      args,
+      durationMs: Date.now() - started,
+      exitCode: err.exitCode ?? 1,
+      error: err.message,
+    })
     throw new GhError({
       message: err.message,
       stderr: err.stderr || '',
@@ -59,6 +88,12 @@ export async function runGh(args, opts = {}) {
   }
 
   if (result.timedOut) {
+    pushGhCall({
+      args,
+      durationMs: Date.now() - started,
+      exitCode: result.exitCode ?? 1,
+      error: 'timeout',
+    })
     throw new GhError({
       message: `gh ${args.slice(0, 3).join(' ')} timed out after ${timeout}ms`,
       stderr: (result.stderr || '').replace(/[a-zA-Z0-9_-]{20,}/g, '[REDACTED]'),
@@ -84,6 +119,12 @@ export async function runGh(args, opts = {}) {
       message = stderr.split('\n')[0].trim().replace(/[a-zA-Z0-9_-]{40,}/g, '[REDACTED]')
     }
 
+    pushGhCall({
+      args,
+      durationMs: Date.now() - started,
+      exitCode: result.exitCode,
+      error: message,
+    })
     throw new GhError({
       message,
       stderr: stderr.replace(/[a-zA-Z0-9_-]{20,}/g, '[REDACTED]'),
@@ -91,6 +132,12 @@ export async function runGh(args, opts = {}) {
       args: args.map(arg => typeof arg === 'string' ? arg.replace(/[a-zA-Z0-9_-]{40,}/g, '[REDACTED]') : arg),
     })
   }
+
+  pushGhCall({
+    args,
+    durationMs: Date.now() - started,
+    exitCode: 0,
+  })
 
   const stdout = result.stdout?.trim()
   if (!stdout) return null

@@ -1,3 +1,5 @@
+// @ts-check
+
 /**
  * src/features/prs/list.jsx — PR list pane
  *
@@ -13,6 +15,7 @@
 import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
+import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
   listPRs, listLabels, listCollaborators,
@@ -27,7 +30,6 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { NewPRDialog } from './NewPRDialog.jsx'
 import { AppContext } from '../../context.js'
-import { useKeyScope } from '../../keyscope.js'
 import { usePaneState } from '../../hooks/usePaneState.js'
 import { loadConfig, loadState, saveState } from '../../config.js'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
@@ -419,7 +421,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
   const rawItems = (prs || []).filter(pr => pr && pr.number && filterStates.has((pr.state || '').toLowerCase()))
   const items = sortMode === 'oldest'
-    ? [...rawItems].sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt))
+    ? [...rawItems].sort((a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime())
     : rawItems
 
   // Filter keys from config (defaults: O=open, C=closed, M=merged)

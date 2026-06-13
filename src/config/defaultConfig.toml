@@ -113,9 +113,10 @@ high_contrast = false
 [keymaps.global]
 ":"              = "command-palette.open"
 "<space><space>" = "command-palette.open"
-","              = "settings.open"
-"q"              = "app.quit"
-"?"              = "help.show"
+","              = "app.settings"
+"q"              = "app.back"
+"?"              = "app.help"
+"Ctrl+D"         = "debug.dump-state"
 
 [keymaps.pr-list]
 "j"     = "cursor.down"
@@ -123,7 +124,7 @@ high_contrast = false
 "enter" = "pr.open-selected"
 "a"     = "pr.approve"
 "m"     = "pr.merge"
-"r"     = "pr.refresh"
+"r"     = "list.refresh"
 
 # ── Action registry: key bindings + human/AI documentation metadata ─────
 [actions."app.ai-assistant"]
@@ -203,6 +204,14 @@ keys = ["L"]
 hint = "L"
 label = "logs"
 description = "Open debug logs when LAZYHUB_DEBUG=1"
+scope = "global"
+group = "debug"
+
+[actions."debug.dump-state"]
+keys = ["Ctrl+D"]
+hint = "Ctrl+D"
+label = "debug state"
+description = "Write a local debug-state dump"
 scope = "global"
 group = "debug"
 

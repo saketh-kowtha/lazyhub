@@ -2,6 +2,13 @@ if (process.argv.includes('--mouse')) {
   process.env.LAZYHUB_MOUSE = '1'
 }
 
+if (process.argv.includes('--debug-state')) {
+  const { printDebugState } = await import('../src/debug-state.js')
+  const dump = printDebugState()
+  process.stdout.write(`${JSON.stringify(dump, null, 2)}\n`)
+  process.exit(0)
+}
+
 // MCP server mode: lazyhub --mcp
 // Speaks Model Context Protocol over stdio so AI assistants can query/act on GitHub data.
 if (process.argv.includes('--mcp')) {

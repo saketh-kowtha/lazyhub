@@ -119,9 +119,10 @@ export const DEFAULT_CONFIG = {
     global: {
       ':': 'command-palette.open',
       '<space><space>': 'command-palette.open',
-      ',': 'settings.open',
-      'q': 'app.quit',
-      '?': 'help.show',
+      ',': 'app.settings',
+      'q': 'app.back',
+      '?': 'app.help',
+      'Ctrl+D': 'debug.dump-state',
     },
     'pr-list': {
       'j': 'cursor.down',
@@ -129,7 +130,7 @@ export const DEFAULT_CONFIG = {
       'enter': 'pr.open-selected',
       'a': 'pr.approve',
       'm': 'pr.merge',
-      'r': 'pr.refresh',
+      'r': 'list.refresh',
     },
   },
   tabs: [{
@@ -154,6 +155,7 @@ export const DEFAULT_CONFIG = {
     'command-palette.open':  { keys: [':', '<space><space>'], hint: ':', label: 'command palette', description: 'Open the command palette', scope: 'global', group: 'global' },
     'app.visual-toggle':     { keys: ['V'], hint: 'V', label: 'visual', description: 'Toggle visual selection mode', scope: 'global', group: 'global' },
     'app.logs':              { keys: ['L'], hint: 'L', label: 'logs', description: 'Open debug logs when LAZYHUB_DEBUG=1', scope: 'global', group: 'debug' },
+    'debug.dump-state':      { keys: ['Ctrl+D'], hint: 'Ctrl+D', label: 'debug state', description: 'Write a local debug-state dump', scope: 'global', group: 'debug' },
     'app.leader':            { keys: ['Space'], hint: '<Space>', label: 'leader', description: 'Start a leader-key chord', scope: 'global', group: 'global' },
     'app.leader-theme':      { keys: ['t'], hint: 't', label: 'theme', description: 'Open theme controls from leader mode', scope: 'global', group: 'leader' },
     'app.leader-ai':         { keys: ['a'], hint: 'a', label: 'AI', description: 'Open AI assistant from leader mode', scope: 'global', group: 'leader' },
@@ -507,6 +509,42 @@ function validateKeymaps(val, warnings) {
   return out
 }
 
+function normalizeKeyForValidation(key) {
+  return String(key || '').trim().toLowerCase()
+}
+
+function actionScopeMatchesKeymap(actionScope, keymapScope) {
+  if (actionScope === keymapScope) return true
+  if (actionScope === 'list' && keymapScope.endsWith('-list')) return true
+  return false
+}
+
+function validateKeymapReferences(config, warnings) {
+  const actions = config?.actions || {}
+  const keymaps = config?.keymaps || {}
+  for (const [scope, bindings] of Object.entries(keymaps)) {
+    if (!isPlainObject(bindings)) continue
+    const defaultsByKey = new Map()
+    for (const [actionId, action] of Object.entries(actions)) {
+      if (!actionScopeMatchesKeymap(action.scope, scope)) continue
+      for (const key of action.keys || []) {
+        defaultsByKey.set(normalizeKeyForValidation(key), actionId)
+      }
+    }
+    for (const [key, actionId] of Object.entries(bindings)) {
+      if (key === 'unbind' || typeof actionId !== 'string') continue
+      if (!actions[actionId]) {
+        warnings.push(`[keymaps.${scope}].${key} points to unknown action "${actionId}"`)
+        continue
+      }
+      const defaultAction = defaultsByKey.get(normalizeKeyForValidation(key))
+      if (defaultAction && defaultAction !== actionId) {
+        warnings.push(`[keymaps.${scope}].${key} maps to "${actionId}" but also matches "${defaultAction}"`)
+      }
+    }
+  }
+}
+
 function validateTabs(val, warnings) {
   if (!Array.isArray(val)) {
     warnings.push('[[tabs]] must be an array of tables — ignored')
@@ -723,6 +761,10 @@ export function validateConfig(raw) {
     if (!openaiCompatible?.model) {
       warnings.push('[ai.openai_compatible].model is required when provider is "openai-compatible"')
     }
+  }
+  if (out.keymaps) {
+    const mergedForActions = mergeConfig(DEFAULT_CONFIG, out)
+    validateKeymapReferences({ actions: mergedForActions.actions, keymaps: out.keymaps }, warnings)
   }
   return { config: out, warnings }
 }

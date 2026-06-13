@@ -9,7 +9,7 @@ import { useTheme } from '../../theme.js'
 import { useKeyScope } from '../../keyscope.js'
 import { matchesAction } from '../../config/actions.js'
 
-export function ConfirmDialog({ message, destructive = false, onConfirm, onCancel, requireText }) {
+export function ConfirmDialog({ message, destructive = false, onConfirm, onCancel, requireText = null }) {
   useKeyScope('dialog')
   const { t } = useTheme()
   const [cursor, setCursor] = useState(1) // 0 = Yes, 1 = No (default No for safety)
