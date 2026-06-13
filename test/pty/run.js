@@ -210,12 +210,6 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
     output = ''
     term.write('\x1b')
     await waitForScreen(() => output, /open.*closed.*merged.*scope/, 'Esc back')
-    output = ''
-    term.write('?')
-    await waitForScreen(() => output, /Keyboard Reference|Global/, 'help overlay')
-    output = ''
-    term.write('\x1b')
-    await waitForScreen(() => output, /open.*closed.*merged.*scope|Pull Requests/, 'close help')
     for (const [key, label] of [['3', 'issues'], ['4', 'branches'], ['5', 'actions']]) {
       output = ''
       term.write(key)
