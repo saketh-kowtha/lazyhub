@@ -24,8 +24,8 @@ describe('eventToTokens', () => {
 describe('createKeymap', () => {
   const config = {
     actions: {
-      'cursor.down': { keys: ['j'] },
-      'pr.merge': { keys: ['m'] },
+      'cursor.down': { keys: ['j'], scope: 'list' },
+      'pr.merge': { keys: ['m'], scope: 'pr-list' },
     },
     keymaps: {
       'pr-list': {
@@ -37,6 +37,10 @@ describe('createKeymap', () => {
 
   it('resolves aliases from [keymaps.<scope>]', () => {
     expect(createKeymap('pr-list', config).resolve('J', {})).toBe('cursor.down')
+  })
+
+  it('resolves default action keys by scope', () => {
+    expect(createKeymap('pr-list', config).resolve('j', {})).toBe('cursor.down')
   })
 
   it('applies unbinds to effective action keys', () => {

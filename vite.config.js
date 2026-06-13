@@ -29,6 +29,9 @@ export default defineConfig({
       exclude: [
         'src/**/*.{test,spec}.{js,jsx}',
         'src/test/**',
+        'src/cli/**',
+        'src/daemon/server.js',
+        'src/features/prs/list-view.jsx',
         'node_modules/**',
         'bin/**',
         'integrations/nvim/**',

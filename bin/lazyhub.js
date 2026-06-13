@@ -26,12 +26,8 @@ if (process.argv[2] === 'perf' && process.argv[3] === 'report') {
 // MCP server mode: lazyhub --mcp
 // Speaks Model Context Protocol over stdio so AI assistants can query/act on GitHub data.
 if (process.argv.includes('--mcp')) {
-  const { bootstrap } = await import('../src/bootstrap.js')
-  const { runMCPServer } = await import('../src/mcp.js')
-  // Detect repo context (needed for executor calls) but skip Ink rendering
-  await bootstrap(null)
-  await runMCPServer()
-  process.exit(0)
+  const { runMcpServer } = await import('../src/cli/mcp-server.js')
+  process.exit(await runMcpServer())
 }
 
 if (process.argv[2] === 'doctor') {
@@ -39,14 +35,27 @@ if (process.argv[2] === 'doctor') {
   process.exit(await runDoctor(process.argv.slice(3)))
 }
 
+if (process.argv[2] === 'serve') {
+  const { runServe } = await import('../src/cli/serve.js')
+  process.exit(await runServe(process.argv.slice(3)))
+}
+
+if (process.argv[2] === 'mcp-server') {
+  const { runMcpServer } = await import('../src/cli/mcp-server.js')
+  process.exit(await runMcpServer())
+}
+
 const { bootstrap } = await import('../src/bootstrap.js')
 const { installCrashHandlers } = await import('../src/crash.js')
 const { renderApp } = await import('../src/app.jsx')
 const { loadConfig } = await import('../src/config.js')
 const { startIPC } = await import('../src/ipc.js')
+const { ensureDaemon } = await import('../src/daemon/lifecycle.js')
 
 const cfg = loadConfig()
 installCrashHandlers()
+
+await ensureDaemon(cfg, new URL('./lazyhub.js', import.meta.url).pathname)
 
 // Start IPC server for IDE integrations (unless disabled in config)
 if (cfg.ipc?.enabled !== false) {

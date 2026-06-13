@@ -74,6 +74,7 @@ To prevent merge conflicts and "branch drift":
 - **Dead Code:** Run `npx knip` to find unused files and exports.
 - **Architectural Linting:** `npm run lint` enforces the "Executor Pattern".
 - **Validation:** Always run `npm test` before any PR merge.
+- **PTY Acceptance:** `npm run test:pty` exercises the built CLI in a real pseudo-terminal when `node-pty` can spawn. It covers smoke navigation plus crash restoration, degraded `gh` recovery, opt-in perf writes, and stale-while-revalidate cache first-frame behavior.
 
 ## 7. Runtime Resilience & Performance
 

@@ -100,29 +100,61 @@ export function buildEffectiveActionKeys(config = loadConfig()) {
   return Object.fromEntries(Object.entries(byAction).map(([id, keys]) => [id, [...keys]]))
 }
 
+function actionScopeMatches(actionScope, keymapScope) {
+  if (actionScope === keymapScope) return true
+  if (actionScope === 'list' && keymapScope.endsWith('-list')) return true
+  return false
+}
+
+function buildScopeBindings(scope, config) {
+  const bindings = new Map()
+  for (const [actionId, action] of Object.entries(config?.actions || {})) {
+    if (!actionScopeMatches(action.scope, scope)) continue
+    for (const key of action.keys || []) {
+      const token = normalizeKeyToken(key)
+      if (token) bindings.set(token, actionId)
+    }
+  }
+
+  const scopeBindings = config?.keymaps?.[scope] || {}
+  const unbind = scopeBindings.unbind && typeof scopeBindings.unbind === 'object' ? scopeBindings.unbind : {}
+  for (const [key, enabled] of Object.entries(unbind)) {
+    if (enabled) bindings.delete(normalizeKeyToken(key))
+  }
+  for (const [key, actionId] of Object.entries(scopeBindings)) {
+    if (key === 'unbind' || typeof actionId !== 'string') continue
+    const token = normalizeKeyToken(key)
+    if (token) bindings.set(token, actionId)
+  }
+  return bindings
+}
+
 /**
  *
  * @param scope
  * @param config
  */
 export function createKeymap(scope, config = loadConfig()) {
-  const actionKeys = buildEffectiveActionKeys(config)
-  const scopeBindings = config?.keymaps?.[scope] || {}
+  const scopeBindings = buildScopeBindings(scope, config)
   return {
     resolve(input, key) {
       const event = eventToTokens(input, key)
-      for (const [token, actionId] of Object.entries(scopeBindings)) {
-        if (token === 'unbind' || typeof actionId !== 'string') continue
-        if (event.has(normalizeKeyToken(token))) return actionId
+      for (const [token, actionId] of scopeBindings.entries()) {
+        if (event.has(token)) return actionId
       }
       return null
     },
     matches(actionId, input, key) {
       const event = eventToTokens(input, key)
-      return (actionKeys[actionId] || []).some(token => event.has(token))
+      for (const [token, mappedAction] of scopeBindings.entries()) {
+        if (mappedAction === actionId && event.has(token)) return true
+      }
+      return false
     },
     keys(actionId) {
-      return actionKeys[actionId] || []
+      return [...scopeBindings.entries()]
+        .filter(([, mappedAction]) => mappedAction === actionId)
+        .map(([token]) => token)
     },
   }
 }

@@ -25,9 +25,11 @@ const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t }) => {
       {isCurrent && (
         <Text color={t.pr.open}>► </Text>
       )}
-      <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
-        {branch.name}
-      </Text>
+      <Box flexGrow={1}>
+        <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate">
+          {branch.name}
+        </Text>
+      </Box>
       {typeof branch.aheadBy === 'number' && typeof branch.behindBy === 'number' && (
         <Text color={t.ui.dim}> ↑{branch.aheadBy} ↓{branch.behindBy}</Text>
       )}

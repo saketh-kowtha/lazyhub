@@ -35,19 +35,13 @@ import { loadConfig, loadState, saveState } from '../../config.js'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
 import { useTheme } from '../../theme/index.js'
 import { sanitize } from '../../utils.js'
-import { PRListSkeleton } from '../../components/Skeleton.jsx'
-import { Popover } from '../../ui/Popover.jsx'
 import {
   schemeToT,
   canToggleAutoMergeFromList,
   MERGE_OPTIONS,
-  PRDetailPopoverContentMemo,
-  PRRow,
-  PR_ROW_FIXED_COLS,
-  POPOVER_WIDTH,
-  POPOVER_HEIGHT,
 } from './list-row.jsx'
 import { LabelDialog, AssigneeDialog, AuthorSearchDialog, ReviewerDialog } from './list-dialogs.jsx'
+import { PRListView } from './list-view.jsx'
 
 const _appConfig = loadConfig()
 const _cfg = _appConfig.pr
@@ -485,121 +479,34 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
   const visiblePRs = items.slice(scrollOffset, scrollOffset + effectiveHeight)
 
-  // Popover anchor coordinates:
-  //   Row 0 = filter/header bar.
-  //   Row 1..N = visible PR rows.
-  //   The selected row is at visual index (cursor - scrollOffset), 0-based.
-  //   +1 for the header bar above the rows.
-  const popoverRowIndex = cursor - scrollOffset
-  const popoverAnchor = {
-    x: 1,
-    y: 1 + popoverRowIndex,
-    width: innerWidth ? innerWidth - 2 : termCols - 2,
-    height: 1,
-  }
-  const effectivePopoverWidth  = Math.min(POPOVER_WIDTH, termCols - 4)
-  const effectivePopoverHeight = POPOVER_HEIGHT
-
   return (
-    <Box flexDirection="column" flexGrow={1}>
-      <Box paddingX={1} gap={1} overflow="hidden">
-        {/* State chips — active states colored, inactive dimmed */}
-        <Box gap={0}>
-          {[['open', t.pr.open], ['closed', t.pr.closed], ['merged', t.pr.merged]].map(([state, color], i) => (
-            <React.Fragment key={state}>
-              {i > 0 && <Text color={t.ui.dim}>/</Text>}
-              <Text color={filterStates.has(state) ? color : t.ui.dim} bold={filterStates.has(state)}>{state}</Text>
-            </React.Fragment>
-          ))}
-        </Box>
-        <Text color={t.ui.dim}>·</Text>
-        <Text color={sortMode === 'oldest' ? t.ci.pending : scope === 'own' ? t.ui.selected : scope === 'reviewing' ? t.ci.pending : t.ui.muted} bold>
-          {sortMode === 'oldest' ? '↑ oldest' : scope === 'own' ? 'mine' : scope === 'reviewing' ? 'reviewing' : 'all'}
-        </Text>
-        {authorFilter && (
-          <>
-            <Text color={t.ui.dim}>·</Text>
-            <Text color={t.ci.pending}>@{authorFilter}</Text>
-            <Text color={t.ui.dim}> [@] change</Text>
-          </>
-        )}
-        {loading && items.length > 0 && <Text color={t.ui.dim}>⟳</Text>}
-        {statusMsg
-          ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
-          : <Text color={t.ui.dim}>[{FK.filterOpen}]open [{FK.filterClosed}]closed [{FK.filterMerged}]merged [s]scope [@]author</Text>
-        }
-        {items.length >= _cfg.pageSize && (
-          <Text color={t.ui.dim}> ({items.length})</Text>
-        )}
-      </Box>
-
-      {!loading && !error && items.length === 0 && (
-        <Box paddingX={2} paddingY={1} flexDirection="column" gap={0}>
-          <Text color={t.ui.muted}>
-            No {[...filterStates].join('/')} pull requests
-            {scope === 'own' ? ' by you' : scope === 'reviewing' ? ' assigned for your review' : ''}.
-          </Text>
-          {scope === 'own' && (
-            <Text color={t.ui.dim}>[s] show all open PRs  [r] refresh</Text>
-          )}
-          {scope !== 'own' && (
-            <Text color={t.ui.dim}>[f] change filter  [s] change scope  [r] refresh</Text>
-          )}
-        </Box>
-      )}
-
-      {loading && items.length === 0 && (
-        <PRListSkeleton count={height} />
-      )}
-
-      {visiblePRs.map((pr, i) => {
-        const idx = scrollOffset + i
-        const isSelected = idx === cursor
-        return (
-          <PRRow
-            key={`${pr.number}`}
-            pr={pr}
-            isSelected={isSelected}
-            t={t}
-            titleWidth={innerWidth ? innerWidth - PR_ROW_FIXED_COLS : undefined}
-            expanded={expansionEnabled && isSelected}
-          />
-        )
-      })}
-
-      {(items.length > effectiveHeight || items.length >= 100) && (
-        <Box paddingX={1} justifyContent="space-between">
-          <Text color={t.ui.dim}>
-            {scrollOffset + 1}–{Math.min(scrollOffset + effectiveHeight, items.length)} / {items.length}
-          </Text>
-          {items.length >= 100 && !loading && (
-            <Text color={t.ui.dim}>scroll down for more</Text>
-          )}
-        </Box>
-      )}
-
-      {/* Floating PR detail popover — auto-shown for focused row; position:
-          absolute means no layout shift. ESC dismisses for current row;
-          moving the cursor re-shows. */}
-      {selectedPR && !dialog && !popoverDismissed && (
-        <Popover
-          anchor={popoverAnchor}
-          popoverWidth={effectivePopoverWidth}
-          popoverHeight={effectivePopoverHeight}
-          termCols={termCols}
-          termRows={termRows}
-          preferredSide="right"
-          onClose={() => setPopoverDismissed(true)}
-        >
-          <PRDetailPopoverContentMemo
-            pr={selectedPR}
-            t={t}
-            scheme={scheme}
-            width={effectivePopoverWidth}
-          />
-        </Popover>
-      )}
-    </Box>
+    <PRListView
+      items={items}
+      loading={loading}
+      error={error}
+      filterStates={filterStates}
+      scope={scope}
+      sortMode={sortMode}
+      authorFilter={authorFilter}
+      statusMsg={statusMsg}
+      config={_cfg}
+      filterKeys={FK}
+      t={t}
+      height={height}
+      effectiveHeight={effectiveHeight}
+      visiblePRs={visiblePRs}
+      scrollOffset={scrollOffset}
+      cursor={cursor}
+      innerWidth={innerWidth}
+      termCols={termCols}
+      termRows={termRows}
+      selectedPR={selectedPR}
+      dialog={dialog}
+      popoverDismissed={popoverDismissed}
+      setPopoverDismissed={setPopoverDismissed}
+      expansionEnabled={expansionEnabled}
+      scheme={scheme}
+    />
   )
 }
 

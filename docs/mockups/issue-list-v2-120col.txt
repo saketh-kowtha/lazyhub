@@ -1,0 +1,9 @@
+Ref: gh-dash density; k9s header
+Variant 2: breadcrumb-first compact layout
+Tokens: border.default border.focused accent.primary fg.muted fg.subtle
+┌──────────────────────────────────────┐
+│ Issue list v2 │
+│ #205 status freshness p1 │
+│ #201 design refs ux │
+│ #198 perf baseline │
+└──────────────────────────────────────┘

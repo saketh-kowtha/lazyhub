@@ -2,7 +2,7 @@ import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { __sendInput } from 'ink'
 import { SettingsPane } from './features/settings/index.jsx'
-import { renderWithProviders, flush, cleanup } from './test/test-helpers.jsx'
+import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
 const saveConfig = vi.hoisted(() => vi.fn())
 const loadConfigMock = vi.hoisted(() => vi.fn())
@@ -179,25 +179,20 @@ describe('Settings pane user flows', () => {
       },
     }))
 
-    renderWithProviders(
-      <>
-        <SettingsPane onBack={() => {}} />
-        <InputDriver events={[
-          { input: 'j' },
-          { input: 'j' },
-          { input: 'j' },
-          { input: 'j' },
-          { input: 'j' },
-          { key: { return: true } },
-          { wait: 40 },
-          { input: 's' },
-          { wait: 40 },
-        ]} />
-      </>
-    )
+    const view = renderWithProviders(<SettingsPane onBack={() => {}} />)
 
-    await flush(140)
-    expect(saveConfig).toHaveBeenCalledWith(expect.objectContaining({
+    await flush(20)
+    for (let i = 0; i < 5; i += 1) {
+      __sendInput('j')
+      await flush(10)
+    }
+    await waitForExpectation(() => {
+      expect(view.lastFrame()).toContain('AI Provider:')
+      expect(view.lastFrame()).toContain('qwen2.5-coder:32b')
+    })
+    __sendInput('s')
+    await waitForExpectation(() => {
+      expect(saveConfig).toHaveBeenCalledWith(expect.objectContaining({
       ai: {
         provider: 'openai-compatible',
         openai_compatible: {
@@ -207,6 +202,7 @@ describe('Settings pane user flows', () => {
           timeout_ms: 60000,
         },
       },
-    }))
+      }))
+    })
   })
 })

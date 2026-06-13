@@ -20,7 +20,7 @@
  *   Some terminals write just the bg number; some write fg;bg.
  *   We extract the LAST numeric segment to get the bg value.
  *
- * @param {NodeJS.ProcessEnv} [env] — injectable for testing; defaults to process.env
+ * @param {NodeJS.ProcessEnv} [env] injectable for testing; defaults to process.env
  * @returns {'dark' | 'light' | 'unknown'}
  */
 export function detectBackground(env = process.env) {

@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { existsSync, mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { describe, expect, it, vi } from 'vitest'
 import { buildPerfReport, percentile } from './perf.js'
 
 describe('perf report', () => {
@@ -15,5 +18,22 @@ describe('perf report', () => {
 
   it('handles empty percentile input', () => {
     expect(percentile([], 95)).toBe(0)
+  })
+
+  it('does not write perf entries unless LAZYHUB_PERF is enabled', async () => {
+    vi.resetModules()
+    const dir = mkdtempSync(join(tmpdir(), 'lazyhub-perf-test-'))
+    const path = join(dir, 'perf.ndjson')
+    delete process.env.LAZYHUB_PERF
+    process.env.LAZYHUB_PERF_PATH = path
+    try {
+      const perf = await import('./perf.js')
+      perf.recordDuration('input', 'keypress-render', 1)
+      expect(perf.isPerfEnabled()).toBe(false)
+      expect(existsSync(path)).toBe(false)
+    } finally {
+      delete process.env.LAZYHUB_PERF_PATH
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

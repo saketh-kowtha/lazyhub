@@ -104,7 +104,9 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
                 <Box flexDirection="column">
                   {val ? (
                     val.split('\n').slice(0, 3).map((line, li) => (
-                      <Text key={li} wrap="truncate">{line || ' '}</Text>
+                      <Box key={li}>
+                        <Text wrap="truncate">{line || ' '}</Text>
+                      </Box>
                     ))
                   ) : (
                     <Text color={t.ui.dim}>

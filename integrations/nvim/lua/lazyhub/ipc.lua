@@ -14,6 +14,10 @@ local M = {}
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
 local function socket_path()
+  local daemon = vim.fn.expand('~/.config/lazyhub/daemon.sock')
+  if vim.fn.filereadable(daemon) == 1 then
+    return daemon
+  end
   local pointer = vim.fn.expand('~/.lazyhub-socket')
   if vim.fn.filereadable(pointer) == 1 then
     return vim.fn.readfile(pointer)[1]

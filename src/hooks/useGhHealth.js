@@ -18,6 +18,22 @@ function snapshot() {
   }
 }
 
+/**
+ * Return the current gh health snapshot.
+ */
+export function getGhHealthSnapshot() {
+  return snapshot()
+}
+
+/**
+ * Reset gh health singleton state for tests.
+ */
+export function resetGhHealthForTest() {
+  state.lastError = null
+  state.failing.clear()
+  emit()
+}
+
 function emit() {
   const next = snapshot()
   for (const listener of listeners) listener(next)

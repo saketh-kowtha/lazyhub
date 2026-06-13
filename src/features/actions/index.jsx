@@ -34,9 +34,11 @@ const ActionRow = memo(({ run, isSelected, t }) => {
     <Box key={run.databaseId} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
       <StatusBadge run={run} />
       <Text> </Text>
-      <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
-        {run.workflowName}
-      </Text>
+      <Box flexGrow={1}>
+        <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate">
+          {run.workflowName}
+        </Text>
+      </Box>
       <Text color={t.ui.muted}> {run.headBranch}</Text>
       <Text color={t.ui.dim}> {format(run.createdAt)}</Text>
     </Box>

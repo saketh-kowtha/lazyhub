@@ -17,9 +17,9 @@ function Monogram({ login }) {
 export function CommentThread({ comments = [], t }) {
   if (!comments.length) return null
 
-  const sorted = [...comments].sort((a, b) =>
-    new Date(a.createdAt) - new Date(b.createdAt)
-  )
+	  const sorted = [...comments].sort((a, b) =>
+	    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+	  )
   const topLevel = sorted.filter(c => !c.inReplyToId)
   const replies  = sorted.filter(c =>  c.inReplyToId)
 

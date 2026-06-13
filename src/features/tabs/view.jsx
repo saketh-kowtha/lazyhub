@@ -20,7 +20,11 @@ export function TabView({ tab, repo }) {
         <Text color={t.ui.dim}>{panes.length} panes</Text>
       </Box>
       <Box flexDirection={wide ? 'row' : 'column'} gap={1} flexGrow={1}>
-        {panes.map((pane, idx) => <TabPane key={`${pane.kind}-${pane.title || idx}`} pane={pane} repo={repo} />)}
+        {panes.map((pane, idx) => (
+          <Box key={`${pane.kind}-${pane.title || idx}`} flexGrow={1}>
+            <TabPane pane={pane} repo={repo} />
+          </Box>
+        ))}
         {panes.length === 0 && <Text color={t.ui.dim}>No panes declared.</Text>}
       </Box>
     </Box>

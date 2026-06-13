@@ -16,6 +16,7 @@ import {
   GhError,
   runGh,
   listPRs,
+  normalizePRListGraphQL,
   getPR,
   mergePR,
   listIssues,
@@ -133,40 +134,86 @@ describe('runGh()', () => {
 // ─── PR functions ─────────────────────────────────────────────────────────────
 
 describe('listPRs()', () => {
-  it('calls gh pr list with correct args', async () => {
-    mockSuccess([])
+  it('calls one gh GraphQL process with correct args', async () => {
+    mockSuccess({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo')
     const [cmd, args] = execa.mock.calls[0]
     expect(cmd).toBe('gh')
-    expect(args).toContain('pr')
-    expect(args).toContain('list')
-    expect(args).toContain('--repo')
-    expect(args).toContain('owner/repo')
-    expect(args).toContain('--json')
+    expect(args).toEqual(expect.arrayContaining(['api', 'graphql']))
+    expect(args).toContain('-f')
+    expect(args).toContain('owner=owner')
+    expect(args).toContain('name=repo')
+    expect(args).toContain('-F')
+    expect(args).toContain('limit=100')
+    expect(execa).toHaveBeenCalledTimes(1)
   })
 
   it('passes state filter when provided', async () => {
-    mockSuccess([])
+    mockSuccess({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { state: 'closed' })
     const [, args] = execa.mock.calls[0]
-    expect(args).toContain('--state')
-    expect(args).toContain('closed')
+    expect(args.find(arg => String(arg).startsWith('searchQuery='))).toContain('state:closed')
   })
 
   it('passes author filter when provided', async () => {
-    mockSuccess([])
+    mockSuccess({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { author: 'alice' })
     const [, args] = execa.mock.calls[0]
-    expect(args).toContain('--author')
-    expect(args).toContain('alice')
+    expect(args.find(arg => String(arg).startsWith('searchQuery='))).toContain('author:alice')
+  })
+
+  it('caps PR list pagination at the single-call GraphQL search limit', async () => {
+    mockSuccess({ data: { search: { nodes: [] } } })
+    await listPRs('owner/repo', { limit: 250 })
+    const [, args] = execa.mock.calls[0]
+    expect(args).toContain('limit=100')
+  })
+
+  it('normalizes GraphQL response to the legacy list shape', () => {
+    const result = normalizePRListGraphQL({
+      data: {
+        search: {
+          nodes: [{
+            __typename: 'PullRequest',
+            number: 42,
+            title: 'GraphQL list',
+            state: 'OPEN',
+            author: { login: 'octocat' },
+            labels: { nodes: [{ name: 'perf', color: 'f00' }] },
+            reviewRequests: { nodes: [{ requestedReviewer: { __typename: 'User', login: 'alice', name: 'Alice' } }] },
+            statusCheckRollup: { nodes: [{ __typename: 'CheckRun', name: 'CI', status: 'COMPLETED', conclusion: 'FAILURE' }] },
+            reviewDecision: 'CHANGES_REQUESTED',
+            updatedAt: '2026-06-13T00:00:00Z',
+            isDraft: true,
+            headRefName: 'feat/graphql',
+            baseRefName: 'main',
+            assignees: { nodes: [{ login: 'bob', name: 'Bob' }] },
+            body: 'Body',
+            mergeable: 'MERGEABLE',
+            autoMergeRequest: { enabledAt: '2026-06-13T00:00:00Z' },
+            url: 'https://github.com/owner/repo/pull/42',
+          }],
+        },
+      },
+    })
+    expect(result).toEqual([expect.objectContaining({
+      number: 42,
+      author: { login: 'octocat' },
+      labels: [{ name: 'perf', color: 'f00' }],
+      reviewRequests: [{ login: 'alice', name: 'Alice' }],
+      statusCheckRollup: [expect.objectContaining({ name: 'CI', conclusion: 'FAILURE' })],
+      reviewDecision: 'CHANGES_REQUESTED',
+      isDraft: true,
+      mergeable: 'MERGEABLE',
+    })])
   })
 
   it('requests autoMergeRequest so list view can toggle auto-merge', async () => {
-    mockSuccess([])
+    mockSuccess({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo')
     const [, args] = execa.mock.calls[0]
-    const jsonFields = args[args.indexOf('--json') + 1].split(',')
-    expect(jsonFields).toContain('autoMergeRequest')
+    const query = args.find(arg => String(arg).startsWith('query='))
+    expect(query).toContain('autoMergeRequest')
   })
 })
 

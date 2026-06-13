@@ -9,9 +9,9 @@ const VALID = new Set([
 
 /**
  *
- * @param filter
- * @param root0
- * @param root0.limit
+ * @param {object} filter
+ * @param {object} root0
+ * @param {number} [root0.limit]
  */
 export function filterToGh(filter = {}, { limit = 25 } = {}) {
   const warnings = []

@@ -52,7 +52,7 @@ export const themes = {
  * If the terminal is confidently light → returns 'lazyhub-light'.
  * Otherwise → returns 'lazyhub-dark' (safe, default).
  *
- * @param {NodeJS.ProcessEnv} [env] — injectable for testing; defaults to process.env
+ * @param {NodeJS.ProcessEnv} [env] injectable for testing; defaults to process.env
  * @returns {'lazyhub-dark' | 'lazyhub-light'}
  */
 export function getDefaultScheme(env = process.env) {

@@ -23,6 +23,7 @@
 | `src/executor/issues.js` | List issues with optional filters. @param repo @param filter |
 | `src/executor/misc.js` | List the authenticated user's gists. |
 | `src/executor/notifications.js` | List notifications. @param filter |
+| `src/executor/pr-comments.js` | PR diff, review comment, line comment, review-thread reply, and review-thread resolution helpers. Kept separate from `prs.js` so the PR executor modules stay below the split-file size limit while all consumers continue importing from `src/executor.js`. |
 | `src/executor/prs.js` | List pull requests for a repo with optional filters. @param repo @param filter |
 
 ## AI provider abstraction
@@ -74,6 +75,7 @@
 | `src/features/prs/diff.jsx` | PR diff view with syntax highlighting + line comments |
 | `src/features/prs/list-dialogs.jsx` | (no header — inferred: list-dialogs) |
 | `src/features/prs/list-row.jsx` | Maps a new-style token scheme object (src/theme/index.js) to the legacy `t.*` shape consumed by PR list sub-components. @param {object} scheme - Active scheme from useTheme().scheme @returns {{ ui: object, pr: object, ci: object, review: object }} |
+| `src/features/prs/list-view.jsx` | Presentation-only PR list surface: filter chips, stale refresh glyph, empty/loading states, scroll footer, rows, and floating PR detail popover. |
 | `src/features/prs/list.jsx` | PR list pane Props: repo         string listHeight   number   — visible row count from App onHover      fn(pr)   — called when cursor moves (for side panel) onSelectPR   fn(pr)   — called on Enter → full detail onOpenDiff   fn(pr)   — called on 'd' onPaneState  fn({loading, error, count}) |
 | `src/features/prs/NewPRDialog.jsx` | Smart New PR creation dialog. Features: - Auto-detects current branch and offers to use it as head - Validates head branch against remote (not pushed / has unpushed commits / no diff) - Validates base branch exists on GitHub - Offers to push branch to origin if needed - Shift+Tab for backward field navigation |
 

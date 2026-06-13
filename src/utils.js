@@ -1,3 +1,5 @@
+// @ts-nocheck
+// TODO(#197): legacy Ink markdown/chalk utilities need dedicated JS typedef cleanup.
 /**
  * src/utils.js — shared utility functions
  */

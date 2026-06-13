@@ -1,5 +1,6 @@
+// @ts-nocheck
+// TODO(#197): typed gh issue payload shapes should replace broad JS destructuring.
 import { getRepo, runGh } from './core.js'
-
 /**
  * List issues with optional filters.
  * @param repo

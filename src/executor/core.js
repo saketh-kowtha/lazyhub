@@ -10,6 +10,8 @@ import { execa } from 'execa'
 import { GhError } from './gh-error.js'
 import { recordDuration } from '../perf.js'
 import { invalidateRepoCache } from '../cache.js'
+import { requestDaemon } from '../daemon/lifecycle.js'
+import { isGhMutation, writeAuditEntry } from '../daemon/audit.js'
 
 // Re-exported so `import { GhError } from './executor.js'` keeps working.
 export { GhError }
@@ -45,17 +47,6 @@ function repoFromArgs(args) {
   return match?.[1] || null
 }
 
-function isMutation(args) {
-  if (args.includes('--method')) {
-    const method = args[args.indexOf('--method') + 1]
-    if (method && method !== 'GET') return true
-  }
-  const [group, cmd] = args
-  return [
-    'merge', 'close', 'ready', 'review', 'comment', 'create', 'edit',
-  ].includes(cmd) || (group === 'gist' && cmd === 'delete') || (group === 'run' && ['rerun', 'cancel'].includes(cmd))
-}
-
 /**
  * Return a sanitized copy of the recent gh CLI call history.
  * @returns {{args:string[],durationMs:number,exitCode:number,error?:string}[]}
@@ -74,14 +65,31 @@ export function getGhCallHistory() {
  * @param {string[]} args            argv to pass to gh
  * @param {object}   [opts]
  * @param {number}   [opts.timeout]  per-call timeout in ms (default 30s)
- * @param {boolean}  [opts.json]     false → never JSON.parse (return raw text);
- *                                   true/undefined → parse JSON, fall back to raw
- * @param {string}   [opts.stdin]    optional payload written to the gh stdin
- * @returns {Promise<any>}           parsed JSON or raw string (null if empty)
+	 * @param {boolean}  [opts.json]     false → never JSON.parse (return raw text);
+	 *                                   true/undefined → parse JSON, fall back to raw
+	 * @param {string}   [opts.stdin]    optional payload written to the gh stdin
+	 * @param {boolean}  [opts.skipDaemon] bypass the local daemon even when available
+	 * @param {number}   [opts.ttl]      daemon cache TTL override in ms
+	 * @returns {Promise<any>}           parsed JSON or raw string (null if empty)
  * @throws {GhError}                 on non-zero exit, timeout, or spawn failure
  */
 export async function runGh(args, opts = {}) {
-  const { timeout = GH_TIMEOUT, json, stdin } = opts
+  const { timeout = GH_TIMEOUT, json, stdin, skipDaemon, ttl } = opts
+  if (!skipDaemon && process.env.LAZYHUB_DAEMON_SOCKET && !isGhMutation(args)) {
+    try {
+      const response = await requestDaemon(process.env.LAZYHUB_DAEMON_SOCKET, {
+        type: 'gh',
+        args,
+        stdin,
+        json,
+        ttl,
+        repo: repoFromArgs(args),
+      }, Math.min(timeout, 5000))
+      return response.payload
+    } catch {
+      // Fall back to direct gh if the daemon vanished or is stale.
+    }
+  }
   const started = Date.now()
   // GH_HOST / GH_TOKEN are inherited by the child process from process.env
   // (we pass no curated env here — see ARCHITECT_DECISIONS invariant 4, which
@@ -167,7 +175,11 @@ export async function runGh(args, opts = {}) {
     exitCode: 0,
   })
   recordDuration('gh', ghOpName(args), Date.now() - started)
-  if (isMutation(args)) invalidateRepoCache(repoFromArgs(args))
+  if (isGhMutation(args)) {
+    const repo = repoFromArgs(args)
+    invalidateRepoCache(repo)
+    writeAuditEntry({ op: ghOpName(args), repo, args: args.slice(0, 4) })
+  }
 
   const stdout = result.stdout?.trim()
   if (!stdout) return null

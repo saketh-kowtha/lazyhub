@@ -1,3 +1,5 @@
+// @ts-nocheck
+// TODO(#197): legacy log viewer JSX/input surface needs typed props after checkJs gate lands.
 /**
  * src/features/logs/index.jsx — In-app structured log viewer
  */

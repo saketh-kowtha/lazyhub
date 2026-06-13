@@ -2,7 +2,7 @@
 
 Goal: actively find bugs and edge cases before users do. Not just coverage numbers — tests that would have caught every bug already filed in the issue tracker.
 
-Current state: executor, ai, bootstrap, and utils have unit tests. Zero component tests. Zero integration tests. Zero property-based tests. The entire UI layer is untested.
+Current state: executor, ai, bootstrap, utils, cache, perf reporting, gh-health state, key config, and major Ink flows have Vitest coverage. The PTY harness (`npm run test:pty`) runs against `dist/lazyhub.js` when `node-pty` is available and covers smoke navigation plus crash restoration, degraded `gh` recovery, opt-in perf entries, and stale-while-revalidate first-frame cache behavior.
 
 ---
 
@@ -13,11 +13,11 @@ Four complementary layers, each catching a different class of bug:
 | Layer | What it catches | Tools |
 |-------|----------------|-------|
 | 1. Executor contract tests | Wrong gh CLI args, silent failures, error parsing | vitest + execa mock |
-| 2. Component render tests | Broken layout, wrong states, missing keys, text overflow | ink-testing-library |
+| 2. Component render tests | Broken layout, wrong states, missing keys, text overflow | ink-testing-library + snapshot tests |
 | 3. Property-based tests | State machine violations, unrecoverable UI states, invariant breaks | fast-check + vitest |
 | 4. AI-generated scenario matrix | Combinations no human thinks to write | Claude API + vitest codegen |
 
-Run order in CI: 1 → 2 → 3 → 4. Layers 1-2 must be fast (<10s). Layers 3-4 can be slower, run on PR only.
+Run order in CI: 1 → 2 → PTY smoke/acceptance → 3 → 4. Layers 1-2 must be fast (<10s). Layers 3-4 can be slower, run on PR only.
 
 ---
 

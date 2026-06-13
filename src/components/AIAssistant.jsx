@@ -29,7 +29,7 @@ function fmtTime(date) {
 
 // ─── Single message row ───────────────────────────────────────────────────────
 
-function MessageRow({ msg, maxWidth }) {
+function MessageRow({ msg }) {
   const { t } = useTheme()
 
   const roleLabel  = msg.role === 'user' ? ' You' : msg.role === 'system' ? ' Lzy' : '  AI'
@@ -247,9 +247,11 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
             <Text color={t.ui.dim}>  · take me to the actions pane</Text>
           </Box>
         ) : (
-          visibleMessages.map((msg, i) => (
-            <MessageRow key={`${msg.timestamp.getTime()}-${i}`} msg={msg} />
-          ))
+	          visibleMessages.map((msg, i) => (
+	            <Box key={`${msg.timestamp.getTime()}-${i}`}>
+	              <MessageRow msg={msg} />
+	            </Box>
+	          ))
         )}
       </Box>
 

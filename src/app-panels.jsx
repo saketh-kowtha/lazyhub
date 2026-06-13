@@ -43,13 +43,15 @@ export function HelpOverlay({ pane, view, onClose }) {
           <Box marginBottom={0} borderStyle="single" borderTop={false} borderLeft={false} borderRight={false} borderBottom={true} borderColor={t.ui.dim}>
             <Text color={t.ui.muted} bold>{contextLabel}</Text>
           </Box>
-          <Box flexDirection="column" marginTop={1}>
-            {contextKeys.length > 0 ? contextKeys.map(k => (
-              <Box key={k.key} gap={2}>
-                <Text color={t.ui.selected} bold width={18}>{k.key}</Text>
-                <Text color={t.ui.muted}>{k.label}</Text>
-              </Box>
-            )) : <Text color={t.ui.dim}>No specific keys</Text>}
+	          <Box flexDirection="column" marginTop={1}>
+	            {contextKeys.length > 0 ? contextKeys.map(k => (
+	              <Box key={k.key} gap={2}>
+	                <Box width={18}>
+	                  <Text color={t.ui.selected} bold>{k.key}</Text>
+	                </Box>
+	                <Text color={t.ui.muted}>{k.label}</Text>
+	              </Box>
+	            )) : <Text color={t.ui.dim}>No specific keys</Text>}
           </Box>
         </Box>
 
@@ -59,13 +61,15 @@ export function HelpOverlay({ pane, view, onClose }) {
             <Box marginBottom={0} borderStyle="single" borderTop={false} borderLeft={false} borderRight={false} borderBottom={true} borderColor={t.ui.dim}>
               <Text color={t.ui.muted} bold>Global (any view)</Text>
             </Box>
-            <Box flexDirection="column" marginTop={1}>
-              {GLOBAL_KEYS.map(k => (
-                <Box key={k.key} gap={2}>
-                  <Text color={t.ui.selected} bold width={18}>{k.key}</Text>
-                  <Text color={t.ui.muted}>{k.label}</Text>
-                </Box>
-              ))}
+	            <Box flexDirection="column" marginTop={1}>
+	              {GLOBAL_KEYS.map(k => (
+	                <Box key={k.key} gap={2}>
+	                  <Box width={18}>
+	                    <Text color={t.ui.selected} bold>{k.key}</Text>
+	                  </Box>
+	                  <Text color={t.ui.muted}>{k.label}</Text>
+	                </Box>
+	              ))}
             </Box>
           </Box>
         )}

@@ -221,16 +221,19 @@ describe('Pane E2E user flows', () => {
         <InputDriver events={[
           { input: 'x' },
           { wait: 20 },
-          { key: { leftArrow: true } },
-          { key: { return: true } },
         ]} />
       </>
     )
 
+    await waitForExpectation(() => {
+      expect(closeView.lastFrame()).toContain('Close issue #11')
+    })
+    __sendInput('', { leftArrow: true })
     await flush(20)
-    expect(closeView.lastFrame()).toContain('Close issue #11')
-    await flush(60)
-    expect(closeIssue).toHaveBeenCalledWith('owner/repo', 11)
+    __sendInput('', { return: true })
+    await waitForExpectation(() => {
+      expect(closeIssue).toHaveBeenCalledWith('owner/repo', 11)
+    })
   })
 
   it('protects the current branch from pointless checkout and requires typed confirmation for deletion', async () => {

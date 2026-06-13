@@ -117,9 +117,11 @@ export function LogViewer({ lines = [], onClose }) {
           else if (isWarning) color = t.ci.pending
           else color = t.diff.ctxFg
           return (
-            <Text key={scrollOffset + i} bold={isHeader} color={color} wrap="truncate">
-              {line}
-            </Text>
+            <Box key={scrollOffset + i}>
+              <Text bold={isHeader} color={color} wrap="truncate">
+                {line}
+              </Text>
+            </Box>
           )
         })}
       </Box>

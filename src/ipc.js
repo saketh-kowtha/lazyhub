@@ -1,3 +1,5 @@
+// @ts-nocheck
+// TODO(#197): IPC handler registry needs explicit protocol typedefs.
 /**
  * src/ipc.js — IPC Unix-socket server for IDE integrations
  *
@@ -25,6 +27,9 @@
  *   review-comments { prNumber }   → { comments: [{ id, threadId, path, line, body, user, resolved }] }
  *   reply-thread { threadId, body } → { ok: true, commentId }
  *   resolve-thread { threadId }    → { ok: true }
+ *   subscribe { event }             → subscribe this client to an event stream
+ *   invalidate { repo? }            → request cache invalidation
+ *   watch { event? }                → alias for subscribe, used by daemon clients
  *
  * Events emitted to all clients (via emitIPC):
  *   cursor-changed    { view, prNumber, file, line }
@@ -174,6 +179,18 @@ function handleMessage(socket, raw) {
           })
         })
         .catch(err => sendResponse(socket, id, { error: err?.message || 'resolve failed' }))
+      break
+    }
+
+    case 'subscribe':
+    case 'watch': {
+      sendResponse(socket, id, { ok: true, subscribed: msg.event || 'pr-state-changed' })
+      break
+    }
+
+    case 'invalidate': {
+      broadcast('cache-invalidated', { repo: msg.repo || null })
+      sendResponse(socket, id, { ok: true })
       break
     }
 

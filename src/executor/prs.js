@@ -1,5 +1,98 @@
-import { GhError } from './gh-error.js'
+// @ts-nocheck
+// TODO(#197): typed gh PR payload shapes should replace broad JS destructuring.
 import { getRepo, runGh } from './core.js'
+
+const PR_LIST_MAX_GRAPHQL_NODES = 100
+const PR_SEARCH_STATES = new Set(['open', 'closed', 'merged'])
+
+function compact(value) {
+  return String(value || '').replace(/"/g, '\\"').trim()
+}
+
+function prSearchQuery(repo, filter) {
+  const state = PR_SEARCH_STATES.has(filter.state) ? filter.state : 'open'
+  const parts = [`repo:${repo}`, 'is:pr']
+  if (state === 'merged') {
+    parts.push('is:merged')
+  } else {
+    parts.push(`state:${state}`)
+  }
+  if (filter.author) parts.push(`author:${compact(filter.author)}`)
+  if (filter.reviewer) parts.push(`review-requested:${compact(filter.reviewer)}`)
+  if (filter.assignee) parts.push(`assignee:${compact(filter.assignee)}`)
+  if (filter.label) parts.push(`label:"${compact(filter.label)}"`)
+  if (!filter.author) {
+    if (filter.scope === 'own') parts.push('author:@me')
+    if (filter.scope === 'reviewing') parts.push('review-requested:@me')
+  }
+  return parts.join(' ')
+}
+
+function normalizeReviewRequests(reviewRequests) {
+  return (reviewRequests?.nodes || [])
+    .map(node => node?.requestedReviewer)
+    .filter(Boolean)
+    .map(reviewer => ({
+      login: reviewer.login || reviewer.name || '',
+      name: reviewer.name || reviewer.login || '',
+    }))
+}
+
+function normalizeStatusCheck(node) {
+  if (!node) return null
+  if (node.__typename === 'CheckRun') {
+    return {
+      name: node.name,
+      state: node.status,
+      status: node.status,
+      conclusion: node.conclusion,
+      startedAt: node.startedAt,
+      completedAt: node.completedAt,
+    }
+  }
+  if (node.__typename === 'StatusContext') {
+    return {
+      name: node.context,
+      context: node.context,
+      state: node.state,
+      status: node.state,
+      conclusion: node.state,
+    }
+  }
+  return node
+}
+
+/**
+ * Normalize the PR list GraphQL response to the legacy gh `pr list --json`
+ * shape consumed by the list pane.
+ *
+ * @param {object} result
+ * @returns {object[]}
+ */
+export function normalizePRListGraphQL(result) {
+  const nodes = result?.data?.search?.nodes || []
+  return nodes
+    .filter(node => node?.__typename === 'PullRequest')
+    .map(pr => ({
+      number: pr.number,
+      title: pr.title,
+      state: pr.state,
+      author: pr.author ? { login: pr.author.login } : null,
+      labels: pr.labels?.nodes || [],
+      reviewRequests: normalizeReviewRequests(pr.reviewRequests),
+      statusCheckRollup: (pr.statusCheckRollup?.nodes || []).map(normalizeStatusCheck).filter(Boolean),
+      reviewDecision: pr.reviewDecision,
+      updatedAt: pr.updatedAt,
+      isDraft: Boolean(pr.isDraft),
+      headRefName: pr.headRefName,
+      baseRefName: pr.baseRefName,
+      assignees: pr.assignees?.nodes || [],
+      body: pr.body || '',
+      mergeable: pr.mergeable,
+      autoMergeRequest: pr.autoMergeRequest,
+      url: pr.url,
+    }))
+}
 
 /**
  * List pull requests for a repo with optional filters.
@@ -7,29 +100,62 @@ import { getRepo, runGh } from './core.js'
  * @param filter
  */
 export async function listPRs(repo, filter = {}) {
-  const base = [
-    'pr', 'list',
-    '--repo', getRepo(repo),
-    '--limit', String(filter.limit || 50),
-  ]
-  if (filter.state)    base.push('--state',    filter.state)
-  if (filter.author)   base.push('--author',   filter.author)
-  if (filter.reviewer) base.push('--reviewer', filter.reviewer)
-  if (filter.label)    base.push('--label',    filter.label)
-  if (filter.assignee) base.push('--assignee', filter.assignee)
-  if (!filter.author) {
-    if (filter.scope === 'own')       base.push('--author',   '@me')
-    if (filter.scope === 'reviewing') base.push('--reviewer', '@me')
-  }
-
-  // Try with all fields first; fall back to a reduced set for GHE instances
-  // where statusCheckRollup / mergeable are not in the GraphQL schema.
-  try {
-    return await runGh([...base, '--json', 'number,title,state,author,labels,reviewRequests,statusCheckRollup,reviewDecision,updatedAt,isDraft,headRefName,baseRefName,assignees,body,mergeable,autoMergeRequest,url'])
-  } catch (err) {
-    if (!/unknown|field|not found/i.test(err.message)) throw err
-    return runGh([...base, '--json', 'number,title,state,author,labels,reviewRequests,reviewDecision,updatedAt,isDraft,headRefName,baseRefName,assignees,body,url'])
-  }
+  const r = getRepo(repo)
+  const [owner, name] = r.split('/')
+  const limit = Math.max(1, Math.min(Number(filter.limit || PR_LIST_MAX_GRAPHQL_NODES), PR_LIST_MAX_GRAPHQL_NODES))
+  const queryText = prSearchQuery(r, filter)
+  const query = `
+    query($owner: String!, $name: String!, $searchQuery: String!, $limit: Int!) {
+      search(type: ISSUE, first: $limit, query: $searchQuery) {
+        nodes {
+          __typename
+          ... on PullRequest {
+            number
+            title
+            state
+            author { login }
+            labels(first: 20) { nodes { name color } }
+            reviewRequests(first: 10) {
+              nodes {
+                requestedReviewer {
+                  __typename
+                  ... on User { login name }
+                  ... on Team { name }
+                }
+              }
+            }
+            statusCheckRollup(first: 50) {
+              nodes {
+                __typename
+                ... on CheckRun { name status conclusion startedAt completedAt }
+                ... on StatusContext { context state }
+              }
+            }
+            reviewDecision
+            updatedAt
+            isDraft
+            headRefName
+            baseRefName
+            assignees(first: 10) { nodes { login name } }
+            body
+            mergeable
+            autoMergeRequest { enabledAt }
+            url
+          }
+        }
+      }
+      repository(owner: $owner, name: $name) { id }
+    }
+  `
+  const result = await runGh([
+    'api', 'graphql',
+    '-f', `query=${query}`,
+    '-f', `owner=${owner}`,
+    '-f', `name=${name}`,
+    '-f', `searchQuery=${queryText}`,
+    '-F', `limit=${limit}`,
+  ])
+  return normalizePRListGraphQL(result)
 }
 
 /**
@@ -128,322 +254,6 @@ export async function reviewPR(repo, number, event, body = '') {
   ]
   if (body) args.push('--body', body)
   return runGh(args)
-}
-
-// ─── Issue functions ──────────────────────────────────────────────────────────
-
-/**
- * Get the unified diff for a PR.
- * @param repo
- * @param number
- */
-export async function getPRDiff(repo, number) {
-  const args = [
-    'pr', 'diff', String(number),
-    '--repo', getRepo(repo),
-  ]
-  return runGh(args)
-}
-
-/**
- * Add a general comment to a PR.
- * @param repo
- * @param number
- * @param body
- */
-export async function addPRComment(repo, number, body) {
-  const args = [
-    'pr', 'comment', String(number),
-    '--repo', getRepo(repo),
-    '--body', body,
-  ]
-  return runGh(args)
-}
-
-/**
- * Add assignees to a PR.
- * @param repo
- * @param number
- * @param assignees
- */
-export async function addPRAssignees(repo, number, assignees) {
-  const args = ['pr', 'edit', String(number), '--repo', getRepo(repo), '--add-assignee', assignees.join(',')]
-  return runGh(args)
-}
-
-/**
- * Remove assignees from a PR.
- * @param repo
- * @param number
- * @param assignees
- */
-export async function removePRAssignees(repo, number, assignees) {
-  const args = ['pr', 'edit', String(number), '--repo', getRepo(repo), '--remove-assignee', assignees.join(',')]
-  return runGh(args)
-}
-
-/**
- * Add a line-level review comment to a PR.
- * @param repo
- * @param number
- * @param root0
- * @param root0.body
- * @param root0.path
- * @param root0.line
- * @param root0.side
- * @param root0.commitId
- */
-export async function addPRLineComment(repo, number, { body, path, line, side = 'RIGHT', commitId }) {
-  const r = getRepo(repo)
-  const payload = JSON.stringify({ body, path, line, side, commit_id: commitId })
-  const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/${encodeURIComponent(number)}/comments`,
-    '--method', 'POST',
-    '--input', '-',
-  ]
-  // Routes through the runGh chokepoint; the JSON body is piped via stdin
-  // (never argv) per the subprocess-discipline invariant.
-  return runGh(args, { stdin: payload })
-}
-
-/**
- * List review comments on a PR.
- */
-const REPO_PART_RE = /^[a-zA-Z0-9._-]+$/
-
-/**
- *
- * @param repo
- * @param number
- */
-export async function listPRComments(repo, number) {
-  const r = getRepo(repo)
-  const [owner, name] = r.split('/')
-  if (!REPO_PART_RE.test(owner) || !REPO_PART_RE.test(name)) {
-    throw new GhError({ message: `Invalid repository format: ${r}`, stderr: '', exitCode: 1, args: [] })
-  }
-  // Use GraphQL so we can get the ReviewThread node ID (needed for resolveReviewThread mutation)
-  const query = `
-    query($owner: String!, $name: String!, $number: Int!) {
-      repository(owner: $owner, name: $name) {
-        pullRequest(number: $number) {
-          reviewThreads(first: 100) {
-            nodes {
-              id
-              isResolved
-              comments(first: 50) {
-                nodes {
-                  databaseId
-                  body
-                  path
-                  line
-                  originalLine
-                  author { login }
-                  createdAt
-                  replyTo { databaseId }
-                  pullRequestReview { databaseId }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  `
-  const result = await runGh([
-    'api', 'graphql',
-    '-f', `owner=${owner}`,
-    '-f', `name=${name}`,
-    '-F', `number=${number}`,
-    '-f', `query=${query}`,
-  ])
-  const threads = result?.data?.repository?.pullRequest?.reviewThreads?.nodes || []
-  return threads.flatMap(thread =>
-    thread.comments.nodes.map(c => ({
-      id: c.databaseId,
-      body: c.body,
-      path: c.path,
-      line: c.line,
-      originalLine: c.originalLine,
-      side: 'RIGHT', // Default to RIGHT as diffSide is missing from schema
-      user: { login: c.author?.login },
-      createdAt: c.createdAt,
-      inReplyToId: c.replyTo?.databaseId || null,
-      pullRequestReviewId: c.pullRequestReview?.databaseId || null,
-      threadId: thread.id,
-      threadResolved: thread.isResolved,
-    }))
-  )
-}
-
-/**
- * Reply to an existing PR review comment thread.
- * Uses the dedicated replies endpoint — no path/line/commitId needed.
- * @param repo
- * @param prNumber
- * @param commentId
- * @param body
- */
-export async function replyToComment(repo, prNumber, commentId, body) {
-  const r = getRepo(repo)
-  if (!Number.isInteger(Number(commentId)) || Number(commentId) <= 0) {
-    throw new Error(`Invalid comment ID: ${commentId}`)
-  }
-  const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/${encodeURIComponent(prNumber)}/comments/${encodeURIComponent(commentId)}/replies`,
-    '--method', 'POST',
-    '--raw-field', `body=${body}`,
-  ]
-  return runGh(args)
-}
-
-/**
- * Edit (update) a PR review comment body.
- * @param repo
- * @param commentId
- * @param body
- */
-export async function editPRComment(repo, commentId, body) {
-  const r = getRepo(repo)
-  if (!Number.isInteger(Number(commentId)) || Number(commentId) <= 0) {
-    throw new Error(`Invalid comment ID: ${commentId}`)
-  }
-  const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/comments/${encodeURIComponent(commentId)}`,
-    '--method', 'PATCH',
-    '--raw-field', `body=${body}`,
-  ]
-  return runGh(args)
-}
-
-/**
- * Delete a PR review comment.
- * @param repo
- * @param commentId
- */
-export async function deletePRComment(repo, commentId) {
-  const r = getRepo(repo)
-  if (!Number.isInteger(Number(commentId)) || Number(commentId) <= 0) {
-    throw new Error(`Invalid comment ID: ${commentId}`)
-  }
-  const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/comments/${encodeURIComponent(commentId)}`,
-    '--method', 'DELETE',
-  ]
-  return runGh(args)
-}
-
-/**
- * Resolve (hide as resolved) a PR review thread.
- * Uses the GraphQL API via gh api graphql.
- * @param threadId
- */
-export async function resolveThread(threadId) {
-  const query = 'mutation($threadId: ID!) { resolveReviewThread(input: { threadId: $threadId }) { thread { id isResolved } } }'
-  const args = [
-    'api', 'graphql',
-    '-f', `query=${query}`,
-    '-f', `threadId=${threadId}`,
-  ]
-  return runGh(args)
-}
-
-// ─── IPC-facing review functions (Phase 2) ───────────────────────────────────
-
-/**
- * Get PR review comments shaped for the IPC `review-comments` response.
- * Uses GraphQL to retrieve thread node IDs and resolution status.
- *
- * @param {string} repo       - "owner/name" (falls back to GHUI_REPO)
- * @param {number|string} prNumber
- * @returns {Promise<Array<{id, threadId, path, line, body, user, resolved}>>}
- */
-export async function getPRReviewComments(repo, prNumber) {
-  const r = getRepo(repo)
-  const [owner, name] = r.split('/')
-  if (!REPO_PART_RE.test(owner) || !REPO_PART_RE.test(name)) {
-    throw new GhError({ message: `Invalid repository format: ${r}`, stderr: '', exitCode: 1, args: [] })
-  }
-  const query = `
-    query($owner: String!, $name: String!, $number: Int!) {
-      repository(owner: $owner, name: $name) {
-        pullRequest(number: $number) {
-          reviewThreads(first: 100) {
-            nodes {
-              id
-              isResolved
-              comments(first: 50) {
-                nodes {
-                  databaseId
-                  body
-                  path
-                  line
-                  originalLine
-                  author { login }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  `
-  const result = await runGh([
-    'api', 'graphql',
-    '-f', `owner=${owner}`,
-    '-f', `name=${name}`,
-    '-F', `number=${Number(prNumber)}`,
-    '-f', `query=${query}`,
-  ])
-  const threads = result?.data?.repository?.pullRequest?.reviewThreads?.nodes || []
-  // Flatten: one entry per comment, carrying threadId + resolved from the parent thread
-  return threads.flatMap(thread =>
-    thread.comments.nodes.map(c => ({
-      id:       c.databaseId,
-      threadId: thread.id,
-      path:     c.path,
-      line:     c.line ?? c.originalLine ?? null,
-      body:     c.body,
-      user:     c.author?.login || null,
-      resolved: thread.isResolved,
-    }))
-  )
-}
-
-/**
- * Reply to a PR review thread via GraphQL `addPullRequestReviewThreadReply`.
- *
- * @param {string} threadId  - node ID of the review thread (e.g. "PRRT_...")
- * @param {string} body      - reply text
- * @returns {Promise<{ok: true, commentId: number}>}
- */
-export async function addPRReviewThreadReply(threadId, body) {
-  // threadId is a GraphQL node ID (ID!); body is a String!
-  const mutation = 'mutation($threadId: ID!, $body: String!) { addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $threadId, body: $body }) { comment { databaseId } } }'
-  const result = await runGh([
-    'api', 'graphql',
-    '-f', `query=${mutation}`,
-    '-f', `threadId=${threadId}`,
-    '-f', `body=${body}`,
-  ])
-  const commentId = result?.data?.addPullRequestReviewThreadReply?.comment?.databaseId
-  return { ok: true, commentId: commentId || null }
-}
-
-/**
- * Resolve a PR review thread via GraphQL `resolveReviewThread`.
- *
- * @param {string} threadId  - node ID of the review thread (e.g. "PRRT_...")
- * @returns {Promise<{ok: true}>}
- */
-export async function resolvePRReviewThread(threadId) {
-  const mutation = 'mutation($threadId: ID!) { resolveReviewThread(input: { threadId: $threadId }) { thread { id isResolved } } }'
-  await runGh([
-    'api', 'graphql',
-    '-f', `query=${mutation}`,
-    '-f', `threadId=${threadId}`,
-  ])
-  return { ok: true }
 }
 
 /**

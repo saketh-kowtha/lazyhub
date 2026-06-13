@@ -65,9 +65,11 @@ const CustomPaneRow = memo(({ item, isSelected, t, stateColor }) => {
     <Box paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
       <Text color={t.ui.dim} bold>{numStr} </Text>
       {state ? <Text color={stateColor(state)}>{state.slice(0, 8).padEnd(9)}</Text> : null}
-      <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
-        {title}
-      </Text>
+      <Box flexGrow={1}>
+        <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate">
+          {title}
+        </Text>
+      </Box>
       {author && <Text color={t.ui.muted}> {author.slice(0, 12).padEnd(12)}</Text>}
       <Text color={t.ui.dim}> {timeStr}</Text>
     </Box>
