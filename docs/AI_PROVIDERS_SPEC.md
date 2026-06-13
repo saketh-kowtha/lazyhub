@@ -71,6 +71,7 @@ src/ai/
     ├── claude-code.js    ← `claude` CLI
     ├── codex.js          ← `codex` CLI
     ├── gemini-cli.js     ← `gemini` CLI
+    ├── openai-compatible.js ← OpenAI-compatible HTTP (covers Ollama, Groq, LM Studio, Azure OpenAI, OpenRouter, etc.)
     └── _base.js          ← shared spawn helper, timeout, stdin piping
 ```
 
@@ -107,9 +108,10 @@ getAICodeReview(args)
   ↓
 selectProvider()
   1. $LAZYHUB_AI_PROVIDER env override?       → use it (or throw if unavailable)
-  2. settings.json has explicit choice?       → use it
-  3. Iterate detect.js priority list:
+  2. ~/.config/lazyhub/lazyhub.toml [defaults].ai_provider set?  → use it
+  3. Iterate auto-detect priority:
        claude-code → codex → gemini → anthropic-api
+     (openai-compatible skipped; only available via env/config above)
      First with available:true wins.
   4. None available?                          → throw AIError('no-provider')
   ↓
@@ -193,7 +195,40 @@ Current `src/ai.js` HTTP logic, extracted unchanged. Detection = `!!process.env.
 
 This provider keeps the `cache_control` ephemeral header. The CLI-based providers cannot use prompt caching because we don't control their request layer.
 
-### 4.5 Base helper (`_base.js`)
+### 4.5 OpenAI-compatible HTTP (`openai-compatible.js`)
+
+**Detection:** reads config; requires `[ai.openai_compatible].base_url` and `[ai.openai_compatible].model` in `~/.config/lazyhub/lazyhub.toml`.
+
+**Invocation:**
+```
+POST {base_url}/chat/completions
+{
+  "model": "{model}",
+  "messages": [
+    { "role": "system", "content": "{system}" },
+    { "role": "user", "content": "{user}" }
+  ],
+  "max_tokens": 2048
+}
+```
+- Config can provide an optional `api_key` (sent as `Authorization: Bearer {api_key}`)
+- Optional `timeout_ms` override (default: 60s)
+- Parses response: `choices[0].message.content` is the assistant text
+
+**Use cases:** Ollama, Groq, LM Studio, Azure OpenAI, OpenRouter, or any HTTP server implementing the OpenAI Chat Completions API.
+
+**Config example:**
+```toml
+[ai.openai_compatible]
+base_url = "http://localhost:11434/v1"
+model = "llama2"
+api_key = ""           # optional; omit if endpoint is unauth'd
+timeout_ms = 60000
+```
+
+**Non-goal:** This is not a generic LLM aggregator. Providers with materially different HTTP APIs (not OpenAI-compatible) need separate provider modules.
+
+### 4.6 Base helper (`_base.js`)
 
 ```js
 export async function spawnAndPipe({ cmd, args, stdin, timeoutMs }) {
@@ -210,17 +245,19 @@ Used by all three CLI providers. Single chokepoint for security review.
 
 ```js
 // src/ai/detect.js
-const PRIORITY = ['claude-code', 'codex', 'gemini-cli', 'anthropic-api']
+const PROVIDERS = ['claude-code', 'codex', 'gemini-cli', 'anthropic-api', 'openai-compatible']
 ```
 
+**Auto-detection priority** (first available wins): `claude-code` → `codex` → `gemini-cli` → `anthropic-api`. **Note:** `openai-compatible` is **not included in auto-detection** — it's only available via explicit configuration (see override mechanisms below) because users who have local/self-hosted HTTP endpoints must opt-in.
+
 Override mechanisms (in order of precedence):
-1. **Env:** `LAZYHUB_AI_PROVIDER=codex` — hardest override, useful for CI
-2. **Settings file:** `~/.config/lazyhub/settings.json` → `{ "ai": { "provider": "claude-code" } }`
-3. **Default priority** above
+1. **Env:** `LAZYHUB_AI_PROVIDER=openai-compatible` — hardest override, useful for CI
+2. **Config file:** `~/.config/lazyhub/lazyhub.toml` → `[defaults]` → `ai_provider = "openai-compatible"`
+3. **Auto-detection** (skips `openai-compatible` unless forced above)
 
 Detection runs **once at TUI startup**, results cached in-memory. A `[r]` key in the Settings → AI Provider panel re-runs detection.
 
-If the chosen provider becomes unavailable mid-session (CLI uninstalled), the next call throws `AIError('provider-unavailable')` and prompts the user to pick another.
+If the chosen provider becomes unavailable mid-session (CLI uninstalled, HTTP endpoint down), the next call throws `AIError('provider-unavailable')` and prompts the user to pick another.
 
 ---
 
