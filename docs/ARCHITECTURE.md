@@ -58,7 +58,7 @@ To prevent merge conflicts and "branch drift":
 
 ## 5. Development Invariants
 
-1. **`executor.js` is the only file that calls `gh`** — enforced by `no-restricted-imports`.
+1. **`src/executor/core.js` is the only implementation file that calls `gh`**. Public imports still go through `src/executor.js`, which is a barrel over the split executor modules.
 2. **`useTheme()` not `import { t }`** — always use the hook in components.
 3. **FuzzySearch always gets objects**, never strings.
 4. **GraphQL integer variables use `-F`**, string variables use `-f`.
@@ -74,6 +74,13 @@ To prevent merge conflicts and "branch drift":
 - **Dead Code:** Run `npx knip` to find unused files and exports.
 - **Architectural Linting:** `npm run lint` enforces the "Executor Pattern".
 - **Validation:** Always run `npm test` before any PR merge.
+
+## 7. Runtime Resilience & Performance
+
+- Fatal crashes install handlers before Ink renders. The shared `src/crash.js` restore path leaves the alternate screen, shows the cursor, disables mouse tracking/raw mode where possible, and prints the bug-report pointer.
+- `useGh()` serves stale-while-revalidate data from `~/.cache/lazyhub/data/` when available, then refreshes in the background. Corrupt cache files are misses; mutation paths invalidate the affected repo cache coarsely.
+- `useGhHealth()` tracks failed gh-backed calls globally. The status bar renders a sanitized degraded-state banner with retry guidance and clears automatically after successful refreshes.
+- `LAZYHUB_PERF=1` records `runGh()` duration and keypress-to-render latency to `~/.cache/lazyhub/perf.ndjson`. `lazyhub perf report` summarizes count, p50, p95, and max per operation.
 
 ---
 

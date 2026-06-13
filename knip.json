@@ -9,6 +9,7 @@
   "project": ["src/**/*.{js,jsx}", "bin/*.js"],
   "ignoreBinaries": [
     "gh",
+    "tmux",
     "which",
     // Runtime clipboard command on macOS, invoked by src/ui/actions.js.
     "pbcopy",
@@ -30,6 +31,8 @@
     "src/config/actions.js": ["exports"],
     // Config context/useConfig remain public config-layer API from #130/#132.
     "src/config/index.js": ["exports"],
+    // Debug-state path helper is retained for editor/integration consumers.
+    "src/debug-state.js": ["exports"],
     // useKeymap is the centerpiece of the keymap registry work in #132.
     "src/config/keymap.js": ["exports"],
     // Scope constants/useScopedInput are reserved for keymap/scope integration in #132.

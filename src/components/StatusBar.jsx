@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useTheme } from '../theme.js'
+import { sanitize } from '../utils.js'
 
 const PANE_META = {
   prs:           { icon: '⎇',  label: 'Pull Requests' },
@@ -33,7 +34,7 @@ function formatAge(ms) {
   return `${Math.floor(s / 3600)}h ago`
 }
 
-export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode = 'NORMAL' }) {
+export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode = 'NORMAL', ghHealth }) {
   const { t } = useTheme()
   const { stdout } = useStdout()
   const cols = stdout?.columns || 80
@@ -49,6 +50,12 @@ export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode
   const dot     = <Text color={t.ui.dim}>  ·  </Text>
   const chipClr = modeColor(mode, t)
   const narrow  = cols < 100
+  const degraded = ghHealth?.degraded
+  const errorText = degraded
+    ? sanitize(ghHealth.failingCount > 1
+      ? `${ghHealth.failingCount} calls failing: ${ghHealth.error?.message || ghHealth.error || 'gh failed'}`
+      : `${ghHealth.error?.message || ghHealth.error || 'gh failed'} - press r to retry`)
+    : null
 
   return (
     <Box paddingX={1} justifyContent="space-between" backgroundColor={t.ui.headerBg}>
@@ -62,6 +69,7 @@ export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode
 
       {/* Right zone: mode chip · refresh age · scope */}
       <Box gap={1}>
+        {errorText && <Text color={t.ci?.fail || t.ui.selected} bold>{errorText}</Text>}
         {mode !== 'NORMAL' && (
           <Text color={chipClr} bold>{mode}</Text>
         )}

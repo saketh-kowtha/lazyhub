@@ -15,8 +15,15 @@
 
 | File | Purpose |
 |---|---|
-| `src/executor.js` | the ONLY place the `gh` CLI is invoked in lazyhub. `runGh(args, opts)` is the single chokepoint: every exported function routes through it. That gives one place to mock in tests, one place to type errors (GhError), and one place to instrument (timeout, future retry/observability). |
+| `src/executor.js` | public barrel for the gh executor modules. Keep importing from this file; implementation modules live under src/executor/. |
+| `src/executor/actions.js` | List workflow runs. @param repo @param filter |
+| `src/executor/branches.js` | Request reviewers for a PR. @param repo @param number @param reviewers |
+| `src/executor/core.js` | the ONLY place the `gh` CLI is invoked in lazyhub. `runGh(args, opts)` is the single chokepoint: every exported function routes through it. That gives one place to mock in tests, one place to type errors (GhError), and one place to instrument (timeout, future retry/observability). |
 | `src/executor/gh-error.js` | the error type thrown by `runGh()` in executor.js. Carries the sanitized stderr, exit code, and args so callers can render an actionable message without re-parsing gh output. Lives in its own module so the executor and its tests (and future contract tests) share one definition. |
+| `src/executor/issues.js` | List issues with optional filters. @param repo @param filter |
+| `src/executor/misc.js` | List the authenticated user's gists. |
+| `src/executor/notifications.js` | List notifications. @param filter |
+| `src/executor/prs.js` | List pull requests for a repo with optional filters. @param repo @param filter |
 
 ## AI provider abstraction
 
@@ -65,6 +72,8 @@
 | `src/features/prs/detail.jsx` | PR detail pane Scrollable view: j/k to scroll, gg/G top/bottom, / to search body |
 | `src/features/prs/diff-parser.js` | pure diff-parsing logic, no React/Ink deps. Extracted from diff.jsx so it can be unit-tested without mocking the entire Ink/chalk/hljs stack. |
 | `src/features/prs/diff.jsx` | PR diff view with syntax highlighting + line comments |
+| `src/features/prs/list-dialogs.jsx` | (no header — inferred: list-dialogs) |
+| `src/features/prs/list-row.jsx` | Maps a new-style token scheme object (src/theme/index.js) to the legacy `t.*` shape consumed by PR list sub-components. @param {object} scheme - Active scheme from useTheme().scheme @returns {{ ui: object, pr: object, ci: object, review: object }} |
 | `src/features/prs/list.jsx` | PR list pane Props: repo         string listHeight   number   — visible row count from App onHover      fn(pr)   — called when cursor moves (for side panel) onSelectPR   fn(pr)   — called on Enter → full detail onOpenDiff   fn(pr)   — called on 'd' onPaneState  fn({loading, error, count}) |
 | `src/features/prs/NewPRDialog.jsx` | Smart New PR creation dialog. Features: - Auto-detects current branch and offers to use it as head - Validates head branch against remote (not pushed / has unpushed commits / no diff) - Validates base branch exists on GitHub - Offers to push branch to origin if needed - Shift+Tab for backward field navigation |
 
@@ -121,6 +130,7 @@
 | File | Purpose |
 |---|---|
 | `src/hooks/useGh.js` | React hook that wraps executor calls with loading/error/data state and an in-memory TTL cache. |
+| `src/hooks/useGhHealth.js` | global degraded-state tracker for gh-backed requests. |
 | `src/hooks/useLayout.js` | responsive layout breakpoints based on terminal dimensions. Config overrides always win over breakpoint defaults. |
 | `src/hooks/usePaneState.js` | preserve list/pane view state across navigation. State is stored in a Map on AppContext (via paneStateRef). Survives PRList unmount (back-nav from detail/diff). Cleared on explicit pane-switch (Tab, number key) by the App. Usage: const [state, setState] = usePaneState('prs', { cursor: 0, scrollOffset: 0, filterState: 'open', ... }) |
 | `src/hooks/useVirtualList.js` | safe for repos with tens of thousands of items. Usage: const { cursor, scrollOffset, visibleItems, moveCursor, jumpTop, jumpBottom } = useVirtualList({ items, height }) // In JSX: visibleItems.map((item, i) => { const isSelected = scrollOffset + i === cursor ... }) |
@@ -154,13 +164,19 @@
 
 | File | Purpose |
 |---|---|
+| `src/app-keys.js` | (no header — inferred: app-keys) |
+| `src/app-panels.jsx` | (no header — inferred: app-panels) |
+| `src/app-views.jsx` | (no header — inferred: app-views) |
+| `src/cache.js` | stale-while-revalidate disk cache for gh-backed panes. |
 | `src/cli/doctor/config.js` | lazyhub doctor --config. |
 | `src/cli/doctor/index.js` | lazyhub doctor command. |
-| `src/debug-state.js` | (no header — inferred: debug-state) |
+| `src/crash.js` | terminal restoration and fatal-crash reporting. |
+| `src/debug-state.js` | Build the redacted debug-state object. @param {object} appState optional app-level state snapshot @returns {object} serializable debug-state payload |
 | `src/features/tabs/filter-to-gh.js` | translate TOML pane filters to executor args. |
 | `src/features/tabs/pane.jsx` | one TOML-declared dashboard pane. |
 | `src/features/tabs/registry.js` | TOML custom tab registry. |
 | `src/features/tabs/view.jsx` | TOML-declared multi-pane dashboard. |
+| `src/perf.js` | opt-in local NDJSON performance instrumentation. |
 | `src/test/test-helpers.jsx` | (no header — inferred: test-helpers) |
 
 ## Tests
@@ -169,7 +185,7 @@ Test file counts by directory:
 
 | Directory | Test files |
 |---|---|
-| `src/` | 11 |
+| `src/` | 13 |
 | `src/ai/` | 3 |
 | `src/ai/providers/` | 4 |
 | `src/cli/doctor/` | 1 |
@@ -179,5 +195,5 @@ Test file counts by directory:
 | `src/theme/` | 1 |
 | `src/ui/` | 2 |
 
-**Total non-test source files:** 94
-**Total test files:** 32
+**Total non-test source files:** 110
+**Total test files:** 34

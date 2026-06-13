@@ -79,7 +79,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
   const FK = _cfg.keys
   const [filterState, setFilterState] = useState(_cfg.defaultFilter)
   const [sortMode, setSortMode] = useState('default') // 'default' | 'oldest'
-  const { data: issues, loading, error, refetch } = useGh(listIssues, [repo, { state: filterState, limit: _cfg.pageSize }])
+  const { data: issues, loading, error, refetch, isStale } = useGh(listIssues, [repo, { state: filterState, limit: _cfg.pageSize }])
   const [cursor, setCursor] = useState(initialCursor)
   const [scrollOffset, setScrollOffset] = useState(initialScrollOffset)
   const [dialog, setDialog] = useState(null)
@@ -94,8 +94,8 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
   const STATE_CYCLE = ['open', 'closed']
 
   useEffect(() => {
-    if (onPaneState) onPaneState({ loading, error, count: items.length })
-  }, [loading, error, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
+  }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     notifyDialog(!!dialog)
