@@ -44,7 +44,7 @@ export function checkConfig(opts = {}) {
   checks.push({ ok: existsSync(configPath), label: `File ${existsSync(configPath) ? 'exists' : 'missing'}` })
   if (existsSync(configPath)) {
     try {
-      raw = parse(readFileSync(configPath, 'utf8'), { filename: configPath })
+      raw = parse(readFileSync(configPath, 'utf8'))
       checks.push({ ok: true, label: 'Valid TOML syntax' })
     } catch (err) {
       checks.push({ ok: false, label: formatError(err, configPath) })
@@ -70,8 +70,8 @@ export function checkConfig(opts = {}) {
 /**
  *
  * @param report
- * @param root0
- * @param root0.json
+ * @param {object} root0
+ * @param {boolean} [root0.json]
  */
 export function formatConfigReport(report, { json = false } = {}) {
   if (json) return `${JSON.stringify(report, null, 2)}\n`

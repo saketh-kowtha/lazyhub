@@ -1,0 +1,130 @@
+import { existsSync, mkdirSync, unlinkSync } from 'fs'
+import { homedir, userInfo } from 'os'
+import { dirname } from 'path'
+import { connect } from 'net'
+import { spawn } from 'child_process'
+
+function expandHome(path) {
+  if (!path) return path
+  return path === '~' ? homedir() : path.replace(/^~(?=\/|\\)/, homedir())
+}
+
+/**
+ * Resolve the daemon endpoint. Unix uses a filesystem socket; Windows uses a
+ * named pipe so the rest of the daemon can stay on Node's `net` module.
+ *
+ * @param {object} config
+ */
+export function daemonSocketPath(config = {}) {
+  if (process.platform === 'win32') {
+    const user = userInfo().username.replace(/[^a-zA-Z0-9_.-]/g, '-')
+    return `\\\\.\\pipe\\lazyhub-${user}`
+  }
+  return expandHome(config.daemon?.socket_path || '~/.config/lazyhub/daemon.sock')
+}
+
+/**
+ * @param {object} config
+ */
+export function daemonPidPath(config = {}) {
+  return expandHome(config.daemon?.pid_file || '~/.config/lazyhub/daemon.pid')
+}
+
+/**
+ * @param {string} socketPath
+ */
+export function ensureSocketDir(socketPath) {
+  if (process.platform !== 'win32') mkdirSync(dirname(socketPath), { recursive: true, mode: 0o700 })
+}
+
+/**
+ * @param {string} socketPath
+ */
+export function removeStaleSocket(socketPath) {
+  if (process.platform !== 'win32' && existsSync(socketPath)) {
+    try { unlinkSync(socketPath) } catch { /* ignore */ }
+  }
+}
+
+/**
+ * Send one NDJSON request to the daemon and resolve with the response payload.
+ *
+ * @param {string} socketPath
+ * @param {object} message
+ * @param {number} timeoutMs
+ */
+export function requestDaemon(socketPath, message, timeoutMs = 1000) {
+  return new Promise((resolve, reject) => {
+    const socket = connect(socketPath)
+    const id = message.id || String(Date.now())
+    let buffer = ''
+    const timer = setTimeout(() => {
+      socket.destroy()
+      reject(new Error('daemon request timed out'))
+    }, timeoutMs)
+
+    socket.on('connect', () => {
+      socket.write(JSON.stringify({ ...message, id }) + '\n')
+    })
+    socket.on('data', chunk => {
+      buffer += chunk.toString()
+      const lines = buffer.split('\n')
+      buffer = lines.pop()
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          const parsed = JSON.parse(line)
+          if (parsed.id === id) {
+            clearTimeout(timer)
+            socket.end()
+            if (parsed.error) reject(new Error(parsed.error))
+            else resolve(parsed)
+          }
+        } catch {
+          // Keep waiting for a complete JSON line.
+        }
+      }
+    })
+    socket.on('error', err => {
+      clearTimeout(timer)
+      reject(err)
+    })
+    socket.on('close', () => clearTimeout(timer))
+  })
+}
+
+/**
+ * Ensure a daemon is reachable, spawning one detached when needed.
+ *
+ * @param {object} config
+ * @param {string} entrypoint absolute path to bin/lazyhub.js
+ */
+export async function ensureDaemon(config = {}, entrypoint) {
+  if (process.env.LAZYHUB_NO_DAEMON === '1' || process.env.LAZYHUB_DAEMON_CHILD === '1') return null
+  if (config.agent?.auto_spawn_daemon === false) return null
+  const socketPath = daemonSocketPath(config)
+  try {
+    await requestDaemon(socketPath, { type: 'status' }, 150)
+    process.env.LAZYHUB_DAEMON_SOCKET = socketPath
+    return socketPath
+  } catch {
+    // Spawn below.
+  }
+  const child = spawn(process.execPath, [entrypoint, 'serve', '--json'], {
+    detached: true,
+    stdio: 'ignore',
+    env: { ...process.env, LAZYHUB_DAEMON_CHILD: '1' },
+  })
+  child.unref()
+  for (let i = 0; i < 20; i += 1) {
+    await new Promise(resolve => setTimeout(resolve, 50))
+    try {
+      await requestDaemon(socketPath, { type: 'status' }, 150)
+      process.env.LAZYHUB_DAEMON_SOCKET = socketPath
+      return socketPath
+    } catch {
+      // Keep waiting until the short startup window expires.
+    }
+  }
+  return null
+}

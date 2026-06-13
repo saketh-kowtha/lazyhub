@@ -173,6 +173,13 @@ describe('validateConfig — keymaps with platform sub-section', () => {
     })
     expect(warnings.join('\n')).toContain('unknown action "settings.open"')
   })
+
+  it('warns when normalized keys conflict in one scope', () => {
+    const { warnings } = validateConfig({
+      keymaps: { global: { enter: 'app.help', '<enter>': 'app.back' } },
+    })
+    expect(warnings.join('\n')).toContain('duplicate binding "<enter>" conflicts with "enter"')
+  })
 })
 
 describe('validateConfig — openai-compatible provider', () => {

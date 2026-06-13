@@ -1,0 +1,9 @@
+Ref: gh-dash columns; lazygit borders
+Variant 2: breadcrumb-first compact layout
+Tokens: border.default border.focused accent.primary fg.muted fg.subtle
+┌────────────────────────┐
+│ PR list v2 │
+│ #204 GraphQL list x1/6 @maya │
+│ #203 daemon cache ok @sak │
+│ #202 snapshots pending @ai │
+└────────────────────────┘

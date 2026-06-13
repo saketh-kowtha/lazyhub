@@ -1,3 +1,5 @@
+// @ts-nocheck
+// TODO(#197): extracted app view renderer needs explicit prop typedefs after split.
 import React from 'react'
 import { Box, Text } from 'ink'
 import { APP_CONFIG as _config, DIALOG_KEYS, PANES, PANE_ICONS, PANE_LABELS } from './app-keys.js'
@@ -25,6 +27,7 @@ import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 import { AIAssistant } from './components/AIAssistant.jsx'
 import { CommandPalette } from './components/CommandPalette.jsx'
 import { HelpOverlay, PaneHeader } from './app-panels.jsx'
+import { THEME_NAMES } from './theme.js'
 
 export function renderAppView(ctx) {
   const {

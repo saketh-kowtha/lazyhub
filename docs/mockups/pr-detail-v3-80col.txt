@@ -1,0 +1,9 @@
+Ref: lazygit detail; Charm overlay
+Variant 3: overlay-first no-reflow layout
+Tokens: border.default border.focused accent.primary fg.muted fg.subtle
+┌────────────────────────┐
+│ PR detail v3 │
+│ #204 OPEN @maya -> main │
+│ checks x1/6 labels perf │
+│ body excerpt + actions │
+└────────────────────────┘

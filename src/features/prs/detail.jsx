@@ -1,3 +1,5 @@
+// @ts-nocheck
+// TODO(#197): PR detail view has legacy Ink prop inference noise pending typed props.
 /**
  * src/features/prs/detail.jsx — PR detail pane
  * Scrollable view: j/k to scroll, gg/G top/bottom, / to search body

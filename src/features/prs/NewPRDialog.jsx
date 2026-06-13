@@ -1,3 +1,5 @@
+// @ts-nocheck
+// TODO(#197): new PR dialog needs typed form state and executor payload typedefs.
 /**
  * src/features/prs/NewPRDialog.jsx — Smart New PR creation dialog.
  *

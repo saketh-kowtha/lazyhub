@@ -96,7 +96,7 @@ export function fuzzyScore(label, query) {
  * @param {object[]} actions   — full action list
  * @param {string}   query     — user query (may be empty)
  * @param {string}   context   — resolved context string from resolveContext()
- * @param {number}   [limit=8] — max results to return
+ * @param {number}   [limit=8] max results to return
  * @returns {object[]}         — scored and sorted actions (score attached as ._score)
  */
 export function filterActions(actions, query, context, limit = 8) {

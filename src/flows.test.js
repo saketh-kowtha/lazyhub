@@ -77,74 +77,68 @@ beforeEach(() => {
 
 describe('PR list — fetch flows', () => {
   it('fetches open PRs by default', async () => {
-    ok([])
+    ok({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo')
-    expect(args()).toContain('pr')
-    expect(args()).toContain('list')
-    expect(args()).toContain('--repo')
-    expect(args()).toContain('owner/repo')
+    expect(args()).toEqual(expect.arrayContaining(['api', 'graphql']))
+    expect(args().find(arg => String(arg).startsWith('searchQuery='))).toContain('state:open')
   })
 
   it('fetches closed PRs when state=closed', async () => {
-    ok([])
+    ok({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { state: 'closed' })
-    expect(args()).toContain('--state')
-    expect(args()).toContain('closed')
+    expect(args().find(arg => String(arg).startsWith('searchQuery='))).toContain('state:closed')
   })
 
   it('fetches merged PRs when state=merged', async () => {
-    ok([])
+    ok({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { state: 'merged' })
-    expect(args()).toContain('merged')
+    expect(args().find(arg => String(arg).startsWith('searchQuery='))).toContain('is:merged')
   })
 
   it('filters by author when scope=own (passes @me)', async () => {
-    ok([])
+    ok({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { scope: 'own' })
-    expect(args()).toContain('--author')
-    expect(args()).toContain('@me')
+    expect(args().find(arg => String(arg).startsWith('searchQuery='))).toContain('author:@me')
   })
 
   it('filters by review-requested when scope=reviewing', async () => {
-    ok([])
+    ok({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { scope: 'reviewing' })
-    expect(args()).toContain('--reviewer')
-    expect(args()).toContain('@me')
+    expect(args().find(arg => String(arg).startsWith('searchQuery='))).toContain('review-requested:@me')
   })
 
   it('passes explicit author filter', async () => {
-    ok([])
+    ok({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { author: 'alice' })
-    expect(args()).toContain('--author')
-    expect(args()).toContain('alice')
+    expect(args().find(arg => String(arg).startsWith('searchQuery='))).toContain('author:alice')
   })
 
   it('passes assignee filter', async () => {
-    ok([])
+    ok({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { assignee: 'bob' })
-    expect(args()).toContain('--assignee')
-    expect(args()).toContain('bob')
+    expect(args().find(arg => String(arg).startsWith('searchQuery='))).toContain('assignee:bob')
   })
 
   it('passes label filter', async () => {
-    ok([])
+    ok({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { label: 'bug' })
-    expect(args()).toContain('--label')
-    expect(args()).toContain('bug')
+    expect(args().find(arg => String(arg).startsWith('searchQuery='))).toContain('label:"bug"')
   })
 
   it('respects custom page limit', async () => {
-    ok([])
+    ok({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { limit: 200 })
-    expect(args()).toContain('--limit')
-    expect(args()).toContain('200')
+    expect(args()).toContain('limit=100')
   })
 
   it('returns parsed PR array', async () => {
-    const prs = [{ number: 1, title: 'Fix bug' }, { number: 2, title: 'Feature' }]
-    ok(prs)
+    const prs = [
+      { __typename: 'PullRequest', number: 1, title: 'Fix bug', labels: { nodes: [] }, reviewRequests: { nodes: [] }, statusCheckRollup: { nodes: [] }, assignees: { nodes: [] } },
+      { __typename: 'PullRequest', number: 2, title: 'Feature', labels: { nodes: [] }, reviewRequests: { nodes: [] }, statusCheckRollup: { nodes: [] }, assignees: { nodes: [] } },
+    ]
+    ok({ data: { search: { nodes: prs } } })
     const result = await listPRs('owner/repo')
-    expect(result).toEqual(prs)
+    expect(result.map(pr => pr.number)).toEqual([1, 2])
   })
 })
 
@@ -866,7 +860,7 @@ describe('GH_HOST env var support', () => {
   // `gh api`, `gh auth *`, `gh repo *`).
   it('does not prepend --hostname when GH_HOST is set (env inheritance)', async () => {
     process.env.GH_HOST = 'github.example.com'
-    ok([])
+    ok({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo')
     expect(args()).not.toContain('--hostname')
     delete process.env.GH_HOST
@@ -874,7 +868,7 @@ describe('GH_HOST env var support', () => {
 
   it('does not prepend --hostname when GH_HOST is not set', async () => {
     delete process.env.GH_HOST
-    ok([])
+    ok({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo')
     expect(args()).not.toContain('--hostname')
   })
@@ -885,9 +879,10 @@ describe('GH_HOST env var support', () => {
 describe('GHUI_REPO env var fallback', () => {
   it('uses GHUI_REPO when repo arg is omitted', async () => {
     process.env.GHUI_REPO = 'env-owner/env-repo'
-    ok([])
+    ok({ data: { search: { nodes: [] } } })
     await listPRs(null)
-    expect(args()).toContain('env-owner/env-repo')
+    expect(args()).toContain('owner=env-owner')
+    expect(args()).toContain('name=env-repo')
   })
 })
 

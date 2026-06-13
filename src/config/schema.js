@@ -481,16 +481,35 @@ function validateKeymaps(val, warnings) {
       continue
     }
     const cleaned = {}
+    const seen = new Map()
+    const remember = (key) => {
+      const normalized = normalizeKeyForValidation(key)
+      const prior = seen.get(normalized)
+      if (prior && prior !== key) {
+        warnings.push(`[keymaps.${ctx}] duplicate binding "${key}" conflicts with "${prior}" after normalization`)
+      }
+      seen.set(normalized, key)
+      return normalized
+    }
     for (const [key, action] of Object.entries(bindings)) {
       if (typeof action === 'string') {
+        remember(key)
         cleaned[key] = action
       } else if (isPlainObject(action) && PLATFORMS.includes(key)) {
         // Platform sub-section, e.g. [keymaps.pr-list.darwin]. Keep its string bindings;
         // mergePlatformKeymaps() folds it onto the base at load time.
         const sub = {}
+        const platformSeen = new Map()
         for (const [pk, pv] of Object.entries(action)) {
-          if (typeof pv === 'string') sub[pk] = pv
-          else warnings.push(`[keymaps.${ctx}.${key}].${pk} expected string action — ignored`)
+          if (typeof pv === 'string') {
+            const normalized = normalizeKeyForValidation(pk)
+            const prior = platformSeen.get(normalized)
+            if (prior && prior !== pk) {
+              warnings.push(`[keymaps.${ctx}.${key}] duplicate binding "${pk}" conflicts with "${prior}" after normalization`)
+            }
+            platformSeen.set(normalized, pk)
+            sub[pk] = pv
+          } else warnings.push(`[keymaps.${ctx}.${key}].${pk} expected string action — ignored`)
         }
         cleaned[key] = sub
       } else if (key === 'unbind' && isPlainObject(action)) {
@@ -510,7 +529,15 @@ function validateKeymaps(val, warnings) {
 }
 
 function normalizeKeyForValidation(key) {
-  return String(key || '').trim().toLowerCase()
+  const raw = String(key || '').trim()
+  const angle = raw.match(/^<(.+)>$/)
+  const body = (angle ? angle[1] : raw).toLowerCase()
+  if (body === 'return') return 'enter'
+  if (body === 'escape') return 'esc'
+  if (body.startsWith('c-')) return `ctrl+${body.slice(2)}`
+  if (body.startsWith('s-')) return `shift+${body.slice(2)}`
+  if (body.startsWith('m-')) return `meta+${body.slice(2)}`
+  return body
 }
 
 function actionScopeMatchesKeymap(actionScope, keymapScope) {

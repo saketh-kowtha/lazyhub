@@ -191,14 +191,15 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
             <Box key={notif.id} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
               <Text color={typeInfo.color}>{typeInfo.icon} </Text>
               <Text color={t.ui.dim}>{notif.repository?.name} </Text>
-              <Text
-                color={notif.unread ? (isSelected ? t.ui.selected : undefined) : t.ui.muted}
-                wrap="truncate"
-                flexGrow={1}
-                bold={notif.unread}
-              >
-                {sanitize(notif.subject?.title || '')}
-              </Text>
+              <Box flexGrow={1}>
+                <Text
+                  color={notif.unread ? (isSelected ? t.ui.selected : undefined) : t.ui.muted}
+                  wrap="truncate"
+                  bold={notif.unread}
+                >
+                  {sanitize(notif.subject?.title || '')}
+                </Text>
+              </Box>
               <Text color={t.ui.dim}> {notif.reason}</Text>
               <Text color={t.ui.dim}> {format(notif.updatedAt)}</Text>
             </Box>

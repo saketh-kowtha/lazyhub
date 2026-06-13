@@ -495,12 +495,13 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
               backgroundColor={isCursor ? t.ui.headerBg : undefined}>
               <Text color={isCursor ? t.ui.selected : t.ui.muted}>{isCursor ? '▶ ' : '  '}</Text>
               <Text color={color} bold>{icon} </Text>
-              <Text
-                color={isCursor ? t.ui.selected : (file.staged ? t.ui.dim : undefined)}
-                wrap="truncate"
-                flexGrow={1}>
-                {sanitize(file.path)}
-              </Text>
+              <Box flexGrow={1}>
+                <Text
+                  color={isCursor ? t.ui.selected : (file.staged ? t.ui.dim : undefined)}
+                  wrap="truncate">
+                  {sanitize(file.path)}
+                </Text>
+              </Box>
               <Text color={t.ui.dim}>  </Text>
               {file.staged
                 ? <Text color={t.ci.pass}>staged</Text>

@@ -1,0 +1,9 @@
+Ref: k9s breadcrumb; lazygit footer
+Variant 3: overlay-first no-reflow layout
+Tokens: border.default border.focused accent.primary fg.muted fg.subtle
+┌────────────────────────┐
+│ App chrome v3 │
+│ repo/main NORMAL gh ok │
+│ sidebar + work area │
+│ q tab ? : Ctrl+A │
+└────────────────────────┘

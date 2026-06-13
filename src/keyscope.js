@@ -101,7 +101,7 @@ export function useActiveScope() {
  * The handler only fires when this component's scope is the top of the stack.
  *
  * @param {string} scope - Scope name (global/pane/view/overlay/dialog/input)
- * @param {Function} handler - useInput handler (input, key) => void
+ * @param {(input:string, key:object) => void} handler - useInput handler
  * @param {object} [opts]
  * @param {boolean} [opts.active=true] - When false, neither claims scope nor wires handler
  */

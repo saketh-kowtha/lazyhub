@@ -48,9 +48,9 @@ export function useTheme() {
 
 /**
  * Provide reactive theme to the entire app.
- * @param root0
- * @param root0.children
- * @param root0.initialTheme
+ * @param {object} root0
+ * @param {import('react').ReactNode} root0.children
+ * @param {string} [root0.initialTheme]
  */
 export function ThemeProvider({ children, initialTheme }) {
   const [themeName, setThemeName] = useState(initialTheme || 'github-dark')

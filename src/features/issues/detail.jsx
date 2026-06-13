@@ -65,7 +65,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
 
     // Body
     if (issue.body) {
-      rows.push({ id: 'body-hdr', el: <Text key="body-hdr" color={t.ui.muted} bold>Description:</Text> })
+      rows.push({ id: 'body-hdr', el: <Text color={t.ui.muted} bold>Description:</Text> })
       const mdRows = getMarkdownRows(issue.body, termCols - 4, t)
       mdRows.forEach((row, i) => rows.push({ id: `body-${i}`, el: row }))
     }
@@ -175,7 +175,9 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
           {issue.assignees?.length > 0 && (
             <Box gap={1}>
               {issue.assignees.map(a => (
-                <Text key={a.login} color={t.ui.muted}>@{a.login}</Text>
+                <Box key={a.login}>
+                  <Text color={t.ui.muted}>@{a.login}</Text>
+                </Box>
               ))}
             </Box>
           )}

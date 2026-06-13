@@ -94,7 +94,7 @@ export default {
     /** Context (unchanged) line — muted; doesn't compete with add/del. */
     context: '#768390',
 
-    /** Hunk header (@@ -n,m +n,m @@) — subtly distinct from context. */
+    /** Hunk header marker, subtly distinct from context. */
     hunk: '#6cb6ff',
 
     /**

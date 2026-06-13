@@ -169,9 +169,9 @@ function upsertAllowedScalars(text, section, patch, allowed) {
   return next
 }
 
-function parseUserConfig(text, configPath) {
+function parseUserConfig(text, _configPath) {
   if (!text.trim()) return {}
-  return parse(text, { filename: configPath })
+  return parse(text)
 }
 
 /**

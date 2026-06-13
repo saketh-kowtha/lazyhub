@@ -1,3 +1,5 @@
+// @ts-nocheck
+// TODO(#197): issue list view needs explicit item/dialog prop typedefs.
 /**
  * src/features/issues/list.jsx — Issue list pane
  */

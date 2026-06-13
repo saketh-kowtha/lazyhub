@@ -689,6 +689,21 @@ async function runOpenAITurn({ messages, userMessage, repo, ctx, aiConfig, onSta
 // ─── Public turn runner — dispatches by provider ─────────────────────────────
 
 /**
+ * @typedef {object} AssistantResult
+ * @property {string} type
+ * @property {string} text
+ * @property {object} [navigate]
+ * @property {Array} [messages]
+ * @property {object} [usage]
+ * @property {string} [error]
+ * @property {string} [confirmMessage]
+ * @property {string} [toolName]
+ * @property {object} [toolInput]
+ * @property {string} [toolUseId]
+ * @property {boolean} [isDestructive]
+ */
+
+/**
  * Run one user turn through the tool-use loop.
  *
  * @param {object} opts

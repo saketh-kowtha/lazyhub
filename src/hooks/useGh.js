@@ -18,8 +18,8 @@ const DEFAULT_TTL = 30_000 // 30 seconds
  *
  * @param {Function} fetchFn - async function that returns data
  * @param {Array}    deps    - dependency array, used as cache key
- * @param {Object}   options - { ttl: number (ms) }
- * @param options.ttl
+ * @param {Object}   [options] - { ttl: number (ms) }
+ * @param {number}   [options.ttl]
  * @returns {{ data, loading, error, refetch, mutate, isStale }}
  */
 export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {

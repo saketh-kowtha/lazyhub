@@ -89,7 +89,7 @@ export default {
     /** Context (unchanged) line — muted dark gray. */
     context: '#57606a',
 
-    /** Hunk header (@@ -n,m +n,m @@) — blue, distinct from context. */
+    /** Hunk header marker, blue and distinct from context. */
     hunk: '#0969da',
 
     /**

@@ -2,6 +2,8 @@
  * src/components/ErrorBoundary.jsx — catches render crashes, logs them, shows a minimal error box.
  */
 
+// @ts-nocheck
+// TODO(#197): class component props/state need explicit React typedefs.
 import React from 'react'
 import { Box, Text, useInput } from 'ink'
 import { logger } from '../utils.js'

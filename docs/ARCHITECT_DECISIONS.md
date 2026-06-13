@@ -53,9 +53,11 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
 - **Why:** best DX for humans (zero config) and agents (deterministic — agent
   calls `lazyhub --json prs.list`, gets a fast warm response). Idempotent —
   if daemon already running, attach over IPC socket.
-- **Lifecycle:** daemon writes PID to `~/.config/lazyhub/daemon.pid`, listens on
-  unix socket at `~/.config/lazyhub/daemon.sock`. On crash, stale socket is
-  cleaned on next attach attempt.
+- **Lifecycle:** daemon writes PID to `~/.config/lazyhub/daemon.pid`. The daemon
+  uses Node `net` with a platform-conditional endpoint: Unix systems listen on
+  `~/.config/lazyhub/daemon.sock`; Windows listens on a same-user named pipe at
+  `\\.\pipe\lazyhub-<user>`. On crash, stale Unix socket files are cleaned on
+  next attach attempt.
 - **Tracked in:** Phase K #145.
 
 ## Decision 4 — MCP server registration

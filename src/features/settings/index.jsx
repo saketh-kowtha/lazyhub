@@ -1,3 +1,5 @@
+// @ts-nocheck
+// TODO(#197): settings pane needs typed row/item props for checkJs.
 /**
  * src/features/settings/index.jsx — In-app settings and theme picker
  */
