@@ -195,21 +195,29 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
     term.onData(data => { output += data })
 
     await waitForScreen(() => output, /Focus|Pull Requests|PTY harness fixture PR/, 'startup')
+    output = ''
     term.write('2')
     await waitForScreen(() => output, /Pull Requests|PTY harness fixture PR/, 'pane 2 pull requests')
+    output = ''
     term.write('j')
     await waitForScreen(() => output, /PTY harness fixture PR/, 'j navigation')
+    output = ''
     term.write('k')
     await waitForScreen(() => output, /PTY harness fixture PR/, 'k navigation')
+    output = ''
     term.write('\r')
     await waitForScreen(() => output, /Fixture body/, 'Enter detail')
+    output = ''
     term.write('\x1b')
-    await waitForScreen(() => output, /Pull Requests|PTY harness fixture PR/, 'Esc back')
+    await waitForScreen(() => output, /open.*closed.*merged.*scope/, 'Esc back')
+    output = ''
     term.write('?')
     await waitForScreen(() => output, /Keyboard Reference|Global/, 'help overlay')
+    output = ''
     term.write('\x1b')
-    await waitForScreen(() => output, /Pull Requests|PTY harness fixture PR/, 'close help')
+    await waitForScreen(() => output, /open.*closed.*merged.*scope|Pull Requests/, 'close help')
     for (const [key, label] of [['3', 'issues'], ['4', 'branches'], ['5', 'actions']]) {
+      output = ''
       term.write(key)
       await waitForScreen(() => output, /Issues|Branches|Actions|Debug state fixture issue|main|CI/, `pane ${label}`)
     }
