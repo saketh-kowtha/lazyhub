@@ -29,7 +29,7 @@ function endpointHost(baseUrl) {
  * @param {string} baseUrl provider base URL ending at /v1
  * @returns {string} chat completions URL
  */
-export function completionUrl(baseUrl) {
+function completionUrl(baseUrl) {
   return `${String(baseUrl || '').replace(/\/+$/, '')}/chat/completions`
 }
 

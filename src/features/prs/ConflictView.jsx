@@ -19,6 +19,7 @@
 import React, { useState, useEffect, useCallback, useContext, useRef } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
+import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
 import { loadConfig } from '../../config.js'

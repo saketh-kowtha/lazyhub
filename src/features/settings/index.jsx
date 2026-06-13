@@ -20,6 +20,10 @@ const PROVIDER_LABELS = {
   'openai-compatible': 'OpenAI-compatible HTTP',
 }
 
+function themeNameFromConfig(theme) {
+  return typeof theme === 'string' ? theme : theme?.name
+}
+
 export function SettingsPane({ onBack }) {
   const { notifyDialog, setMouseEnabled } = useContext(AppContext)
   const { t, themeName, setTheme } = useTheme()
@@ -36,6 +40,15 @@ export function SettingsPane({ onBack }) {
 
   function aiProviderSummary(ai) {
     const provider = ai.provider || 'anthropic'
+    if (provider === 'openai-compatible') {
+      const openaiCompatible = ai.openai_compatible || ai.openaiCompatible || {}
+      const model = openaiCompatible.model || 'model not set'
+      const baseUrl = openaiCompatible.base_url || 'base URL not set'
+      const endpointHint = baseUrl.startsWith('http')
+        ? baseUrl.replace(/^https?:\/\//, '').split('/')[0]
+        : baseUrl
+      return `${model}  (${endpointHint})`
+    }
     if (provider === 'ollama') {
       const model   = ai.model || 'llama3'
       const baseUrl = ai.openaiBaseUrl || 'http://localhost:11434/v1'
@@ -112,7 +125,7 @@ export function SettingsPane({ onBack }) {
   if (dialog === 'theme') {
     return (
       <ThemePicker
-        current={config.theme || 'github-dark'}
+        current={themeNameFromConfig(config.theme) || 'github-dark'}
         onSelect={(theme) => { updateConfig({ theme }); setDialog(null) }}
         onCancel={() => setDialog(null)}
       />
@@ -170,42 +183,65 @@ export function SettingsPane({ onBack }) {
 const AI_FIELDS_ANTHROPIC = ['provider', 'anthropicApiKey', 'model']
 const AI_FIELDS_OPENAI    = ['provider', 'openaiApiKey', 'openaiBaseUrl', 'model']
 const AI_FIELDS_OLLAMA    = ['provider', 'openaiBaseUrl', 'model']
+const AI_FIELDS_OPENAI_COMPATIBLE = [
+  'provider',
+  'openaiCompatibleBaseUrl',
+  'openaiCompatibleApiKey',
+  'openaiCompatibleModel',
+  'openaiCompatibleTimeoutMs',
+]
 
 const FIELD_LABELS = {
-  provider:        'Provider',
-  anthropicApiKey: 'Anthropic API Key',
-  openaiApiKey:    'API Key',
-  openaiBaseUrl:   'Base URL',
-  model:           'Model',
+  provider:                  'Provider',
+  anthropicApiKey:           'Anthropic API Key',
+  openaiApiKey:              'API Key',
+  openaiBaseUrl:             'Base URL',
+  model:                     'Model',
+  openaiCompatibleBaseUrl:   'Base URL',
+  openaiCompatibleApiKey:    'API Key',
+  openaiCompatibleModel:     'Model',
+  openaiCompatibleTimeoutMs: 'Timeout (ms)',
 }
 
 const FIELD_HINTS_BY_PROVIDER = {
   anthropic: {
-    provider:        'anthropic → Claude  |  openai → OpenAI/Groq/etc.  |  ollama → local Ollama (no key needed)',
+    provider:        'anthropic → Claude  |  openai → OpenAI/Groq/etc.  |  ollama → local Ollama  |  openai-compatible → BYO HTTP',
     anthropicApiKey: 'sk-ant-…  required to use Claude models',
     model:           'leave empty for default (claude-sonnet-4-6)',
   },
   openai: {
-    provider:        'anthropic → Claude  |  openai → OpenAI/Groq/etc.  |  ollama → local Ollama (no key needed)',
+    provider:        'anthropic → Claude  |  openai → OpenAI/Groq/etc.  |  ollama → local Ollama  |  openai-compatible → BYO HTTP',
     openaiApiKey:    'sk-…  API key from your provider',
     openaiBaseUrl:   'https://api.openai.com/v1  or  https://api.groq.com/openai/v1  etc.',
     model:           'leave empty for default (gpt-4o)',
   },
   ollama: {
-    provider:        'anthropic → Claude  |  openai → OpenAI/Groq/etc.  |  ollama → local Ollama (no key needed)',
+    provider:        'anthropic → Claude  |  openai → OpenAI/Groq/etc.  |  ollama → local Ollama  |  openai-compatible → BYO HTTP',
     openaiBaseUrl:   'http://localhost:11434/v1  (Ollama default port)',
     model:           'e.g. llama3, mistral, codellama  (leave empty for llama3)',
+  },
+  'openai-compatible': {
+    provider:                  'anthropic → Claude  |  openai → OpenAI/Groq/etc.  |  ollama → local Ollama  |  openai-compatible → BYO HTTP',
+    openaiCompatibleBaseUrl:   'http://localhost:11434/v1, http://localhost:1234/v1, https://api.groq.com/openai/v1, etc.',
+    openaiCompatibleApiKey:    'optional for local providers; required by hosted providers',
+    openaiCompatibleModel:     'model identifier from the provider catalog',
+    openaiCompatibleTimeoutMs: '60000 by default; increase for slower local models',
   },
 }
 
 function AIProviderEditor({ ai, onSave, onCancel }) {
   const { t } = useTheme()
+  const openaiCompatible = ai.openai_compatible || ai.openaiCompatible || {}
   const [values, setValues] = useState({
-    provider:        ai.provider        || 'anthropic',
-    anthropicApiKey: ai.anthropicApiKey || '',
-    openaiApiKey:    ai.openaiApiKey    || '',
-    openaiBaseUrl:   ai.openaiBaseUrl   || '',
-    model:           ai.model           || '',
+    provider:                  ai.provider        || 'anthropic',
+    anthropicApiKey:           ai.anthropicApiKey || '',
+    openaiApiKey:              ai.openaiApiKey    || '',
+    openaiBaseUrl:             ai.openaiBaseUrl   || '',
+    model:                     ai.model           || '',
+    openaiCompatibleBaseUrl:   openaiCompatible.base_url || '',
+    openaiCompatibleApiKey:    openaiCompatible.api_key || '',
+    openaiCompatibleModel:     openaiCompatible.model || '',
+    openaiCompatibleTimeoutMs: String(openaiCompatible.timeout_ms || ''),
   })
   const [cursor,  setCursor]  = useState(0)
   const [editing, setEditing] = useState(null)
@@ -214,18 +250,20 @@ function AIProviderEditor({ ai, onSave, onCancel }) {
     ? AI_FIELDS_OPENAI
     : values.provider === 'ollama'
       ? AI_FIELDS_OLLAMA
-      : AI_FIELDS_ANTHROPIC
+      : values.provider === 'openai-compatible'
+        ? AI_FIELDS_OPENAI_COMPATIBLE
+        : AI_FIELDS_ANTHROPIC
 
   const hints = FIELD_HINTS_BY_PROVIDER[values.provider] || FIELD_HINTS_BY_PROVIDER.anthropic
 
   function displayValue(field) {
     const v = values[field]
     if (field === 'provider') return PROVIDER_LABELS[v] || v
-    if (field === 'anthropicApiKey' || field === 'openaiApiKey') {
+    if (field === 'anthropicApiKey' || field === 'openaiApiKey' || field === 'openaiCompatibleApiKey') {
       if (!v) return '(not set)'
       return v.slice(0, 4) + '•'.repeat(Math.max(4, v.length - 8)) + v.slice(-4)
     }
-    if (field === 'openaiBaseUrl') {
+    if (field === 'openaiBaseUrl' || field === 'openaiCompatibleBaseUrl') {
       if (!v) {
         return values.provider === 'ollama'
           ? 'http://localhost:11434/v1'
@@ -233,15 +271,30 @@ function AIProviderEditor({ ai, onSave, onCancel }) {
       }
       return v
     }
-    if (field === 'model') {
+    if (field === 'model' || field === 'openaiCompatibleModel') {
       if (!v) {
         if (values.provider === 'ollama')    return 'llama3 (default)'
         if (values.provider === 'openai')    return 'gpt-4o (default)'
+        if (values.provider === 'openai-compatible') return '(required)'
         return 'claude-sonnet-4-6 (default)'
       }
       return v
     }
+    if (field === 'openaiCompatibleTimeoutMs') return v || '60000 (default)'
     return v || '(not set)'
+  }
+
+  function configFromValues(values) {
+    if (values.provider !== 'openai-compatible') return values
+    return {
+      provider: 'openai-compatible',
+      openai_compatible: {
+        base_url:   values.openaiCompatibleBaseUrl,
+        api_key:    values.openaiCompatibleApiKey,
+        model:      values.openaiCompatibleModel,
+        timeout_ms: Number(values.openaiCompatibleTimeoutMs || 60000),
+      },
+    }
   }
 
   useKeymapInput((input, key) => {
@@ -260,13 +313,13 @@ function AIProviderEditor({ ai, onSave, onCancel }) {
       }
       return
     }
-    if ((key.ctrl && input === 'g') || input === 's') { onSave(values); return }
+    if ((key.ctrl && input === 'g') || input === 's') { onSave(configFromValues(values)); return }
     if (input === 'j' || key.downArrow) { setCursor(c => (c + 1) % fields.length); return }
     if (input === 'k' || key.upArrow)   { setCursor(c => (c - 1 + fields.length) % fields.length); return }
   })
 
   if (editing) {
-    const isKey = editing === 'anthropicApiKey' || editing === 'openaiApiKey'
+    const isKey = editing === 'anthropicApiKey' || editing === 'openaiApiKey' || editing === 'openaiCompatibleApiKey'
     return (
       <FieldEditor
         label={FIELD_LABELS[editing]}

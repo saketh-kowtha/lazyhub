@@ -7,5 +7,34 @@
     "src/ai/providers/_base.js"
   ],
   "project": ["src/**/*.{js,jsx}", "bin/*.js"],
-  "ignoreBinaries": ["sleep", "gh", "which"]
+  "ignoreBinaries": [
+    "gh",
+    "which",
+    // Runtime clipboard command on macOS, invoked by src/ui/actions.js.
+    "pbcopy",
+    // Runtime clipboard command on Linux/X11, invoked by src/ui/actions.js.
+    "xclip",
+    // Runtime clipboard command on Linux/X11, invoked by src/ui/actions.js.
+    "xsel"
+  ],
+  "ignoreIssues": {
+    // Provider catalog metadata is read dynamically from namespace imports.
+    "src/ai/providers/codex.js": ["exports"],
+    // Provider catalog metadata is read dynamically from namespace imports.
+    "src/ai/providers/gemini-cli.js": ["exports"],
+    // Provider catalog metadata is read dynamically from namespace imports.
+    "src/ai/providers/openai-compatible.js": ["exports"],
+    // Toaster hook is retained for the polish/error-formatting work in #129.
+    "src/components/Toaster.jsx": ["exports"],
+    // Action metadata helpers are reserved for the keymap registry work in #132.
+    "src/config/actions.js": ["exports"],
+    // Config context/useConfig remain public config-layer API from #130/#132.
+    "src/config/index.js": ["exports"],
+    // useKeymap is the centerpiece of the keymap registry work in #132.
+    "src/config/keymap.js": ["exports"],
+    // Scope constants/useScopedInput are reserved for keymap/scope integration in #132.
+    "src/keyscope.js": ["exports"],
+    // Token taxonomy is retained for theme/high-contrast work in #129.
+    "src/theme/tokens.js": ["exports"]
+  }
 }

@@ -11,7 +11,7 @@ import { USER_CONFIG_PATH } from './loader.js'
 import { writeConfig } from './writer.js'
 import { isPlainObject } from './schema.js'
 
-export const LEGACY_STATE_PATH = join(homedir(), '.config', 'lazyhub', 'state.json')
+const LEGACY_STATE_PATH = join(homedir(), '.config', 'lazyhub', 'state.json')
 
 function readTomlState(configPath) {
   if (!existsSync(configPath)) return undefined

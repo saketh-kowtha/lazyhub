@@ -14,7 +14,7 @@
   "plugins": ["react-hooks", "jsdoc"],
   "rules": {
     "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
-    "no-undef": "off",
+    "no-undef": "error",
     "no-constant-condition": "error",
     "no-duplicate-case": "error",
     "no-unreachable": "error",

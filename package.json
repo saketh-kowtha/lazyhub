@@ -58,7 +58,6 @@
     "timeago.js": "^4.0.2"
   },
   "devDependencies": {
-    "@google/generative-ai": "^0.24.1",
     "@vitejs/plugin-react": "^6.0.2",
     "@vitest/coverage-v8": "^3.2.6",
     "esbuild": "^0.28.1",

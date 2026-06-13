@@ -696,13 +696,13 @@ async function runOpenAITurn({ messages, userMessage, repo, ctx, aiConfig, onSta
  * @param {string} opts.userMessage  - New user text
  * @param {string} opts.repo         - owner/repo
  * @param {object} opts.ctx          - { repo, pane, selectedItem }
- * @param {object} opts.aiConfig     - From config.ai: { provider, model, anthropicApiKey, openaiApiKey, openaiBaseUrl }
+ * @param {object} opts.aiConfig     - From config.ai
  * @param {Function} [opts.onStatus] - Called with a status string during tool execution
  * @returns {Promise<AssistantResult>}
  */
 export async function runAssistantTurn({ messages, userMessage, repo, ctx, aiConfig, onStatus }) {
   const provider = aiConfig?.provider || 'anthropic'
-  if (provider === 'openai' || provider === 'ollama') {
+  if (provider === 'openai' || provider === 'ollama' || provider === 'openai-compatible') {
     // For ollama: use openai-compatible adapter with its baseUrl; no key needed
     const cfg = provider === 'ollama'
       ? {
@@ -711,6 +711,14 @@ export async function runAssistantTurn({ messages, userMessage, repo, ctx, aiCon
           openaiBaseUrl: aiConfig?.openaiBaseUrl || 'http://localhost:11434/v1',
           model:         aiConfig?.model         || 'llama3',
         }
+      : provider === 'openai-compatible'
+        ? {
+            ...aiConfig,
+            provider:      'openai',
+            openaiApiKey:  (aiConfig?.openai_compatible || aiConfig?.openaiCompatible)?.api_key,
+            openaiBaseUrl: (aiConfig?.openai_compatible || aiConfig?.openaiCompatible)?.base_url,
+            model:         (aiConfig?.openai_compatible || aiConfig?.openaiCompatible)?.model,
+          }
       : aiConfig
     return runOpenAITurn({ messages, userMessage, repo, ctx, aiConfig: cfg, onStatus })
   }

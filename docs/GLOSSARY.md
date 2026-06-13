@@ -180,7 +180,7 @@ Alphabetical. Cross-references in **bold**.
 
 ## U
 
-**useConfig() / useTheme() / useRecent()** — Custom React hooks. `useConfig` exposes merged TOML config; `useTheme` exposes resolved tokens for the active scheme; `useRecent` persists last-N visited items per type.
+**useConfig() / useTheme()** — Custom React hooks. `useConfig` exposes merged TOML config; `useTheme` exposes resolved tokens for the active scheme.
 
 **Unified mode (TUI)** — Render mode for the diff view that shows added/removed lines in a single column (as opposed to side-by-side). Auto-selected on narrow terminals.
 
