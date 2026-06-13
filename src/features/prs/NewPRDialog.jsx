@@ -12,6 +12,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
+import { useKeyScope } from '../../keyscope.js'
 import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'

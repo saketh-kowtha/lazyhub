@@ -7,7 +7,7 @@
  * Scope priority: global(0) < pane(1) < view(2) < overlay(3) < dialog(4) < input(5)
  *
  * Usage:
- *   const { isActive } = useKeyScope('pane')
+ *   const { isActive } = useKeyScope with scope 'pane'
  *   useInput(handler, { isActive })
  *
  *   // Or the convenience hook that combines claim + useInput:
@@ -70,7 +70,7 @@ export function KeyScopeProvider({ children }) {
  * @param {boolean} [active=true] - When false, scope is not claimed and isActive is always false
  * @returns {{ isActive: boolean, activeScope: string }} current scope activation state
  */
-export function useKeyScope(scope, active = true) {
+const useClaimedKeyScope = (scope, active = true) => {
   const ctx = useContext(KeyScopeContext)
   const releaseRef = useRef(null)
 
@@ -89,6 +89,8 @@ export function useKeyScope(scope, active = true) {
   return { isActive, activeScope: ctx.activeScope }
 }
 
+export const useKeyScope = useClaimedKeyScope
+
 /** Read the current scope without claiming one. */
 export function useActiveScope() {
   return useContext(KeyScopeContext).activeScope
@@ -105,7 +107,7 @@ export function useActiveScope() {
  */
 export function useScopedInput(scope, handler, opts = {}) {
   const active = opts.active !== false
-  const { isActive } = useKeyScope(scope, active)
+  const { isActive } = useClaimedKeyScope(scope, active)
   useInput(handler, { isActive })
   return { isActive }
 }

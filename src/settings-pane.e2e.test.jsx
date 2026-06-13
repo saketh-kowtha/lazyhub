@@ -5,6 +5,7 @@ import { SettingsPane } from './features/settings/index.jsx'
 import { renderWithProviders, flush, cleanup } from './test/test-helpers.jsx'
 
 const saveConfig = vi.hoisted(() => vi.fn())
+const loadConfigMock = vi.hoisted(() => vi.fn())
 const inputHandlers = vi.hoisted(() => new Set())
 
 vi.mock('ink', async () => {
@@ -25,7 +26,13 @@ vi.mock('ink', async () => {
 })
 
 vi.mock('./config.js', () => ({
-  loadConfig: () => ({
+  loadConfig: loadConfigMock,
+  saveConfig,
+  BUILTIN_PANES: ['prs', 'issues', 'branches', 'actions', 'notifications'],
+}))
+
+function baseConfig(overrides = {}) {
+  return {
     theme: 'github-dark',
     mouse: false,
     aiReviewEnabled: true,
@@ -33,14 +40,14 @@ vi.mock('./config.js', () => ({
     customPanes: {},
     pr: { pageSize: 50 },
     ai: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
-  }),
-  saveConfig,
-  BUILTIN_PANES: ['prs', 'issues', 'branches', 'actions', 'notifications'],
-}))
+    ...overrides,
+  }
+}
 
 describe('Settings pane user flows', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    loadConfigMock.mockReturnValue(baseConfig())
   })
 
   afterEach(() => {
@@ -101,5 +108,105 @@ describe('Settings pane user flows', () => {
     await flush(140)
     expect(view.lastFrame()).toContain('Theme:')
     expect(view.lastFrame()).toContain('github-light')
+  })
+
+  it('marks an object-shaped theme config as current in the picker', async () => {
+    loadConfigMock.mockReturnValue(baseConfig({ theme: { name: 'tokyo-night', overrides: {} } }))
+
+    const view = renderWithProviders(
+      <>
+        <SettingsPane onBack={() => {}} />
+        <InputDriver events={[
+          { key: { return: true } },
+          { wait: 40 },
+        ]} />
+      </>
+    )
+
+    await flush(80)
+    expect(view.lastFrame()).toContain('▶ tokyo-night')
+    expect(view.lastFrame()).toContain('(current)')
+  })
+
+  it('edits openai-compatible provider settings with nested TOML keys', async () => {
+    loadConfigMock.mockReturnValue(baseConfig({
+      ai: {
+        provider: 'openai-compatible',
+        openai_compatible: {
+          base_url: 'http://localhost:1234/v1',
+          api_key: 'local-key',
+          model: 'qwen2.5-coder:32b',
+          timeout_ms: 60000,
+        },
+      },
+    }))
+
+    const view = renderWithProviders(
+      <>
+        <SettingsPane onBack={() => {}} />
+        <InputDriver events={[
+          { input: 'j' },
+          { input: 'j' },
+          { input: 'j' },
+          { input: 'j' },
+          { input: 'j' },
+          { key: { return: true } },
+          { wait: 40 },
+        ]} />
+      </>
+    )
+
+    await flush(120)
+    expect(view.lastFrame()).toContain('OpenAI-compatible HTTP')
+    expect(view.lastFrame()).toContain('Base URL:')
+    expect(view.lastFrame()).toContain('http://localhost:1234/v1')
+    expect(view.lastFrame()).toContain('API Key:')
+    expect(view.lastFrame()).toContain('Model:')
+    expect(view.lastFrame()).toContain('qwen2.5-coder:32b')
+    expect(view.lastFrame()).toContain('Timeout (ms):')
+  })
+
+  it('saves openai-compatible provider settings back to the nested config shape', async () => {
+    loadConfigMock.mockReturnValue(baseConfig({
+      ai: {
+        provider: 'openai-compatible',
+        openai_compatible: {
+          base_url: 'http://localhost:1234/v1',
+          api_key: 'local-key',
+          model: 'qwen2.5-coder:32b',
+          timeout_ms: 60000,
+        },
+      },
+    }))
+
+    renderWithProviders(
+      <>
+        <SettingsPane onBack={() => {}} />
+        <InputDriver events={[
+          { input: 'j' },
+          { input: 'j' },
+          { input: 'j' },
+          { input: 'j' },
+          { input: 'j' },
+          { key: { return: true } },
+          { wait: 40 },
+          { input: 's' },
+          { wait: 40 },
+        ]} />
+      </>
+    )
+
+    await flush(140)
+    expect(saveConfig).toHaveBeenCalledWith(expect.objectContaining({
+      ai: {
+        provider: 'openai-compatible',
+        openai_compatible: {
+          base_url: 'http://localhost:1234/v1',
+          api_key: 'local-key',
+          model: 'qwen2.5-coder:32b',
+          timeout_ms: 60000,
+        },
+      },
+    }))
   })
 })

@@ -60,16 +60,4 @@ export async function waitForExpectation(assertion, {
   throw lastError
 }
 
-export function pressEnter(stdin) {
-  stdin.write('\r')
-}
-
-export function pressEscape(stdin) {
-  stdin.write('\u001B')
-}
-
-export function pressLeft(stdin) {
-  stdin.write('\u001B[D')
-}
-
 export { cleanup }

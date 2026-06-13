@@ -38,9 +38,9 @@ import {
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url))
 const DEFAULT_CONFIG_TOML_PATH = join(MODULE_DIR, 'defaultConfig.toml')
 
-export const CONFIG_DIR = join(homedir(), '.config', 'lazyhub')
+const CONFIG_DIR = join(homedir(), '.config', 'lazyhub')
 export const USER_CONFIG_PATH = join(CONFIG_DIR, 'lazyhub.toml')
-export const CACHE_PATH = join(CONFIG_DIR, '.config-cache.toml')
+const CACHE_PATH = join(CONFIG_DIR, '.config-cache.toml')
 
 const REMOTE_TIMEOUT_MS = 5000
 // Cap remote config size. A config file is tiny; this stops a malicious or

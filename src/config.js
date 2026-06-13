@@ -9,12 +9,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
-import { ConfigContext, ConfigProvider, useConfig } from './config/index.js'
 import { loadConfig as loadTomlConfig, USER_CONFIG_PATH } from './config/loader.js'
 import { DEFAULT_CONFIG } from './config/schema.js'
 import { readState as readTomlState, writeConfig as writeTomlConfig, writeState as writeTomlState } from './config/writer.js'
-
-export { ConfigContext, ConfigProvider, useConfig }
 
 export const BUILTIN_PANES = ['prs', 'issues', 'branches', 'actions', 'notifications']
 export const CONFIG_PATH = USER_CONFIG_PATH
@@ -36,7 +33,7 @@ function camelAi(ai = {}) {
     anthropicApiKey: ai.anthropic_api_key || process.env.ANTHROPIC_API_KEY || '',
     openaiApiKey:    ai.openai_api_key || process.env.OPENAI_API_KEY || '',
     openaiBaseUrl:   ai.openai_base_url || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-    openaiCompatible: ai.openai_compatible || {},
+    openai_compatible: ai.openai_compatible || {},
   }
 }
 
@@ -174,7 +171,7 @@ function patchToToml(patch) {
       anthropic_api_key: patch.ai.anthropicApiKey,
       openai_api_key:    patch.ai.openaiApiKey,
       openai_base_url:   patch.ai.openaiBaseUrl,
-      openai_compatible: patch.ai.openaiCompatible,
+      openai_compatible: patch.ai.openai_compatible || patch.ai.openaiCompatible,
     }
   }
   return out

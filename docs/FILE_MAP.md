@@ -108,7 +108,6 @@
 | `src/components/dialogs/OptionPicker.jsx` | single-select option picker with virtual scrolling. Props: options ([{value, label, description?}]), onSubmit(value), onCancel(), title?, promptText? |
 | `src/components/ErrorBoundary.jsx` | catches render crashes, logs them, shows a minimal error box. |
 | `src/components/FooterKeys.jsx` | footer key hint bar. Keys shape: { key, label, group? } When group numbers present, renders groups separated by ┊ (U+250A). Falls back to plain │ separators when no groups defined. |
-| `src/components/Monogram.jsx` | [XX] author initial badge with hash-based color. Props: login (string) |
 | `src/components/Sidebar.jsx` | Navigation sidebar for switching between feature views. |
 | `src/components/Skeleton.jsx` | animated placeholder loaders for every list/detail pane. Each exported component mirrors the exact column layout of its real counterpart so the UI doesn't shift when data arrives. Animation: a single 700ms interval per skeleton component pulses all bars between ░ and ▒ — one setInterval total, not one per bar. |
 | `src/components/Spinner.jsx` | animated braille spinner for loading states |
@@ -123,7 +122,6 @@
 | `src/hooks/useGh.js` | React hook that wraps executor calls with loading/error/data state and an in-memory TTL cache. |
 | `src/hooks/useLayout.js` | responsive layout breakpoints based on terminal dimensions. Config overrides always win over breakpoint defaults. |
 | `src/hooks/usePaneState.js` | preserve list/pane view state across navigation. State is stored in a Map on AppContext (via paneStateRef). Survives PRList unmount (back-nav from detail/diff). Cleared on explicit pane-switch (Tab, number key) by the App. Usage: const [state, setState] = usePaneState('prs', { cursor: 0, scrollOffset: 0, filterState: 'open', ... }) |
-| `src/hooks/useRecent.js` | persist recently viewed items to ~/.config/lazyhub/recent.json Max 10 entries per type. Entries: { type: 'pr'|'issue', repo, number, title, updatedAt } |
 | `src/hooks/useVirtualList.js` | safe for repos with tens of thousands of items. Usage: const { cursor, scrollOffset, visibleItems, moveCursor, jumpTop, jumpBottom } = useVirtualList({ items, height }) // In JSX: visibleItems.map((item, i) => { const isSelected = scrollOffset + i === cursor ... }) |
 
 ## Configuration & Context

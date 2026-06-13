@@ -8,7 +8,7 @@ import { homedir } from 'os'
 import { parse } from 'smol-toml'
 import { validateConfig, mergeConfig, DEFAULT_CONFIG } from '../../config/schema.js'
 
-export const USER_CONFIG_PATH = join(homedir(), '.config', 'lazyhub', 'lazyhub.toml')
+const USER_CONFIG_PATH = join(homedir(), '.config', 'lazyhub', 'lazyhub.toml')
 
 function formatError(err, source) {
   const where = typeof err.line === 'number' ? ` (line ${err.line}, column ${err.column})` : ''

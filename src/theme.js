@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useState, useMemo, useCallback } from 'react'
 import { join, isAbsolute } from 'path'
 import { homedir } from 'os'
+import { existsSync, readFileSync } from 'fs'
 
 import githubDark      from './themes/github-dark.js'
 import githubLight     from './themes/github-light.js'
