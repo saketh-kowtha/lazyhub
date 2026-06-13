@@ -37,7 +37,16 @@ import { useTheme } from '../../theme/index.js'
 import { sanitize } from '../../utils.js'
 import { PRListSkeleton } from '../../components/Skeleton.jsx'
 import { Popover } from '../../ui/Popover.jsx'
-import { schemeToT, canToggleAutoMergeFromList, PRDetailPopoverContentMemo, PRRow, POPOVER_WIDTH, POPOVER_HEIGHT } from './list-row.jsx'
+import {
+  schemeToT,
+  canToggleAutoMergeFromList,
+  MERGE_OPTIONS,
+  PRDetailPopoverContentMemo,
+  PRRow,
+  PR_ROW_FIXED_COLS,
+  POPOVER_WIDTH,
+  POPOVER_HEIGHT,
+} from './list-row.jsx'
 import { LabelDialog, AssigneeDialog, AuthorSearchDialog, ReviewerDialog } from './list-dialogs.jsx'
 
 const _appConfig = loadConfig()

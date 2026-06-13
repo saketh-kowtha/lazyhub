@@ -99,7 +99,7 @@ function ReviewBadge({ pr, t }) {
 }
 
 // Fixed columns: paddingX(2) + cursor(1) + badge(2) + num(7) + review(2) + CI_max(8) + author(13) + age(5) = 40; +4 buffer
-const PR_ROW_FIXED_COLS = 44
+export const PR_ROW_FIXED_COLS = 44
 
 // ─── Expanded detail shown below selected PR ─────────────────────────────────
 
@@ -183,7 +183,7 @@ export const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded }) => {
   )
 })
 
-const MERGE_OPTIONS = [
+export const MERGE_OPTIONS = [
   { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
   { value: 'squash', label: '--squash', description: 'Squash all commits into one' },
   { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
