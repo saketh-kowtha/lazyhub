@@ -9,6 +9,20 @@ if (process.argv.includes('--debug-state')) {
   process.exit(0)
 }
 
+if (process.argv[2] === 'perf' && process.argv[3] === 'report') {
+  const { readPerfReport } = await import('../src/perf.js')
+  const rows = readPerfReport()
+  if (rows.length === 0) {
+    process.stdout.write('No perf data found. Run with LAZYHUB_PERF=1 first.\n')
+    process.exit(0)
+  }
+  process.stdout.write('op\tcount\tp50\tp95\tmax\n')
+  for (const row of rows) {
+    process.stdout.write(`${row.op}\t${row.count}\t${row.p50.toFixed(1)}\t${row.p95.toFixed(1)}\t${row.max.toFixed(1)}\n`)
+  }
+  process.exit(0)
+}
+
 // MCP server mode: lazyhub --mcp
 // Speaks Model Context Protocol over stdio so AI assistants can query/act on GitHub data.
 if (process.argv.includes('--mcp')) {
@@ -26,11 +40,13 @@ if (process.argv[2] === 'doctor') {
 }
 
 const { bootstrap } = await import('../src/bootstrap.js')
+const { installCrashHandlers } = await import('../src/crash.js')
 const { renderApp } = await import('../src/app.jsx')
 const { loadConfig } = await import('../src/config.js')
 const { startIPC } = await import('../src/ipc.js')
 
 const cfg = loadConfig()
+installCrashHandlers()
 
 // Start IPC server for IDE integrations (unless disabled in config)
 if (cfg.ipc?.enabled !== false) {

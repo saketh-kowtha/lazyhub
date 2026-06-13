@@ -35,7 +35,7 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
   const { stdout } = useStdout()
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
-  const { data: notifications, loading, error, refetch } = useGh(listNotifications, [])
+  const { data: notifications, loading, error, refetch, isStale } = useGh(listNotifications, [])
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
@@ -46,8 +46,8 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
   const items = notifications || []
 
   useEffect(() => {
-    if (onPaneState) onPaneState({ loading, error, count: items.length })
-  }, [loading, error, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
+  }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     notifyDialog(!!dialog)

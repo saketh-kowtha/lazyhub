@@ -30,14 +30,19 @@ lazyhub is built on a decoupled, reactive architecture using **React** and **Ink
 ```mermaid
 graph TD
     User([User Input]) --> UI[React / Ink TUI]
-    UI --> Hook[useGh Hook / 30s TTL Cache]
+    UI --> Hook[useGh Hook / SWR Disk Cache]
     UI --> Context[AppContext / State Management]
-    Hook --> Executor[executor.js / gh CLI Wrapper]
+    Hook --> Executor[executor.js Barrel / gh Chokepoint]
     Hook --> AI[ai.js / Anthropic Claude API]
     Executor --> GH[GitHub CLI / GraphQL & REST]
     AI --> Claude[Claude 3.5 Sonnet]
     GH --> API[GitHub API]
 ```
+
+Operational notes:
+- Warm panes render from `~/.cache/lazyhub/data/` immediately, then refresh in the background.
+- `LAZYHUB_PERF=1 lazyhub` records local perf data; `lazyhub perf report` prints p50/p95/max by operation.
+- Fatal crashes restore the terminal and point users at `lazyhub --debug-state`.
 
 ---
 

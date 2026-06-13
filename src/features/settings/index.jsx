@@ -2,7 +2,7 @@
  * src/features/settings/index.jsx — In-app settings and theme picker
  */
 
-import React, { useState, useContext } from 'react'
+import React, { useState, useContext, useRef } from 'react'
 import { Box, Text } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { THEME_NAMES, useTheme } from '../../theme.js'
@@ -29,6 +29,7 @@ export function SettingsPane({ onBack }) {
   const { t, themeName, setTheme } = useTheme()
   const [config, setConfig] = useState(() => loadConfig())
   const [cursor, setCursor] = useState(0)
+  const cursorRef = useRef(0)
   const [dialog, setDialog] = useState(null)
 
   React.useEffect(() => {
@@ -101,10 +102,32 @@ export function SettingsPane({ onBack }) {
   useKeymapInput((input, key) => {
     if (dialog) return
     if (key.escape || input === 'q') { onBack(); return }
-    if (input === 'j' || key.downArrow) { setCursor(c => (c + 1) % OPTIONS.length); return }
-    if (input === 'k' || key.upArrow)   { setCursor(c => (c - 1 + OPTIONS.length) % OPTIONS.length); return }
+    if (input === 'j' || key.downArrow) {
+      cursorRef.current = (cursorRef.current + 1) % OPTIONS.length
+      setCursor(cursorRef.current)
+      return
+    }
+    if (input === 'k' || key.upArrow) {
+      cursorRef.current = (cursorRef.current - 1 + OPTIONS.length) % OPTIONS.length
+      setCursor(cursorRef.current)
+      return
+    }
+    const activeCursor = cursorRef.current
+    if (input === 's' && OPTIONS[activeCursor]?.id === 'aiProvider' && ai.provider === 'openai-compatible') {
+      const openaiCompatible = ai.openai_compatible || ai.openaiCompatible || {}
+      updateAI({
+        provider: 'openai-compatible',
+        openai_compatible: {
+          base_url:   openaiCompatible.base_url || '',
+          api_key:    openaiCompatible.api_key || '',
+          model:      openaiCompatible.model || '',
+          timeout_ms: Number(openaiCompatible.timeout_ms || 60000),
+        },
+      })
+      return
+    }
     if (key.return) {
-      const id = OPTIONS[cursor].id
+      const id = OPTIONS[activeCursor].id
       // Toggles are applied directly from the key handler instead of via a
       // "dialog" re-entry; that avoided calling setState during render.
       if (id === 'mouse') {

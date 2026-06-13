@@ -44,7 +44,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
   const { stdout } = useStdout()
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
-  const { data: branches, loading, error, refetch } = useGh(listBranches, [repo])
+  const { data: branches, loading, error, refetch, isStale } = useGh(listBranches, [repo])
   const { data: prs } = useGh(listPRs, [repo, { state: 'open', limit: 100 }], { ttl: 120_000 })
   const [currentBranch, setCurrentBranch] = useState(null)
 
@@ -66,8 +66,8 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
   const items = branches || []
 
   useEffect(() => {
-    if (onPaneState) onPaneState({ loading, error, count: items.length })
-  }, [loading, error, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
+  }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     notifyDialog(!!dialog)

@@ -257,6 +257,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   const [statusMsg, setStatusMsg] = useState(null)
   const [baseInput, setBaseInput] = useState('')
   const [checkCursor, setCheckCursor] = useState(null) // null = checks mode off, number = active
+  const checkCursorRef = useRef(null)
   const [checkLogLines, setCheckLogLines] = useState([])
   const [checkLogLoading, setCheckLogLoading] = useState(false)
   const lastKeyRef   = useRef(null)
@@ -366,26 +367,35 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
     if (dialog) return
 
     // ── Checks navigation mode ─────────────────────────────────────────────
-    if (checkCursor !== null) {
-      if (key.escape) { setCheckCursor(null); return }
+    const activeCheckCursor = checkCursor ?? checkCursorRef.current
+    if (activeCheckCursor !== null) {
+      if (key.escape) { checkCursorRef.current = null; setCheckCursor(null); return }
       if (input === 'j' || key.downArrow) {
-        setCheckCursor(c => Math.min(allChecksForNav.length - 1, c + 1))
+        setCheckCursor(c => {
+          const next = Math.min(allChecksForNav.length - 1, c + 1)
+          checkCursorRef.current = next
+          return next
+        })
         return
       }
       if (input === 'k' || key.upArrow) {
-        setCheckCursor(c => Math.max(0, c - 1))
+        setCheckCursor(c => {
+          const next = Math.max(0, c - 1)
+          checkCursorRef.current = next
+          return next
+        })
         return
       }
-      if ((key.return || input === 'o') && allChecksForNav[checkCursor]) {
-        openCheckInBrowser(allChecksForNav[checkCursor])
+      if ((key.return || input === 'o') && allChecksForNav[activeCheckCursor]) {
+        openCheckInBrowser(allChecksForNav[activeCheckCursor])
         return
       }
-      if (input === 'l' && allChecksForNav[checkCursor]) {
-        openCheckLogs(allChecksForNav[checkCursor])
+      if (input === 'l' && allChecksForNav[activeCheckCursor]) {
+        openCheckLogs(allChecksForNav[activeCheckCursor])
         return
       }
-      if (input === 'R' && allChecksForNav[checkCursor]?.id) {
-        const c = allChecksForNav[checkCursor]
+      if (input === 'R' && allChecksForNav[activeCheckCursor]?.id) {
+        const c = allChecksForNav[activeCheckCursor]
         rerunCheckRun(repo, c.id)
           .then(() => showStatus(`↺ Re-run triggered for ${c.name}`))
           .catch(err => showStatus(`✗ Re-run failed: ${err.message}`, true))
@@ -438,6 +448,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
       // Start at first failing check, or 0
       const firstFailing = allChecksForNav.findIndex(c => /failure|error/i.test(c.conclusion || c.status || c.state || ''))
       const startIdx = firstFailing >= 0 ? firstFailing : 0
+      checkCursorRef.current = startIdx
       setCheckCursor(startIdx)
       // Scroll to checks section
       const checksRow = filteredRows.findIndex(r => r.id === 'checks-hdr')

@@ -51,7 +51,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
   const [branchFilter, setBranchFilter] = useState(initialBranch)
-  const { data: runs, loading, error, refetch } = useGh(listRuns, [repo, branchFilter ? { branch: branchFilter } : {}])
+  const { data: runs, loading, error, refetch, isStale } = useGh(listRuns, [repo, branchFilter ? { branch: branchFilter } : {}])
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null) // null | 'logs' | 'cancel'
@@ -64,8 +64,8 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
   const items = runs || []
 
   useEffect(() => {
-    if (onPaneState) onPaneState({ loading, error, count: items.length })
-  }, [loading, error, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
+  }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     notifyDialog(!!dialog)
