@@ -185,11 +185,11 @@ If a build or test or script doesn't run cleanly to completion, the work is not 
 
 If the spec says "implement X," ship the real thing or open a follow-up issue explaining what's missing. Do not ship a function that returns a hardcoded value, a UI that renders placeholder text, or a config layer that doesn't actually read the config — and then claim the issue is done.
 
-### 8. Mockup-first for UI (added 2026-06-10)
+### 8. Spec-first for UI (added 2026-06-10)
 
-No UI change without a committed ASCII mockup it implements (`docs/mockups/`).
-If asked to "improve the design" with no mockup, produce 2–3 mockup variants for
-the maintainer to choose from — do not freestyle visual design in code.
+No UI change without a concrete visual spec or golden snapshot it implements.
+If asked to "improve the design" with no spec, propose 2–3 variants for the
+maintainer to choose from — do not freestyle visual design in code.
 
 ### 9. Repro-first for bugs (added 2026-06-10)
 

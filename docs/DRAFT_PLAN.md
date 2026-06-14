@@ -39,20 +39,19 @@ DESIGN_REVAMP.md exists but specifies tokens, not screens.
 
 **Fix — change the design workflow, not the model:**
 
-1. **Mockup-first rule.** No UI PR without an ASCII mockup committed first to
-   `docs/mockups/<screen>.txt` — exact box-drawing chars, column widths at 80/120/160
-   cols, every glyph, every color token annotated. The LLM's job becomes
-   "match the mockup byte-for-byte", which it is excellent at.
+1. **Spec-first rule.** No UI PR without a concrete visual spec or golden snapshot
+   committed first. The LLM's job becomes "match the reviewed frame", which it is
+   excellent at.
 2. **Steal deliberately.** Build a reference sheet (`docs/DESIGN_REFERENCES.md`) with
    screenshots of the best-looking TUIs: lazygit (layout density), k9s (header/crumbs),
    atac/posting (Charm-style chrome), gh-dash (PR table), superfile (modern borders).
-   Every mockup must cite which reference it borrows from. Original design is not a goal;
+   Every spec must cite which reference it borrows from. Original design is not a goal;
    *coherent borrowed design* is.
 3. **Snapshot the pixels.** Add render-to-string snapshot tests per screen
    (ink-testing-library output committed as `.snap` golden files). Design regressions
    become test failures. This also stops LLMs from "improving" a screen nobody asked about.
-4. **One design pass, by a human eye.** Maintainer picks the mockups (10 minutes per
-   screen choosing between 2–3 ASCII variants the LLM generates). The human chooses,
+4. **One design pass, by a human eye.** Maintainer picks the direction (10 minutes per
+   screen choosing between 2–3 variants the LLM generates). The human chooses,
    the LLM renders. This is the missing step — taste cannot be delegated.
 5. **Quick wins that read as "designed":** consistent 1-cell padding everywhere, one
    border style (rounded) app-wide, a real header bar with repo/context breadcrumb,
@@ -252,14 +251,14 @@ every advertised key works in every pane.
 **Exit criteria:** keystroke feedback <33ms; warm pane switch <100ms perceived;
 maintainer agrees it feels faster than the browser for the core loop.
 
-### Phase 3 — Design revamp (mockup-first)
-1. #201 DESIGN_REFERENCES.md + per-screen ASCII mockups; maintainer picks variants.
-2. #202 golden render snapshots per screen (the enforcement layer for mockup-first).
+### Phase 3 — Design revamp (spec-first)
+1. #201 DESIGN_REFERENCES.md + per-screen design variants; maintainer picks direction.
+2. #202 golden render snapshots per screen (the enforcement layer for spec-first).
 3. Implement screen-by-screen against the snapshots: PR list → PR detail → diff
    (#127) → issues → header/footer chrome (#129 hint bars, NO_COLOR, high-contrast).
 4. #126 onboarding tour; #128 embedded mode/drafts.
 
-**Exit criteria:** every screen matches a committed mockup; maintainer is satisfied
+**Exit criteria:** every screen matches a committed snapshot/spec; maintainer is satisfied
 looking at each screen for the first time in weeks.
 
 ### Phase 4 — Differentiate (the wedge)
@@ -426,11 +425,11 @@ failure mode of this plan. The maintainer's job in months 1–2 is to say "not y
 
 ## Part 7 — New operating rules for LLM sessions (proposed ARCHITECT_DECISIONS additions)
 
-1. **Mockup-first:** no UI change without a committed ASCII mockup it implements.
+1. **Spec-first:** no UI change without a concrete visual spec or golden snapshot.
 2. **Repro-first:** no bug fix without a failing test that reproduces it first.
 3. **Verified-by-running:** every feature PR body includes the exact manual steps run.
 4. **Snapshot gate:** screens have golden snapshots; intentional changes update them
-   in the same PR with the mockup.
+   in the same PR as the implementation.
 5. **Perf budget:** PRs may not regress keypress→render latency (perf trace in CI on
    the PTY harness, threshold-gated).
 6. **Right-size the model:** cross-file state bugs are never delegated to Haiku.

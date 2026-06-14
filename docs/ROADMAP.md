@@ -64,13 +64,13 @@ Plus: daily dogfood sessions file bugs; every fix follows repro-first
 | **#200** | one GraphQL call for PR list + N+1 audit |
 | **#145** | daemon, K-lite slice only: cache + background refresh (see re-scope comment; Windows transport decision first) |
 
-## Phase 3 — Design (exit: every screen matches a committed mockup the maintainer picked)
+## Phase 3 — Design (exit: every screen matches a committed snapshot/spec the maintainer picked)
 
 | # | Title |
 |---|---|
-| **#201** | DESIGN_REFERENCES.md + per-screen mockup variants (docs only — human picks; do first) |
+| **#201** | DESIGN_REFERENCES.md + per-screen design variants (docs only — human picks; do first) |
 | **#202** | golden render snapshots per screen |
-| **#127** | diff view redesign (implements its chosen mockup) |
+| **#127** | diff view redesign (implements its chosen direction) |
 | **#129** | polish: hint bars, error formatter, loading states, NO_COLOR, high-contrast |
 | **#128** | embedded mode + drafts persistence |
 | **#126** | onboarding tour |

@@ -4,8 +4,8 @@
  * Update intentionally with:
  *   npx vitest run src/screens.snapshot.test.jsx -u
  *
- * Rule: snapshot updates ship in the same PR as the mockup/implementation they
- * represent, so frame diffs are reviewed as product changes.
+ * Rule: snapshot updates ship in the same PR as the implementation they represent,
+ * so frame diffs are reviewed as product changes.
  */
 
 import React from 'react'

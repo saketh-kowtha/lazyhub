@@ -1,9 +1,0 @@
-Ref: Charm modal; k9s help
-Variant 1: table-first dense layout
-Tokens: border.default border.focused accent.primary fg.muted fg.subtle
-┌──────────────────────────────────────┐
-│ Help overlay v1 │
-│ j/k nav r refresh │
-│ a approve m merge │
-│ : palette ? help │
-└──────────────────────────────────────┘
