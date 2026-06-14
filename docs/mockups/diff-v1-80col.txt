@@ -1,9 +1,0 @@
-Ref: lazygit file rail; k9s header
-Variant 1: table-first dense layout
-Tokens: border.default border.focused accent.primary fg.muted fg.subtle
-┌────────────────────────┐
-│ Diff view v1 │
-│ M src/executor/prs.js │
-│ - old subprocess path │
-│ + GraphQL rollup path │
-└────────────────────────┘

@@ -1,9 +1,0 @@
-Ref: k9s breadcrumb; lazygit footer
-Variant 2: breadcrumb-first compact layout
-Tokens: border.default border.focused accent.primary fg.muted fg.subtle
-┌────────────────────────┐
-│ App chrome v2 │
-│ repo/main NORMAL gh ok │
-│ sidebar + work area │
-│ q tab ? : Ctrl+A │
-└────────────────────────┘
