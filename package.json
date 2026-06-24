@@ -60,7 +60,7 @@
     "timeago.js": "^4.0.2"
   },
   "devDependencies": {
-    "@types/node": "^25.9.3",
+    "@types/node": "^26.0.1",
     "@vitejs/plugin-react": "^6.0.2",
     "@vitest/coverage-v8": "^3.2.6",
     "esbuild": "^0.28.1",
