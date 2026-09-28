@@ -32,10 +32,11 @@ import { logAiUsage } from './usage.js'
  * @param {string} [opts.apiKey]   - Ignored (kept for backward compat); provider reads ANTHROPIC_API_KEY
  * @param {string} [opts.model]    - Model override
  * @param {number} [opts.timeoutMs] - Timeout override for CLI providers
+ * @param {object|string} [opts.authorHint] - Optional PR author hint for cross-model review routing
  * @returns {Promise<{ summary: string, suggestions: Array }>}
  */
-export async function getAICodeReview({ diff, prTitle, prBody, apiKey: _apiKey, model, timeoutMs }) {
-  const provider = await selectProvider()
+export async function getAICodeReview({ diff, prTitle, prBody, apiKey: _apiKey, model, timeoutMs, authorHint }) {
+  const { provider, secondOpinion } = await selectProvider({ authorHint })
 
   const system = SYSTEM_PROMPT
   const user   = buildUserPrompt({ diff, prTitle, prBody })
@@ -65,7 +66,9 @@ export async function getAICodeReview({ diff, prTitle, prBody, apiKey: _apiKey, 
     })
   }
 
-  return parseReviewResponse(result.text)
+  const parsed = parseReviewResponse(result.text)
+  if (secondOpinion) parsed.secondOpinion = secondOpinion
+  return parsed
 }
 
 // ── listProviders ─────────────────────────────────────────────────────────────

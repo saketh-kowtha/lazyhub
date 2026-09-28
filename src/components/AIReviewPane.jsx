@@ -46,6 +46,7 @@ export function AIReviewPane({
   onClose,        // () → void
   postStatus,     // string | null
   onOpenEditor,   // (initialText) → string — open $EDITOR, return edited text
+  provenance,
 }) {
   useKeyScope('overlay')
   const { t } = useTheme()
@@ -163,6 +164,14 @@ export function AIReviewPane({
         {summary ? (
           <Box marginBottom={1}>
             <Text color={t.ui.fg} wrap="wrap">{summary}</Text>
+          </Box>
+        ) : null}
+
+        {provenance ? (
+          <Box marginBottom={1}>
+            <Text color={provenance.fallback ? t.ci.pending : t.ui.muted}>
+              second opinion: reviewed by {provenance.selected} for {provenance.authorFamily}{provenance.fallback ? ' author (fallback)' : ' author'}
+            </Text>
           </Box>
         ) : null}
 

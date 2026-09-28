@@ -25,6 +25,13 @@ import { loadConfig } from '../config/loader.js'
 // CLI logged in get zero-config behaviour.
 
 const PROVIDERS = [claudeCode, codex, geminiCli, anthropicApi, openaiCompatible]
+const PROVIDER_FAMILY = {
+  'claude-code': 'claude',
+  'anthropic-api': 'claude',
+  codex: 'codex',
+  'gemini-cli': 'gemini',
+  'openai-compatible': 'openai',
+}
 
 /**
  * @type {Array<{provider: object, result: {available: boolean, version?: string, reason?: string}}>|null}
@@ -36,6 +43,65 @@ let _detectionCache = null
  */
 export function clearDetectionCache() {
   _detectionCache = null
+}
+
+/**
+ * Infer an AI/coding-agent family from a PR author hint.
+ *
+ * @param {object|string} authorHint
+ * @returns {string|null}
+ */
+export function detectAuthorFamily(authorHint) {
+  const login = String(authorHint?.login || authorHint || '').toLowerCase()
+  if (!login) return null
+  if (login.includes('copilot')) return 'copilot'
+  if (login.startsWith('claude') || login.includes('anthropic')) return 'claude'
+  if (login.startsWith('codex') || login.includes('openai')) return 'codex'
+  if (login.startsWith('gemini') || login.includes('google-labs')) return 'gemini'
+  return null
+}
+
+/**
+ * Return the model family for a provider module.
+ *
+ * @param {object} provider
+ * @returns {string|null}
+ */
+function familyForProvider(provider) {
+  return PROVIDER_FAMILY[provider?.id] || provider?.id || null
+}
+
+async function selectMappedSecondOpinion(config, authorFamily, fallbackProvider) {
+  const secondOpinion = config.ai?.second_opinion || {}
+  if (secondOpinion.enabled === false || !authorFamily) return { provider: fallbackProvider, secondOpinion: null }
+  const mappedId = secondOpinion.map?.[authorFamily]
+  const allResults = await detectAll()
+  const mapped = mappedId ? allResults.find(({ provider }) => provider.id === mappedId) : null
+  const differentAvailable = allResults.find(({ provider, result }) =>
+    result.available &&
+    provider.id !== 'openai-compatible' &&
+    familyForProvider(provider) !== authorFamily
+  )
+  const picked = mapped?.result?.available ? mapped : differentAvailable
+  if (!picked) {
+    return {
+      provider: fallbackProvider,
+      secondOpinion: {
+        authorFamily,
+        selected: fallbackProvider.id,
+        fallback: true,
+        note: 'second opinion fallback: no different configured provider available',
+      },
+    }
+  }
+  return {
+    provider: picked.provider,
+    secondOpinion: {
+      authorFamily,
+      selected: picked.provider.id,
+      fallback: false,
+    },
+  }
 }
 
 /**
@@ -64,11 +130,14 @@ async function detectAll() {
  * Honour LAZYHUB_AI_PROVIDER env override first.
  * Otherwise iterate the priority list and return the first available.
  *
+ * @param {object} [root0]
+ * @param {object|string} [root0.authorHint]
  * @returns {Promise<object>} The selected provider module
  */
-export async function selectProvider() {
+export async function selectProvider({ authorHint } = {}) {
   const envOverride = process.env.LAZYHUB_AI_PROVIDER
-  const configOverride = loadConfig().defaults?.ai_provider === 'openai-compatible' ? 'openai-compatible' : null
+  const config = loadConfig()
+  const configOverride = config.defaults?.ai_provider === 'openai-compatible' ? 'openai-compatible' : null
   const forced = envOverride || configOverride
   if (forced) {
     const p = PROVIDERS.find(p => p.id === forced)
@@ -85,7 +154,7 @@ export async function selectProvider() {
         { code: 'provider-unavailable', provider: forced }
       )
     }
-    return p
+    return { provider: p, secondOpinion: null }
   }
 
   const allResults = await detectAll()
@@ -97,7 +166,7 @@ export async function selectProvider() {
     )
   }
 
-  return winner.provider
+  return selectMappedSecondOpinion(config, detectAuthorFamily(authorHint), winner.provider)
 }
 
 /**

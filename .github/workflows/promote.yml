@@ -1,0 +1,134 @@
+name: Promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to promote, without the leading v'
+        required: true
+        type: string
+      confirm_version:
+        description: 'Type the same version again to confirm promotion'
+        required: true
+        type: string
+
+jobs:
+  promote:
+    name: Promote npm next to latest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      - name: Confirm version input
+        run: |
+          if [ "${{ inputs.version }}" != "${{ inputs.confirm_version }}" ]; then
+            echo "::error::version and confirm_version must match"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build promotion smoke artifact
+        run: npm run build
+
+      - name: Verify live gh smoke path
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr list --repo saketh-kowtha/lazyhub --limit 1 --json number,title
+
+      - name: Verify package is on next
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          NEXT="$(npm view lazyhub dist-tags.next)"
+          if [ "$NEXT" != "$VERSION" ]; then
+            echo "::error::lazyhub@$VERSION is not the current next tag (next=$NEXT)"
+            exit 1
+          fi
+
+      - name: Promote npm dist-tag
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: npm dist-tag add "lazyhub@${VERSION}" latest
+
+      - name: Compute tarball SHA256 for Homebrew
+        id: sha
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          URL="https://registry.npmjs.org/lazyhub/-/lazyhub-${VERSION}.tgz"
+
+          echo "Waiting for tarball ${VERSION} on npm CDN..."
+          for i in $(seq 1 18); do
+            STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$URL")
+            [ "$STATUS" = "200" ] && break
+            echo "  attempt $i/18: HTTP $STATUS - retrying in 10s"
+            sleep 10
+          done
+
+          SHA=$(curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors "$URL" | sha256sum | awk '{print $1}')
+          echo "sha=${SHA}"        >> "$GITHUB_OUTPUT"
+          echo "url=${URL}"        >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Check TAP_TOKEN presence
+        id: check_tap
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [ -n "$TAP_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::TAP_TOKEN not set - skipping Homebrew formula push"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push Homebrew formula
+        if: steps.check_tap.outputs.present == 'true'
+        uses: actions/github-script@v9
+        env:
+          VERSION: ${{ steps.sha.outputs.version }}
+          SHA256:  ${{ steps.sha.outputs.sha }}
+          URL:     ${{ steps.sha.outputs.url }}
+        with:
+          github-token: ${{ secrets.TAP_TOKEN }}
+          script: |
+            const { VERSION, SHA256, URL } = process.env
+            const formula = `class Lazyhub < Formula
+              desc "Lazygit-style GitHub TUI - keyboard-driven terminal UI for GitHub"
+              homepage "https://github.com/saketh-kowtha/lazyhub"
+              url "${URL}"
+              sha256 "${SHA256}"
+              version "${VERSION}"
+              license "MIT"
+              depends_on "node"
+              def install
+                system "npm", "install", *Language::Node.std_npm_install_args(libexec)
+                bin.install_symlink Dir["#{libexec}/bin/*"]
+              end
+              test do
+                assert_match "lazyhub", shell_output("#{bin}/lazyhub --version 2>&1", 1)
+              end
+            end`
+            const owner = 'saketh-kowtha', repo = 'homebrew-tap', path = 'Formula/lazyhub.rb'
+            let sha
+            try {
+              const { data } = await github.rest.repos.getContent({ owner, repo, path })
+              sha = data.sha
+            } catch (err) { if (err.status !== 404) throw err }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path,
+              message: `lazyhub ${VERSION}`,
+              content: Buffer.from(formula).toString('base64'),
+              sha,
+            })

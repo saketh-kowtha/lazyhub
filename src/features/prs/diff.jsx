@@ -1012,6 +1012,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         diff:     diffText || '',
         prTitle:  sanitize(prMeta?.title || `PR #${prNumber}`),
         prBody:   sanitize((prMeta?.body || '').slice(0, 500)),
+        authorHint: prMeta?.author?.login,
       })
         .then(result => { setAiReview(result) })
         .catch(err => {
@@ -1302,6 +1303,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         <AIReviewPane
           suggestions={aiReview.suggestions}
           summary={aiReview.summary}
+          provenance={aiReview.secondOpinion}
           onJumpTo={handleAiJumpTo}
           onPost={handleAiPost}
           onClose={() => { setAiReview(null); setAiReviewError(null); setAiPostStatus(null) }}

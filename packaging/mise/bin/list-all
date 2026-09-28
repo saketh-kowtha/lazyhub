@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+npm view lazyhub versions --json | node -e "let s=''; process.stdin.on('data', d => s += d); process.stdin.on('end', () => JSON.parse(s).forEach(v => console.log(v)))"

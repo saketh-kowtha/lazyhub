@@ -124,3 +124,30 @@ jobs:
 
       - name: PTY E2E
         run: npm run test:pty
+
+  windows-smoke:
+    name: Windows smoke
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (lockfile-free)
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify CLI starts
+        shell: pwsh
+        run: |
+          node dist/lazyhub.js --version
+          node dist/lazyhub.js status --format json

@@ -241,6 +241,8 @@ instead of needing conversation history.
 |---|---|---|
 | `ARCHITECT_DECISIONS.md` (this file) | Locked cross-cutting decisions | Every fresh session |
 | `ARCHITECTURE.md` | High-level codebase architecture | Onboarding to the codebase; before any cross-cutting refactor |
+| `CONTRACT.md` | Current machine-facing CLI and MCP contract | Changing JSON, MCP, or agent-facing behavior |
+| `COMPATIBILITY.md` | Stability promises and deprecation policy | Renaming/removing commands, config keys, or schemas |
 | `GLOSSARY.md` | Authoritative definitions for every domain term | Whenever an unfamiliar term appears |
 | `FILE_MAP.md` | Concept → owning files crosswalk | Before greping; answers "where is X?" |
 | `DESIGN_REVAMP.md` | Visual design system, theme tokens, screen layouts | Any UI / theme issue |

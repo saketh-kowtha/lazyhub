@@ -3,7 +3,8 @@ name: Release
 # Releases are 100% tag-driven. To cut a release:
 #   1. On main with a clean tree:  npm version patch  (or minor / major)
 #   2. git push && git push --tags
-# That's it. This workflow handles the rest.
+# This publishes to the npm "next" dist-tag. Promote to "latest" separately
+# with promote.yml after the soak window.
 
 on:
   push:
@@ -42,26 +43,7 @@ jobs:
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
-
-      - name: Compute tarball SHA256 for Homebrew
-        id: sha
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          URL="https://registry.npmjs.org/lazyhub/-/lazyhub-${VERSION}.tgz"
-
-          echo "Waiting for tarball ${VERSION} on npm CDN..."
-          for i in $(seq 1 18); do
-            STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$URL")
-            [ "$STATUS" = "200" ] && break
-            echo "  attempt $i/18: HTTP $STATUS — retrying in 10s"
-            sleep 10
-          done
-
-          SHA=$(curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors "$URL" | sha256sum | awk '{print $1}')
-          echo "sha=${SHA}"        >> "$GITHUB_OUTPUT"
-          echo "url=${URL}"        >> "$GITHUB_OUTPUT"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+        run: npm publish --access public --tag next
 
       - name: Create GitHub Release
         env:
@@ -70,56 +52,4 @@ jobs:
           gh release create "${GITHUB_REF#refs/tags/}" \
             --title "${GITHUB_REF#refs/tags/}" \
             --generate-notes \
-            --latest
-
-      - name: Check TAP_TOKEN presence
-        id: check_tap
-        env:
-          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
-        run: |
-          if [ -n "$TAP_TOKEN" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::TAP_TOKEN not set — skipping Homebrew formula push"
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Push Homebrew formula
-        if: steps.check_tap.outputs.present == 'true'
-        uses: actions/github-script@v9
-        env:
-          VERSION: ${{ steps.sha.outputs.version }}
-          SHA256:  ${{ steps.sha.outputs.sha }}
-          URL:     ${{ steps.sha.outputs.url }}
-        with:
-          github-token: ${{ secrets.TAP_TOKEN }}
-          script: |
-            const { VERSION, SHA256, URL } = process.env
-            const formula = `class Lazyhub < Formula
-              desc "Lazygit-style GitHub TUI — keyboard-driven terminal UI for GitHub"
-              homepage "https://github.com/saketh-kowtha/lazyhub"
-              url "${URL}"
-              sha256 "${SHA256}"
-              version "${VERSION}"
-              license "MIT"
-              depends_on "node"
-              def install
-                system "npm", "install", *Language::Node.std_npm_install_args(libexec)
-                bin.install_symlink Dir["#{libexec}/bin/*"]
-              end
-              test do
-                assert_match "lazyhub", shell_output("#{bin}/lazyhub --version 2>&1", 1)
-              end
-            end`
-            const owner = 'saketh-kowtha', repo = 'homebrew-tap', path = 'Formula/lazyhub.rb'
-            let sha
-            try {
-              const { data } = await github.rest.repos.getContent({ owner, repo, path })
-              sha = data.sha
-            } catch (err) { if (err.status !== 404) throw err }
-            await github.rest.repos.createOrUpdateFileContents({
-              owner, repo, path,
-              message: `lazyhub ${VERSION}`,
-              content: Buffer.from(formula).toString('base64'),
-              sha,
-            })
+            --prerelease

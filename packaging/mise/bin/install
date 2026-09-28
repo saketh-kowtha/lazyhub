@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+version="${ASDF_INSTALL_VERSION:-${MISE_INSTALL_VERSION:-}}"
+install_path="${ASDF_INSTALL_PATH:-${MISE_INSTALL_PATH:-}}"
+
+if [ -z "$version" ] || [ -z "$install_path" ]; then
+  echo "missing ASDF/MISE install environment" >&2
+  exit 1
+fi
+
+if [ "$version" = "latest" ]; then
+  version="$(npm view lazyhub dist-tags.latest)"
+fi
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+curl -fsSL "https://registry.npmjs.org/lazyhub/-/lazyhub-${version}.tgz" -o "$tmp/lazyhub.tgz"
+mkdir -p "$install_path"
+tar -xzf "$tmp/lazyhub.tgz" -C "$tmp"
+cp -R "$tmp/package/." "$install_path/"
+
+(
+  cd "$install_path"
+  npm install --omit=dev --no-audit --no-fund
+)
+
+mkdir -p "$install_path/bin"
+ln -sf "$install_path/dist/lazyhub.js" "$install_path/bin/lazyhub"

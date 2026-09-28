@@ -1,0 +1,26 @@
+{
+  "version": "26.6.2",
+  "description": "Lazygit-style GitHub TUI for pull requests, issues, actions, and notifications.",
+  "homepage": "https://github.com/saketh-kowtha/lazyhub",
+  "license": "MIT",
+  "depends": [
+    "nodejs",
+    "gh"
+  ],
+  "url": "https://registry.npmjs.org/lazyhub/-/lazyhub-26.6.2.tgz",
+  "hash": "sha256:4dd586c45ac0b6279ec575882bf4a8bb9fcbe0569b8480605425cf944391a09f",
+  "extract_dir": "package",
+  "bin": [
+    [
+      "dist\\lazyhub.js",
+      "lazyhub"
+    ]
+  ],
+  "checkver": {
+    "url": "https://registry.npmjs.org/lazyhub/latest",
+    "jsonpath": "$.version"
+  },
+  "autoupdate": {
+    "url": "https://registry.npmjs.org/lazyhub/-/lazyhub-$version.tgz"
+  }
+}
