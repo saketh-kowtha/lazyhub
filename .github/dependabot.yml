@@ -6,6 +6,16 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     versioning-strategy: increase
+    groups:
+      compatible-dev-tooling:
+        patterns:
+          - vite
+          - knip
+          - '@types/node'
+          - eslint-plugin-jsdoc
+        update-types:
+          - minor
+          - patch
     # Security alerts open separately and are auto-opened by GitHub regardless.
     ignore:
       # Block dev-tooling major bumps that have broken us before. Each of these
