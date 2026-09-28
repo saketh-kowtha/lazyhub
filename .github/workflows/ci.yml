@@ -140,7 +140,7 @@ jobs:
 
       - name: Install dependencies (lockfile-free)
         run: |
-          rm -f package-lock.json
+          Remove-Item package-lock.json -Force
           npm install --no-audit --no-fund
 
       - name: Build
