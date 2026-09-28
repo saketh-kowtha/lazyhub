@@ -1,0 +1,9 @@
+PackageIdentifier: saketh-kowtha.lazyhub
+PackageVersion: 26.6.2
+PackageLocale: en-US
+Publisher: Saketh Kowtha
+PackageName: lazyhub
+License: MIT
+ShortDescription: Keyboard-driven terminal UI for GitHub.
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

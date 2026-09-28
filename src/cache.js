@@ -7,7 +7,7 @@ import { createHash } from 'crypto'
 import { homedir } from 'os'
 import { join } from 'path'
 
-const CACHE_DIR = process.env.LAZYHUB_CACHE_DIR || join(homedir(), '.cache', 'lazyhub', 'data')
+export const CACHE_DIR = process.env.LAZYHUB_CACHE_DIR || join(homedir(), '.cache', 'lazyhub', 'data')
 const MAX_BYTES = 50 * 1024 * 1024
 
 /**
@@ -35,6 +35,27 @@ export function readCache(key) {
   } catch {
     return null
   }
+}
+
+/**
+ * Read every well-formed cache entry from disk.
+ * Corrupt entries are ignored so lightweight CLI callers can stay best-effort.
+ */
+export function listCacheEntries() {
+  if (!existsSync(CACHE_DIR)) return []
+  const entries = []
+  for (const file of readdirSync(CACHE_DIR)) {
+    if (!file.endsWith('.json')) continue
+    try {
+      const raw = readFileSync(join(CACHE_DIR, file), 'utf8')
+      const parsed = JSON.parse(raw)
+      if (!parsed || typeof parsed.ts !== 'number' || !Object.prototype.hasOwnProperty.call(parsed, 'payload')) continue
+      entries.push({ key: file.slice(0, -'.json'.length), ...parsed })
+    } catch {
+      // Ignore corrupt cache entries; the normal TUI refresh path will replace them.
+    }
+  }
+  return entries
 }
 
 /**

@@ -1,3 +1,10 @@
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  const { readFileSync } = await import('fs')
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  process.stdout.write(`${pkg.version}\n`)
+  process.exit(0)
+}
+
 if (process.argv.includes('--mouse')) {
   process.env.LAZYHUB_MOUSE = '1'
 }
@@ -38,6 +45,11 @@ if (process.argv[2] === 'doctor') {
 if (process.argv[2] === 'serve') {
   const { runServe } = await import('../src/cli/serve.js')
   process.exit(await runServe(process.argv.slice(3)))
+}
+
+if (process.argv[2] === 'status') {
+  const { runStatus } = await import('../src/cli/status.js')
+  process.exit(await runStatus(process.argv.slice(3)))
 }
 
 if (process.argv[2] === 'mcp-server') {

@@ -1,0 +1,11 @@
+PackageIdentifier: saketh-kowtha.lazyhub
+PackageVersion: 26.6.2
+InstallerType: portable
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://registry.npmjs.org/lazyhub/-/lazyhub-26.6.2.tgz
+    InstallerSha256: 4DD586C45AC0B6279EC575882BF4A8BB9FCBE0569B8480605425CF944391A09F
+    Commands:
+      - lazyhub
+ManifestType: installer
+ManifestVersion: 1.6.0

@@ -859,6 +859,15 @@ api_key    = ""
 model      = "qwen2.5-coder:32b"
 timeout_ms = 60000
 
+[ai.second_opinion]
+enabled = true
+
+[ai.second_opinion.map]
+copilot = "anthropic-api"
+claude  = "codex"
+codex   = "anthropic-api"
+gemini  = "anthropic-api"
+
 [ai.budget]
 monthly_usd_cap  = 0     # 0 = unlimited
 per_call_usd_cap = 0     # 0 = unlimited

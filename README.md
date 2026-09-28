@@ -43,6 +43,7 @@ Operational notes:
 - Warm panes render from `~/.cache/lazyhub/data/` immediately, then refresh in the background.
 - `LAZYHUB_PERF=1 lazyhub` records local perf data; `lazyhub perf report` prints p50/p95/max by operation.
 - Fatal crashes restore the terminal and point users at `lazyhub --debug-state`.
+- Machine-facing contracts are documented in [`docs/CONTRACT.md`](./docs/CONTRACT.md) and [`docs/COMPATIBILITY.md`](./docs/COMPATIBILITY.md).
 
 ---
 
@@ -72,6 +73,15 @@ Need a view for your team's specific deployments or Gists? Define a custom pane 
 
 ## 📦 Installation
 
+| Channel | Command | Status |
+| --- | --- | --- |
+| npm | `npm install -g lazyhub` | Published |
+| Homebrew | `brew install saketh-kowtha/tap/lazyhub` | Published after npm `latest` promotion |
+| Scoop | `scoop install ./packaging/scoop/lazyhub.json` | Manifest prepared; bucket submission pending |
+| winget | See `packaging/winget/README.md` | Manifest prepared; winget-pkgs PR is manual |
+| Nix | `nix run github:saketh-kowtha/lazyhub` | Flake prepared; hash must be refreshed per release |
+| mise/asdf | `mise plugin install lazyhub ./packaging/mise` | Plugin seed prepared |
+
 ### via Homebrew (Recommended)
 ```bash
 brew install saketh-kowtha/tap/lazyhub
@@ -81,6 +91,16 @@ brew install saketh-kowtha/tap/lazyhub
 ```bash
 npm install -g lazyhub
 ```
+
+### Ambient status
+```bash
+lazyhub status --format tmux
+lazyhub status --format starship
+lazyhub status --format json
+```
+
+`status` reads only the local SWR cache, so it is safe for tmux and starship
+segments. Open the app once to seed the cache.
 
 ---
 

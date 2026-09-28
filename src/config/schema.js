@@ -253,6 +253,15 @@ export const DEFAULT_CONFIG = {
       model: 'qwen2.5-coder:32b',
       timeout_ms: 60000,
     },
+    second_opinion: {
+      enabled: true,
+      map: {
+        copilot: 'anthropic-api',
+        claude: 'codex',
+        codex: 'anthropic-api',
+        gemini: 'anthropic-api',
+      },
+    },
     budget: {
       monthly_usd_cap: 0,
       per_call_usd_cap: 0,
@@ -425,6 +434,11 @@ const OPENAI_COMPATIBLE_SPEC = {
   api_key:    { type: 'string' },
   model:      { type: 'string', validate: (v) => (v.trim() ? null : 'must not be empty') },
   timeout_ms: { type: 'integer', validate: (v) => (v > 0 ? null : 'must be positive') },
+}
+
+const SECOND_OPINION_SPEC = {
+  enabled: { type: 'boolean' },
+  map:     { type: 'object' },
 }
 
 // ─── Section validators with bespoke shapes ─────────────────────────────────────
@@ -719,6 +733,20 @@ function validateAi(val, warnings) {
     } else if (k === 'openai_compatible') {
       const cfg = validateFlat(v, OPENAI_COMPATIBLE_SPEC, warnings, 'ai.openai_compatible')
       if (cfg !== undefined) out.openai_compatible = cfg
+    } else if (k === 'second_opinion') {
+      const cfg = validateFlat(v, SECOND_OPINION_SPEC, warnings, 'ai.second_opinion')
+      if (cfg?.map) {
+        const cleaned = {}
+        for (const [family, providerId] of Object.entries(cfg.map)) {
+          if (typeof providerId === 'string' && ['claude-code', 'codex', 'gemini-cli', 'anthropic-api', 'openai-compatible'].includes(providerId)) {
+            cleaned[family] = providerId
+          } else {
+            warnings.push(`[ai.second_opinion.map].${family} expected known provider id — ignored`)
+          }
+        }
+        cfg.map = cleaned
+      }
+      if (cfg !== undefined) out.second_opinion = cfg
     } else if (AI_SPEC[k]) {
       const partial = validateFlat({ [k]: v }, { [k]: AI_SPEC[k] }, warnings, 'ai')
       if (partial !== undefined && k in partial) out[k] = partial[k]
