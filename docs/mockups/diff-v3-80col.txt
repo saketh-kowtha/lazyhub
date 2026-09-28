@@ -1,9 +1,0 @@
-Ref: lazygit file rail; k9s header
-Variant 3: overlay-first no-reflow layout
-Tokens: border.default border.focused accent.primary fg.muted fg.subtle
-┌────────────────────────┐
-│ Diff view v3 │
-│ M src/executor/prs.js │
-│ - old subprocess path │
-│ + GraphQL rollup path │
-└────────────────────────┘

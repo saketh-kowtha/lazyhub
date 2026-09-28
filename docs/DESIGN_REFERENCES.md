@@ -6,7 +6,7 @@
 - Keep 1-cell horizontal padding inside bordered panes.
 - Use `accent.primary` in no more than three places per screen: active pane, focused row, primary action.
 - Dim inactive panes with `fg.subtle`; do not hide them unless the viewport forces collapse.
-- Use tokens from `src/theme/tokens.js` only; mockup annotations use token paths such as `border.default`.
+- Use tokens from `src/theme/tokens.js` only; design annotations use token paths such as `border.default`.
 
 ## lazygit
 
