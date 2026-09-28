@@ -33,7 +33,7 @@ import { logAiUsage } from './usage.js'
  * @param {string} [opts.model]    - Model override
  * @param {number} [opts.timeoutMs] - Timeout override for CLI providers
  * @param {object|string} [opts.authorHint] - Optional PR author hint for cross-model review routing
- * @returns {Promise<{ summary: string, suggestions: Array }>}
+ * @returns {Promise<{ summary: string, suggestions: Array, secondOpinion?: { authorFamily: string, selected: string, fallback: boolean, note?: string } }>}
  */
 export async function getAICodeReview({ diff, prTitle, prBody, apiKey: _apiKey, model, timeoutMs, authorHint }) {
   const { provider, secondOpinion } = await selectProvider({ authorHint })
@@ -67,8 +67,7 @@ export async function getAICodeReview({ diff, prTitle, prBody, apiKey: _apiKey, 
   }
 
   const parsed = parseReviewResponse(result.text)
-  if (secondOpinion) parsed.secondOpinion = secondOpinion
-  return parsed
+  return { ...parsed, secondOpinion: secondOpinion || undefined }
 }
 
 // ── listProviders ─────────────────────────────────────────────────────────────
