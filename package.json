@@ -50,7 +50,7 @@
     "url": "https://github.com/saketh-kowtha/lazyhub/issues"
   },
   "dependencies": {
-    "chalk": "^5.3.0",
+    "chalk": "^6.0.0",
     "execa": "^9.6.1",
     "highlight.js": "^11.9.0",
     "ink": "^4.4.1",
