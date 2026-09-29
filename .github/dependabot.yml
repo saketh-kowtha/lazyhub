@@ -27,26 +27,42 @@ updates:
 
       # React 19 broke ink@4 reconciler. Tied to ink majors.
       - dependency-name: react
-        update-types: [version-update:semver-major]
+        update-types: ['version-update:semver-major']
       - dependency-name: '@types/react'
-        update-types: [version-update:semver-major]
+        update-types: ['version-update:semver-major']
       - dependency-name: ink
-        update-types: [version-update:semver-major]
+        update-types: ['version-update:semver-major']
       # ESLint 9+ requires migrating from .eslintrc.json to flat config (eslint.config.js).
       # That migration needs careful vetting of plugin compatibility. Pin to ESLint 8.x for now.
       - dependency-name: eslint
-        update-types: [version-update:semver-major]
+        update-types: ['version-update:semver-major']
       # eslint-plugin-jsdoc and eslint-plugin-react-hooks major bumps may require
       # ESLint 9+ as a peer dep, so hold them at majors compatible with ESLint 8.
       - dependency-name: eslint-plugin-jsdoc
-        update-types: [version-update:semver-major]
+        update-types: ['version-update:semver-major']
       - dependency-name: eslint-plugin-react-hooks
-        update-types: [version-update:semver-major]
+        update-types: ['version-update:semver-major']
 
       # Vitest 4 switched to rolldown which has cross-platform lockfile issues
       # (https://github.com/npm/cli/issues/4828). Locking to 3.x.
       - dependency-name: vitest
-        update-types: [version-update:semver-major]
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@vitest/coverage-v8'
+        update-types: ['version-update:semver-major']
+
+      # TypeScript 7 changes JS/JSDoc inference enough to produce broad
+      # typecheck failures. Upgrade only through a dedicated migration.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+
+      # Chalk 6 requires Node 22 while lazyhub supports Node 20.
+      - dependency-name: chalk
+        update-types: ['version-update:semver-major']
+
+      # Execa owns the subprocess boundary. Major upgrades require a focused
+      # migration across every spawn callsite and platform test.
+      - dependency-name: execa
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /
