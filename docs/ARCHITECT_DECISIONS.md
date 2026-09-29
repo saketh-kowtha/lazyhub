@@ -1,4 +1,4 @@
-# Architect Decisions — Locked for V1
+# Architecture Decisions
 
 > Single source of truth for cross-cutting decisions that affect multiple issues.
 > If an issue body conflicts with this doc, **this doc wins** unless the issue body
@@ -6,6 +6,117 @@
 >
 > **Fresh session checklist:** read this file, then the issue body, then any other
 > doc the issue body links to. That triad is your full context.
+
+## Agent Gateway decisions (2026-09-28)
+
+These decisions supersede older issue comments and Decisions 3-7 wherever they
+conflict. Alpha targets solo maintainers and pilot repositories. Slice 1 is
+watch-only observation plus immediate safety and release hardening. Slice 2
+records an exact approval and updates `lazyhub/approval`; Lazyhub does not
+execute merges in Alpha.
+
+### D1 — GitHub-enforced approval check
+
+Every pull request targeting an enrolled protected branch requires a check named
+`lazyhub/approval`, with the expected source pinned to the user's Lazyhub GitHub
+App integration. There is no human-authored-PR exemption: author/agent
+classification is audit metadata only.
+
+The check binds repository and PR node IDs, head SHA, observed base SHA, request
+ID, policy/evidence versions, expiry, and nonce. Missing approval and stale,
+expired, or revoked approval are non-passing; never use `neutral` or `skipped`
+for denial. A changed head always needs a new approval.
+
+The checks-only credential helper is the only component that can turn this
+check green. Alpha does not yet have trusted payload-bound native human-presence
+signing. Therefore local-agent merges are `managed_gateway`. A cloud agent with
+no access to the local helper may be `github_enforced` after App-source and
+ruleset verification. Native presence signing is tracked separately and does
+not block Alpha.
+
+### D2 — User-owned checks-only App
+
+Each user or organization owns and installs its own App. The App has repository
+metadata/read access plus Checks write for explicitly selected repositories. It
+has no PR-review, merge, administration, secrets, workflows, organization, or
+ruleset-bypass authority.
+
+For each approval, the helper mints a fresh installation token restricted to
+one repository and `checks:write`, uses it internally for one check operation,
+then discards it. Tokens are never cached, persisted, returned over IPC, placed
+in process environments, or exposed to the daemon, TUI, agents, logs, audit, or
+diagnostics.
+
+### D3 — Layered identity with one Alpha App
+
+Alpha uses one shared GitHub App identity for check publication. Lazyhub still
+records a stable enrolled agent identity, short-lived session identity, and
+separate authenticated human approver identity. Self-declared MCP client names,
+process names, and PR classification are metadata, never authorization inputs.
+Every App action carries the canonical request ID in the check `external_id`.
+The App never submits PR reviews.
+
+### D4 — Exact approval, not execution
+
+Policy classifies future operations as `auto_allow`, `ask`, or `always_deny`,
+but Alpha only records approve, deny, revoke, expire, and inspect decisions. An
+approval binds one canonical request and its preconditions. Material deviation
+requires a new approval. Alpha has no batch approval and no mutation execution,
+retry, or reconciliation lifecycle.
+
+### D5 — Watch-only is the default
+
+New installs use the existing read-only `gh` session to observe GitHub-side PR
+timelines, commits, reviews, check runs, and known actor identities. No agent,
+webhook, App, or MCP configuration is required. Unknown attribution remains
+`unknown`; reports stay local and never grant authority.
+
+### D6 — Private-read to public-write rule
+
+After a session reads a private repository, any proposed public-repository write
+is at least `ask`. This remains a policy requirement for Beta execution; Alpha
+does not execute the write.
+
+### D7 — Honest operation-level coverage
+
+Coverage is reported per operation as exactly one of `github_enforced`,
+`managed_gateway`, `advisory`, or `ungoverned`, with evidence and downgrade
+reasons. A repository-level protected badge is insufficient. Doctor reports
+alternate credentials, SSH, direct clients, other MCP servers, incomplete
+observation, and ruleset bypasses.
+
+### D8 — Fail closed
+
+Gateway, policy, identity, approval-store, audit, or classification failure
+blocks writes. A missing approval check leaves a merge pending. No governed
+write falls back to direct `gh`, and no unknown operation is treated as a read.
+
+### D9 — Policy and approval service
+
+`lazyhub serve` is a typed policy, approval, and event service, not a general
+GitHub command proxy and not an impenetrable same-OS-user vault. Local isolation
+is defense-in-depth hygiene. Privileged daemons are never auto-spawned from an
+untrusted agent context.
+
+### D10 — One-way agent safe mode
+
+Agents may engage safe mode but cannot disengage it, alter policy, revoke
+containment, or change repository enforcement. Human recovery uses a separate
+authenticated channel. Removing the App or tightening the ruleset is the
+GitHub-side kill switch.
+
+### D11 — Minimal durable audit
+
+Audit stores identities, request IDs, hashes, state transitions, and GitHub
+links rather than prompts, full diffs, or credentials. Sensitive files are
+permission restricted, retention defaults to 90 days, and integrity-linked
+entries fail closed for governed writes.
+
+### D12 — Product focus
+
+Until pilot evidence exists, support npm and Homebrew only, freeze editor
+integrations and broad TUI expansion, and prioritize watch-only observation,
+approval integrity, published-package security, and trustworthy diagnostics.
 
 ## How to read an issue body
 
@@ -46,7 +157,10 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
 - **Tracked in:** #134 (polish bundle adds the command), Phase E1 #130 (config
   schema for installed themes).
 
-## Decision 3 — Daemon spawn behavior
+## Decision 3 — Daemon spawn behavior (superseded by D9)
+
+> Historical V1 decision. Do not implement this auto-spawn behavior for the
+> privileged gateway. D9 and the current issue body control.
 
 **Auto-spawn on first `lazyhub` call. Opt-out via `LAZYHUB_NO_DAEMON=1`.**
 
@@ -60,7 +174,10 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
   next attach attempt.
 - **Tracked in:** Phase K #145.
 
-## Decision 4 — MCP server registration
+## Decision 4 — MCP server registration (superseded by D5 and D9)
+
+> Historical V1 decision. MCP registration is not part of the Alpha onboarding
+> path; D5 and D9 control.
 
 **Manual via `lazyhub mcp install`. Never auto-edit `~/.claude/config`.**
 
@@ -69,7 +186,10 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
   `--write` flag — appends it after asking.
 - **Tracked in:** Phase K #145.
 
-## Decision 5 — Daemon idle timeout
+## Decision 5 — Daemon idle timeout (superseded by D9)
+
+> Historical V1 decision. Define lifecycle only after the Beta gateway design;
+> D9 controls.
 
 **30 minutes default. Configurable via `[daemon.idle_timeout_minutes]` in TOML.**
 
@@ -77,7 +197,10 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
   on long jobs can override; idle humans don't pay forever.
 - **Tracked in:** Phase E1 #130, Phase K #145.
 
-## Decision 6 — Audit log location
+## Decision 6 — Audit log location (superseded by D11)
+
+> Historical V1 decision. D11 controls audit content, permissions, retention,
+> integrity, and failure behavior.
 
 **`~/.config/lazyhub/audit.log` (XDG-compliant). Configurable via `[audit.path]`.**
 
@@ -85,7 +208,10 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
 - **Rotation:** size-based, 10 MB cap, keep last 3 files. Owned by Phase K #145.
 - **Tracked in:** Phase L3 #148, Phase K #145.
 
-## Decision 7 — Permission scope set (Phase L3 #148)
+## Decision 7 — Permission scope set (superseded by D4, D7, and D8)
+
+> Historical scope names may remain for compatibility, but D4, D7, and D8
+> control authority. Unknown clients and fresh configuration are read-only.
 
 **Six built-in scopes:**
 
@@ -99,7 +225,8 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
 | `triage-only` | ✓ | | | | ✓ (issues only) |
 
 - **Configurable:** custom scopes definable in `[scopes.<name>]` TOML blocks.
-- **Default:** `full` (matches today's behavior).
+- **Default:** `read-only`. Broader configured names do not grant authority until
+  the typed server-side policy path exists.
 - **Tracked in:** Phase L3 #148, Phase E1 #130.
 
 ## Decision 8 — BYO-LLM strategy
@@ -128,8 +255,11 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
 These are not decisions in flight — they are project rules. Listing here so fresh
 sessions don't need conversation history to know them.
 
-1. **`gh` is the only GitHub interface.** All GitHub calls go through
-   `src/executor.js`. No `octokit`, no raw HTTP, no other CLI.
+1. **Repository operations use the typed executor.** Ordinary GitHub calls go
+   through `src/executor.js`. The sole raw-HTTPS exception is the minimal
+   credential helper for allowlisted GitHub App authentication, token, and
+   check endpoints. It uses only an explicitly configured proxy and ignores
+   inherited proxy variables. No Octokit or generic HTTP GitHub client.
 2. **`src/ai/providers/anthropic-api.js` is the only file that makes Anthropic HTTP calls.**
 3. **Subprocess discipline:** `execa` only, args always as arrays. Never shell
    strings / shell interpolation. Prompts via stdin, never argv. All `gh` calls

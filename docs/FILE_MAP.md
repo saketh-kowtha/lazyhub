@@ -23,8 +23,8 @@
 | `src/executor/issues.js` | List issues with optional filters. @param repo @param filter |
 | `src/executor/misc.js` | List the authenticated user's gists. |
 | `src/executor/notifications.js` | List notifications. @param filter |
-| `src/executor/pr-comments.js` | PR diff, review comment, line comment, review-thread reply, and review-thread resolution helpers. Kept separate from `prs.js` so the PR executor modules stay below the split-file size limit while all consumers continue importing from `src/executor.js`. |
-| `src/executor/prs.js` | List pull requests for a repo with optional filters. @param repo @param filter |
+| `src/executor/pr-comments.js` | Get the unified diff for a PR. @param repo @param number |
+| `src/executor/prs.js` | Normalize the PR list GraphQL response to the legacy gh `pr list --json` shape consumed by the list pane. @param {object} result @returns {object[]} |
 
 ## AI provider abstraction
 
@@ -50,7 +50,7 @@
 | File | Purpose |
 |---|---|
 | `src/theme.js` | resolves the active theme from config and exports t. |
-| `src/theme/bg-detect.js` | Terminal background brightness detection. Pure function, no side effects, no I/O. Reads environment variables passed in as an argument (defaults to process.env) for easy testing. Detection strategy (in priority order): 1. $COLORFGBG   — set by many terminal emulators, format "fg;bg" bg component: 7 or 15 = light background, 0 or 8 = dark. 2. $TERM_PROGRAM — well-known values that imply a default background. 3. $COLORTHEME  — explicit hint some terminals set ('light'|'dark'). Returns 'dark' | 'light' | 'unknown'. Reference for COLORFGBG convention: The variable has the form "fg;bg" (sometimes "fg;bg;color-count"). The bg component encodes a terminal palette index: 0 = black (dark bg)       8  = bright black / dark gray (dark bg) 7 = white (light bg)      15 = bright white (light bg) Some terminals write just the bg number; some write fg;bg. We extract the LAST numeric segment to get the bg value. @param {NodeJS.ProcessEnv} [env] — injectable for testing; defaults to process.env @returns {'dark' | 'light' | 'unknown'} |
+| `src/theme/bg-detect.js` | Terminal background brightness detection. Pure function, no side effects, no I/O. Reads environment variables passed in as an argument (defaults to process.env) for easy testing. Detection strategy (in priority order): 1. $COLORFGBG   — set by many terminal emulators, format "fg;bg" bg component: 7 or 15 = light background, 0 or 8 = dark. 2. $TERM_PROGRAM — well-known values that imply a default background. 3. $COLORTHEME  — explicit hint some terminals set ('light'|'dark'). Returns 'dark' | 'light' | 'unknown'. Reference for COLORFGBG convention: The variable has the form "fg;bg" (sometimes "fg;bg;color-count"). The bg component encodes a terminal palette index: 0 = black (dark bg)       8  = bright black / dark gray (dark bg) 7 = white (light bg)      15 = bright white (light bg) Some terminals write just the bg number; some write fg;bg. We extract the LAST numeric segment to get the bg value. @param {NodeJS.ProcessEnv} [env] injectable for testing; defaults to process.env @returns {'dark' | 'light' | 'unknown'} |
 | `src/theme/index.js` | Public API for the lazyhub theme system. Exports: themes         — Map of scheme name → scheme object getDefaultScheme(env) — Returns 'lazyhub-dark' or 'lazyhub-light' based on terminal background detection. Falls back to 'lazyhub-dark'. ThemeContext   — React context (for advanced consumers) ThemeProvider  — Wraps the app; provides `useTheme()` to all children useTheme()     — React hook; returns { scheme, schemeName, setScheme } Usage in components: import { useTheme } from '../theme/index.js' const { scheme } = useTheme() <Text color={scheme.accent.primary}>focused row</Text> Design contract (DESIGN_REVAMP.md §3.4): - Components NEVER import color literals directly. - They always consume tokens via useTheme().scheme[...]. - Theme switch is hot — no relaunch required. Only stable React APIs are used (createContext, useContext, useMemo, useState) to remain compatible with both React 18 and React 19. |
 | `src/theme/schemes/lazyhub-dark.js` | Default dark color scheme. Inspired by GitHub Dark Dimmed (the dimmer variant of GitHub's dark theme) but tuned for terminal readability. Terminal renderers tend to crush saturation vs. a gamma-corrected web browser, so we bump saturation and lightness slightly on critical tokens. Design constraints (from DESIGN_REVAMP.md §12 row 1): - Foreground ~#adbac7  (GitHub Dark Dimmed body text) - Background ~#22272e  (GitHub Dark Dimmed canvas) - Accent     ~#539bf5  (GitHub Dark Dimmed blue) - Diff add   ~#347d39  on bg ~#0f2f23 - Diff del   ~#c93c37  on bg ~#3c1f1f Contrast ratios (approximate, checked against WCAG AA 4.5:1 for body text): fg.default  (#adbac7) on bg.default (#22272e): ~6.2:1  ✓ accent.primary (#539bf5) on bg.default:       ~4.7:1  ✓ fg.muted (#768390)   on bg.default:           ~3.8:1  (acceptable for metadata) fg.subtle (#545d68)  on bg.default:           ~2.4:1  (decorative / low-emphasis only) All values are hex strings accepted by Ink's `color` prop. Diff tokens use { fg, bg } shape (two channels — text + row background). |
 | `src/theme/schemes/lazyhub-light.js` | Light color scheme (daylight counterpart to lazyhub-dark). Auto-selected when the terminal background is detected as light (via $COLORFGBG or bg-detect.js heuristics). Can also be set explicitly via config or the settings switcher. Design approach: - Light gray canvas (#f6f8fa, GitHub Light surface) instead of dark. - Dark foreground (#1f2328, GitHub Light body) for contrast. - Accent blue (#0969da, GitHub Light link) — same family, light-tuned. - Diff add: #0f7931 fg on #dafbe1 bg (GitHub Light diff-add palette). - Diff del: #82071e fg on #ffebe9 bg (GitHub Light diff-del palette). Contrast ratios (approximate, WCAG AA 4.5:1 target for body text): fg.default  (#1f2328) on bg.default (#f6f8fa): ~16:1   ✓ accent.primary (#0969da) on bg.default:        ~5.8:1  ✓ fg.muted (#57606a)   on bg.default:            ~5.0:1  ✓ fg.subtle (#8c959f)  on bg.default:            ~3.0:1  (metadata/decorative) All values are hex strings accepted by Ink's `color` prop. Diff tokens use { fg, bg } shape. |
@@ -75,7 +75,7 @@
 | `src/features/prs/diff.jsx` | PR diff view with syntax highlighting + line comments |
 | `src/features/prs/list-dialogs.jsx` | (no header — inferred: list-dialogs) |
 | `src/features/prs/list-row.jsx` | Maps a new-style token scheme object (src/theme/index.js) to the legacy `t.*` shape consumed by PR list sub-components. @param {object} scheme - Active scheme from useTheme().scheme @returns {{ ui: object, pr: object, ci: object, review: object }} |
-| `src/features/prs/list-view.jsx` | Presentation-only PR list surface: filter chips, stale refresh glyph, empty/loading states, scroll footer, rows, and floating PR detail popover. |
+| `src/features/prs/list-view.jsx` | (no header — inferred: list-view) |
 | `src/features/prs/list.jsx` | PR list pane Props: repo         string listHeight   number   — visible row count from App onHover      fn(pr)   — called when cursor moves (for side panel) onSelectPR   fn(pr)   — called on Enter → full detail onOpenDiff   fn(pr)   — called on 'd' onPaneState  fn({loading, error, count}) |
 | `src/features/prs/NewPRDialog.jsx` | Smart New PR creation dialog. Features: - Auto-detects current branch and offers to use it as head - Validates head branch against remote (not pushed / has unpushed commits / no diff) - Validates base branch exists on GitHub - Offers to push branch to origin if needed - Shift+Tab for backward field navigation |
 
@@ -157,9 +157,9 @@
 | File | Purpose |
 |---|---|
 | `src/editor.js` | Editor detection and file-open utility Supports: vscode, cursor, nvim, vim, nano, emacs, and $EDITOR/$VISUAL fallback. Configured via config.editor.command ("auto" | "vscode" | "cursor" | "nvim" | etc.) openInEditor(file, line) — opens the file at the given line number in the detected/configured editor. Non-blocking; fires and returns immediately. |
-| `src/ipc.js` | IPC Unix-socket server for IDE integrations Starts a Unix domain socket server at: $LAZYHUB_SOCKET  (if set) /tmp/lazyhub-<pid>.sock  (default) Also writes the socket path to ~/.lazyhub-socket so clients can discover the most recent instance without knowing the PID. Protocol: newline-delimited JSON (NDJSON) Requests  → { id, type, ...params } Responses → { id, type, ...result } Events    → { type: "event", event, data }   (pushed to all clients) Request types: ping                           → { pong: true } state                          → current lazyhub state snapshot navigate  { view, prNumber, issueNumber }  → navigate the TUI open-file { file, line }       → open file in editor from IDE side pr-for-branch { branch, repo? } → { prNumber, prState?, ciStatus?, unresolvedThreads? } or { prNumber: null } if no PR for the branch review-comments { prNumber }   → { comments: [{ id, threadId, path, line, body, user, resolved }] } reply-thread { threadId, body } → { ok: true, commentId } resolve-thread { threadId }    → { ok: true } Events emitted to all clients (via emitIPC): cursor-changed    { view, prNumber, file, line } view-changed      { view } pr-merged         { prNumber } pr-state-changed  { branch, prNumber, ciStatus, unresolvedThreads } — broadcast helper provided; triggers (CI refresh, merge) ship in later phases. Call emitIPC('pr-state-changed', payload) from any refresh path. review-comment-added   { prNumber, comment } review-thread-resolved { prNumber, threadId } |
+| `src/ipc.js` | IPC Unix-socket server for IDE integrations Starts a Unix domain socket server at: $LAZYHUB_SOCKET  (if set) /tmp/lazyhub-<pid>.sock  (default) Also writes the socket path to ~/.lazyhub-socket so clients can discover the most recent instance without knowing the PID. Protocol: newline-delimited JSON (NDJSON) Requests  → { id, type, ...params } Responses → { id, type, ...result } Events    → { type: "event", event, data }   (pushed to all clients) Request types: ping                           → { pong: true } state                          → current lazyhub state snapshot navigate  { view, prNumber, issueNumber }  → navigate the TUI open-file { file, line }       → open file in editor from IDE side pr-for-branch { branch, repo? } → { prNumber, prState?, ciStatus?, unresolvedThreads? } or { prNumber: null } if no PR for the branch review-comments { prNumber }   → { comments: [{ id, threadId, path, line, body, user, resolved }] } reply-thread { threadId, body } → { ok: true, commentId } resolve-thread { threadId }    → { ok: true } subscribe { event }             → subscribe this client to an event stream invalidate { repo? }            → request cache invalidation watch { event? }                → alias for subscribe, used by daemon clients Events emitted to all clients (via emitIPC): cursor-changed    { view, prNumber, file, line } view-changed      { view } pr-merged         { prNumber } pr-state-changed  { branch, prNumber, ciStatus, unresolvedThreads } — broadcast helper provided; triggers (CI refresh, merge) ship in later phases. Call emitIPC('pr-state-changed', payload) from any refresh path. review-comment-added   { prNumber, comment } review-thread-resolved { prNumber, threadId } |
 | `src/keyscope.js` | keyboard scope isolation for Ink TUI. Prevents useInput handlers in lower-priority components from firing when a higher-priority scope (e.g. text input dialog) is active. Scope priority: global(0) < pane(1) < view(2) < overlay(3) < dialog(4) < input(5) Usage: const { isActive } = useKeyScope with scope 'pane' useInput(handler, { isActive }) // Or the convenience hook that combines claim + useInput: useScopedInput('view', (input, key) => { … }) Legacy aliases kept for backward compat: list=pane, detail=view |
-| `src/mcp.js` | MCP (Model Context Protocol) server mode Usage:  lazyhub --mcp Speaks MCP protocol over stdio (JSON-RPC 2.0). AI assistants (Claude Code, GitHub Copilot, Cursor AI, etc.) can use this to query and act on GitHub data without writing their own gh CLI wrappers. Tools exposed: list_prs            list open/closed/merged pull requests get_pr              get full PR details + comments list_issues         list open/closed issues get_issue           get full issue details + comments list_notifications  list GitHub notifications post_comment        post a comment on a PR or issue merge_pr            merge a pull request close_issue         close an issue list_branches       list repository branches get_pr_diff         get the unified diff for a PR get_checks          get CI check status for a PR |
+| `src/mcp.js` | (no header — inferred: mcp) |
 | `src/utils.js` | shared utility functions |
 
 ## Uncategorized
@@ -172,7 +172,16 @@
 | `src/cache.js` | stale-while-revalidate disk cache for gh-backed panes. |
 | `src/cli/doctor/config.js` | lazyhub doctor --config. |
 | `src/cli/doctor/index.js` | lazyhub doctor command. |
+| `src/cli/mcp-server.js` | Run lazyhub MCP server mode. |
+| `src/cli/serve.js` | CLI entry point for `lazyhub serve`. @param {string[]} argv |
+| `src/cli/status.js` | Compute ambient-status counts from disk cache entries. @param {Array} entries @param {number} now @returns {object|null} |
 | `src/crash.js` | terminal restoration and fatal-crash reporting. |
+| `src/daemon/audit.js` | Resolve the audit log path from config. @param {object} config |
+| `src/daemon/cache.js` | Read-through cache used by the daemon for gh results. @property {Map<string, {ts:number, payload:unknown}>} memory |
+| `src/daemon/event-bus.js` | Small in-daemon event bus for IPC/MCP/TUI subscribers. @property {Map<string, Set<{write:Function}>>} subscribers |
+| `src/daemon/lifecycle.js` | Resolve the daemon endpoint. Unix uses a filesystem socket; Windows uses a named pipe so the rest of the daemon can stay on Node's `net` module. @param {object} config |
+| `src/daemon/mcp-adapter.js` | Execute one MCP tool by name. @param {string} name @param {object} args |
+| `src/daemon/server.js` | Start the K-lite daemon in the current process. @param {object} config loaded lazyhub config |
 | `src/debug-state.js` | Build the redacted debug-state object. @param {object} appState optional app-level state snapshot @returns {object} serializable debug-state payload |
 | `src/features/tabs/filter-to-gh.js` | translate TOML pane filters to executor args. |
 | `src/features/tabs/pane.jsx` | one TOML-declared dashboard pane. |
@@ -187,15 +196,18 @@ Test file counts by directory:
 
 | Directory | Test files |
 |---|---|
-| `src/` | 13 |
+| `src/` | 14 |
 | `src/ai/` | 3 |
 | `src/ai/providers/` | 4 |
+| `src/cli/` | 1 |
 | `src/cli/doctor/` | 1 |
 | `src/config/` | 6 |
+| `src/daemon/` | 5 |
 | `src/features/prs/` | 2 |
 | `src/features/tabs/` | 2 |
+| `src/hooks/` | 1 |
 | `src/theme/` | 1 |
 | `src/ui/` | 2 |
 
-**Total non-test source files:** 110
-**Total test files:** 34
+**Total non-test source files:** 121
+**Total test files:** 42
