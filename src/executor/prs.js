@@ -179,15 +179,25 @@ export async function getPR(repo, number) {
  * @param number
  * @param strategy
  * @param commitMessage
+ * @param options
  */
-export async function mergePR(repo, number, strategy = 'merge', commitMessage) {
+export async function mergePR(repo, number, strategy = 'merge', commitMessage, options = {}) {
+  const standardStrategies = new Set(['merge', 'squash', 'rebase'])
+  const adminStrategies = new Set(['admin-merge', 'admin-squash', 'admin-rebase'])
+  const isAdminStrategy = adminStrategies.has(strategy)
+
+  if (!standardStrategies.has(strategy) && !isAdminStrategy) {
+    throw new Error(`Unsupported merge strategy: ${strategy}`)
+  }
+  if (isAdminStrategy && options.allowAdmin !== true) {
+    throw new Error('Administrative merge strategies are disabled for agent-callable paths')
+  }
+
   const args = [
     'pr', 'merge', String(number),
     '--repo', getRepo(repo),
   ]
-  // strategy may be 'admin-merge' | 'admin-squash' | 'admin-rebase' (admin + method)
-  // or plain 'merge' | 'squash' | 'rebase'
-  if (strategy.startsWith('admin-')) {
+  if (isAdminStrategy) {
     args.push('--admin')
     args.push(`--${strategy.slice('admin-'.length)}`)
   } else {

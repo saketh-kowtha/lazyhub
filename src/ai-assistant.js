@@ -402,7 +402,13 @@ async function callReadOnlyTool(toolName, toolInput, repo) {
  */
 export async function executeMutatingTool(toolName, toolInput, repo) {
   switch (toolName) {
-    case 'merge_pr':       return mergePR(repo, toolInput.number, toolInput.strategy || 'merge', toolInput.message)
+    case 'merge_pr': {
+      const strategy = toolInput.strategy || 'merge'
+      if (!['merge', 'squash', 'rebase'].includes(strategy)) {
+        throw new Error('Administrative and unsupported merge strategies are disabled for agent-callable paths')
+      }
+      return mergePR(repo, toolInput.number, strategy, toolInput.message)
+    }
     case 'close_pr':       return closePR(repo, toolInput.number)
     case 'close_issue':    return closeIssue(repo, toolInput.number)
     case 'add_pr_comment': return addPRComment(repo, toolInput.number, toolInput.body)

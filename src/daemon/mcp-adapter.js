@@ -1,8 +1,5 @@
 import * as readline from 'readline'
 import {
-  addPRComment,
-  addPRLineComment,
-  closeIssue,
   getIssue,
   getPR,
   getPRChecks,
@@ -11,8 +8,6 @@ import {
   listIssues,
   listNotifications,
   listPRs,
-  mergePR,
-  reviewPR,
 } from '../executor.js'
 
 const TOOL_ALIASES = {
@@ -30,17 +25,22 @@ const TOOL_ALIASES = {
   lazyhub_watch_ci: 'get_checks',
 }
 
+const MUTATING_TOOLS = new Set([
+  'approve_pr',
+  'merge_pr',
+  'post_comment',
+  'close_issue',
+  'review_line',
+])
+
+const MCP_MUTATIONS_DISABLED = 'MCP mutating tools are disabled until governed authorization is available'
+
 const TOOLS = [
   ['lazyhub_pr_list', 'List pull requests'],
   ['lazyhub_pr_view', 'View a pull request'],
   ['lazyhub_pr_diff', 'Get a pull request diff'],
-  ['lazyhub_pr_approve', 'Approve a pull request'],
-  ['lazyhub_pr_merge', 'Merge a pull request'],
-  ['lazyhub_pr_comment', 'Comment on a pull request'],
-  ['lazyhub_pr_review_line', 'Create a line review comment'],
   ['lazyhub_issue_list', 'List issues'],
   ['lazyhub_issue_view', 'View an issue'],
-  ['lazyhub_issue_comment', 'Comment on an issue'],
   ['lazyhub_query', 'Query lazyhub context'],
   ['lazyhub_watch_ci', 'Get CI status for a PR'],
   ['list_prs', 'List pull requests'],
@@ -50,9 +50,6 @@ const TOOLS = [
   ['list_issues', 'List issues'],
   ['get_issue', 'View an issue'],
   ['list_notifications', 'List notifications'],
-  ['post_comment', 'Post a comment'],
-  ['merge_pr', 'Merge a pull request'],
-  ['close_issue', 'Close an issue'],
   ['list_branches', 'List branches'],
 ].map(([name, description]) => ({
   name,
@@ -80,28 +77,18 @@ const repo = () => process.env.GHUI_REPO || null
  */
 async function callTool(name, args = {}) {
   const canonical = TOOL_ALIASES[name] || name
+  if (MUTATING_TOOLS.has(canonical)) throw new Error(MCP_MUTATIONS_DISABLED)
+
   const r = args.repo || repo()
   switch (canonical) {
     case 'list_prs': return listPRs(r, { state: args.state || 'open', limit: args.limit || 30 })
     case 'get_pr': return getPR(r, args.number)
     case 'get_pr_diff': return getPRDiff(r, args.number)
     case 'get_checks': return getPRChecks(r, args.number)
-    case 'approve_pr': return reviewPR(r, args.number, 'approve', args.body || '')
-    case 'merge_pr': return mergePR(r, args.number, args.strategy || 'merge', args.message)
     case 'list_issues': return listIssues(r, { state: args.state || 'open', limit: args.limit || 30 })
     case 'get_issue': return getIssue(r, args.number)
     case 'list_notifications': return listNotifications()
-    case 'post_comment': return addPRComment(r, args.number, args.body)
-    case 'close_issue': return closeIssue(r, args.number)
     case 'list_branches': return listBranches(r)
-    case 'review_line':
-      return addPRLineComment(r, args.number, {
-        body: args.body,
-        path: args.file || args.path,
-        line: args.line,
-        side: args.side || 'RIGHT',
-        commitId: args.commitId,
-      })
     case 'query': return { answer: 'lazyhub_query is available; AI-backed answers are configured by provider in later phases.' }
     default: throw new Error(`Unknown tool: ${name}`)
   }
@@ -153,4 +140,4 @@ export async function runMCPServer() {
   }
 }
 
-export { TOOLS, callTool }
+export { MCP_MUTATIONS_DISABLED, TOOLS, callTool }

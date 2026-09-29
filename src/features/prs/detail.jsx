@@ -530,7 +530,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
           const strategy = typeof val === 'object' ? val.value : val
           const msg = typeof val === 'object' ? val.text : undefined
           setDialog(null)
-          mergePR(repo, pr.number, strategy, msg)
+          mergePR(repo, pr.number, strategy, msg, { allowAdmin: strategy.startsWith('admin-') })
             .then(() => refetch())
             .catch(err => showStatus(`✗ Merge failed: ${err.message}`, true))
         }}
