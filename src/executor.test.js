@@ -252,6 +252,31 @@ describe('mergePR()', () => {
     const [, args] = execa.mock.calls[0]
     expect(args).toContain('--rebase')
   })
+
+  it.each(['admin-merge', 'admin-squash', 'admin-rebase'])(
+    'rejects %s unless a trusted human path explicitly opts in',
+    async strategy => {
+      await expect(mergePR('owner/repo', 4, strategy)).rejects.toThrow(
+        'Administrative merge strategies are disabled for agent-callable paths'
+      )
+      expect(execa).not.toHaveBeenCalled()
+    }
+  )
+
+  it('rejects unknown strategies before invoking gh', async () => {
+    await expect(mergePR('owner/repo', 4, 'admin-force')).rejects.toThrow(
+      'Unsupported merge strategy: admin-force'
+    )
+    expect(execa).not.toHaveBeenCalled()
+  })
+
+  it('allows the existing human TUI admin flow to opt in explicitly', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+    await mergePR('owner/repo', 4, 'admin-squash', undefined, { allowAdmin: true })
+    const [, args] = execa.mock.calls[0]
+    expect(args).toContain('--admin')
+    expect(args).toContain('--squash')
+  })
 })
 
 // ─── Issue functions ──────────────────────────────────────────────────────────

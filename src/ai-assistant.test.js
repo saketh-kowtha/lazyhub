@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { runAssistantTurn } from './ai-assistant.js'
+import { executeMutatingTool, runAssistantTurn } from './ai-assistant.js'
 
 describe('runAssistantTurn provider routing', () => {
   beforeEach(() => {
@@ -40,4 +40,18 @@ describe('runAssistantTurn provider routing', () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body.model).toBe('qwen2.5-coder:32b')
   })
+})
+
+describe('agent mutation containment', () => {
+  it.each(['admin-merge', 'admin-squash', 'admin-rebase', 'admin-force'])(
+    'rejects merge strategy %s before execution',
+    async strategy => {
+      await expect(executeMutatingTool('merge_pr', {
+        number: 42,
+        strategy,
+      }, 'owner/repo')).rejects.toThrow(
+        'Administrative and unsupported merge strategies are disabled for agent-callable paths'
+      )
+    }
+  )
 })

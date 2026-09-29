@@ -184,21 +184,21 @@ describe('PR merge flows', () => {
 
   it('admin-merge: uses --admin --merge', async () => {
     ok()
-    await mergePR('owner/repo', 1, 'admin-merge')
+    await mergePR('owner/repo', 1, 'admin-merge', undefined, { allowAdmin: true })
     expect(args()).toContain('--admin')
     expect(args()).toContain('--merge')
   })
 
   it('admin-squash: uses --admin --squash', async () => {
     ok()
-    await mergePR('owner/repo', 1, 'admin-squash')
+    await mergePR('owner/repo', 1, 'admin-squash', undefined, { allowAdmin: true })
     expect(args()).toContain('--admin')
     expect(args()).toContain('--squash')
   })
 
   it('admin-rebase: uses --admin --rebase', async () => {
     ok()
-    await mergePR('owner/repo', 1, 'admin-rebase')
+    await mergePR('owner/repo', 1, 'admin-rebase', undefined, { allowAdmin: true })
     expect(args()).toContain('--admin')
     expect(args()).toContain('--rebase')
   })

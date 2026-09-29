@@ -1140,7 +1140,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         destructive={true}
         onConfirm={() => {
           setDialog(null)
-          mergePR(repo, prNumber, pending.strategy, pending.msg || undefined)
+          mergePR(repo, prNumber, pending.strategy, pending.msg || undefined, { allowAdmin: true })
             .then(() => onBack())
             .catch(err => {
               setCommentStatus(`✗ Merge failed: ${err.message}`)
