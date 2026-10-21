@@ -338,3 +338,8 @@ To prevent merge conflicts and "branch drift":
 **B-61 — Author logins cut mid-name (`@dev-agent[b`, `@dependabot[`)**
 - Root cause: PR/issue/custom-pane author columns used `truncateToWidth` / `.slice` with no ellipsis, and bot logins carry a 5-column `[bot]` suffix that alone consumed the column.
 - Fix: new `formatLogin()` in `utils.js` drops a trailing `[bot]` and truncates with an ellipsis; used in `PRRow`, the PR popover meta line, `IssueRow` and `CustomPane`. No separate bot marker was added (design docs define none; app account names such as `dependabot` are self-evident).
+
+**B-62 — PR list and Focus PR panes fail with `Field 'statusCheckRollup' doesn't accept argument 'first'`**
+- Symptom: the PR list and Focus PR panes showed `gh: Field 'statusCheckRollup' doesn't accept argument 'first'` and no PRs.
+- Root cause: `listPRs()` queried `statusCheckRollup(first: 50) { nodes { ... } }`, but `PullRequest.statusCheckRollup` is a `StatusCheckRollup` object with no arguments; the checks are the `contexts(first:)` connection on it. Unit tests mocked the response, so the invalid query text was never exercised.
+- Fix: query `statusCheckRollup { contexts(first: 50) { nodes { ... } } }` and normalize from `statusCheckRollup.contexts.nodes`; a test asserts the query text. Sibling sweep: `activity.js` and `pr-comments.js` GraphQL queries were run read-only against the live API and are valid; `branches.js`/`getPR` use `gh ... --json statusCheckRollup`, which gh resolves itself.

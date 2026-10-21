@@ -133,8 +133,8 @@ describe('PR list — fetch flows', () => {
 
   it('returns parsed PR array', async () => {
     const prs = [
-      { __typename: 'PullRequest', number: 1, title: 'Fix bug', labels: { nodes: [] }, reviewRequests: { nodes: [] }, statusCheckRollup: { nodes: [] }, assignees: { nodes: [] } },
-      { __typename: 'PullRequest', number: 2, title: 'Feature', labels: { nodes: [] }, reviewRequests: { nodes: [] }, statusCheckRollup: { nodes: [] }, assignees: { nodes: [] } },
+      { __typename: 'PullRequest', number: 1, title: 'Fix bug', labels: { nodes: [] }, reviewRequests: { nodes: [] }, statusCheckRollup: { contexts: { nodes: [] } }, assignees: { nodes: [] } },
+      { __typename: 'PullRequest', number: 2, title: 'Feature', labels: { nodes: [] }, reviewRequests: { nodes: [] }, statusCheckRollup: { contexts: { nodes: [] } }, assignees: { nodes: [] } },
     ]
     ok({ data: { search: { nodes: prs } } })
     const result = await listPRs('owner/repo')
