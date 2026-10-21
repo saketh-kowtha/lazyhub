@@ -8,7 +8,7 @@
 import { generateWatchOnlyReport } from '../watch-only/index.js'
 import { resolveCurrentRepo } from '../executor/activity.js'
 import { DEFAULT_LIMIT, DEFAULT_MAX_PAGES } from '../watch-only/observe.js'
-import { sanitize } from '../utils.js'
+import { sanitize } from '../utils-core.js'
 
 /**
  * @param {string[]} args

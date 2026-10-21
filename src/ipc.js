@@ -54,7 +54,7 @@ import { homedir } from 'os'
 import { randomBytes } from 'crypto'
 import { chmodSync, mkdirSync, readFileSync, unlinkSync } from 'fs'
 import { assertPrivateDir, prepareSocketPath, writePrivateFile } from './secure-fs.js'
-import { logger } from './utils.js'
+import { logger } from './utils-core.js'
 import {
   getPRStateForBranch as _defaultGetPRStateForBranch,
   getPRReviewComments as _defaultGetPRReviewComments,

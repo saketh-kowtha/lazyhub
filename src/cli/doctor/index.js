@@ -5,7 +5,7 @@
 import { checkConfig, formatConfigReport } from './config.js'
 import { checkCoverage, formatCoverageReport } from './coverage.js'
 import { resolveCurrentRepo } from '../../executor/activity.js'
-import { sanitize } from '../../utils.js'
+import { sanitize } from '../../utils-core.js'
 
 /**
  * @param argv

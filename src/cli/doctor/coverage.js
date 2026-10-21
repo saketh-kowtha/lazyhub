@@ -21,7 +21,7 @@ import { runGh } from '../../executor.js'
 import { observeRepo } from '../../watch-only/observe.js'
 import { classifyObservation } from '../../watch-only/classify.js'
 import { buildReport, COVERAGE_STATES } from '../../watch-only/report.js'
-import { sanitize } from '../../utils.js'
+import { sanitize } from '../../utils-core.js'
 import { detectAlternatePaths } from './detect.js'
 
 const DOCTOR_SCHEMA_VERSION = 1

@@ -23,7 +23,7 @@ import { ensurePrivateDir, writePrivateFile } from '../secure-fs.js'
 import { fileURLToPath } from 'url'
 import { homedir, platform as osPlatform } from 'os'
 import { parse, TomlError } from 'smol-toml'
-import { logger } from '../utils.js'
+import { logger } from '../utils-core.js'
 import {
   DEFAULT_CONFIG,
   SCHEMA_VERSION,

@@ -4,8 +4,10 @@
  * using esbuild. node_modules are kept as external (not bundled).
  */
 import * as esbuild from 'esbuild'
-import { mkdir, copyFile } from 'fs/promises'
+import { mkdir, copyFile, rm } from 'fs/promises'
 
+// Chunk filenames are content-hashed; drop stale ones so they never ship in the package.
+await rm('dist', { recursive: true, force: true })
 await mkdir('dist', { recursive: true })
 
 // Non-JS assets read at runtime via fs (not bundled by esbuild) must be copied
@@ -20,7 +22,13 @@ const ctx = await esbuild.context({
   bundle: true,
   platform: 'node',
   format: 'esm',
-  outfile: 'dist/lazyhub.js',
+  // Code splitting: bin/lazyhub.js dynamic-imports each command, so non-TUI
+  // commands never load the ink/react/highlight.js chunks (#302).
+  outdir: 'dist',
+  splitting: true,
+  // Chunks sit beside the entry: loader.js resolves dist/defaultConfig.toml
+  // relative to its own module dir.
+  chunkNames: '[name]-[hash]',
   loader: { '.js': 'jsx', '.jsx': 'jsx' },
   packages: 'external',          // leave node_modules as-is
   banner: { js: '#!/usr/bin/env node' },
