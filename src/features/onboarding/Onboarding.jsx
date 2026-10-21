@@ -114,7 +114,7 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
       if (repo) observe(repo)
       else setAttempt(n => n + 1)
     } else if (phase === 'repos') {
-      if (input === 'j' || key.downArrow) setCursor(c => Math.min(c + 1, repos.length - 1))
+      if (input === 'j' || key.downArrow) setCursor(c => Math.max(0, Math.min(c + 1, repos.length - 1)))
       else if (input === 'k' || key.upArrow) setCursor(c => Math.max(c - 1, 0))
       else if (key.return && repos.length > 0) observe(repos[cursor].name)
     } else if (phase === 'report') {
