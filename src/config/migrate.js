@@ -76,3 +76,67 @@ export function migrateStateJsonToToml(opts = {}) {
   logger.info('migrated state.json into lazyhub.toml; old file kept as state.json.bak')
   return { migrated: true, deleted: true, reason: 'migrated' }
 }
+
+// Pane icons shipped as defaults before #275 swapped them for single-width glyphs.
+// Older releases copied the whole bundled config into the user file, pinning these.
+const LEGACY_PANE_ICONS = {
+  issues: '◎',
+  branches: '⑂',
+  actions: '⚡',
+  notifications: '◈',
+}
+const SECTION_RE = /^\s*\[([^\[\]]+)\]\s*(?:#.*)?\s*$/
+const ICON_RE = /^\s*icon\s*=\s*(["'])(.*)\1\s*(?:#.*)?\s*$/
+
+/**
+ * Drop `icon = "<old default>"` from [panes.<id>] so the current default applies.
+ * Only an icon exactly equal to that pane's previous default is removed; any
+ * customised icon, comments and all other content are left byte-for-byte intact.
+ * Idempotent, and writes nothing when there is nothing to change.
+ *
+ * @param {Object} [opts]
+ * @param {string} [opts.configPath]
+ * @returns {{migrated:boolean, removed:string[]}} pane ids whose icon was removed
+ */
+export function migrateLegacyPaneIcons(opts = {}) {
+  const { configPath = USER_CONFIG_PATH } = opts
+  if (!existsSync(configPath)) return { migrated: false, removed: [] }
+
+  let text
+  try {
+    text = readFileSync(configPath, 'utf8')
+  } catch (err) {
+    logger.warn('config: could not read config for pane icon migration', { error: err.message })
+    return { migrated: false, removed: [] }
+  }
+
+  const removed = []
+  /** @type {string|null} */
+  let pane = null
+  /** @type {string[]} */
+  const lines = text.match(/[^\n]*\n|[^\n]+/g) || []
+  const kept = lines.filter(line => {
+    const section = line.match(SECTION_RE)
+    if (section) {
+      const m = section[1].trim().match(/^panes\.(\w+)$/)
+      pane = m ? m[1] : null
+      return true
+    }
+    const icon = pane === null ? null : line.match(ICON_RE)
+    if (pane !== null && icon && LEGACY_PANE_ICONS[pane] === icon[2]) {
+      removed.push(pane)
+      return false
+    }
+    return true
+  })
+
+  if (removed.length === 0) return { migrated: false, removed }
+  try {
+    writePrivateFile(configPath, kept.join(''))
+  } catch (err) {
+    logger.warn('config: could not write pane icon migration', { error: err.message })
+    return { migrated: false, removed: [] }
+  }
+  logger.info('migrated legacy pane icons to current defaults', { panes: removed })
+  return { migrated: true, removed }
+}

@@ -62,7 +62,13 @@ function isSectionTree(name, root) {
   return name === root || name.startsWith(`${root}.`)
 }
 
-function removeSectionTree(text, root) {
+/**
+ * Drop a [root] table and all [root.*] sub-tables, including their body lines.
+ * @param {string} text TOML source
+ * @param {string} root section name
+ * @returns {string} text without that section tree
+ */
+export function removeSectionTree(text, root) {
   const lines = splitLines(text)
   const kept = []
   let dropping = false

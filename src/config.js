@@ -11,9 +11,10 @@ import { dirname, join } from 'path'
 import { ensurePrivateDir, tightenFile, writePrivateFile } from './secure-fs.js'
 import { logger } from './utils.js'
 import { fileURLToPath } from 'url'
+import { migrateLegacyPaneIcons } from './config/migrate.js'
 import { loadConfig as loadTomlConfig, USER_CONFIG_PATH } from './config/loader.js'
 import { DEFAULT_CONFIG } from './config/schema.js'
-import { readState as readTomlState, writeConfig as writeTomlConfig, writeState as writeTomlState } from './config/writer.js'
+import { readState as readTomlState, removeSectionTree, writeConfig as writeTomlConfig, writeState as writeTomlState } from './config/writer.js'
 
 export const BUILTIN_PANES = ['prs', 'issues', 'branches', 'actions', 'notifications']
 export const CONFIG_PATH = USER_CONFIG_PATH
@@ -188,19 +189,27 @@ export function saveConfig(patch) {
 }
 
 /**
- * Create lazyhub.toml from bundled defaults if it does not exist.
+ * Create lazyhub.toml from bundled defaults if it does not exist; otherwise tighten
+ * its permissions and migrate legacy pinned pane icons.
+ * @param {string} [configPath] user config path (defaults to CONFIG_PATH)
  */
-export function writeDefaultConfig() {
+export function writeDefaultConfig(configPath = CONFIG_PATH) {
   try {
-    readFileSync(CONFIG_PATH, 'utf8')
+    readFileSync(configPath, 'utf8')
     // Migrate files written by older releases with default (world-readable) modes.
-    try { ensurePrivateDir(dirname(CONFIG_PATH)); tightenFile(CONFIG_PATH) } catch (err) {
+    try { ensurePrivateDir(dirname(configPath)); tightenFile(configPath) } catch (err) {
       logger.warn('config: could not tighten config permissions', { error: err.message })
+    }
+    // Older releases pinned the then-default pane icons into the user file (B-63).
+    try { migrateLegacyPaneIcons({ configPath }) } catch (err) {
+      logger.warn('config: pane icon migration failed', { error: err.message })
     }
   } catch {
     try {
-      ensurePrivateDir(dirname(CONFIG_PATH))
-      writePrivateFile(CONFIG_PATH, readFileSync(DEFAULT_CONFIG_TOML_PATH, 'utf8'))
+      ensurePrivateDir(dirname(configPath))
+      // Pane presentation ([panes.*]) is not pinned: those values are defaults, so
+      // omitting them lets future default changes reach existing users.
+      writePrivateFile(configPath, removeSectionTree(readFileSync(DEFAULT_CONFIG_TOML_PATH, 'utf8'), 'panes'))
     } catch { /* non-fatal: defaults are bundled and loaded in-memory */ }
   }
 }
