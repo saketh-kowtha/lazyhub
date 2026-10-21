@@ -196,6 +196,37 @@ describe('complete()', () => {
     expect(out.tokensOut).toBeNull()
   })
 
+  // Event shape documented for `codex exec --json` (0.163, codex-rs exec JSONL
+  // docs): lifecycle events plus item.completed carrying the agent message.
+  // Not captured from a live account run; contains no account/token data.
+  it('parses item.completed agent_message events (codex exec --json 0.163)', async () => {
+    const ndjson = [
+      JSON.stringify({ type: 'thread.started', thread_id: 'thread_0' }),
+      JSON.stringify({ type: 'turn.started' }),
+      JSON.stringify({ type: 'item.completed', item: { id: 'item_0', type: 'reasoning', text: 'thinking' } }),
+      JSON.stringify({ type: 'item.completed', item: { id: 'item_1', type: 'command_execution', command: 'ls', aggregated_output: '', exit_code: 0, status: 'completed' } }),
+      JSON.stringify({ type: 'item.completed', item: { id: 'item_2', type: 'agent_message', text: 'Hello from Codex' } }),
+      JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5 } }),
+    ].join('\n')
+
+    makeChild({ stdout: ndjson })
+
+    const out = await complete({ system: 'sys', user: 'usr' })
+    expect(out.text).toBe('Hello from Codex')
+  })
+
+  it('ignores item.started/updated agent_message events (no double count)', async () => {
+    const ndjson = [
+      JSON.stringify({ type: 'item.started', item: { id: 'item_0', type: 'agent_message', text: '' } }),
+      JSON.stringify({ type: 'item.completed', item: { id: 'item_0', type: 'agent_message', text: 'Done' } }),
+    ].join('\n')
+
+    makeChild({ stdout: ndjson })
+
+    const out = await complete({ system: 'sys', user: 'usr' })
+    expect(out.text).toBe('Done')
+  })
+
   it('ignores non-agent_message events in NDJSON output', async () => {
     const ndjson = [
       JSON.stringify({ type: 'tool_call', name: 'grep' }),
