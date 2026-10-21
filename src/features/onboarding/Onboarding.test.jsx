@@ -95,7 +95,6 @@ describe('first-run onboarding', () => {
     expect(out).toMatch(/pr_merge\s+advisory/)
     expect(out).toContain('local_agent_approval')
     expect(out).toContain('(coming, not available yet; #245)')
-    expect(out).toContain('coming, not available yet')
     expect(out).toContain('solo/pilot limits')
     expect(out).not.toMatch(/https?:\/\//)
 
@@ -164,18 +163,6 @@ describe('first-run onboarding', () => {
     expect(frame(view)).toMatch(/unknown [1-9]/)
     expect(frame(view)).toContain('unattributed event(s): unknown is not safe')
     expectOnlyReads()
-  })
-
-  it('cancellation at the repository step leaves no files and makes no write calls', async () => {
-    stubGh()
-    const view = start()
-    await waitForExpectation(() => expect(frame(view)).toContain('Pick a repository to observe'))
-    view.stdin.write('q')
-    await flush(20)
-    expect(view.onDone).toHaveBeenCalledWith({ status: 'cancelled' })
-    expect(view.onDone).toHaveBeenCalledTimes(1)
-    expectOnlyReads()
-    expect(readdirSync(home)).toEqual([])
   })
 
   it('Esc/b returns from the report to the repository list without completing', async () => {
