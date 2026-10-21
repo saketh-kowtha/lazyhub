@@ -11,7 +11,7 @@ import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import chalk from 'chalk'
-import hljs from 'highlight.js'
+import { getHljs } from '../../highlight.js'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo, reviewPR } from '../../executor.js'
@@ -180,7 +180,7 @@ function syntaxHighlight(code, lang, bgColor, t) {
 
   let result
   try {
-    const { value } = hljs.highlight(code, { language: lang, ignoreIllegals: true })
+    const { value } = getHljs().highlight(code, { language: lang, ignoreIllegals: true })
     result = htmlToChalk(value, bgColor, t)
   } catch {
     result = applyThemeStyle(code, t.syntax.default, bgColor)

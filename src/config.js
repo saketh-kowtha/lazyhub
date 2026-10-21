@@ -9,7 +9,7 @@
 import { readFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { ensurePrivateDir, tightenFile, writePrivateFile } from './secure-fs.js'
-import { logger } from './utils.js'
+import { logger } from './utils-core.js'
 import { fileURLToPath } from 'url'
 import { migrateLegacyPaneIcons } from './config/migrate.js'
 import { loadConfig as loadTomlConfig, USER_CONFIG_PATH } from './config/loader.js'
