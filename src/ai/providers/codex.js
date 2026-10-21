@@ -11,7 +11,9 @@
  * invalidate the user's real login. No key -> provider unavailable.
  *
  * Note: Codex outputs NDJSON event stream (one JSON object per line).
- * We filter for 'agent_message' events and concatenate their text.
+ * We take completed agent messages — `item.completed` with `item.type ===
+ * 'agent_message'` (`item.text`), or the legacy top-level `agent_message`
+ * (`message`) — and concatenate their text.
  */
 
 import { spawnAndPipe, pickEnv } from './_base.js'
@@ -75,8 +77,8 @@ export async function detect() {
  * The combined system+user prompt is piped via stdin in the format:
  *   <system>\n\n<user>
  *
- * Codex outputs NDJSON event stream. We filter for 'agent_message' type
- * events and concatenate their 'message' fields.
+ * Codex outputs NDJSON event stream. See the file header for the accepted
+ * agent_message shapes.
  *
  * @param {object} opts
  * @param {string}  opts.system      - System prompt text
@@ -142,7 +144,11 @@ export async function complete({ system, user, _model, timeoutMs }) {
   for (const line of lines) {
     try {
       const event = JSON.parse(line)
-      if (event.type === 'agent_message' && typeof event.message === 'string') {
+      if (event.type === 'item.completed' && event.item?.type === 'agent_message') {
+        // Current shape (codex exec --json 0.163): {type:'item.completed', item:{type:'agent_message', text}}
+        if (typeof event.item.text === 'string') messages.push(event.item.text)
+      } else if (event.type === 'agent_message' && typeof event.message === 'string') {
+        // Legacy top-level shape, kept as a fallback
         messages.push(event.message)
       }
     } catch {
