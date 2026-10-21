@@ -3,15 +3,17 @@ import { Text, useInput } from 'ink'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { __sendInput } from 'ink'
 import { App } from './app.jsx'
-import { renderWithProviders, flush, cleanup } from './test/test-helpers.jsx'
+import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
 const inputHandlers = vi.hoisted(() => new Set())
+const exitSpy = vi.hoisted(() => vi.fn())
 
 vi.mock('ink', async () => {
   const React = await import('react')
   const actual = await vi.importActual('ink')
   return {
     ...actual,
+    useApp: () => ({ exit: exitSpy }),
     useInput: (handler) => {
       React.useEffect(() => {
         inputHandlers.add(handler)
@@ -146,6 +148,43 @@ describe('App shell user flows', () => {
 
     await flush(20)
     expect(view.lastFrame()).toContain('Keyboard Reference')
+  })
+
+  it('Esc on a top-level list does not quit; q does', async () => {
+    exitSpy.mockClear()
+    renderWithProviders(
+      <>
+        <App repo="owner/repo" />
+        <InputDriver events={[{ input: '', key: { escape: true } }]} />
+      </>
+    )
+    await flush(20)
+    expect(exitSpy).not.toHaveBeenCalled()
+    cleanup()
+
+    renderWithProviders(
+      <>
+        <App repo="owner/repo" />
+        <InputDriver events={[{ input: 'q' }]} />
+      </>
+    )
+    await flush(20)
+    expect(exitSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('Esc still steps back from detail to the list', async () => {
+    const view = renderWithProviders(
+      <>
+        <App repo="owner/repo" />
+        <InputDriver events={[{ input: 'o' }]} />
+      </>
+    )
+    // Wait for the detail view (and its re-registered input handler) before
+    // sending Esc; a fixed timer between the two keys races on slow runners.
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DETAIL 7'))
+    await flush(30)
+    __sendInput('', { escape: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PRS LIST'))
   })
 
   it('opens settings from the shell', async () => {
