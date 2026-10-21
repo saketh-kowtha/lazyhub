@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { parse } from 'smol-toml'
-import { migrateStateJsonToToml } from './migrate.js'
+import { migrateStateJsonToToml, migrateLegacyPaneIcons } from './migrate.js'
+import { writeDefaultConfig } from '../config.js'
+import { loadConfig } from './loader.js'
 import { logger } from '../utils.js'
 
 let dir
@@ -63,5 +65,91 @@ prScope = "all"
     const result = migrateStateJsonToToml({ statePath, configPath, backupPath })
     expect(result).toEqual({ migrated: false, deleted: false, reason: 'missing-state-json' })
     expect(existsSync(configPath)).toBe(false)
+  })
+})
+
+describe('migrateLegacyPaneIcons', () => {
+  const legacy = `# my config
+[panes.prs]
+label = "Pull Requests"
+icon  = "⎇"
+
+[panes.issues]
+label = "Issues"
+icon = "◎"  # old default
+
+[panes.branches]
+icon = "⑂"
+
+[panes.actions]
+icon = "⚡"
+
+[panes.notifications]
+icon = "◈"
+`
+
+  it('removes icons equal to the old defaults so the current defaults apply', () => {
+    writeFileSync(configPath, legacy, 'utf8')
+
+    const result = migrateLegacyPaneIcons({ configPath })
+
+    expect(result).toEqual({ migrated: true, removed: ['issues', 'branches', 'actions', 'notifications'] })
+    const text = readFileSync(configPath, 'utf8')
+    expect(text).toContain('# my config')
+    expect(text).toContain('icon  = "⎇"')
+    expect(parse(text).panes.issues).toEqual({ label: 'Issues' })
+    const panes = loadConfig({ configPath }).panes
+    expect(panes.issues.icon).toBe('⚑')
+    expect(panes.branches.icon).toBe('⌥')
+    expect(panes.actions.icon).toBe('↯')
+    expect(panes.notifications.icon).toBe('✦')
+  })
+
+  it('leaves customised icons and other-pane old glyphs untouched', () => {
+    const custom = `[panes.issues]
+icon = "I"
+
+[panes.actions]
+icon = "◎"
+
+[ui]
+icon = "⚡"
+`
+    writeFileSync(configPath, custom, 'utf8')
+    utimesSync(configPath, new Date(1000), new Date(1000))
+
+    expect(migrateLegacyPaneIcons({ configPath })).toEqual({ migrated: false, removed: [] })
+    expect(readFileSync(configPath, 'utf8')).toBe(custom)
+    expect(statSync(configPath).mtimeMs).toBe(1000)
+  })
+
+  it('is idempotent: a second run changes nothing and does not write', () => {
+    writeFileSync(configPath, legacy, 'utf8')
+    migrateLegacyPaneIcons({ configPath })
+    const after = readFileSync(configPath, 'utf8')
+    utimesSync(configPath, new Date(1000), new Date(1000))
+
+    expect(migrateLegacyPaneIcons({ configPath })).toEqual({ migrated: false, removed: [] })
+    expect(readFileSync(configPath, 'utf8')).toBe(after)
+    expect(statSync(configPath).mtimeMs).toBe(1000)
+  })
+
+  it('does nothing when the config file is missing', () => {
+    expect(migrateLegacyPaneIcons({ configPath })).toEqual({ migrated: false, removed: [] })
+    expect(existsSync(configPath)).toBe(false)
+  })
+
+  it('writeDefaultConfig does not pin pane presentation into a fresh user file', () => {
+    writeDefaultConfig(configPath)
+    const text = readFileSync(configPath, 'utf8')
+    expect(parse(text).panes).toBeUndefined()
+    expect(parse(text).app.active_panes).toContain('issues')
+    expect(loadConfig({ configPath }).panes.issues.icon).toBe('⚑')
+  })
+
+  it('writeDefaultConfig migrates a pre-existing config that pinned old icons', () => {
+    writeFileSync(configPath, legacy, 'utf8')
+    writeDefaultConfig(configPath)
+    expect(loadConfig({ configPath }).panes.actions.icon).toBe('↯')
   })
 })
