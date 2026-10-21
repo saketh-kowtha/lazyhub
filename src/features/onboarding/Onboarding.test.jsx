@@ -56,6 +56,7 @@ const frame = view => view.lastFrame() || ''
 
 async function pick(view) {
   await waitForExpectation(() => expect(frame(view)).toContain('Pick a repository to observe'))
+  await flush(50) // let Ink attach its input handler before the keypress
   view.stdin.write('\r')
 }
 
