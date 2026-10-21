@@ -181,7 +181,7 @@ describe('listPRs()', () => {
             author: { login: 'octocat' },
             labels: { nodes: [{ name: 'perf', color: 'f00' }] },
             reviewRequests: { nodes: [{ requestedReviewer: { __typename: 'User', login: 'alice', name: 'Alice' } }] },
-            statusCheckRollup: { nodes: [{ __typename: 'CheckRun', name: 'CI', status: 'COMPLETED', conclusion: 'FAILURE' }] },
+            statusCheckRollup: { contexts: { nodes: [{ __typename: 'CheckRun', name: 'CI', status: 'COMPLETED', conclusion: 'FAILURE' }] } },
             reviewDecision: 'CHANGES_REQUESTED',
             updatedAt: '2026-06-13T00:00:00Z',
             isDraft: true,
@@ -214,6 +214,15 @@ describe('listPRs()', () => {
     const [, args] = execa.mock.calls[0]
     const query = args.find(arg => String(arg).startsWith('query='))
     expect(query).toContain('autoMergeRequest')
+  })
+
+  it('queries statusCheckRollup without arguments and pages via contexts(first:)', async () => {
+    mockSuccess({ data: { search: { nodes: [] } } })
+    await listPRs('owner/repo')
+    const [, args] = execa.mock.calls[0]
+    const query = args.find(arg => String(arg).startsWith('query='))
+    expect(query).not.toMatch(/statusCheckRollup\s*\(/)
+    expect(query).toMatch(/statusCheckRollup\s*\{\s*contexts\(first:/)
   })
 })
 

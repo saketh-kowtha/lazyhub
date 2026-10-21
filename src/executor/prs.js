@@ -80,7 +80,7 @@ export function normalizePRListGraphQL(result) {
       author: pr.author ? { login: pr.author.login } : null,
       labels: pr.labels?.nodes || [],
       reviewRequests: normalizeReviewRequests(pr.reviewRequests),
-      statusCheckRollup: (pr.statusCheckRollup?.nodes || []).map(normalizeStatusCheck).filter(Boolean),
+      statusCheckRollup: (pr.statusCheckRollup?.contexts?.nodes || []).map(normalizeStatusCheck).filter(Boolean),
       reviewDecision: pr.reviewDecision,
       updatedAt: pr.updatedAt,
       isDraft: Boolean(pr.isDraft),
@@ -124,11 +124,13 @@ export async function listPRs(repo, filter = {}) {
                 }
               }
             }
-            statusCheckRollup(first: 50) {
-              nodes {
-                __typename
-                ... on CheckRun { name status conclusion startedAt completedAt }
-                ... on StatusContext { context state }
+            statusCheckRollup {
+              contexts(first: 50) {
+                nodes {
+                  __typename
+                  ... on CheckRun { name status conclusion startedAt completedAt }
+                  ... on StatusContext { context state }
+                }
               }
             }
             reviewDecision
