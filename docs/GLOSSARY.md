@@ -14,6 +14,8 @@ Alphabetical. Cross-references in **bold**.
 
 **AI provider** — A pluggable backend for AI features. Four shipped today: `claude-code`, `codex`, `gemini-cli`, `anthropic-api`. Selected via `[defaults].ai_provider` in **user config** or `--provider` flag. Lives in `src/ai/providers/`. The `anthropic-api` provider is the only one allowed to make Anthropic HTTP calls directly; the other three shell out to vendor CLIs. **openai-compatible** ships in V2 (#168) and full **LiteLLM** is V3-gated (#170).
 
+**Authorization (Lazyhub)** — A commit-bound approval record that Lazyhub issues and that the App-pinned `lazyhub/approval` check reflects (D1). Exists only in the optional approval stage (`stage:approval`). Never inferred from **review progress**, a **local decision**, or a **GitHub review**. Distinct from all three; see **Review concepts**.
+
 **Audit log** — Append-only NDJSON record of every state-changing operation, written to `~/.config/lazyhub/audit.log` per **ARCHITECT_DECISIONS §6**. Size-capped at 10 MB with 3-file rotation. Owned by the **daemon**.
 
 ---
@@ -68,6 +70,8 @@ Alphabetical. Cross-references in **bold**.
 
 ## G
 
+**GitHub review** — A review (approve / request changes / comment) submitted to GitHub on a pull request. A GitHub-side fact that Lazyhub can display. It is not **review progress** and is not a Lazyhub **authorization**. In review Alpha, submitting one is a human-typed management action, never model-proposed. See **Review concepts**.
+
 **gh** — The GitHub CLI (`github.com/cli/cli`). The only GitHub interface lazyhub uses. No octokit, no raw HTTP. Pinned via **executor**.
 
 **GHES** — GitHub Enterprise Server. Self-hosted GitHub. Supported via `GH_HOST` environment variable that gh already honors.
@@ -95,6 +99,8 @@ Alphabetical. Cross-references in **bold**.
 ---
 
 ## L
+
+**Local decision** — A maintainer's own note or verdict about a change, kept locally (for example "needs follow-up"). Not published to GitHub, not a **GitHub review**, and grants no authority: it is not a Lazyhub **authorization**. Any persistence is demand-gated (#294). See **Review concepts**.
 
 **logAiUsage()** — Helper that records every AI call's tokens, cost, provider, and outcome. Mandatory for every `src/ai/providers/*` call site. Feeds **AI budget** enforcement.
 
@@ -152,11 +158,19 @@ Alphabetical. Cross-references in **bold**.
 
 ## R
 
+**Review concepts** — Four different things that must never be conflated or inferred from one another. (1) **Review progress**: local, derived state of what the maintainer has inspected (files seen, changes since last inspection); retention-oriented and pilot-gated (#294); grants nothing. (2) **GitHub review**: a review submitted on GitHub. (3) **Local decision**: the maintainer's local verdict. (4) **Authorization (Lazyhub)**: the commit-bound approval record behind `lazyhub/approval`; optional, `stage:approval` only. Agent classification and unknown attribution also grant no authority. See ARCHITECT_DECISIONS D12.
+
+**Review progress** — See **Review concepts**. Local and read-only; implies neither a **GitHub review** nor an **authorization**.
+
+**Review Alpha** — The first delivery stage (`stage:review-alpha`): a read-only review journey (open, see work needing attention, inspect changes and evidence, understand the next action, return with context preserved) over the existing `gh` login, with no App, agent/MCP, or AI provider required. Contrast **optional approval** (`stage:approval`) and demand-gated expansion (`stage:demand-gated`).
+
 **runGh** — The single chokepoint function in **executor.js** that every gh call goes through. Phase J2 #139 refactor lands this as the only public API of executor.
 
 ---
 
 ## S
+
+**Stage labels** — `stage:review-alpha`, `stage:approval`, `stage:demand-gated`. Board rule: pick by active stage first, priority second (ROADMAP "Picking the next issue").
 
 **Scope (permission)** — A restriction profile applied to an agent invocation: `full` / `read-only` / `review-only` / `comment-only` / `no-merge` / `triage-only` per ARCHITECT_DECISIONS §7. Set via `--scope=<name>` or `[scopes.*]` TOML block. Distinct from **PR scope**.
 

@@ -10,10 +10,15 @@
 ## Agent Gateway decisions (2026-09-28)
 
 These decisions supersede older issue comments and Decisions 3-7 wherever they
-conflict. Alpha targets solo maintainers and pilot repositories. Slice 1 is
-watch-only observation plus immediate safety and release hardening. Slice 2
-records an exact approval and updates `lazyhub/approval`; Lazyhub does not
-execute merges in Alpha.
+conflict. D1-D11 are security and enforcement contracts and are unchanged by the
+2026-10-21 review-first amendment (see D12).
+
+> **Superseded narrative (2026-10-21).** The earlier framing of this section,
+> "Alpha is watch-only observation (Slice 1) plus approval recording (Slice 2)",
+> and the gateway-first product story are superseded as *product narrative*.
+> The delivery stages are now review Alpha, optional approval, and demand-gated
+> expansion (D12, `docs/ROADMAP.md`). The unchanged parts: Lazyhub never
+> executes merges, and Slice 2 content is the optional approval stage.
 
 ### D1 — GitHub-enforced approval check
 
@@ -112,11 +117,51 @@ links rather than prompts, full diffs, or credentials. Sensitive files are
 permission restricted, retention defaults to 90 days, and integrity-linked
 entries fail closed for governed writes.
 
-### D12 — Product focus
+### D12 — Product focus (amended 2026-10-21, #293)
 
-Until pilot evidence exists, support npm and Homebrew only, freeze editor
-integrations and broad TUI expansion, and prioritize watch-only observation,
-approval integrity, published-package security, and trustworthy diagnostics.
+**Purpose.** Lazyhub helps maintainers understand changes, make informed
+decisions, and stay accountable for what ships as coding agents produce more
+work. **First audience:** terminal-oriented solo maintainers who regularly review
+agent-produced PRs. **Core journey:** open, see work needing attention, inspect
+changes and evidence, understand the next action, return with context preserved.
+General GitHub management supports this job; it is not the headline.
+
+**Scope amendment.** The narrow, read-only review journey (queue with explainable
+attention reasons, evidence and diff, return-to-queue continuity: #177, #175,
+#127, on the existing surfaces) is in scope. The freeze is otherwise unchanged:
+no broad dashboards, no editor integrations, no broad TUI expansion, no packaging
+beyond npm and Homebrew, no plugin marketplace, no generic coding-agent runtime,
+no visual reskin, until pilot evidence exists. Superseded wording: the prior D12
+text "prioritize watch-only observation, approval integrity..." as the product
+focus, and any gateway-first narrative elsewhere.
+
+**Stages.** Review Alpha (`stage:review-alpha`) uses the existing `gh` login with
+no App, agent/MCP setup, or AI provider, and its core journey is read-only.
+Optional approval (`stage:approval`) is separate and is never a dependency of
+review Alpha; it must keep D1-D11 intact and requires #277 feasibility, #278
+contracts, #245/#235/#244/#203, and #141 proof, and never executes merges.
+Demand-gated work (`stage:demand-gated`: #294, #297, #145) activates only from
+pilot evidence. Review Alpha success is not evidence for approval.
+
+**Write boundary.** Model-proposed GitHub writes are disabled for review Alpha,
+including writes a human confirms. Human-initiated management actions (typed by
+the user, not proposed by a model) are preserved as legacy supporting
+functionality and are kept outside the read-only review context. Agent
+classification, unknown attribution, and review progress grant no authority.
+This amendment changes no permission default and no enforcement guarantee.
+
+**Distinct concepts.** Review progress, GitHub review, local decision, and Lazyhub
+authorization are different things (GLOSSARY "Review concepts"); none implies
+another.
+
+**Prioritization.** Pick by active stage first, priority second
+(`stage:review-alpha`, then `stage:approval`, then `stage:demand-gated`). Stage
+order does not defer security defects in shipped or enabled functionality;
+triage those by exposure and severity regardless of stage.
+
+**Success signals.** Repeat usefulness, informed decisions, and observed saved
+effort outrank stars or acquisition. No traction is claimed until pilots (#286)
+produce evidence.
 
 ## How to read an issue body
 
