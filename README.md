@@ -142,6 +142,8 @@ npm run dev   # Auto-rebuild on change
 npm test      # Run Vitest suite
 ```
 
+Security issues and least-privilege setup: see [SECURITY.md](./SECURITY.md).
+
 ---
 
 ## 📜 License
