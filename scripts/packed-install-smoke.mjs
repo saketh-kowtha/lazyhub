@@ -43,8 +43,10 @@ try {
   const version = run('node', [bin, '--version'], { timeout: 30_000 }).trim()
   check(/^\d+\.\d+\.\d+/.test(version), `--version reports ${version}`)
   // doctor exits non-zero when the temp HOME has no config; only its output matters here.
-  const doctor = spawnSync('node', [bin, 'doctor', '--help'], { encoding: 'utf8', env, timeout: 30_000 })
-  check(doctor.stdout.includes('Schema validation passed'), 'doctor --help runs (bundled ESM + lazy chunks load)')
+  const doctor = spawnSync('node', [bin, 'doctor', '--config'], { encoding: 'utf8', env, timeout: 30_000 })
+  check(doctor.stdout.includes('Schema validation passed'), 'doctor --config runs (bundled ESM + lazy chunks load)')
+  const doctorHelp = spawnSync('node', [bin, 'doctor', '--help'], { encoding: 'utf8', env, timeout: 30_000 })
+  check(doctorHelp.status === 0 && /--coverage/.test(doctorHelp.stdout), 'doctor --help prints usage')
   // Evaluating the chunk that bundles Ink's layout engine proves yoga.wasm resolves from the installed dist/ (top-level await).
   const dist = join(installed, 'dist')
   const yogaChunk = readdirSync(dist).find(f => f.endsWith('.js') && readFileSync(join(dist, f), 'utf8').includes('./yoga.wasm'))
