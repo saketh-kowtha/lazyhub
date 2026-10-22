@@ -70,6 +70,10 @@ describe('code-split bundle', () => {
 
   it.each([
     [['--version']],
+    [['--help']],
+    [['-h']],
+    [['--bogus']],
+    [['not-a-reference']],
     [['doctor', '--json']],
     [['watch-only', '--json', '--repo', 'o/r']],
     [['--mcp']],
@@ -118,5 +122,42 @@ describe('self-contained package (#282)', () => {
     const entries = licenses.split(/\n-{72}\n/)
     expect(entries.length).toBeGreaterThan(30)
     expect(entries.filter(e => e.includes('no license file shipped')).length).toBeLessThan(5)
+  })
+
+  describe('top-level arguments (#315)', () => {
+    const run = args => {
+      const home = mkdtempSync(join(tmpdir(), 'lazyhub-cli-'))
+      // No gh on PATH: a refused argument must exit before anything contacts GitHub.
+      return spawnSync(process.execPath, [BIN, ...args], {
+        env: { PATH: dirname(process.execPath), HOME: home, USER: 'lazyhub', LAZYHUB_NO_DAEMON: '1' },
+        input: '', encoding: 'utf8', timeout: 30_000,
+      })
+    }
+
+    it.each([['--help'], ['-h']])('%s prints usage with the reference forms and exits 0', flag => {
+      const r = run([flag])
+      expect(r.status).toBe(0)
+      expect(r.stdout).toContain('owner/repo#123')
+      expect(r.stdout).toContain('doctor')
+      expect(r.stdout).not.toContain('feedback')
+    })
+
+    it('an unknown flag prints usage to stderr and exits 2', () => {
+      const r = run(['--bogus'])
+      expect(r.status).toBe(2)
+      expect(r.stderr).toContain('unknown option: --bogus')
+      expect(r.stderr).toContain('Usage:')
+    })
+
+    it.each([
+      ['https://evil.example/o/r/pull/1'],
+      ['o/r#1; id'],
+      ['0'],
+      ['docter'],
+    ])('refuses %j with usage and exit 2, before contacting anything', ref => {
+      const r = run([ref])
+      expect(r.status).toBe(2)
+      expect(r.stderr).toContain('Usage:')
+    })
   })
 })

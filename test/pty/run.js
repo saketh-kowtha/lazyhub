@@ -54,6 +54,7 @@ function installGhStub(dir) {
 const fs = require('fs')
 const args = process.argv.slice(2)
 const has = value => args.includes(value)
+if (process.env.LAZYHUB_GH_LOG) fs.appendFileSync(process.env.LAZYHUB_GH_LOG, JSON.stringify(args) + '\\n')
 const json = value => { process.stdout.write(JSON.stringify(value)); process.exit(0) }
 const latency = Number(process.env.LAZYHUB_GH_LATENCY_MS || 0)
 if (latency > 0 && ((args[0] === 'api' && args[1] === 'graphql') || (args[0] === 'pr' && args[1] === 'list'))) {
@@ -82,6 +83,7 @@ if (args[0] === 'issue' && args[1] === 'list') json(${JSON.stringify(fixtureIssu
 if (args[0] === 'issue' && args[1] === 'view') json(${JSON.stringify(fixtureIssues()[0])})
 if (args[0] === 'run' && args[1] === 'list') json([{ databaseId: 1, name: 'CI', status: 'completed', conclusion: 'success', workflowName: 'CI', headBranch: 'main', event: 'push', createdAt: '2026-06-13T00:00:00Z', updatedAt: '2026-06-13T00:01:00Z', url: 'https://github.com/saketh-kowtha/lazyhub/actions/runs/1' }])
 if (args[0] === 'api' && args[1] === 'notifications') json([])
+if (args[0] === 'api' && /^repos\\/[^/]+\\/[^/]+\\/issues\\/\\d+$/.test(args[1] || '')) { process.stdout.write('true\\n'); process.exit(0) }
 if (args[0] === 'api' && /\\/branches/.test(args[1] || '')) json([{ name: 'main', protected: true, commit: { sha: 'abc123' } }, { name: 'feature/pty', protected: false, commit: { sha: 'def456' } }])
 json([])
 `, 'utf8')
@@ -114,8 +116,8 @@ function waitForScreen(getText, pattern, label, timeoutMs = 8000) {
   })
 }
 
-function spawnTerminal(env) {
-  const term = pty.spawn(process.execPath, [BIN], {
+function spawnTerminal(env, args = []) {
+  const term = pty.spawn(process.execPath, [BIN, ...args], {
     name: 'xterm-256color',
     cols: 80,
     rows: 24,
@@ -226,6 +228,32 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
   }
 }
 
+// #315: `lazyhub owner/repo#N` opens the PR detail read-only; Esc returns to that repo's list.
+async function runReferenceFlow() {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-ref-'))
+  const stubBin = installGhStub(temp)
+  const ghLog = join(temp, 'gh-calls.ndjson')
+  let output = ''
+  let term
+  try {
+    term = spawnTerminal({ ...childEnv(stubBin, temp), LAZYHUB_GH_LOG: ghLog }, ['saketh-kowtha/lazyhub#186'])
+    term.onData(data => { output += data })
+    await waitForScreen(() => output, /Fixture body/, 'PR detail opened by reference')
+    output = ''
+    term.write('\x1b')
+    await waitForScreen(() => output, /open.*closed.*merged.*scope/, 'Esc back to the PR list')
+    term.write('q')
+    await waitForExit(term)
+    const { classifyGh } = await import(new URL('../../src/daemon/protocol.js', import.meta.url).href)
+    const calls = readFileSync(ghLog, 'utf8').trim().split('\n').map(line => JSON.parse(line))
+    assert.ok(calls.some(args => args[0] === 'pr' && args[1] === 'view'), 'PR detail was fetched')
+    assert.deepEqual(calls.filter(args => classifyGh(args) === 'write'), [])
+  } finally {
+    try { term?.kill() } catch {}
+    rmSync(temp, { recursive: true, force: true })
+  }
+}
+
 async function runCrashFlow() {
   const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-crash-'))
   const stubBin = installGhStub(temp)
@@ -329,6 +357,7 @@ if (process.env.CI && process.platform === 'linux') {
 }
 
 await runLazyhubFlow()
+await runReferenceFlow()
 await runCrashFlow()
 await runDegradedFlow()
 await runPerfFlow()
