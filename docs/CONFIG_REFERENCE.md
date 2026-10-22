@@ -8,6 +8,9 @@ The single source of truth is `~/.config/lazyhub/lazyhub.toml`.
 
 - `[theme]` selects the active theme.
 - `[app]`, `[panes.*]`, `[features.*]`, `[layout]`, `[diff]`, `[editor]`, `[ipc]`, and `[ai]` provide app configuration.
+- `[ipc].allow_writes` (default `false`) lets editor integrations reply to and
+  resolve PR review threads over the IDE socket. Reads and navigation always
+  work. Local-only: a remote `config_url` cannot set it.
 - `[actions.*]` stores key bindings plus label/description metadata for help, docs, and AI guidance.
 - `[state]` stores auto-managed runtime state migrated from the old `state.json`.
 - `[ai.second_opinion]` controls cross-model review routing for agent-authored

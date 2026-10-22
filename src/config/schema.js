@@ -108,6 +108,7 @@ export const DEFAULT_CONFIG = {
   },
   ipc: {
     enabled: true,
+    allow_writes: false,
   },
   ui: {
     density: 'compact',
@@ -391,7 +392,8 @@ const EDITOR_SPEC = {
 }
 
 const IPC_SPEC = {
-  enabled: { type: 'boolean' },
+  enabled:      { type: 'boolean' },
+  allow_writes: { type: 'boolean' },
 }
 
 const UI_SPEC = {

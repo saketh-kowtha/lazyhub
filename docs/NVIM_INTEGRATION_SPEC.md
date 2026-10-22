@@ -245,6 +245,8 @@ The current `src/ipc.js` covers `ping`/`state`/`navigate`/`open-file`. To suppor
 | `reply-thread` | `{ threadId, body }` | `{ ok, commentId }` |
 | `resolve-thread` | `{ threadId }` | `{ ok }` |
 
+`reply-thread` and `resolve-thread` are GitHub writes. They are disabled by default and answer `{ ok: false, error: 'writes-disabled', message }` unless the user sets `[ipc] allow_writes = true` in `lazyhub.toml`. The plugin shows `message` via `vim.notify`. Reads and navigation are unaffected.
+
 These are thin wrappers around existing executor calls so lazyhub's in-memory cache is reused (cheaper than nvim spawning `gh` again).
 
 ### 5.2 New events

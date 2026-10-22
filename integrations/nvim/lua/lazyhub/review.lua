@@ -568,9 +568,10 @@ local function _do_reply(comment, body)
           end)
         end)
       else
-        local msg = (resp and resp.error) or 'reply failed'
+        local writes_off = resp and resp.error == 'writes-disabled'
+        local msg = (resp and (writes_off and resp.message or resp.error)) or 'reply failed'
         vim.schedule(function()
-          vim.notify('[lazyhub] ' .. msg, vim.log.levels.ERROR)
+          vim.notify('[lazyhub] ' .. msg, writes_off and vim.log.levels.WARN or vim.log.levels.ERROR)
         end)
       end
     end)
@@ -731,9 +732,10 @@ function M.resolve()
             vim.notify('[lazyhub] thread resolved', vim.log.levels.INFO)
           end)
         else
-          local msg = (resp and resp.error) or 'resolve failed'
+          local writes_off = resp and resp.error == 'writes-disabled'
+          local msg = (resp and (writes_off and resp.message or resp.error)) or 'resolve failed'
           vim.schedule(function()
-            vim.notify('[lazyhub] ' .. msg, vim.log.levels.ERROR)
+            vim.notify('[lazyhub] ' .. msg, writes_off and vim.log.levels.WARN or vim.log.levels.ERROR)
           end)
         end
       end)
