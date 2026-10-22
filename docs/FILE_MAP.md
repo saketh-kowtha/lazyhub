@@ -41,7 +41,7 @@
 | `src/ai/providers/_base.js` | Shared spawn helper for CLI-based AI providers. Security requirements (mirroring executor.js): - execFile only — no exec, no shell interpretation - Prompt piped via stdin — never as argv (diffs exceed ARG_MAX; injection risk) - Isolation — empty 0700 temp cwd + throwaway HOME; minimal env plus the provider's explicit env-var auth only (no repo, no user agent settings) - Cleanup of the sandbox on success, error, timeout and parent termination - 60s hard timeout + SIGTERM → SIGKILL after 5s grace - 256KB output cap — larger responses truncated and treated as malformed |
 | `src/ai/providers/anthropic-api.js` | Anthropic HTTP API provider. This is the ONLY file that makes Anthropic HTTP calls. HTTP logic extracted unchanged from src/ai.js. Preserves the cache_control ephemeral header on the system prompt. |
 | `src/ai/providers/claude-code.js` | Claude Code CLI provider. Uses the `claude` CLI in non-interactive (-p) mode. Prompt is piped via stdin — never argv (diffs exceed ARG_MAX). Isolation (#252): runs in an empty temp cwd with a throwaway HOME, so no repo CLAUDE.md/.claude settings, plugins, hooks, or the user's ~/.claude are loaded. Auth is handed over explicitly via env only: - ANTHROPIC_API_KEY        -> `--bare` (API-key-only minimal mode) - CLAUDE_CODE_OAUTH_TOKEN  -> (`claude setup-token`) non-bare Without either, the provider is unavailable (OAuth/keychain logins cannot be handed over without exposing the real config dir). |
-| `src/ai/providers/codex.js` | Codex CLI provider. Uses the `codex` CLI for executing agent tasks. Prompt is piped via stdin — never argv (diffs exceed ARG_MAX). Isolation (#252): runs in an empty temp cwd with a throwaway HOME/CODEX_HOME. Auth is env-API-key only (CODEX_API_KEY / OPENAI_API_KEY). The user's ~/.codex/auth.json (ChatGPT login) is deliberately NOT copied: Codex rotates single-use refresh tokens, so a refresh inside the sandbox would silently invalidate the user's real login. No key -> provider unavailable. Note: Codex outputs NDJSON event stream (one JSON object per line). We filter for 'agent_message' events and concatenate their text. |
+| `src/ai/providers/codex.js` | Codex CLI provider. Uses the `codex` CLI for executing agent tasks. Prompt is piped via stdin — never argv (diffs exceed ARG_MAX). Isolation (#252): runs in an empty temp cwd with a throwaway HOME/CODEX_HOME. Auth is env-API-key only (CODEX_API_KEY / OPENAI_API_KEY). The user's ~/.codex/auth.json (ChatGPT login) is deliberately NOT copied: Codex rotates single-use refresh tokens, so a refresh inside the sandbox would silently invalidate the user's real login. No key -> provider unavailable. Note: Codex outputs NDJSON event stream (one JSON object per line). We take completed agent messages — `item.completed` with `item.type === 'agent_message'` (`item.text`), or the legacy top-level `agent_message` (`message`) — and concatenate their text. |
 | `src/ai/providers/gemini-cli.js` | Gemini CLI provider. Uses the `gemini` CLI for executing agent tasks. Prompt is piped via stdin — never argv (diffs exceed ARG_MAX). Isolation (#252): runs in an empty temp cwd with GEMINI_CLI_HOME and HOME pointing at a throwaway dir. Auth is env-API-key only (GEMINI_API_KEY). The user's ~/.gemini/oauth_creds.json is deliberately NOT copied: a token refresh inside the sandbox could invalidate the real login and we cannot prove it doesn't. No key -> provider unavailable. |
 | `src/ai/providers/openai-compatible.js` | OpenAI-compatible HTTP provider. |
 | `src/ai/usage.js` | AI usage logging wrapper. Centralizes usage recording for all AI providers. Mirrors the project's existing logAiUsage() pattern. tokens{In,Out} may be null for CLI providers — that is expected. |
@@ -194,10 +194,12 @@
 | `src/features/tabs/pane.jsx` | one TOML-declared dashboard pane. |
 | `src/features/tabs/registry.js` | TOML custom tab registry. |
 | `src/features/tabs/view.jsx` | TOML-declared multi-pane dashboard. |
+| `src/highlight.js` | lazily-built highlight.js instance (#302). `import hljs from 'highlight.js'` registers all ~190 languages (~70 ms at startup). Instead this module builds a `highlight.js/lib/core` instance with only the languages the diff view maps file extensions to (see getLang in features/prs/diff.jsx), plus `diff` and `ini` for markdown code fences. It loads synchronously on the first highlight call (render code cannot await), so CLI commands and the first frame never pay for it. Trade-off: fenced code blocks in markdown with a language outside this set (e.g. ```lua) now render unhighlighted, and untagged blocks are auto-detected among these languages only. |
 | `src/input-validation.js` | shared runtime validators for untrusted agent/model-supplied input (MCP adapter, AI assistant). Dependency-free so the daemon can import it without pulling in UI code. |
 | `src/perf.js` | opt-in local NDJSON performance instrumentation. |
 | `src/secure-fs.js` | private-by-default filesystem helpers (#253). Every lazyhub-owned directory that may hold repository metadata, request arguments, config or IPC endpoints is created 0700 and every file 0600, regardless of the process umask. Existing paths are tightened in place (migration from releases that wrote with default modes). On win32 POSIX modes do not apply, so these helpers degrade to plain fs calls. This is defense in depth against other local accounts; a hostile process running as the same OS user is out of scope (docs/THREAT_MODEL.md). |
 | `src/test/test-helpers.jsx` | (no header — inferred: test-helpers) |
+| `src/utils-core.js` | UI-free helpers (logger, path + text sanitizing). Split out of utils.js so CLI commands (doctor, watch-only, serve, --mcp, ...) can use them without loading ink/react/highlight.js (#302). utils.js re-exports everything here, so existing imports keep working. |
 | `src/watch-only/classify.js` | attribute observed actors, with evidence. SECURITY: classification is audit METADATA ONLY (ARCHITECT_DECISIONS D1/D3, THREAT_MODEL T10/T12). Nothing in report.js reads a class to decide coverage, and no caller may use it to grant or bypass authority. Classes: agent       identity is in the local registry as a known coding/review agent automation  identity is in the registry as non-AI automation (CI, dependency bots) human       GitHub `User` account with no registry match. This is "no agent evidence", NOT proof of a human: an agent using a personal token is indistinguishable from here. unknown     anything ambiguous (unregistered Bot/App, deleted account, git-only identity, login/type mismatch). Never guessed. Event-level attribution additionally has `shared` (human + agent on one event). |
 | `src/watch-only/index.js` | observe -> classify -> report, read-only and local. |
 | `src/watch-only/observe.js` | read GitHub-side PR activity into normalized events. Observes only what reached GitHub (PR timelines, commits, reviews, check runs) through the user's existing `gh` session. Local work that never reached GitHub is invisible by construction (THREAT_MODEL T7) and is never claimed. Anything not fully read becomes an explicit `gap` rather than silence, so the report can refuse to call an incompletely observed operation covered (T1). Event `type` values are the operation names used by report.js. |
@@ -209,21 +211,22 @@ Test file counts by directory:
 
 | Directory | Test files |
 |---|---|
-| `src/` | 16 |
+| `src/` | 17 |
 | `src/ai/` | 3 |
 | `src/ai/providers/` | 4 |
-| `src/cli/` | 1 |
+| `src/cli/` | 2 |
 | `src/cli/doctor/` | 4 |
+| `src/components/` | 1 |
 | `src/config/` | 6 |
 | `src/daemon/` | 7 |
 | `src/executor/` | 1 |
 | `src/features/onboarding/` | 1 |
-| `src/features/prs/` | 2 |
+| `src/features/prs/` | 3 |
 | `src/features/tabs/` | 2 |
 | `src/hooks/` | 1 |
 | `src/theme/` | 1 |
 | `src/ui/` | 2 |
 | `src/watch-only/` | 1 |
 
-**Total non-test source files:** 134
-**Total test files:** 52
+**Total non-test source files:** 136
+**Total test files:** 56
