@@ -61,3 +61,51 @@ evidence and `downgrade_reasons` behind it.
   which keys GitHub accepts) are listed as `unknown`.
 
 `--json` carries the same data as the text output (`schema_version` 1).
+
+## What lazyhub can access
+
+Lazyhub runs the `gh` CLI and inherits whatever access that session or token
+has. The default `gh auth login` scopes include `repo` and `workflow`, so
+lazyhub can do anything those scopes allow, including writes. Lazyhub stores no
+credentials of its own: it keeps only local config and cache files, which can
+contain private repository content and are created with private permissions.
+AI features are off by default and send nothing until
+you enable a provider. Lazyhub has no telemetry.
+
+## Running with least privilege
+
+Lazyhub starts `gh` with its environment unchanged, so `GH_TOKEN` (and
+`GH_HOST`) set in your shell take precedence over the stored `gh` login. To
+limit what lazyhub can reach:
+
+1. Create a fine-grained personal access token limited to the repositories you
+   review, with read-only permissions for Contents, Pull requests, Issues, and
+   Metadata (add Actions or Commit statuses read-only to see check results).
+2. Start lazyhub with it, for example `GH_TOKEN=<token> lazyhub`.
+
+With a read-only token, reading PRs, issues, and diffs works. Anything that
+writes fails with a GitHub permission error: submitting reviews or comments,
+merging, closing, labeling, and creating issues or PRs. Some views that need
+fields your token cannot read may be partial. Grant a write permission only for
+the operations you need.
+
+## Incident response
+
+For maintainers, when a vulnerability or compromised release is confirmed:
+
+1. Run `npm deprecate lazyhub@"<affected range>" "<reason; upgrade to X>"` for
+   every affected version.
+2. Publish a fixed release through the provenance-enabled release workflow
+   (`.github/workflows/release.yml`), not from a local machine.
+3. Publish a GitHub security advisory for the repository, with affected and
+   patched versions and a CVE request where warranted.
+
+For users of an affected version:
+
+1. Update to the fixed release.
+2. Revoke the GitHub token lazyhub used. `gh auth logout` only removes the
+   local copy, so also revoke the GitHub CLI authorization (GitHub Settings,
+   Applications, Authorized OAuth Apps) and any personal access tokens that were
+   exposed (Developer settings), then run `gh auth login` again.
+3. Review your GitHub security log (Settings, Security log) and repository
+   audit logs for unexpected activity.
