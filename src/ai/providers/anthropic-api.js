@@ -40,6 +40,50 @@ export async function detect() {
   return { available: false, reason: 'ANTHROPIC_API_KEY is not set' }
 }
 
+// ── Transport ─────────────────────────────────────────────────────────────────
+
+/**
+ * POST one Messages API request and return the parsed JSON body. The only
+ * place in the codebase that talks to Anthropic over HTTP.
+ * @param {string} apiKey
+ * @param {object} payload
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<object>}
+ */
+async function postMessages(apiKey, payload, signal) {
+  let response
+  try {
+    response = await fetch(ANTHROPIC_API_URL, {
+      method: 'POST',
+      headers: {
+        'x-api-key':         apiKey,
+        'anthropic-version': ANTHROPIC_VERSION,
+        'content-type':      'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal,
+    })
+  } catch (err) {
+    if (err.name === 'AbortError') throw err
+    if (err.name === 'TimeoutError') throw new AIError('Anthropic request timed out', { code: 'timeout', provider: id })
+    throw new AIError(`Network error: ${err.message}`, { code: 'provider-unavailable', provider: id })
+  }
+
+  if (!response.ok) {
+    const status = response.status
+    if (status === 401) throw new AIError('Invalid API key', { code: 'auth-required', provider: id, status })
+    if (status === 429) throw new AIError('Rate limit exceeded — try again shortly', { code: 'rate-limited', provider: id, status })
+    if (status >= 500)  throw new AIError('Anthropic service error — try again', { code: 'provider-unavailable', provider: id, status })
+    throw new AIError(`API error: ${status}`, { code: 'provider-unavailable', provider: id, status })
+  }
+
+  try {
+    return await response.json()
+  } catch {
+    throw new AIError('Could not parse API response', { code: 'malformed-response', provider: id })
+  }
+}
+
 // ── Inference ─────────────────────────────────────────────────────────────────
 
 /**
@@ -61,48 +105,18 @@ export async function complete({ system, user, maxTokens, model, signal }) {
   const resolvedModel = model || DEFAULT_MODEL
   const resolvedMax   = maxTokens || MAX_TOKENS
 
-  let response
-  try {
-    response = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'x-api-key':         apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-        'content-type':      'application/json',
+  const body = await postMessages(apiKey, {
+    model:      resolvedModel,
+    max_tokens: resolvedMax,
+    system: [
+      {
+        type: 'text',
+        text: system || SYSTEM_PROMPT,
+        cache_control: { type: 'ephemeral' },  // cached — free on repeated calls
       },
-      body: JSON.stringify({
-        model:      resolvedModel,
-        max_tokens: resolvedMax,
-        system: [
-          {
-            type: 'text',
-            text: system || SYSTEM_PROMPT,
-            cache_control: { type: 'ephemeral' },  // cached — free on repeated calls
-          },
-        ],
-        messages: [{ role: 'user', content: user }],
-      }),
-      signal,
-    })
-  } catch (err) {
-    if (err.name === 'AbortError') throw err
-    throw new AIError(`Network error: ${err.message}`, { code: 'provider-unavailable', provider: id })
-  }
-
-  if (!response.ok) {
-    const status = response.status
-    if (status === 401) throw new AIError('Invalid API key', { code: 'auth-required', provider: id, status })
-    if (status === 429) throw new AIError('Rate limit exceeded — try again shortly', { code: 'rate-limited', provider: id, status })
-    if (status >= 500)  throw new AIError('Anthropic service error — try again', { code: 'provider-unavailable', provider: id, status })
-    throw new AIError(`API error: ${status}`, { code: 'provider-unavailable', provider: id, status })
-  }
-
-  let body
-  try {
-    body = await response.json()
-  } catch {
-    throw new AIError('Could not parse API response', { code: 'malformed-response', provider: id })
-  }
+    ],
+    messages: [{ role: 'user', content: user }],
+  }, signal)
 
   const text = body?.content?.[0]?.text
   if (typeof text !== 'string') {
@@ -115,4 +129,58 @@ export async function complete({ system, user, maxTokens, model, signal }) {
     tokensIn:   body.usage?.input_tokens  ?? null,
     tokensOut:  body.usage?.output_tokens ?? null,
   }
+}
+
+// ── Tool-use chat (assistant) ─────────────────────────────────────────────────
+
+/**
+ * One round of a multi-turn, tool-capable conversation. Messages and tool
+ * definitions are Anthropic-native; the returned `message` is appended to the
+ * history as-is.
+ * @param {object} opts
+ * @param {string}      opts.system     - System prompt text
+ * @param {Array}       opts.messages   - Conversation so far (Anthropic format)
+ * @param {Array}       [opts.tools]    - Tool definitions ({name, description, input_schema})
+ * @param {number}      opts.maxTokens  - Maximum tokens to generate
+ * @param {string}      [opts.model]    - Model override
+ * @param {string}      [opts.apiKey]   - Key from lazyhub config; falls back to ANTHROPIC_API_KEY
+ * @param {AbortSignal} [opts.signal]   - Optional abort signal
+ * @returns {Promise<{message: object, text: string, toolCalls: Array<{id: string, name: string, input: object}>, modelUsed: string, tokensIn: number|null, tokensOut: number|null}>}
+ */
+export async function chat({ system, messages, tools, maxTokens, model, apiKey: configuredKey, signal }) {
+  const apiKey = configuredKey || process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    throw new AIError('No Anthropic API key', { code: 'auth-required', provider: id })
+  }
+  const resolvedModel = model || DEFAULT_MODEL
+
+  const body = await postMessages(apiKey, {
+    model:      resolvedModel,
+    max_tokens: maxTokens || MAX_TOKENS,
+    system:     [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+    ...(tools?.length ? { tools } : {}),
+    messages,
+  }, signal)
+
+  if (!Array.isArray(body?.content)) {
+    throw new AIError('Unexpected API response format', { code: 'malformed-response', provider: id })
+  }
+  return {
+    message:   { role: 'assistant', content: body.content },
+    text:      body.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim(),
+    toolCalls: body.content.filter(b => b.type === 'tool_use').map(b => ({ id: b.id, name: b.name, input: b.input })),
+    modelUsed: body.model || resolvedModel,
+    tokensIn:  body.usage?.input_tokens  ?? null,
+    tokensOut: body.usage?.output_tokens ?? null,
+  }
+}
+
+/**
+ * Build the Anthropic-format message(s) answering a round's tool calls. The API
+ * requires one tool_result per tool_use id, all in a single user message.
+ * @param {Array<{id: string, content: string}>} results
+ * @returns {object[]}
+ */
+export function toolResultMessages(results) {
+  return [{ role: 'user', content: results.map(r => ({ type: 'tool_result', tool_use_id: r.id, content: r.content })) }]
 }

@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { executeMutatingTool, runAssistantTurn } from './ai-assistant.js'
 import * as executor from './executor.js'
+import { logAiUsage } from './ai/usage.js'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+vi.mock('./ai/usage.js', () => ({ logAiUsage: vi.fn() }))
 
 vi.mock('./executor.js', () => ({
   listPRs: vi.fn(async () => [{ number: 7 }]),
@@ -122,5 +127,117 @@ describe('assistant mutation containment (B-64: model writes disabled, even if h
 
     expect(executor.listPRs).toHaveBeenCalledWith('owner/repo', expect.objectContaining({ state: 'open' }))
     expect(result).toMatchObject({ type: 'answer', text: 'one PR' })
+  })
+})
+
+describe('assistant provider boundary (B-65: every round goes through src/ai/index.js + logAiUsage)', () => {
+  const base = {
+    messages: [], userMessage: 'hi', repo: 'owner/repo',
+    ctx: { repo: 'owner/repo', pane: 'prs', selectedItem: null },
+  }
+  const json = (body, status = 200) => ({ ok: status < 300, status, json: async () => body })
+
+  beforeEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
+
+  it('records one usage entry per Anthropic round, with null tokens when the provider reports none, and no prompt/tool payload', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({
+        model: 'claude-x', usage: { input_tokens: 11, output_tokens: 3 },
+        content: [{ type: 'tool_use', id: 'tu1', name: 'list_prs', input: { author: 'SECRET-PAYLOAD' } }],
+      }))
+      .mockResolvedValueOnce(json({ content: [{ type: 'text', text: 'ok' }] }))
+
+    await runAssistantTurn({ ...base, userMessage: 'SECRET-PROMPT', aiConfig: { provider: 'anthropic', anthropicApiKey: 'sk-secret' } })
+
+    expect(logAiUsage).toHaveBeenCalledTimes(2)
+    expect(logAiUsage.mock.calls[0][0]).toMatchObject({ provider: 'anthropic-api', model: 'claude-x', tokensIn: 11, tokensOut: 3, success: true })
+    expect(logAiUsage.mock.calls[1][0]).toMatchObject({ provider: 'anthropic-api', tokensIn: null, tokensOut: null, success: true })
+    const logged = JSON.stringify(logAiUsage.mock.calls)
+    for (const secret of ['SECRET-PROMPT', 'SECRET-PAYLOAD', 'sk-secret']) expect(logged).not.toContain(secret)
+  })
+
+  it('records OpenAI-compatible usage and a failed round as success:false', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ model: 'm', usage: { prompt_tokens: 5, completion_tokens: 2 }, choices: [{ message: { role: 'assistant', content: 'a' } }] }))
+      .mockResolvedValueOnce(json({}, 500))
+    const cfg = { provider: 'ollama', openaiBaseUrl: 'http://localhost:11434/v1' }
+
+    await runAssistantTurn({ ...base, aiConfig: cfg })
+    const failed = await runAssistantTurn({ ...base, aiConfig: cfg })
+
+    expect(logAiUsage.mock.calls[0][0]).toMatchObject({ provider: 'openai-compatible', tokensIn: 5, tokensOut: 2, success: true })
+    expect(logAiUsage.mock.calls[1][0]).toMatchObject({ provider: 'openai-compatible', success: false })
+    expect(failed.type).toBe('error')
+  })
+
+  it('surfaces provider errors, malformed responses and cancellation as error results', async () => {
+    const cfg = { provider: 'anthropic', anthropicApiKey: 'k' }
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    fetchMock.mockResolvedValueOnce(json({}, 401))
+    expect(await runAssistantTurn({ ...base, aiConfig: cfg })).toMatchObject({ type: 'error', text: expect.stringMatching(/key/i) })
+    fetchMock.mockResolvedValueOnce(json({ nope: true }))
+    expect(await runAssistantTurn({ ...base, aiConfig: cfg })).toMatchObject({ type: 'error' })
+    fetchMock.mockRejectedValueOnce(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+    expect(await runAssistantTurn({ ...base, aiConfig: cfg })).toMatchObject({ type: 'error', text: expect.stringMatching(/cancel/i) })
+  })
+
+  it('answers EVERY parallel tool call: one Anthropic user message holding all tool_results, mutating ones denied', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ content: [
+        { type: 'tool_use', id: 'a', name: 'list_prs', input: {} },
+        { type: 'tool_use', id: 'b', name: 'merge_pr', input: { number: 1 } },
+      ] }))
+      .mockResolvedValueOnce(json({ content: [{ type: 'text', text: 'done' }] }))
+
+    const result = await runAssistantTurn({ ...base, aiConfig: { provider: 'anthropic', anthropicApiKey: 'k' } })
+
+    const last = JSON.parse(fetchMock.mock.calls[1][1].body).messages.at(-1)
+    expect(last.role).toBe('user')
+    expect(last.content.map(b => b.tool_use_id)).toEqual(['a', 'b'])
+    expect(JSON.parse(last.content[1].content)).toMatchObject({ code: 'AI_MUTATIONS_DISABLED' })
+    expect(result).toMatchObject({ type: 'answer', text: 'done' })
+    expect(executor.mergePR).not.toHaveBeenCalled()
+  })
+
+  it('answers EVERY parallel tool call on OpenAI-compatible providers (one tool message per id)', async () => {
+    const calls = ['x', 'y'].map(id => ({ id, type: 'function', function: { name: 'list_prs', arguments: '{}' } }))
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ choices: [{ message: { role: 'assistant', content: '', tool_calls: calls } }] }))
+      .mockResolvedValueOnce(json({ choices: [{ message: { role: 'assistant', content: 'done' } }] }))
+
+    await runAssistantTurn({ ...base, aiConfig: { provider: 'openai', openaiApiKey: 'k' } })
+
+    const sent = JSON.parse(fetchMock.mock.calls[1][1].body).messages
+    expect(sent.slice(-2).map(m => [m.role, m.tool_call_id])).toEqual([['tool', 'x'], ['tool', 'y']])
+  })
+
+  it('aborts the in-flight request when the caller aborts', async () => {
+    const ctl = new AbortController()
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce((_u, init) => new Promise((_res, rej) => {
+      init.signal.addEventListener('abort', () => rej(init.signal.reason))
+    }))
+    const pending = runAssistantTurn({ ...base, signal: ctl.signal, aiConfig: { provider: 'anthropic', anthropicApiKey: 'k' } })
+    ctl.abort()
+    expect(await pending).toMatchObject({ type: 'error', text: expect.stringMatching(/cancel/i) })
+  })
+
+  it('answers without an Anthropic key before making any request', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    expect(await runAssistantTurn({ ...base, aiConfig: { provider: 'anthropic' } })).toMatchObject({ type: 'error', text: expect.stringMatching(/API key/) })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps Anthropic HTTP in src/ai/providers/anthropic-api.js only', () => {
+    const root = new URL('.', import.meta.url).pathname
+    const offenders = []
+    const walk = dir => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name)
+        if (e.isDirectory()) walk(p)
+        else if (/\.jsx?$/.test(e.name) && !/\.test\./.test(e.name) && readFileSync(p, 'utf8').includes('api.anthropic.com')) offenders.push(p)
+      }
+    }
+    walk(root)
+    expect(offenders.map(p => p.replace(root, ''))).toEqual(['ai/providers/anthropic-api.js'])
   })
 })

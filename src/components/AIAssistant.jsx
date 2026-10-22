@@ -66,6 +66,10 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
 
   // Raw Claude API message array — kept in ref to avoid triggering re-renders
   const conversationRef = useRef([])
+  const abortRef        = useRef(null)
+
+  // Cancel any in-flight model request when the overlay unmounts
+  useEffect(() => () => abortRef.current?.abort(), [])
 
   // Block all background key handlers while AI overlay is open
   useEffect(() => {
@@ -84,7 +88,10 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
 
   // ─── Key handler ─────────────────────────────────────────────────────────
   useInput((input, key) => {
-    if (phase === PHASE.THINKING) return
+    if (phase === PHASE.THINKING) {
+      if (key.escape) abortRef.current?.abort()
+      return
+    }
 
     // Navigation prompt takes priority
     if (navPrompt) {
@@ -118,6 +125,9 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
     setThinkingStatus('thinking…')
     setPhase(PHASE.THINKING)
 
+    const controller = new AbortController()
+    abortRef.current = controller
+
     let result
     try {
       result = await runAssistantTurn({
@@ -127,6 +137,7 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
         ctx:         { repo, pane, selectedItem },
         aiConfig,
         onStatus:    (msg) => setThinkingStatus(msg),
+        signal:      controller.signal,
       })
     } catch (err) {
       setMessages(prev => [...prev, { role: 'system', text: `Error: ${err.message}`, timestamp: new Date() }])

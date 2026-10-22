@@ -16,6 +16,8 @@ import { selectProvider, listProviderStatus } from './detect.js'
 import { SYSTEM_PROMPT, MAX_TOKENS, DEFAULT_MODEL, buildUserPrompt } from './prompt.js'
 import { parseReviewResponse } from './parse.js'
 import { logAiUsage } from './usage.js'
+import * as anthropicApi from './providers/anthropic-api.js'
+import * as openaiCompatible from './providers/openai-compatible.js'
 
 // ── getAICodeReview ───────────────────────────────────────────────────────────
 
@@ -68,6 +70,94 @@ export async function getAICodeReview({ diff, prTitle, prBody, apiKey: _apiKey, 
 
   const parsed = parseReviewResponse(result.text)
   return { ...parsed, secondOpinion: secondOpinion || undefined }
+}
+
+// ── runAIChat ─────────────────────────────────────────────────────────────────
+
+const CHAT_TIMEOUT_MS = 60_000
+
+/**
+ * Map the user's `[ai]` settings to the HTTP provider that serves tool-use
+ * chat plus its connection details. Chat honours the explicit `ai.provider`
+ * choice (CLI providers cannot do tool use, so auto-detection does not apply).
+ * @param {object} aiConfig
+ * @returns {{provider: object, conn: object}}
+ */
+function resolveChatProvider(aiConfig = {}) {
+  const compat = aiConfig.openai_compatible || aiConfig.openaiCompatible
+  switch (aiConfig.provider) {
+    case 'openai':
+      return { provider: openaiCompatible, conn: {
+        baseUrl: (aiConfig.openaiBaseUrl || 'https://api.openai.com/v1').replace(/\/$/, ''),
+        apiKey:  aiConfig.openaiApiKey,
+        model:   aiConfig.model || 'gpt-4o',
+      } }
+    case 'ollama':
+      return { provider: openaiCompatible, conn: {
+        baseUrl: (aiConfig.openaiBaseUrl || 'http://localhost:11434/v1').replace(/\/$/, ''),
+        apiKey:  aiConfig.openaiApiKey,
+        model:   aiConfig.model || 'llama3',
+      } }
+    case 'openai-compatible':
+      return { provider: openaiCompatible, conn: {
+        baseUrl: compat?.base_url,
+        apiKey:  compat?.api_key,
+        model:   compat?.model,
+      } }
+    default:
+      return { provider: anthropicApi, conn: { apiKey: aiConfig.anthropicApiKey, model: aiConfig.model || undefined } }
+  }
+}
+
+/**
+ * Run ONE round of a tool-capable conversation (the in-TUI assistant) through
+ * the configured HTTP provider and record its usage. The caller owns the loop,
+ * history and tool execution; this never executes tools. Usage is logged here,
+ * once per round, and callers must not log it again. Prompts, tool payloads and
+ * credentials are never logged.
+ *
+ * @param {object} opts
+ * @param {object} opts.aiConfig   - The `[ai]` settings (provider, keys, model, ...)
+ * @param {string} opts.system     - System prompt
+ * @param {Array}  opts.messages   - Conversation in the selected provider's native format
+ * @param {Array}  [opts.tools]    - Tool definitions ({name, description, input_schema})
+ * @param {number} [opts.maxTokens]
+ * @param {number} [opts.timeoutMs]
+ * @param {AbortSignal} [opts.signal]
+ * @returns {Promise<{message: object, text: string, toolCalls: Array<{id: string, name: string, input: object}>, toolResultMessages: (results: Array<{id: string, content: string}>) => object[]}>}
+ */
+export async function runAIChat({ aiConfig, system, messages, tools, maxTokens, timeoutMs, signal }) {
+  const { provider, conn } = resolveChatProvider(aiConfig)
+  const timeout = AbortSignal.timeout(timeoutMs || aiConfig?.openai_compatible?.timeout_ms || CHAT_TIMEOUT_MS)
+
+  const startMs = Date.now()
+  let result, success = false
+  try {
+    result = await provider.chat({
+      ...conn,
+      system,
+      messages,
+      tools,
+      maxTokens,
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    })
+    success = true
+  } finally {
+    logAiUsage({
+      provider:  provider.id,
+      model:     result?.modelUsed || conn.model || DEFAULT_MODEL,
+      tokensIn:  result?.tokensIn ?? null,
+      tokensOut: result?.tokensOut ?? null,
+      latencyMs: Date.now() - startMs,
+      success,
+    })
+  }
+  return {
+    message:   result.message,
+    text:      result.text,
+    toolCalls: result.toolCalls,
+    toolResultMessages: provider.toolResultMessages,
+  }
 }
 
 // ── listProviders ─────────────────────────────────────────────────────────────
