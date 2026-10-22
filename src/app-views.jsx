@@ -28,6 +28,7 @@ import { AIAssistant } from './components/AIAssistant.jsx'
 import { CommandPalette } from './components/CommandPalette.jsx'
 import { HelpOverlay, PaneHeader } from './app-panels.jsx'
 import { THEME_NAMES } from './theme.js'
+import { contextFooterHints } from './ui/actions.js'
 
 export function renderAppView(ctx) {
   const {
@@ -112,7 +113,7 @@ export function renderAppView(ctx) {
             )}
           <Box flexDirection="column" flexGrow={1} overflow="hidden"
               justifyContent="center" alignItems="center">
-            <HelpOverlay pane={pane} view={view} onClose={() => setShowHelp(false)} />
+            <HelpOverlay pane={pane} view={view} actionCtx={paneState.actionCtx} onClose={() => setShowHelp(false)} />
           </Box>
           </Box>
           <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
@@ -243,17 +244,7 @@ export function renderAppView(ctx) {
 
   if (view === 'detail' && selectedItem) {
     const DetailPane = pane === 'issues' ? IssueDetail : PRDetail
-    const detailFooter = pane === 'prs'
-      ? [
-          { key: 'j/k', label: 'scroll' }, { key: 'd', label: 'diff' },
-          { key: 'm', label: 'merge' }, { key: 'a', label: 'approve' },
-          { key: '?', label: 'more keys' }, { key: 'Esc', label: 'back' },
-        ]
-      : [
-          { key: 'j/k', label: 'scroll' }, { key: 'l', label: 'labels' },
-          { key: 'A', label: 'assignees' },
-          { key: '?', label: 'more keys' }, { key: 'Esc', label: 'back' },
-        ]
+    const detailFooter = contextFooterHints(pane, 'detail', paneState.actionCtx, _config.toml)
 
     return (
       <AppContext.Provider value={appCtx}>
@@ -270,6 +261,7 @@ export function renderAppView(ctx) {
                 onOpenConflict={pane === 'prs' ? goToConflict : undefined}
                 onOpenActions={pane === 'prs' ? goToActions : undefined}
                 onViewComments={pane === 'prs' ? goToComments : undefined}
+                onPaneState={pane === 'prs' ? onPaneState : undefined}
               />
             </ErrorBoundary>
           </Box>
@@ -345,14 +337,7 @@ export function renderAppView(ctx) {
     if (paneState.dialogHint && DIALOG_HINT_MAP[paneState.dialogHint]) {
       return DIALOG_HINT_MAP[paneState.dialogHint]
     }
-    // Group 1: navigation  Group 2: actions  Group 3: meta (? handled separately)
-    const g1 = [{ key: 'j/k', label: 'nav', group: 1 }, { key: 'Tab', label: 'pane', group: 1 }]
-    const g3 = [{ key: 'r', label: 'refresh', group: 3 }, { key: 'S', label: 'settings', group: 3 }, { key: '?', label: 'help' }]
-    if (pane === 'prs')    return [...g1, { key: 'Enter', label: 'open', group: 2 }, { key: 'd', label: 'diff', group: 2 }, { key: 'f', label: 'filter', group: 2 }, { key: 'm', label: 'merge', group: 2 }, { key: 'M', label: 'auto-merge', group: 2 }, ...g3]
-    if (pane === 'issues') return [...g1, { key: 'Enter', label: 'open', group: 2 }, { key: 'n', label: 'new', group: 2 }, ...g3]
-    if (pane === 'branches') return [...g1, { key: 'Enter', label: 'checkout', group: 2 }, { key: 'n', label: 'new', group: 2 }, { key: 'D', label: 'delete', group: 2 }, ...g3]
-    if (pane === 'actions') return [...g1, { key: 'Enter', label: 'logs', group: 2 }, { key: 'R', label: 're-run', group: 2 }, ...g3]
-    return [...g1, ...g3]
+    return contextFooterHints(pane, 'list', paneState.actionCtx, _config.toml)
   })()
 
   const paneSwitch = (p) => { setPane(p); setSelectedItem(null); setView('list'); setAppMode('NORMAL') }

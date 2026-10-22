@@ -8,8 +8,8 @@
  *   - buildActions()   — registry shape and completeness
  */
 
-import { describe, it, expect, vi } from 'vitest'
-import { fuzzyScore, filterActions, resolveContext, buildActions } from './actions.js'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { fuzzyScore, filterActions, resolveContext, buildActions, recordActionUse, resetActionUse } from './actions.js'
 
 // ─── fuzzyScore ───────────────────────────────────────────────────────────────
 
@@ -220,5 +220,46 @@ describe('buildActions — registry shape', () => {
     darkAction.run({})
     expect(themeFn).toHaveBeenCalledWith('github-dark')
     expect(closeFn).toHaveBeenCalled()
+  })
+})
+
+describe('palette keys come from the registry', () => {
+  const noop = () => {}
+  const actions = buildActions({ onNavigate: noop, onTheme: noop, onClose: noop, onQuit: noop, themes: [] })
+
+  it('shows the effective bindings, not literals', () => {
+    expect(actions.find(a => a.id === 'pr.checkout').keys).toEqual(['b'])
+    expect(actions.find(a => a.id === 'pane.issues').keys).toEqual(['g i'])
+    expect(actions.find(a => a.id === 'pr.approve').keys).toEqual(['a'])
+  })
+})
+
+describe('filterActions — recent use ranking', () => {
+  beforeEach(resetActionUse)
+  afterEach(resetActionUse)
+
+  const noop = () => {}
+  const actions = buildActions({ onNavigate: noop, onTheme: noop, onClose: noop, onQuit: noop, themes: [] })
+
+  it('lifts a recently run action above an equally good match', () => {
+    const before = filterActions(actions, 'pr', 'pr-list', 20).map(a => a.id)
+    const target = before[before.length - 1]
+    recordActionUse(target)
+    const after = filterActions(actions, 'pr', 'pr-list', 20).map(a => a.id)
+    expect(after.indexOf(target)).toBeLessThan(before.indexOf(target))
+  })
+
+  it('never lets recency beat a better fuzzy tier', () => {
+    recordActionUse('global.quit')
+    const ranked = filterActions(actions, 'approve', 'pr-list', 5).map(a => a.id)
+    expect(ranked[0]).toBe('pr.approve')
+  })
+
+  it('orders an empty query by most recent first within a tie', () => {
+    recordActionUse('pr.copy-url')
+    recordActionUse('pr.close')
+    const ranked = filterActions(actions, '', 'pr-list', 50).map(a => a.id)
+    expect(ranked.indexOf('pr.close')).toBeLessThan(ranked.indexOf('pr.copy-url'))
+    expect(ranked.indexOf('pr.copy-url')).toBeLessThan(ranked.indexOf('pr.approve'))
   })
 })

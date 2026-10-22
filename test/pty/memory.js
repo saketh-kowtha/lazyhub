@@ -109,8 +109,9 @@ try {
   const sampler = setInterval(() => { peak = Math.max(peak, rssMb(term.pid)) }, 50)
 
   // Fixed settle time per step: screen-scraping is unreliable on some Linux runners.
-  for (const keys of [null, '2', '\r', 'd', 'r']) {
-    if (keys) term.write(keys)
+  for (const keys of [null, 'gp', '\r', 'd', 'r']) {
+    // Chords are written one key at a time; Ink would read "gp" as a single string.
+    if (keys) for (const ch of keys) { term.write(ch); await sleep(50) }
     await sleep(STEP_MS)
   }
   peak = Math.max(peak, rssMb(term.pid))

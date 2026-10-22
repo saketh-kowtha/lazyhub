@@ -3,13 +3,14 @@
  * Supports: reply, edit, delete per comment
  */
 
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { useKeymapInput } from '../../config/keymap.js'
+import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
+import { contextFooterHints } from '../../ui/actions.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
   listPRComments, resolveThread,
@@ -20,16 +21,6 @@ import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { useTheme } from '../../theme.js'
 import { TextInput, sanitize, shortAge } from '../../utils.js'
 
-const FOOTER_KEYS = [
-  { key: 'j/k',   label: 'nav' },
-  { key: 'r',     label: 'reply' },
-  { key: 'e',     label: 'edit' },
-  { key: 'd',     label: 'delete' },
-  { key: 'R',     label: 'resolve' },
-  { key: 'f',     label: 'filter' },
-  { key: 'S',     label: 'settings' },
-  { key: 'Esc',   label: 'back' },
-]
 
 const FILTER_MODES = ['all', 'open', 'resolved']
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
@@ -45,14 +36,15 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   const [filterMode, setFilterMode] = useState('all')
   const [statusMsg, setStatusMsg]   = useState(null)
   const [scrollOffset, setScrollOffset] = useState(0)
-  const lastKeyRef   = useRef(null)
-  const lastKeyTimer = useRef(null)
 
   // action: null | { type: 'reply'|'edit'|'delete', comment }
   const [action, setAction]     = useState(null)
   const [actionText, setActionText] = useState('')
-
-  useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
+  // Typing a reply/edit must never trigger actions.
+  useKeyScope('input', !!action && action.type !== 'delete')
+  const resolveAction = useActionResolver(['global', 'pr-comments'])
+  const resolveConfirm = useActionResolver(['dialog'])
+  const footerKeys = useMemo(() => contextFooterHints('prs', 'comments'), [])
 
   // ── Build flat list: each comment is individually navigable ────────────────
 
@@ -148,14 +140,15 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
     // ── Action mode ──
     if (action) {
       if (action.type === 'delete') {
-        if (input === 'y') { submitAction(); return }
-        if (key.escape || input === 'n') { setAction(null); return }
+        const confirm = resolveConfirm(input, key)
+        if (confirm === 'dialog.yes') { submitAction(); return }
+        if (confirm === 'dialog.no') { setAction(null); return }
         return
       }
       // reply / edit: exit keys handled here, text by TextInput
       if (key.escape) { setAction(null); setActionText(''); return }
       // Ctrl+E opens editor; bare 'e' is a normal character typed in TextInput
-      if (key.ctrl && input === 'e' && action.type !== 'delete') {
+      if (resolveConfirm(input, key) === 'dialog.editor') {
         const result = openEditor(actionText)
         setActionText(result)
         return
@@ -163,15 +156,11 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       return
     }
 
-    // ── Navigation ──
-    if (input === 'S') {
-      // We don't have direct access to setView here, but we can emit Esc then S
-      // Or better, let the parent handle global keys. 
-      // For now, q/Esc goes back.
-    }
-    if (key.escape || input === 'q') { onBack(); return }
+    const id = resolveAction(input, key)
+    if (id === 'app.back') { onBack(); return }
+    if (id === 'list.refresh') { refetch(); return }
 
-    if (input === 'j' || key.downArrow) {
+    if (id === 'cursor.down') {
       setCursor(c => {
         const next = Math.min(visibleCount - 1, c + 1)
         if (next >= scrollOffset + visibleHeight) setScrollOffset(s => s + 1)
@@ -179,7 +168,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       })
       return
     }
-    if (input === 'k' || key.upArrow) {
+    if (id === 'cursor.up') {
       setCursor(c => {
         const next = Math.max(0, c - 1)
         if (next < scrollOffset) setScrollOffset(s => Math.max(0, s - 1))
@@ -187,23 +176,8 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       })
       return
     }
-
-    // gg → top
-    if (input === 'g' && !action) {
-      if (lastKeyRef.current === 'g') {
-        clearTimeout(lastKeyTimer.current)
-        lastKeyRef.current = null
-        setCursor(0); setScrollOffset(0)
-        return
-      }
-      lastKeyRef.current = 'g'
-      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
-      return
-    }
-    if (input !== 'g') lastKeyRef.current = null
-
-    // G → bottom
-    if (input === 'G' && !action) {
+    if (id === 'cursor.top') { setCursor(0); setScrollOffset(0); return }
+    if (id === 'cursor.bottom') {
       const last = visibleCount - 1
       setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
       return
@@ -211,21 +185,21 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
 
     const comment = flatComments[cursor]
 
-    if (input === 'r' && comment) {
+    if (id === 'comment.reply' && comment) {
       setAction({ type: 'reply', comment })
       setActionText('')
       return
     }
-    if (input === 'e' && comment) {
+    if (id === 'comment.edit' && comment) {
       setAction({ type: 'edit', comment })
       setActionText(comment.body || '')
       return
     }
-    if (input === 'd' && comment) {
+    if (id === 'comment.delete' && comment) {
       setAction({ type: 'delete', comment })
       return
     }
-    if (input === 'R' && comment) {
+    if (id === 'comment.resolve' && comment) {
       // threadId is the GraphQL ReviewThread node ID (e.g. PRRT_kwDO...)
       const threadId = comment.threadId
       if (!threadId) { flash('Thread ID unavailable'); return }
@@ -234,12 +208,12 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
         .catch(err => flash(`Failed: ${err.message}`))
       return
     }
-    if (input === 'f') {
+    if (id === 'comment.filter') {
       const idx = FILTER_MODES.indexOf(filterMode)
       setFilterMode(FILTER_MODES[(idx + 1) % FILTER_MODES.length])
       return
     }
-    if (input === 'J' && comment && onJumpToDiff) {
+    if (id === 'comment.jump' && comment && onJumpToDiff) {
       onJumpToDiff(comment.line)
       return
     }
@@ -340,7 +314,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
         )}
       </Box>
 
-      <FooterKeys keys={FOOTER_KEYS} />
+      <FooterKeys keys={footerKeys} />
     </Box>
   )
 }

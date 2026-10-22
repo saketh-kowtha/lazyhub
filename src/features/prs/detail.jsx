@@ -8,7 +8,7 @@
 import React, { useState, useContext, useMemo, useRef } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
-import { useKeymapInput } from '../../config/keymap.js'
+import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
   getPR, listLabels, listCollaborators, addLabels, removeLabels,
@@ -237,7 +237,7 @@ function buildContentRows(pr, checks, protection, cols, t, checkCursor = null) {
   return rows
 }
 
-export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments }) {
+export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
   useKeyScope('view')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
@@ -256,14 +256,16 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   const [adminMergeMsg, setAdminMergeMsg] = useState('')
   const [searching, setSearching] = useState(false)
   const [searchText, setSearchText] = useState('')
+  // Typed characters (search text, base branch) must never trigger actions.
+  useKeyScope('input', searching || dialog === 'base')
+  const resolveAction = useActionResolver(['global', 'pr-detail'])
+  const resolveChecksAction = useActionResolver(['pr-checks'])
   const [statusMsg, setStatusMsg] = useState(null)
   const [baseInput, setBaseInput] = useState('')
   const [checkCursor, setCheckCursor] = useState(null) // null = checks mode off, number = active
   const checkCursorRef = useRef(null)
   const [checkLogLines, setCheckLogLines] = useState([])
   const [checkLogLoading, setCheckLogLoading] = useState(false)
-  const lastKeyRef   = useRef(null)
-  const lastKeyTimer = useRef(null)
 
   const showStatus = (msg, isError = false) => {
     setStatusMsg({ msg, isError, persist: isError })
@@ -274,8 +276,6 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
     notifyDialog(!!dialog)
     return () => notifyDialog(false)
   }, [dialog, notifyDialog])
-
-  React.useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
   const contentRows = useMemo(
     () => pr ? buildContentRows(pr, checks, protection, cols, t, checkCursor) : [],
@@ -294,6 +294,14 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
     }
     return [...raw].sort((a, b) => order(a) - order(b))
   }, [checks, pr])
+
+  // Tell the footer which actions can run for this PR (registry preconditions).
+  const hasChecks = allChecksForNav.length > 0
+  React.useEffect(() => {
+    if (!onPaneState || !pr) return undefined
+    onPaneState({ actionCtx: { prOpen: pr.state === 'OPEN', isDraft: !!pr.isDraft, hasChecks } })
+    return () => onPaneState({ actionCtx: undefined })
+  }, [onPaneState, pr?.state, pr?.isDraft, hasChecks]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredRows = useMemo(() => {
     if (!searchText) return contentRows
@@ -371,8 +379,10 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
     // ── Checks navigation mode ─────────────────────────────────────────────
     const activeCheckCursor = checkCursor ?? checkCursorRef.current
     if (activeCheckCursor !== null) {
-      if (key.escape) { checkCursorRef.current = null; setCheckCursor(null); return }
-      if (input === 'j' || key.downArrow) {
+      const id = resolveChecksAction(input, key)
+      const check = allChecksForNav[activeCheckCursor]
+      if (id === 'check.exit') { checkCursorRef.current = null; setCheckCursor(null); return }
+      if (id === 'cursor.down') {
         setCheckCursor(c => {
           const next = Math.min(allChecksForNav.length - 1, c + 1)
           checkCursorRef.current = next
@@ -380,7 +390,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
         })
         return
       }
-      if (input === 'k' || key.upArrow) {
+      if (id === 'cursor.up') {
         setCheckCursor(c => {
           const next = Math.max(0, c - 1)
           checkCursorRef.current = next
@@ -388,39 +398,35 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
         })
         return
       }
-      if ((key.return || input === 'o') && allChecksForNav[activeCheckCursor]) {
-        openCheckInBrowser(allChecksForNav[activeCheckCursor])
-        return
-      }
-      if (input === 'l' && allChecksForNav[activeCheckCursor]) {
-        openCheckLogs(allChecksForNav[activeCheckCursor])
-        return
-      }
-      if (input === 'R' && allChecksForNav[activeCheckCursor]?.id) {
-        const c = allChecksForNav[activeCheckCursor]
-        rerunCheckRun(repo, c.id)
-          .then(() => showStatus(`↺ Re-run triggered for ${c.name}`))
+      if (id === 'check.open-browser' && check) { openCheckInBrowser(check); return }
+      if (id === 'check.log' && check) { openCheckLogs(check); return }
+      if (id === 'check.rerun' && check?.id) {
+        rerunCheckRun(repo, check.id)
+          .then(() => showStatus(`↺ Re-run triggered for ${check.name}`))
           .catch(err => showStatus(`✗ Re-run failed: ${err.message}`, true))
         return
       }
       return
     }
 
-    if (input === 'r') { refetch(); return }
-    if (input === 'd' && pr) { onOpenDiff(pr); return }
-    if (input === 'v' && onViewComments) { onViewComments(); return }
-    if (input === 'o' && pr?.url) {
+    const id = resolveAction(input, key)
+    const open = pr && pr.state === 'OPEN'
+
+    if (id === 'list.refresh') { refetch(); return }
+    if (id === 'pr.diff' && pr) { onOpenDiff(pr); return }
+    if (id === 'pr.comments' && onViewComments) { onViewComments(); return }
+    if (id === 'pr.open-browser' && pr?.url) {
       import('execa').then(({ execa }) => {
         const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
         execa(cmd, [pr.url]).catch(() => {})
       })
       return
     }
-    if (input === 'a' && pr && pr.state === 'OPEN') { setDialog('approve-body'); return }
-    if (input === 'x' && pr && pr.state === 'OPEN') { setDialog('reqchanges-body'); return }
+    if (id === 'pr.approve' && open) { setDialog('approve-body'); return }
+    if (id === 'pr.request-changes' && open) { setDialog('reqchanges-body'); return }
 
-    // E — open first changed file of this PR in the local editor
-    if (input === 'E' && pr) {
+    // open the first changed file of this PR in the local editor
+    if (id === 'pr.open-editor' && pr) {
       const files = pr.files || []
       if (files.length > 0) {
         openInEditor(files[0].path, 1, _editorCfg).catch(() => {})
@@ -428,21 +434,20 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
       return
     }
 
-    if (input === 'l') { setDialog('labels'); return }
-    if (input === 'A') { setDialog('assignees'); return }
-    if (input === 'R' && pr && pr.state === 'OPEN') { setDialog('reviewers'); return }
-    if (input === 'C' && pr && pr.state === 'OPEN' && onOpenConflict &&
-        pr.mergeable === 'CONFLICTING') {
+    if (id === 'pr.labels') { setDialog('labels'); return }
+    if (id === 'pr.assignees') { setDialog('assignees'); return }
+    if (id === 'pr.reviewers' && open) { setDialog('reviewers'); return }
+    if (id === 'pr.conflicts' && open && onOpenConflict && pr.mergeable === 'CONFLICTING') {
       onOpenConflict()
       return
     }
-    // C on clean PR → jump to Actions pane filtered to this branch
-    if (input === 'C' && pr && onOpenActions && pr.mergeable === 'MERGEABLE') {
+    // on a clean PR → jump to Actions pane filtered to this branch
+    if (id === 'pr.conflicts' && pr && onOpenActions && pr.mergeable === 'MERGEABLE') {
       onOpenActions(pr.headRefName)
       return
     }
-    // c (lowercase) — enter checks navigation mode
-    if (input === 'c') {
+    // enter checks navigation mode
+    if (id === 'pr.checks') {
       if (allChecksForNav.length === 0) {
         showStatus('No CI checks for this PR')
         return
@@ -457,12 +462,12 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
       if (checksRow >= 0) setScrollY(Math.min(checksRow, maxScroll))
       return
     }
-    if (input === '/') { setSearching(true); setSearchText(''); return }
-    if (input === 'm' && pr && pr.state === 'OPEN') { setDialog('merge'); return }
-    if (input === 'X' && pr && pr.state === 'OPEN') { setDialog('close'); return }
-    if (input === 'D' && pr && pr.state === 'OPEN') { setDialog('draft'); return }
-    if (input === 'B' && pr && pr.state === 'OPEN') { setDialog('base'); return }
-    if (input === 'M' && pr && pr.state === 'OPEN' && !pr.isDraft) {
+    if (id === 'list.search') { setSearching(true); setSearchText(''); return }
+    if (id === 'pr.merge' && open) { setDialog('merge'); return }
+    if (id === 'pr.close' && open) { setDialog('close'); return }
+    if (id === 'pr.draft' && open) { setDialog('draft'); return }
+    if (id === 'pr.base' && open) { setDialog('base'); return }
+    if (id === 'pr.auto-merge' && open && !pr.isDraft) {
       if (pr.autoMergeRequest) {
         disableAutoMerge(repo, prNumber)
           .then(() => { showStatus('✓ Auto-merge disabled'); refetch() })
@@ -475,26 +480,13 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
       return
     }
     // If a search filter is active, Esc clears it first (second Esc exits)
-    if ((key.escape || input === 'q') && searchText) { setSearchText(''); setScrollY(0); return }
-    if (key.escape || input === 'q') { onBack(); return }
+    if (id === 'app.back' && searchText) { setSearchText(''); setScrollY(0); return }
+    if (id === 'app.back') { onBack(); return }
 
-    // gg → top
-    if (input === 'g') {
-      if (lastKeyRef.current === 'g') {
-        clearTimeout(lastKeyTimer.current)
-        lastKeyRef.current = null
-        setScrollY(0)
-        return
-      }
-      lastKeyRef.current = 'g'
-      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
-      return
-    }
-    lastKeyRef.current = null
-
-    if (input === 'G') { setScrollY(maxScroll); return }
-    if (input === 'j' || key.downArrow) { setScrollY(s => Math.min(maxScroll, s + 1)); return }
-    if (input === 'k' || key.upArrow)   { setScrollY(s => Math.max(0, s - 1)); return }
+    if (id === 'cursor.top') { setScrollY(0); return }
+    if (id === 'cursor.bottom') { setScrollY(maxScroll); return }
+    if (id === 'cursor.down') { setScrollY(s => Math.min(maxScroll, s + 1)); return }
+    if (id === 'cursor.up')   { setScrollY(s => Math.max(0, s - 1)); return }
   })
 
   // ── Loading / Error ────────────────────────────────────────────────────────

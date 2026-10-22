@@ -186,7 +186,9 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
       assert.equal(started.status, 0, started.stderr?.toString())
       const capture = () => spawnSync('tmux', ['capture-pane', '-pt', session]).stdout.toString()
       await waitForScreen(capture, /Pull Requests|Focus|PTY harness fixture PR/, 'tmux startup')
-      spawnSync('tmux', ['send-keys', '-t', session, '2'])
+      spawnSync('tmux', ['send-keys', '-t', session, 'g'])
+      await new Promise(resolve => setTimeout(resolve, 50))
+      spawnSync('tmux', ['send-keys', '-t', session, 'p'])
       await waitForScreen(capture, /Pull Requests|PTY harness fixture PR/, 'tmux pane switch')
       spawnSync('tmux', ['send-keys', '-t', session, 'q'])
       spawnSync('tmux', ['kill-session', '-t', session])
@@ -198,8 +200,8 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
 
     await waitForScreen(() => output, /Focus|Pull Requests|PTY harness fixture PR/, 'startup')
     output = ''
-    term.write('2')
-    await waitForScreen(() => output, /Pull Requests|PTY harness fixture PR/, 'pane 2 pull requests')
+    await writeChord(term, 'gp') // g p: go to Pull Requests (digits are reserved for PR-detail sections)
+    await waitForScreen(() => output, /Pull Requests|PTY harness fixture PR/, 'g p pull requests')
     output = ''
     term.write('j')
     await waitForScreen(() => output, /PTY harness fixture PR/, 'j navigation')
@@ -212,9 +214,9 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
     output = ''
     term.write('\x1b')
     await waitForScreen(() => output, /open.*closed.*merged.*scope/, 'Esc back')
-    for (const [key, label] of [['3', 'issues'], ['4', 'branches'], ['5', 'actions']]) {
+    for (const [key, label] of [['gi', 'issues'], ['gb', 'branches'], ['ga', 'actions']]) {
       output = ''
-      term.write(key)
+      await writeChord(term, key)
       await waitForScreen(() => output, /Issues|Branches|Actions|Debug state fixture issue|main|CI/, `pane ${label}`)
     }
     term.write('q')
@@ -225,6 +227,14 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
   } finally {
     try { term?.kill() } catch {}
     rmSync(temp, { recursive: true, force: true })
+  }
+}
+
+// Two-key chords must arrive as separate key events (Ink would read "gp" as one string).
+async function writeChord(term, chord) {
+  for (const ch of chord) {
+    term.write(ch)
+    await new Promise(resolve => setTimeout(resolve, 50))
   }
 }
 

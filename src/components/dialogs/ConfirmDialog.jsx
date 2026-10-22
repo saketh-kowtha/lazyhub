@@ -29,6 +29,9 @@ export function ConfirmDialog({ message, destructive = false, onConfirm, onCance
     // names / confirm strings containing j or k would be unreachable.
     if (!requireText && matchesAction('dialog.up', input, key)) { setCursor(0); return }
     if (!requireText && matchesAction('dialog.down', input, key)) { setCursor(1); return }
+    // `y` / `n` answer directly (never while typing a confirmation string)
+    if (!requireText && matchesAction('dialog.yes', input, key)) { onConfirm(); return }
+    if (!requireText && matchesAction('dialog.no', input, key)) { onCancel(); return }
     if (matchesAction('dialog.confirm', input, key)) {
       if (cursor === 0 && canConfirm) {
         onConfirm()
