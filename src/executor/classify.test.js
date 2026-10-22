@@ -82,6 +82,7 @@ describe('classifyGhFailure: one case per day-one failure', () => {
     expect(graphql.subject.scope).toBe('read:org')
     expect(graphql.fix).toBe('gh auth refresh -h github.com -s read:org')
     expect(run('scope_gh_refresh').subject.scope).toBe('read:org')
+    expect(run('scope_rest_suggestion').subject.scope).toBe('read:org')
   })
 
   it('missing scope without a named scope still says so and points at gh auth status', () => {

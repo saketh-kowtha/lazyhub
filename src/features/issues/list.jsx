@@ -345,7 +345,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
         {!loading && !error && items.length === 0 && (
           <EmptyState
             title={`No ${filterState} issues found.`}
-            actions={[{ key: 'f', label: 'cycle the open/closed filter' }, { key: 'n', label: 'new issue' }, { key: 'r', label: 'refresh' }]}
+            actions={[{ key: firstActionKey('issue.filter-cycle', 'f', _actions), label: 'cycle the open/closed filter' }, { key: firstActionKey('issue.new', 'n', _actions), label: 'new issue' }, { key: firstActionKey('list.refresh', 'r', _actions), label: 'refresh' }]}
           />
         )}
       </Box>

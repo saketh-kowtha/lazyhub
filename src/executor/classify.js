@@ -178,7 +178,7 @@ export function classifyGhFailure(err, ctx = {}) {
     })
   }
 
-  if (/SAML (enforcement|SSO)|X-GitHub-SSO|sso.{0,40}authoriz/i.test(text)) {
+  if (/SAML (enforcement|SSO)|Authorize in your web browser|sso.{0,40}authoriz/i.test(text)) {
     const fromUrl = text.match(/\/orgs\/([A-Za-z0-9][A-Za-z0-9._-]*)\/sso/)?.[1]
     const org = safeName(fromUrl) || owner
     return failure('sso', 'degraded',
