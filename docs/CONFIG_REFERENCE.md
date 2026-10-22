@@ -31,6 +31,13 @@ The single source of truth is `~/.config/lazyhub/lazyhub.toml`.
 the file, so keep hand-written notes for runtime state inside the table itself
 or in another user-owned section.
 
+## Environment variables
+
+- `LAZYHUB_GH_CONCURRENCY` (positive integer, default `4`) caps how many `gh`
+  child processes lazyhub runs at once; extra calls queue first-in-first-out.
+  Interactive `gh auth login` is never queued. This is a process-level knob, not
+  a TOML key.
+
 ## Regeneration
 
 Use `generateConfigReferenceMarkdown()` from `src/config/docs.js` to render a current reference from the loaded TOML config.

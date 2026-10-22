@@ -161,13 +161,58 @@ async function invalidateDaemonCache(repo) {
   }
 }
 
+// ─── Bounded gh concurrency ───────────────────────────────────────────────────
+
+/** Default cap on simultaneous gh child processes; override with LAZYHUB_GH_CONCURRENCY. */
+const GH_CONCURRENCY_DEFAULT = 4
+const ghWaiters = []
+let ghInFlight = 0
+
+function ghConcurrencyLimit() {
+  const raw = (process.env.LAZYHUB_GH_CONCURRENCY ?? '').trim()
+  const n = /^\d+$/.test(raw) ? Number(raw) : 0
+  return Number.isSafeInteger(n) && n > 0 ? n : GH_CONCURRENCY_DEFAULT
+}
+
+async function acquireGhSlot() {
+  if (ghInFlight < ghConcurrencyLimit()) {
+    ghInFlight += 1
+    return
+  }
+  // The releasing call hands its slot straight to the next waiter (FIFO).
+  await new Promise(resolve => ghWaiters.push(resolve))
+}
+
+function releaseGhSlot() {
+  const next = ghWaiters.shift()
+  if (next) next()
+  else ghInFlight -= 1
+}
+
 /**
  * Spawn gh once (no retry) and parse its output. Callers classify first.
+ * Non-interactive calls queue behind a small concurrency cap so a refresh can
+ * never fan out into unbounded gh processes; interactive terminal flows (auth
+ * login) bypass the queue so they can never starve behind background reads.
  *
  * @param {string[]} args
  * @param {{timeout?: number, json?: boolean, stdin?: string, interactive?: boolean, combine?: boolean}} [opts]
  */
-async function spawnGh(args, { timeout = GH_TIMEOUT, json, stdin, interactive, combine } = {}) {
+async function spawnGh(args, opts = {}) {
+  if (opts.interactive) return execGh(args, opts)
+  await acquireGhSlot()
+  try {
+    return await execGh(args, opts)
+  } finally {
+    releaseGhSlot()
+  }
+}
+
+/**
+ * @param {string[]} args
+ * @param {{timeout?: number, json?: boolean, stdin?: string, interactive?: boolean, combine?: boolean}} [opts]
+ */
+async function execGh(args, { timeout = GH_TIMEOUT, json, stdin, interactive, combine } = {}) {
   const started = Date.now()
   // GH_HOST / GH_TOKEN are inherited by the child process from process.env
   // (we pass no curated env here — see ARCHITECT_DECISIONS invariant 4, which
