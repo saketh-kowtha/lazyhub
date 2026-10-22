@@ -9,7 +9,7 @@
  */
 
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { execa } from 'execa'
 
 // ─── Editor profiles ──────────────────────────────────────────────────────────
@@ -142,24 +142,25 @@ export async function openInEditor(file, line = 1, cfg = {}) {
 
   if (!editorKey) return
 
+  // Absolute path: can never be parsed as an option (-x) or editor command (+cmd).
+  const absFile = resolve(file)
   let cmd, args
 
   if (editorKey === 'custom' && cfg.customCommand) {
-    // Replace {file} and {line} placeholders, fall back to appending
-    const raw = cfg.customCommand
-      .replace('{file}', file)
-      .replace('{line}', String(line))
-    const parts = raw.split(/\s+/)
+    // Tokenize the template first, then substitute {file}/{line} inside each
+    // token, so a path containing whitespace stays a single argument.
+    const parts = cfg.customCommand.trim().split(/\s+/).map(t =>
+      t.replaceAll('{file}', () => absFile).replaceAll('{line}', () => String(line)))
     cmd  = parts[0]
     args = parts.slice(1)
   } else if (editorKey === '_raw') {
     const raw = (process.env.VISUAL || process.env.EDITOR || '').split(/\s+/)
     cmd  = raw[0]
-    args = [...raw.slice(1), `+${line}`, file]
+    args = [...raw.slice(1), `+${line}`, absFile]
   } else {
     const profile = EDITOR_PROFILES[editorKey]
     if (!profile) return
-    ;[cmd, args] = profile.open(file, line)
+    ;[cmd, args] = profile.open(absFile, line)
   }
 
   try {

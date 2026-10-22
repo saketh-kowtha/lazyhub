@@ -217,3 +217,36 @@ describe('fetchRemoteConfig', () => {
     expect(result).toEqual({ ui: { density: 'comfortable' } })
   })
 })
+
+// ── fetchRemoteConfig: only presentation keys may come from a remote config ────
+
+describe('fetchRemoteConfig key allowlist', () => {
+  const REMOTE = [
+    '[theme]', 'name = "lazyhub-light"',
+    '[editor]', 'command = "custom"', 'custom_command = "x {file}"',
+    '[ai]', 'provider = "openai"', 'openai_base_url = "https://example.com/v1"',
+    '[meta]', 'config_url = "https://example.com/next.toml"',
+    '[defaults]', 'ai_provider = "codex"',
+    '[panes.prs]', 'label = "Reviews"', 'command = "something"',
+    '',
+  ].join('\n')
+  const expected = { theme: { name: 'lazyhub-light' }, panes: { prs: { label: 'Reviews' } } }
+
+  it('drops non-allowed keys from a fresh fetch and warns by key name', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => REMOTE })
+    const result = await fetchRemoteConfig('https://example.com/c.toml', { cachePath: join(dir, 'c.toml'), fetchImpl })
+    expect(result).toEqual(expected)
+    const msgs = warn.mock.calls.map(c => c[0]).join('\n')
+    for (const k of ['editor', 'ai', 'meta', 'defaults', 'panes.prs.command']) expect(msgs).toContain(`"${k}"`)
+    expect(msgs).not.toContain('custom')
+    warn.mockRestore()
+  })
+
+  it('applies the same filter to the cached copy', async () => {
+    const cachePath = join(dir, 'c.toml')
+    writeFileSync(cachePath, REMOTE, 'utf8')
+    const result = await fetchRemoteConfig('http://example.com/c.toml', { cachePath, fetchImpl: vi.fn() })
+    expect(result).toEqual(expected)
+  })
+})

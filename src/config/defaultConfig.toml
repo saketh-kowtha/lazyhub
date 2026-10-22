@@ -24,7 +24,7 @@ panes = [
 # ── Meta ─────────────────────────────────────────────────────────────────
 [meta]
 schema_version = "1.0"   # bumped on breaking schema changes
-config_url     = ""      # optional HTTPS URL to pull config from; remote wins, local becomes cache
+config_url     = ""      # optional HTTPS URL; remote may set only theme, layout, ui, diff, pane labels/icons
 
 # ── Theme ────────────────────────────────────────────────────────────────
 [theme]

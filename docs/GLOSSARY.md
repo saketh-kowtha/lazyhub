@@ -30,7 +30,7 @@ Alphabetical. Cross-references in **bold**.
 
 **Command palette** — A `<space><space>` (or `:`) triggered overlay listing every available action by name. Implementation in `src/components/CommandPalette.jsx` + action registry in `src/ui/actions.js`. Shipped in Phase C step 5a.
 
-**Config_url** — Optional URL under `[meta].config_url` in user TOML config. When set, lazyhub fetches config from the URL (HTTPS only) and treats the local file as a cache. Lets teams centralize config for their developers. Phase E1.
+**Config_url** — Optional URL under `[meta].config_url` in user TOML config. When set, lazyhub fetches config from the URL (HTTPS only), caches it locally, and applies only presentation keys from it (`[theme]`, `[layout]`, `[ui]`, `[diff]`, pane `label`/`icon`/`description`); all other keys are ignored with a warning. Lets teams centralize config for their developers. Phase E1.
 
 **Contract test** — A test that pins the public output shape of an external dependency (gh CLI version X.Y, AI provider API). When the dependency changes incompatibly, the contract test fails. Lives in `src/contract-tests/` (planned Phase J4/J6).
 
