@@ -3,6 +3,10 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { PRListSkeleton } from '../../components/Skeleton.jsx'
+import { FailureNotice } from '../../components/FailureNotice.jsx'
+import { EmptyState } from '../../components/EmptyState.jsx'
+import { classifyGhFailure } from '../../executor.js'
+import { firstActionKey } from '../../config/actions.js'
 import { Popover, calcPopoverPosition } from '../../ui/Popover.jsx'
 import {
   PRDetailPopoverContentMemo,
@@ -98,14 +102,21 @@ export function PRListView({
         {items.length >= config.pageSize && <Text color={t.ui.dim}> ({items.length})</Text>}
       </Box>
 
-      {!loading && !error && items.length === 0 && (
-        <Box paddingX={2} paddingY={1} flexDirection="column" gap={0}>
-          <Text color={t.ui.muted}>
-            No {[...filterStates].join('/')} pull requests
-            {scope === 'own' ? ' by you' : scope === 'reviewing' ? ' assigned for your review' : ''}.
-          </Text>
-          <Text color={t.ui.dim}>{scope === 'own' ? '[s] show all open PRs  [r] refresh' : '[f] change filter  [s] change scope  [r] refresh'}</Text>
+      {error && (
+        <Box paddingX={2} paddingY={1} flexDirection="column">
+          <FailureNotice failure={classifyGhFailure(error)} />
+          <Text color={t.ui.dim}>[{firstActionKey('list.refresh', 'r')}] retry</Text>
         </Box>
+      )}
+
+      {!loading && !error && items.length === 0 && (
+        <EmptyState
+          title={`No ${[...filterStates].join('/')} pull requests${scope === 'own' ? ' by you' : scope === 'reviewing' ? ' assigned for your review' : ''}.`}
+          actions={[
+            ...(scope === 'own' ? [{ key: firstActionKey('pr.scope-cycle', 's'), label: 'show all open PRs' }] : [{ key: firstActionKey('pr.filter-cycle', 'f'), label: 'change the open/closed/merged filter' }, { key: firstActionKey('pr.scope-cycle', 's'), label: 'change scope' }]),
+            { key: firstActionKey('list.refresh', 'r'), label: 'refresh' },
+          ]}
+        />
       )}
 
       {loading && items.length === 0 && <PRListSkeleton count={height} />}
