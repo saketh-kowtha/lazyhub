@@ -67,8 +67,9 @@ evidence and `downgrade_reasons` behind it.
 Lazyhub runs the `gh` CLI and inherits whatever access that session or token
 has. The default `gh auth login` scopes include `repo` and `workflow`, so
 lazyhub can do anything those scopes allow, including writes. Lazyhub stores no
-credentials of its own: it keeps only local config and cache files, created
-with private permissions. AI features are off by default and send nothing until
+credentials of its own: it keeps only local config and cache files, which can
+contain private repository content and are created with private permissions.
+AI features are off by default and send nothing until
 you enable a provider. Lazyhub has no telemetry.
 
 ## Running with least privilege
@@ -102,8 +103,9 @@ For maintainers, when a vulnerability or compromised release is confirmed:
 For users of an affected version:
 
 1. Update to the fixed release.
-2. Rotate the GitHub token lazyhub used: `gh auth logout`, then
-   `gh auth login`. Revoke any personal access tokens that were exposed
-   (GitHub Settings, Developer settings).
+2. Revoke the GitHub token lazyhub used. `gh auth logout` only removes the
+   local copy, so also revoke the GitHub CLI authorization (GitHub Settings,
+   Applications, Authorized OAuth Apps) and any personal access tokens that were
+   exposed (Developer settings), then run `gh auth login` again.
 3. Review your GitHub security log (Settings, Security log) and repository
    audit logs for unexpected activity.
