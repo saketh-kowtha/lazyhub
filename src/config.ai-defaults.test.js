@@ -45,8 +45,9 @@ describe('AI default endpoint resolution (privacy)', () => {
   })
 
   it('ollama ignores the legacy pinned OpenAI default URL written by older configs', async () => {
-    const { url } = await captureRequest({ provider: 'ollama', openai_base_url: OPENAI_URL })
+    const { url, headers } = await captureRequest({ provider: 'ollama', openai_base_url: OPENAI_URL, openai_api_key: 'sk-file-secret' })
     expect(url).toBe(`${OLLAMA_URL}/chat/completions`)
+    expect(headers.authorization).toBeUndefined()
   })
 
   it('openai with no base URL uses api.openai.com and sends the key', async () => {
