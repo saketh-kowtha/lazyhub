@@ -7,35 +7,15 @@
  *    arrives gets a stable AI_MUTATIONS_DISABLED error (see executeMutatingTool)
  *  - Parses <<NAVIGATE:pane[:key=val]*>> markers for app navigation
  *
- * Direct fetch pattern (same as ai.js). No SDK dependency.
+ * Model requests go through runAIChat() in src/ai/index.js (no transport here).
  */
 
 import {
   listPRs, getPR, getPRDiff, getPRChecks, listIssues, getIssue,
   listBranches, listRuns, getRepoInfo, listNotifications, listPRComments,
 } from './executor.js'
+import { runAIChat } from './ai/index.js'
 
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
-const ANTHROPIC_VERSION = '2023-06-01'
-
-function fetchErrorMessage(err, baseUrl) {
-  const cause = err.cause
-  const code  = cause?.code || cause?.errno || ''
-  if (code === 'ECONNREFUSED' || code === 'ECONNRESET') {
-    if (baseUrl && !baseUrl.includes('anthropic.com') && !baseUrl.includes('openai.com')) {
-      return `Connection refused to ${baseUrl} — is your local server running?`
-    }
-    return 'Connection refused — check your network or provider URL in Settings'
-  }
-  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') {
-    return 'DNS lookup failed — check your internet connection'
-  }
-  if (code === 'ETIMEDOUT' || code === 'ECONNABORTED') {
-    return 'Connection timed out — provider may be unreachable'
-  }
-  // Surface the underlying message if available, otherwise fall back to err.message
-  return cause?.message || err.message
-}
 const DEFAULT_MODEL     = 'claude-sonnet-4-6'
 const MAX_TOKENS        = 4096
 const MAX_DIFF_CHARS    = 8000
@@ -308,200 +288,7 @@ function findNavInText(text) {
   return navData
 }
 
-// ─── OpenAI tool definitions (converted from Anthropic input_schema format) ───
-
-const OPENAI_TOOL_DEFINITIONS = TOOL_DEFINITIONS.map(d => ({
-  type: 'function',
-  function: {
-    name:        d.name,
-    description: d.description,
-    parameters:  d.input_schema,
-  },
-}))
-
-// ─── Anthropic adapter ────────────────────────────────────────────────────────
-
-async function runAnthropicTurn({ messages, userMessage, repo, ctx, aiConfig, onStatus }) {
-  const apiKey = aiConfig?.anthropicApiKey
-  if (!apiKey) {
-    return { type: 'error', text: 'No Anthropic API key set. Open Settings → AI Provider to configure.' }
-  }
-
-  const emit = onStatus || (() => {})
-  const model  = aiConfig?.model || DEFAULT_MODEL
-  const system = buildSystemPrompt(ctx)
-  const apiMessages = [...messages, { role: 'user', content: userMessage }]
-  let rounds = 0
-
-  while (rounds < MAX_TOOL_ROUNDS) {
-    rounds++
-    emit(rounds > 1 ? `thinking (round ${rounds})…` : 'thinking…')
-
-    let response
-    try {
-      response = await fetch(ANTHROPIC_API_URL, {
-        method: 'POST',
-        headers: {
-          'x-api-key':         apiKey,
-          'anthropic-version': ANTHROPIC_VERSION,
-          'content-type':      'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: MAX_TOKENS,
-          system,
-          tools:    TOOL_DEFINITIONS,
-          messages: apiMessages,
-        }),
-      })
-    } catch (err) {
-      return { type: 'error', text: `Network error: ${fetchErrorMessage(err, ANTHROPIC_API_URL)}` }
-    }
-
-    if (!response.ok) {
-      const status = response.status
-      if (status === 401) return { type: 'error', text: 'Invalid Anthropic API key' }
-      if (status === 429) return { type: 'error', text: 'Rate limit exceeded — try again shortly' }
-      if (status >= 500) return { type: 'error', text: 'Anthropic service error — try again' }
-      return { type: 'error', text: `API error ${status}` }
-    }
-
-    let body
-    try { body = await response.json() } catch {
-      return { type: 'error', text: 'Could not parse API response' }
-    }
-
-    apiMessages.push({ role: 'assistant', content: body.content })
-
-    const textBlocks   = (body.content || []).filter(b => b.type === 'text')
-    const toolUseBlock = (body.content || []).find(b => b.type === 'tool_use')
-    const textContent  = textBlocks.map(b => b.text).join('\n').trim()
-
-    if (toolUseBlock) {
-      emit(toolLabel(toolUseBlock.name, toolUseBlock.input))
-
-      let toolResult
-      try { toolResult = await dispatchTool(toolUseBlock.name, toolUseBlock.input, repo) }
-      catch (err) { toolResult = { error: err.message, code: err.code } }
-
-      apiMessages.push({
-        role:    'user',
-        content: [{ type: 'tool_result', tool_use_id: toolUseBlock.id, content: JSON.stringify(toolResult) }],
-      })
-      continue
-    }
-
-    let navData = null
-    for (const b of textBlocks) {
-      navData = findNavInText(b.text)
-      if (navData) break
-    }
-
-    if (navData) return { type: 'navigate', text: textContent, navigate: navData, messages: apiMessages }
-    return { type: 'answer', text: textContent || '(no response)', messages: apiMessages }
-  }
-
-  return { type: 'error', text: 'Reached maximum tool-call rounds — please try a simpler question' }
-}
-
-// ─── OpenAI-compatible adapter ────────────────────────────────────────────────
-
-async function runOpenAITurn({ messages, userMessage, repo, ctx, aiConfig, onStatus }) {
-  const apiKey  = aiConfig?.openaiApiKey
-  const baseUrl = (aiConfig?.openaiBaseUrl || 'https://api.openai.com/v1').replace(/\/$/, '')
-  const model   = aiConfig?.model || 'gpt-4o'
-
-  const emit = onStatus || (() => {})
-
-  // Key is optional — local endpoints (Ollama, vLLM, etc.) don't need one.
-  // If the server rejects the request with 401 we surface the error then.
-
-  const system = buildSystemPrompt(ctx)
-
-  // OpenAI keeps system prompt as first message (not in history)
-  // History messages are user/assistant/tool turns only
-  const apiMessages = [
-    { role: 'system', content: system },
-    ...messages,
-    { role: 'user', content: userMessage },
-  ]
-  let rounds = 0
-
-  while (rounds < MAX_TOOL_ROUNDS) {
-    rounds++
-    emit(rounds > 1 ? `thinking (round ${rounds})…` : 'thinking…')
-
-    let response
-    try {
-      const headers = { 'content-type': 'application/json' }
-      if (apiKey) headers['authorization'] = `Bearer ${apiKey}`
-
-      response = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model,
-          max_tokens:  MAX_TOKENS,
-          tools:       OPENAI_TOOL_DEFINITIONS,
-          tool_choice: 'auto',
-          messages:    apiMessages,
-        }),
-      })
-    } catch (err) {
-      return { type: 'error', text: `Network error: ${fetchErrorMessage(err, baseUrl)}` }
-    }
-
-    if (!response.ok) {
-      const status = response.status
-      if (status === 401) return { type: 'error', text: 'Invalid API key' }
-      if (status === 429) return { type: 'error', text: 'Rate limit exceeded — try again shortly' }
-      if (status >= 500) return { type: 'error', text: 'Provider service error — try again' }
-      // Surface provider error details (model not found, etc.)
-      let detail = ''
-      try { const b = await response.json(); detail = b?.error?.message || '' } catch { /* ignore */ }
-      return { type: 'error', text: `API error ${status}${detail ? `: ${detail}` : ''}` }
-    }
-
-    let body
-    try { body = await response.json() } catch {
-      return { type: 'error', text: 'Could not parse API response' }
-    }
-
-    const msg        = body?.choices?.[0]?.message
-    const textContent = (msg?.content || '').trim()
-    const toolCalls  = msg?.tool_calls || []
-
-    // Append assistant turn to history (without the system message prefix)
-    apiMessages.push(msg)
-
-    if (toolCalls.length > 0) {
-      const tc = toolCalls[0]
-      const toolName = tc.function.name
-      let toolInput
-      try { toolInput = JSON.parse(tc.function.arguments) } catch { toolInput = {} }
-
-      emit(toolLabel(toolName, toolInput))
-
-      let toolResult
-      try { toolResult = await dispatchTool(toolName, toolInput, repo) }
-      catch (err) { toolResult = { error: err.message, code: err.code } }
-
-      apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(toolResult) })
-      continue
-    }
-
-    const navData = findNavInText(textContent)
-    // Strip system message from returned history
-    const history = apiMessages.filter(m => m.role !== 'system')
-
-    if (navData) return { type: 'navigate', text: textContent, navigate: navData, messages: history }
-    return { type: 'answer', text: textContent || '(no response)', messages: history }
-  }
-
-  return { type: 'error', text: 'Reached maximum tool-call rounds — please try a simpler question' }
-}
-
-// ─── Public turn runner — dispatches by provider ─────────────────────────────
+// ─── Turn runner ──────────────────────────────────────────────────────────────
 
 /**
  * @typedef {object} AssistantResult
@@ -514,7 +301,9 @@ async function runOpenAITurn({ messages, userMessage, repo, ctx, aiConfig, onSta
  */
 
 /**
- * Run one user turn through the tool-use loop.
+ * Run one user turn through the tool-use loop. Every model request goes
+ * through `runAIChat()` (src/ai/index.js), which owns provider selection,
+ * transport, timeouts and usage logging.
  *
  * @param {object} opts
  * @param {Array}  opts.messages     - Prior messages in provider-specific format
@@ -523,29 +312,50 @@ async function runOpenAITurn({ messages, userMessage, repo, ctx, aiConfig, onSta
  * @param {object} opts.ctx          - { repo, pane, selectedItem }
  * @param {object} opts.aiConfig     - From config.ai
  * @param {Function} [opts.onStatus] - Called with a status string during tool execution
+ * @param {AbortSignal} [opts.signal] - Cancels the in-flight model request
  * @returns {Promise<AssistantResult>}
  */
-export async function runAssistantTurn({ messages, userMessage, repo, ctx, aiConfig, onStatus }) {
+export async function runAssistantTurn({ messages, userMessage, repo, ctx, aiConfig, onStatus, signal }) {
   const provider = aiConfig?.provider || 'anthropic'
-  if (provider === 'openai' || provider === 'ollama' || provider === 'openai-compatible') {
-    // For ollama: use openai-compatible adapter with its baseUrl; no key needed
-    const cfg = provider === 'ollama'
-      ? {
-          ...aiConfig,
-          provider:      'openai',
-          openaiBaseUrl: aiConfig?.openaiBaseUrl || 'http://localhost:11434/v1',
-          model:         aiConfig?.model         || 'llama3',
-        }
-      : provider === 'openai-compatible'
-        ? {
-            ...aiConfig,
-            provider:      'openai',
-            openaiApiKey:  (aiConfig?.openai_compatible || aiConfig?.openaiCompatible)?.api_key,
-            openaiBaseUrl: (aiConfig?.openai_compatible || aiConfig?.openaiCompatible)?.base_url,
-            model:         (aiConfig?.openai_compatible || aiConfig?.openaiCompatible)?.model,
-          }
-      : aiConfig
-    return runOpenAITurn({ messages, userMessage, repo, ctx, aiConfig: cfg, onStatus })
+  const isAnthropic = !['openai', 'ollama', 'openai-compatible'].includes(provider)
+  if (isAnthropic && !aiConfig?.anthropicApiKey) {
+    return { type: 'error', text: 'No Anthropic API key set. Open Settings → AI Provider to configure.' }
   }
-  return runAnthropicTurn({ messages, userMessage, repo, ctx, aiConfig, onStatus })
+
+  const emit = onStatus || (() => {})
+  const system = buildSystemPrompt(ctx)
+  const apiMessages = [...messages, { role: 'user', content: userMessage }]
+  const cfg = { ...aiConfig, model: aiConfig?.model || (isAnthropic ? DEFAULT_MODEL : undefined) }
+
+  for (let round = 1; round <= MAX_TOOL_ROUNDS; round++) {
+    emit(round > 1 ? `thinking (round ${round})…` : 'thinking…')
+
+    let reply
+    try {
+      reply = await runAIChat({ aiConfig: cfg, system, messages: apiMessages, tools: TOOL_DEFINITIONS, maxTokens: MAX_TOKENS, signal })
+    } catch (err) {
+      if (err.name === 'AbortError') return { type: 'error', text: 'Request cancelled' }
+      return { type: 'error', text: err.message }
+    }
+
+    apiMessages.push(reply.message)
+
+    const [toolCall] = reply.toolCalls
+    if (toolCall) {
+      emit(toolLabel(toolCall.name, toolCall.input))
+
+      let toolResult
+      try { toolResult = await dispatchTool(toolCall.name, toolCall.input, repo) }
+      catch (err) { toolResult = { error: err.message, code: err.code } }
+
+      apiMessages.push(reply.toolResultMessage(toolCall.id, JSON.stringify(toolResult)))
+      continue
+    }
+
+    const navigate = findNavInText(reply.text)
+    if (navigate) return { type: 'navigate', text: reply.text, navigate, messages: apiMessages }
+    return { type: 'answer', text: reply.text || '(no response)', messages: apiMessages }
+  }
+
+  return { type: 'error', text: 'Reached maximum tool-call rounds — please try a simpler question' }
 }

@@ -101,6 +101,8 @@ export const capabilities = {
 
 Provider implementations are leaf modules with no knowledge of lazyhub's prompts or response shape. `index.js` does prompt building and parsing around them.
 
+**Tool-use chat (assistant).** `runAIChat()` in `index.js` runs one round of a multi-turn, tool-capable conversation for the in-TUI assistant. It honours the explicit `[ai].provider` choice (CLI providers cannot do tool use, so auto-detection does not apply) and maps it to `anthropic-api` or `openai-compatible`, each of which exports `chat()` and `toolResultMessage()`. Messages stay provider-native; `runAIChat()` applies the timeout/cancellation signal and calls `logAiUsage()` exactly once per round (tokens `null` when the provider reports none). The assistant owns the loop and never makes HTTP calls itself.
+
 ### 3.3 Selection flow
 
 ```
