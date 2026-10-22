@@ -58,6 +58,7 @@ describe('bootstrap login via runGh', () => {
 
   it('runs browser login with inherited stdio and no timeout', async () => {
     delete process.env.GITHUB_TOKEN
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin') // hasBrowser() is true
     await bootstrap(vi.fn())
     const login = execa.mock.calls.find(([, args]) => args[1] === 'login')
     expect(login[1]).toEqual(['auth', 'login', '--web', '--git-protocol', 'https'])
