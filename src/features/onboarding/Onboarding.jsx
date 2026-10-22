@@ -13,7 +13,7 @@ import { ThemeProvider, useTheme, readRawThemeCfg } from '../../theme.js'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { Spinner } from '../../components/Spinner.jsx'
 import { sanitize } from '../../utils.js'
-import { detectHostFromRemote } from '../../bootstrap.js'
+import { selectGhHost } from '../../bootstrap.js'
 import { classifyFailure, explainGap, loadOnboardingReport, loadSession } from './flow.js'
 
 const ERROR_COPY = {
@@ -180,10 +180,10 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
 export async function runOnboarding() {
   /** @type {{status: 'completed', repo: string}|{status: 'cancelled'}} */
   let result = { status: 'cancelled' }
-  // Same Enterprise-host auto-detect as bootstrap (git remote only; no gh call).
+  // Same Enterprise-host selection as bootstrap; bootstrap reports failures.
   if (!process.env.GH_HOST) {
-    const host = await detectHostFromRemote()
-    if (host && host !== 'github.com') process.env.GH_HOST = host
+    const { host } = await selectGhHost()
+    if (host) process.env.GH_HOST = host
   }
   process.stdout.write('\x1b[?1049h\x1b[H')
   try {

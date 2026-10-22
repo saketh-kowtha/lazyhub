@@ -57,26 +57,68 @@ export function printInstallInstructions(platform) {
 // ─── Step 2: detect auth ──────────────────────────────────────────────────────
 
 /**
- * Extract the hostname (e.g. "github.enterprise.com") from the origin remote
- * URL of the current working directory. Returns null when not in a git repo,
- * when no origin is set, or when the URL can't be parsed.
+ * Split a git remote URL into { host, path, ssh }. Handles https (optional
+ * user and port), `ssh://[user@]host[:port]/path`, and scp-like
+ * `[user@]host:path`. Ports are dropped: they belong to the git transport, not
+ * to the API host gh authenticates against. Returns null for other forms.
  *
- * Handles:
- *   https://host/owner/repo(.git)?
- *   https://user@host/owner/repo(.git)?
- *   ssh://git@host[:port]/owner/repo(.git)?
- *   git@host:owner/repo(.git)?
+ * @param {string} url
+ * @returns {{host: string, path: string, ssh: boolean}|null}
  */
-export async function detectHostFromRemote() {
+export function parseRemoteUrl(url) {
+  let m = url.match(/^https?:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i)
+  if (m) return { host: m[1], path: m[2], ssh: false }
+  m = url.match(/^ssh:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i)
+  if (m) return { host: m[1], path: m[2], ssh: true }
+  m = url.match(/^(?:[^@/\s]+@)?([^/:\s]+):(?!\/\/)(.+)$/)
+  if (m) return { host: m[1], path: m[2], ssh: true }
+  return null
+}
+
+/**
+ * Resolve an SSH host (possibly a ~/.ssh/config alias) to the real hostname
+ * with `ssh -G`. Returns null when ssh is missing or yields no hostname.
+ *
+ * @param {string} alias
+ */
+async function resolveSshHostname(alias) {
   try {
-    const result = await execa('git', ['remote', 'get-url', 'origin'], { reject: false })
-    if (result.exitCode !== 0) return null
-    const url = result.stdout.trim()
-    const m = url.match(/^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/git@|git@)([^/:]+)[/:]/)
+    const result = await execa('ssh', ['-G', alias], { reject: false, timeout: 3000 })
+    const m = (result.stdout || '').match(/^hostname\s+(\S+)/m)
     return m ? m[1] : null
   } catch {
     return null
   }
+}
+
+/**
+ * The host named by `origin`, with SSH aliases resolved. `resolved` is false
+ * when an SSH host could not be resolved and may be an alias, not a real host.
+ *
+ * @returns {Promise<{host: string, resolved: boolean}|null>}
+ */
+async function resolveRemoteHost() {
+  try {
+    const result = await execa('git', ['remote', 'get-url', 'origin'], { reject: false })
+    if (result.exitCode !== 0) return null
+    const parsed = parseRemoteUrl(result.stdout.trim())
+    if (!parsed) return null
+    if (!parsed.ssh) return { host: parsed.host, resolved: true }
+    const real = await resolveSshHostname(parsed.host)
+    // GitHub's SSH-over-443 endpoint is not an API host.
+    const host = (real || parsed.host).replace(/^ssh\.github\.com$/i, 'github.com')
+    return { host, resolved: !!real }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The hostname of the `origin` remote (SSH aliases resolved), or null when not
+ * in a git repo, no origin is set, or the URL can't be parsed.
+ */
+export async function detectHostFromRemote() {
+  return (await resolveRemoteHost())?.host ?? null
 }
 
 /**
@@ -110,22 +152,57 @@ export async function checkAuth() {
  * remote-based GH_HOST auto-detect can't fire), the default check misses
  * their existing login and prompts a bogus re-login.
  */
-export async function detectAuthenticatedHost() {
+export async function listAuthenticatedHosts() {
   try {
     const result = await execa('gh', ['auth', 'status'], { reject: false })
     const text = `${result.stdout || ''}\n${result.stderr || ''}`
-    const blocks = text.split(/\n\s*\n/)
-    let firstHost = null
-    for (const block of blocks) {
+    const hosts = []
+    let active = null
+    for (const block of text.split(/\n\s*\n/)) {
       const loginMatch = block.match(/Logged in to (\S+)/)
       if (!loginMatch) continue
-      const host = loginMatch[1]
-      if (!firstHost) firstHost = host
-      if (/Active account:\s*true/.test(block)) return host
+      hosts.push(loginMatch[1])
+      if (!active && /Active account:\s*true/.test(block)) active = loginMatch[1]
     }
-    return firstHost
+    return { hosts, active: active || hosts[0] || null }
   } catch {
-    return null
+    return { hosts: [], active: null }
+  }
+}
+
+/**
+ * The active (else first) logged-in host, or null.
+ */
+export async function detectAuthenticatedHost() {
+  return (await listAuthenticatedHosts()).active
+}
+
+/**
+ * Choose the GH_HOST for this run from the git remote and gh's logins. The
+ * remote's host is only used when gh is logged in to it; an SSH alias or a
+ * separate SSH hostname must never become GH_HOST on its own.
+ *
+ * @returns {Promise<{host: string|null, note?: string, error?: string}>}
+ */
+export async function selectGhHost() {
+  const remote = await resolveRemoteHost()
+  if (!remote || remote.host.toLowerCase() === 'github.com') return { host: null }
+  const { hosts } = await listAuthenticatedHosts()
+  if (hosts.some(h => h.toLowerCase() === remote.host.toLowerCase())) return { host: remote.host }
+  const others = hosts.filter(h => h.toLowerCase() !== 'github.com')
+  if (others.length === 1) {
+    return { host: others[0], note: `Remote host ${remote.host} is not a gh login; using ${others[0]}.` }
+  }
+  // Nothing logged in and the host is a real one: let the login flow offer it.
+  if (hosts.length === 0 && remote.resolved) return { host: remote.host }
+  return {
+    host: null,
+    error: [
+      `  ✗ The git remote points at ${remote.host}, but gh is not logged in to it.`,
+      `    gh is logged in to: ${hosts.length ? hosts.join(', ') : '(nothing)'}`,
+      `    If ${remote.host} is your GitHub Enterprise host, run: gh auth login --hostname ${remote.host}`,
+      '    If it is an SSH alias or a different SSH hostname, set the API host: export GH_HOST=<host>',
+    ].join('\n'),
   }
 }
 
@@ -225,16 +302,13 @@ async function runLoginFlow() {
  *
  */
 export async function detectRepo() {
-  const ghHost = process.env.GH_HOST || 'github.com'
-  const escapedHost = ghHost.replace(/\./g, '\\.')
-
-  // 1. Parse git remote origin URL — fast, no network needed
+  // 1. Parse git remote origin URL — fast, no network needed. Host-agnostic:
+  // an SSH alias or separate SSH hostname never matches GH_HOST literally.
   try {
     const result = await execa('git', ['remote', 'get-url', 'origin'], { reject: false })
     if (result.exitCode === 0) {
-      const url = result.stdout.trim()
-      // Handles HTTPS (host/owner/repo) and SSH (git@host:owner/repo)
-      const match = url.match(new RegExp(`${escapedHost}[/:]([^/\\s]+\\/[^/\\s.]+?)(?:\\.git)?$`))
+      const parsed = parseRemoteUrl(result.stdout.trim())
+      const match = parsed?.path.match(/^([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/)
       if (match) return match[1]
     }
   } catch { /* not in a git repo */ }
@@ -342,13 +416,18 @@ export async function bootstrap(renderApp, { repo: chosenRepo } = /** @type {{re
     process.exit(1)
   }
 
-  // Auto-detect GitHub Enterprise host from the git remote. Users who cloned
-  // a GHE repo but haven't exported GH_HOST would otherwise be treated as if
-  // they were targeting github.com and get a bogus "not logged in" prompt.
+  // Pick the GHE host from the git remote, but only if gh is logged in to it
+  // (SSH aliases and ssh-only hostnames are not API hosts). An explicit
+  // GH_HOST always wins.
   if (!process.env.GH_HOST) {
-    const detectedHost = await detectHostFromRemote()
-    if (detectedHost && detectedHost !== 'github.com') {
-      process.env.GH_HOST = detectedHost
+    const sel = await selectGhHost()
+    if (sel.error) {
+      console.error(`\n${sel.error}\n`)
+      process.exit(1)
+    }
+    if (sel.host) {
+      process.env.GH_HOST = sel.host
+      if (sel.note) process.stdout.write(`  ${sel.note}\n`)
     }
   }
 
