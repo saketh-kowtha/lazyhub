@@ -14,15 +14,9 @@ import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { Spinner } from '../../components/Spinner.jsx'
 import { sanitize } from '../../utils.js'
 import { selectGhHost } from '../../bootstrap.js'
+import { classifyGhFailure } from '../../executor.js'
+import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { classifyFailure, explainGap, isOwnerName, listWindowSize, lookupRepo, loadOnboardingReport, loadSession, repoKey, windowStart } from './flow.js'
-
-const ERROR_COPY = {
-  no_gh: ['GitHub CLI (gh) was not found.', 'Install it from https://cli.github.com, run `gh auth login`, then start lazyhub again.'],
-  auth: ['Not signed in to GitHub through gh.', 'Run `gh auth login` (add `--hostname <host>` for Enterprise), then start lazyhub again. lazyhub did not log in for you.'],
-  rate_limit: ['GitHub API rate limit reached.', 'Nothing was lost. Wait for the limit to reset, then retry.'],
-  permission: ['Your gh login cannot read what lazyhub needs.', 'Check the account and token scopes with `gh auth status`, then retry.'],
-  error: ['GitHub could not be reached.', 'Check your network and `gh auth status`, then retry.'],
-}
 
 const LOOKUP_KEY = 'lookup:'
 const MAX_QUERY = 140
@@ -113,7 +107,7 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
         setSelected(prev => prev ?? (s.repos[0] ? repoKey(s.repos[0].name) : null)) // pin identity once; a refresh keeps it
         setPhase('repos')
       })
-      .catch(err => { if (request.current === id) { setFailure(classifyFailure(err)); setPhase('error') } })
+      .catch(err => { if (request.current === id) { setFailure(classifyGhFailure(err)); setPhase('error') } })
   }, [attempt, loadSessionFn])
 
   const observe = name => {
@@ -124,7 +118,7 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
     setPhase('report')
     loadReportFn(name)
       .then(d => { if (request.current === id) setData(d) })
-      .catch(err => { if (request.current === id) { setFailure(classifyFailure(err)); setPhase('error') } })
+      .catch(err => { if (request.current === id) { setFailure(classifyGhFailure(err)); setPhase('error') } })
   }
 
   const repos = session?.repos ?? []
@@ -219,8 +213,7 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
         {phase === 'session' && <Spinner label="Checking your gh login..." />}
         {phase === 'error' && (
           <Box flexDirection="column">
-            <Text color={t.ci.fail} bold>{ERROR_COPY[failure][0]}</Text>
-            <Text color={t.ui.muted}>{ERROR_COPY[failure][1]}</Text>
+            <FailureNotice failure={failure} />
             <Text color={t.ui.dim}>lazyhub changed nothing on GitHub or on this machine.</Text>
           </Box>
         )}

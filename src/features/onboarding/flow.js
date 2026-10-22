@@ -10,7 +10,7 @@
  */
 
 import { existsSync } from 'fs'
-import { runGh } from '../../executor.js'
+import { classifyGhFailure, runGh } from '../../executor.js'
 import { fetchPullRequestActivityPage, resolveCurrentRepo } from '../../executor/activity.js'
 import { checkCoverage } from '../../cli/doctor/coverage.js'
 import { generateWatchOnlyReport } from '../../watch-only/index.js'
@@ -46,11 +46,11 @@ export function shouldOnboard({
  * @returns {'no_gh'|'auth'|'rate_limit'|'permission'|'error'}
  */
 export function classifyFailure(err) {
-  const text = `${err?.message || ''} ${err?.stderr || ''}`
-  if (/ENOENT/.test(text)) return 'no_gh'
-  if (/gh auth login|authentication required|not logged in|HTTP 401|bad credentials|requires authentication/i.test(text)) return 'auth'
-  if (/rate limit/i.test(text)) return 'rate_limit'
-  if (/HTTP 40[34]|forbidden|not accessible|not found/i.test(text)) return 'permission'
+  const { kind } = classifyGhFailure(err)
+  if (kind === 'gh_missing') return 'no_gh'
+  if (kind === 'not_signed_in') return 'auth'
+  if (kind === 'rate_limit' || kind === 'secondary_limit') return 'rate_limit'
+  if (['sso', 'scope', 'forbidden', 'repo_not_found', 'not_found'].includes(kind)) return 'permission'
   return 'error'
 }
 

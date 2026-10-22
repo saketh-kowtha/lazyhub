@@ -111,7 +111,7 @@ describe('first-run onboarding', () => {
   it('missing auth: explains gh auth login, never logs in, quits cleanly', async () => {
     stubGh({ user: fail('To get started with GitHub CLI, please run:  gh auth login') })
     const view = start()
-    await waitForExpectation(() => expect(frame(view)).toContain('Not signed in to GitHub through gh.'))
+    await waitForExpectation(() => expect(frame(view)).toContain('You are not signed in to GitHub.'))
     expect(frame(view)).toContain('gh auth login')
     expect(calls.map(c => c.args.join(' '))).toEqual(['api user'])
     await waitForInputReady(view)
@@ -150,7 +150,7 @@ describe('first-run onboarding', () => {
   it('rate limit while checking login: error panel with retry, which re-reads', async () => {
     stubGh({ user: fail('gh: API rate limit exceeded for user') })
     const view = start()
-    await waitForExpectation(() => expect(frame(view)).toContain('GitHub API rate limit reached.'))
+    await waitForExpectation(() => expect(frame(view)).toContain('GitHub API rate limit reached'))
     stubGh()
     await waitForInputReady(view)
     view.stdin.write('r')
