@@ -100,7 +100,7 @@ Alphabetical. Cross-references in **bold**.
 
 ## L
 
-**Local decision** — A maintainer's own note or verdict about a change, kept locally (for example "needs follow-up"). Not published to GitHub, not a **GitHub review**, and grants no authority: it is not a Lazyhub **authorization**. Any persistence is demand-gated (#294). See **Review concepts**.
+**Local decision** — A maintainer's own note or verdict about a change, kept locally (for example "needs follow-up"). Not published to GitHub, not a **GitHub review**, and grants no authority: it is not a Lazyhub **authorization**. See **Review concepts**.
 
 **logAiUsage()** — Helper that records every AI call's tokens, cost, provider, and outcome. Mandatory for every `src/ai/providers/*` call site. Feeds **AI budget** enforcement.
 
