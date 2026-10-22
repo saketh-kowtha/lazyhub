@@ -36,7 +36,7 @@ describe('detectGh', () => {
         execa.mockResolvedValue({ exitCode: 0, stdout: 'gh version 2.40.0' })
         const result = await detectGh()
         expect(result).toBe(true)
-        expect(execa).toHaveBeenCalledWith('gh', ['--version'])
+        expect(execa).toHaveBeenCalledWith('gh', ['--version'], expect.any(Object))
     })
 
     it('returns false when gh is not installed', async () => {
@@ -104,7 +104,7 @@ describe('detectAuthenticatedHost', () => {
         execa.mockResolvedValue({
             exitCode: 0,
             stdout: '',
-            stderr: [
+            all: [
                 'github.com',
                 '  ✓ Logged in to github.com account alice (keyring)',
                 '  - Active account: false',
@@ -123,7 +123,7 @@ describe('detectAuthenticatedHost', () => {
         execa.mockResolvedValue({
             exitCode: 0,
             stdout: '',
-            stderr: [
+            all: [
                 'github.enterprise.com',
                 '  ✓ Logged in to github.enterprise.com account alice (keyring)',
                 '  - Active account: true',
@@ -136,7 +136,7 @@ describe('detectAuthenticatedHost', () => {
         execa.mockResolvedValue({
             exitCode: 0,
             stdout: '',
-            stderr: [
+            all: [
                 'github.com',
                 '  ✓ Logged in to github.com account alice (keyring)',
                 '  - Git operations protocol: https',
@@ -149,7 +149,7 @@ describe('detectAuthenticatedHost', () => {
         execa.mockResolvedValue({
             exitCode: 1,
             stdout: '',
-            stderr: 'You are not logged into any GitHub hosts. Run gh auth login to authenticate.',
+            all: 'You are not logged into any GitHub hosts. Run gh auth login to authenticate.',
         })
         expect(await detectAuthenticatedHost()).toBeNull()
     })
@@ -457,7 +457,7 @@ describe('bootstrap() integration', () => {
             .mockResolvedValueOnce({
                 exitCode: 0,
                 stdout: '',
-                stderr: [
+                all: [
                     'github.enterprise.com',
                     '  ✓ Logged in to github.enterprise.com account alice (keyring)',
                     '  - Active account: true',

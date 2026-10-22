@@ -9,6 +9,7 @@
 
 import { execa } from 'execa'
 import { loadSavedRepo, saveDefaultRepo, writeDefaultConfig } from './config.js'
+import { runGh } from './executor/core.js'
 import readline from 'readline'
 
 // ─── Step 1: detect gh ────────────────────────────────────────────────────────
@@ -18,7 +19,7 @@ import readline from 'readline'
  */
 export async function detectGh() {
   try {
-    await execa('gh', ['--version'])
+    await runGh(['--version'], { json: false })
     return true
   } catch {
     return false
@@ -135,8 +136,8 @@ export async function checkAuth() {
     ? ['auth', 'token', '--hostname', process.env.GH_HOST]
     : ['auth', 'token']
   try {
-    const result = await execa('gh', args, { reject: false })
-    return result.exitCode === 0 && !!(result.stdout || '').trim()
+    // runGh throws on non-zero exit and returns null on empty output.
+    return !!(await runGh(args, { json: false }))
   } catch {
     return false
   }
@@ -154,11 +155,17 @@ export async function checkAuth() {
  */
 export async function listAuthenticatedHosts() {
   try {
-    const result = await execa('gh', ['auth', 'status'], { reject: false })
-    const text = `${result.stdout || ''}\n${result.stderr || ''}`
+    // gh reports on stderr (and exits non-zero when any host has issues); combine
+    // keeps both, and a GhError still carries the output in .stderr.
+    let text
+    try {
+      text = await runGh(['auth', 'status'], { json: false, combine: true })
+    } catch (err) {
+      text = err.stderr
+    }
     const hosts = []
     let active = null
-    for (const block of text.split(/\n\s*\n/)) {
+    for (const block of (text || '').split(/\n\s*\n/)) {
       const loginMatch = block.match(/Logged in to (\S+)/)
       if (!loginMatch) continue
       hosts.push(loginMatch[1])
@@ -246,8 +253,7 @@ async function readPATFromStdin(rl) {
  */
 export async function getLoggedInUser() {
   try {
-    const { stdout } = await execa('gh', ['api', 'user', '--jq', '.login'])
-    return stdout.trim()
+    return await runGh(['api', 'user', '--jq', '.login'], { json: false })
   } catch {
     return null
   }
@@ -265,10 +271,8 @@ async function runLoginFlow() {
       const loginArgs = ghHost
         ? ['auth', 'login', '--hostname', ghHost, '--with-token']
         : ['auth', 'login', '--with-token']
-      const proc = execa('gh', loginArgs, { reject: false })
-      proc.stdin.write(process.env.GITHUB_TOKEN)
-      proc.stdin.end()
-      await proc
+      // The token travels on stdin only: never argv, env, or the gh call history.
+      await runGh(loginArgs, { json: false, stdin: process.env.GITHUB_TOKEN })
       return
     } catch {
       // fall through
@@ -278,20 +282,16 @@ async function runLoginFlow() {
   const loginArgs = ['auth', 'login']
   if (ghHost) loginArgs.push('--hostname', ghHost)
   if (hasBrowser()) {
-    await execa('gh', [...loginArgs, '--web', '--git-protocol', 'https'], {
-      stdio: 'inherit',
-      reject: false,
-    })
+    // Interactive: gh owns the terminal and waits on the user, so no timeout.
+    await runGh([...loginArgs, '--web', '--git-protocol', 'https'], { interactive: true, timeout: 0 })
+      .catch(() => {}) // checkAuth() after the flow reports the outcome
   } else {
     const pat = await readPATFromStdin()
     if (pat) {
       const withTokenArgs = ghHost
         ? ['auth', 'login', '--hostname', ghHost, '--with-token']
         : ['auth', 'login', '--with-token']
-      const proc = execa('gh', withTokenArgs, { reject: false })
-      proc.stdin.write(pat)
-      proc.stdin.end()
-      await proc
+      await runGh(withTokenArgs, { json: false, stdin: pat }).catch(() => {})
     }
   }
 }
@@ -316,11 +316,8 @@ export async function detectRepo() {
   // 2. Let gh resolve it from the git context
   const viewArgs = ['repo', 'view', '--json', 'name,owner']
   try {
-    const result = await execa('gh', viewArgs, { reject: false })
-    if (result.exitCode === 0 && result.stdout) {
-      const data = JSON.parse(result.stdout)
-      return `${data.owner.login}/${data.name}`
-    }
+    const data = await runGh(viewArgs)
+    if (data?.owner?.login && data.name) return `${data.owner.login}/${data.name}`
   } catch { /* gh can't figure it out */ }
 
   return null
@@ -331,12 +328,12 @@ export async function detectRepo() {
  */
 export async function listRepos() {
   try {
-    const { stdout } = await execa('gh', [
+    const repos = await runGh([
       'repo', 'list',
       '--limit', '20',
       '--json', 'name,nameWithOwner',
     ])
-    return JSON.parse(stdout)
+    return Array.isArray(repos) ? repos : []
   } catch {
     return []
   }

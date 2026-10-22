@@ -89,6 +89,11 @@ describe('operation classification (fail closed)', () => {
     ['implicit POST via -F', ['api', 'repos/o/r/issues', '-F', 'n=1'], 'write'],
     ['implicit POST via --raw-field', ['api', 'repos/o/r/issues', '--raw-field', 'title=t'], 'write'],
     ['--input with GET', ['api', 'repos/o/r/issues', '--method', 'GET', '--input', '-'], 'write'],
+    // pre-TUI bootstrap (#288)
+    ['bootstrap version', ['--version'], 'read'],
+    ['bootstrap auth token', ['auth', 'token', '--hostname', 'h'], 'read'],
+    ['bootstrap auth login', ['auth', 'login', '--with-token'], 'write'],
+    ['auth logout stays denied', ['auth', 'logout'], 'unknown'],
     // unknown: denied
     ['unknown command', ['repo', 'delete', 'o/r', '--yes'], 'unknown'],
     ['alias/extension', ['alias', 'set', 'x', 'pr merge'], 'unknown'],
