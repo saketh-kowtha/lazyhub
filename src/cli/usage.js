@@ -21,6 +21,7 @@ Reference forms:
 
 Commands:
   doctor [--json]                 check setup, auth and review-coverage evidence
+  feedback [--print]              open a pre-filled issue with redacted diagnostics
   status                          print ambient review/CI/notification counts
   watch-only [--repo owner/name]  read-only coverage report
   serve [--status|--stop]         manage the background daemon
