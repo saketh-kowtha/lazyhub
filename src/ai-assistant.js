@@ -340,15 +340,17 @@ export async function runAssistantTurn({ messages, userMessage, repo, ctx, aiCon
 
     apiMessages.push(reply.message)
 
-    const [toolCall] = reply.toolCalls
-    if (toolCall) {
-      emit(toolLabel(toolCall.name, toolCall.input))
-
-      let toolResult
-      try { toolResult = await dispatchTool(toolCall.name, toolCall.input, repo) }
-      catch (err) { toolResult = { error: err.message, code: err.code } }
-
-      apiMessages.push(reply.toolResultMessage(toolCall.id, JSON.stringify(toolResult)))
+    if (reply.toolCalls.length) {
+      // Providers require a result for EVERY tool call of the round.
+      const results = []
+      for (const toolCall of reply.toolCalls) {
+        emit(toolLabel(toolCall.name, toolCall.input))
+        let toolResult
+        try { toolResult = await dispatchTool(toolCall.name, toolCall.input, repo) }
+        catch (err) { toolResult = { error: err.message, code: err.code } }
+        results.push({ id: toolCall.id, content: JSON.stringify(toolResult) })
+      }
+      apiMessages.push(...reply.toolResultMessages(results))
       continue
     }
 

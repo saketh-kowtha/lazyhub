@@ -176,11 +176,11 @@ export async function chat({ system, messages, tools, maxTokens, model, apiKey: 
 }
 
 /**
- * Build the Anthropic-format message carrying a tool result.
- * @param {string} toolCallId
- * @param {string} content
- * @returns {object}
+ * Build the Anthropic-format message(s) answering a round's tool calls. The API
+ * requires one tool_result per tool_use id, all in a single user message.
+ * @param {Array<{id: string, content: string}>} results
+ * @returns {object[]}
  */
-export function toolResultMessage(toolCallId, content) {
-  return { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolCallId, content }] }
+export function toolResultMessages(results) {
+  return [{ role: 'user', content: results.map(r => ({ type: 'tool_result', tool_use_id: r.id, content: r.content })) }]
 }

@@ -124,7 +124,7 @@ function resolveChatProvider(aiConfig = {}) {
  * @param {number} [opts.maxTokens]
  * @param {number} [opts.timeoutMs]
  * @param {AbortSignal} [opts.signal]
- * @returns {Promise<{message: object, text: string, toolCalls: Array<{id: string, name: string, input: object}>, toolResultMessage: (id: string, content: string) => object}>}
+ * @returns {Promise<{message: object, text: string, toolCalls: Array<{id: string, name: string, input: object}>, toolResultMessages: (results: Array<{id: string, content: string}>) => object[]}>}
  */
 export async function runAIChat({ aiConfig, system, messages, tools, maxTokens, timeoutMs, signal }) {
   const { provider, conn } = resolveChatProvider(aiConfig)
@@ -156,7 +156,7 @@ export async function runAIChat({ aiConfig, system, messages, tools, maxTokens, 
     message:   result.message,
     text:      result.text,
     toolCalls: result.toolCalls,
-    toolResultMessage: provider.toolResultMessage,
+    toolResultMessages: provider.toolResultMessages,
   }
 }
 

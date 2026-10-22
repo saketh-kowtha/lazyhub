@@ -207,11 +207,11 @@ export async function chat({ system, messages, tools, maxTokens, model, baseUrl,
 }
 
 /**
- * Build the OpenAI-format message carrying a tool result.
- * @param {string} toolCallId
- * @param {string} content
- * @returns {object}
+ * Build the OpenAI-format messages answering a round's tool calls (one `tool`
+ * message per tool_call id).
+ * @param {Array<{id: string, content: string}>} results
+ * @returns {object[]}
  */
-export function toolResultMessage(toolCallId, content) {
-  return { role: 'tool', tool_call_id: toolCallId, content }
+export function toolResultMessages(results) {
+  return results.map(r => ({ role: 'tool', tool_call_id: r.id, content: r.content }))
 }

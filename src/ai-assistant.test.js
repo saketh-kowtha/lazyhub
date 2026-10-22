@@ -181,6 +181,46 @@ describe('assistant provider boundary (B-65: every round goes through src/ai/ind
     expect(await runAssistantTurn({ ...base, aiConfig: cfg })).toMatchObject({ type: 'error', text: expect.stringMatching(/cancel/i) })
   })
 
+  it('answers EVERY parallel tool call: one Anthropic user message holding all tool_results, mutating ones denied', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ content: [
+        { type: 'tool_use', id: 'a', name: 'list_prs', input: {} },
+        { type: 'tool_use', id: 'b', name: 'merge_pr', input: { number: 1 } },
+      ] }))
+      .mockResolvedValueOnce(json({ content: [{ type: 'text', text: 'done' }] }))
+
+    const result = await runAssistantTurn({ ...base, aiConfig: { provider: 'anthropic', anthropicApiKey: 'k' } })
+
+    const last = JSON.parse(fetchMock.mock.calls[1][1].body).messages.at(-1)
+    expect(last.role).toBe('user')
+    expect(last.content.map(b => b.tool_use_id)).toEqual(['a', 'b'])
+    expect(JSON.parse(last.content[1].content)).toMatchObject({ code: 'AI_MUTATIONS_DISABLED' })
+    expect(result).toMatchObject({ type: 'answer', text: 'done' })
+    expect(executor.mergePR).not.toHaveBeenCalled()
+  })
+
+  it('answers EVERY parallel tool call on OpenAI-compatible providers (one tool message per id)', async () => {
+    const calls = ['x', 'y'].map(id => ({ id, type: 'function', function: { name: 'list_prs', arguments: '{}' } }))
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ choices: [{ message: { role: 'assistant', content: '', tool_calls: calls } }] }))
+      .mockResolvedValueOnce(json({ choices: [{ message: { role: 'assistant', content: 'done' } }] }))
+
+    await runAssistantTurn({ ...base, aiConfig: { provider: 'openai', openaiApiKey: 'k' } })
+
+    const sent = JSON.parse(fetchMock.mock.calls[1][1].body).messages
+    expect(sent.slice(-2).map(m => [m.role, m.tool_call_id])).toEqual([['tool', 'x'], ['tool', 'y']])
+  })
+
+  it('aborts the in-flight request when the caller aborts', async () => {
+    const ctl = new AbortController()
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce((_u, init) => new Promise((_res, rej) => {
+      init.signal.addEventListener('abort', () => rej(init.signal.reason))
+    }))
+    const pending = runAssistantTurn({ ...base, signal: ctl.signal, aiConfig: { provider: 'anthropic', anthropicApiKey: 'k' } })
+    ctl.abort()
+    expect(await pending).toMatchObject({ type: 'error', text: expect.stringMatching(/cancel/i) })
+  })
+
   it('answers without an Anthropic key before making any request', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
     expect(await runAssistantTurn({ ...base, aiConfig: { provider: 'anthropic' } })).toMatchObject({ type: 'error', text: expect.stringMatching(/API key/) })
