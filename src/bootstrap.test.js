@@ -503,7 +503,7 @@ describe('GHES host resolution', () => {
             if (bin === 'git') return { exitCode: 0, stdout: remote }
             if (bin === 'ssh') return ssh ? { exitCode: 0, stdout: `user git\nhostname ${ssh}\nport 22` } : { exitCode: 255, stdout: '' }
             if (bin === 'gh' && args[0] === 'auth' && args[1] === 'status') {
-                return authed.length ? { exitCode: 0, stdout: '', stderr: status(...authed) } : { exitCode: 1, stdout: '', stderr: 'not logged in' }
+                return authed.length ? { exitCode: 0, stdout: '', stderr: status(...authed), all: status(...authed) } : { exitCode: 1, stdout: '', stderr: 'not logged in', all: 'not logged in' }
             }
             if (bin === 'gh' && args[0] === 'auth' && args[1] === 'token') {
                 const host = args[3] || 'github.com'
