@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'fs'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync } from 'fs'
 import { connect } from 'net'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -108,5 +108,25 @@ describe('daemon startup', () => {
       const { startDaemon } = await import('./server.js')
       expect(() => startDaemon({}, process.env)).toThrow(/NODE_OPTIONS/)
     } finally { delete process.env.NODE_OPTIONS }
+  })
+})
+
+describe.skipIf(process.platform === 'win32')('daemon file permissions', () => {
+  it('tightens a loose pid dir and writes 0600 pid/socket files under a permissive umask', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lh-d-'))
+    dirs.push(dir)
+    chmodSync(dir, 0o755)
+    const config = { daemon: { socket_path: join(dir, 's.sock'), pid_file: join(dir, 'd.pid') } }
+    const { startDaemon } = await import('./server.js')
+    const old = process.umask(0o000)
+    try {
+      daemon = startDaemon(config, { PATH: '/bin' })
+      await new Promise(resolve => daemon.server.once('listening', resolve))
+    } finally {
+      process.umask(old)
+    }
+    expect(statSync(dir).mode & 0o077).toBe(0)
+    expect(statSync(join(dir, 'd.pid')).mode & 0o077).toBe(0)
+    expect(statSync(join(dir, 's.sock')).mode & 0o077).toBe(0)
   })
 })

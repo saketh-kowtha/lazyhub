@@ -1,5 +1,6 @@
-import { mkdirSync } from 'fs'
-import { homedir, userInfo } from 'os'
+import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { randomBytes } from 'crypto'
+import { homedir } from 'os'
 import { dirname, join } from 'path'
 import { connect } from 'net'
 import { spawn } from 'child_process'
@@ -15,14 +16,23 @@ function expandHome(path) {
 
 /**
  * Resolve the daemon endpoint. Unix uses a filesystem socket; Windows uses a
- * named pipe so the rest of the daemon can stay on Node's `net` module.
+ * named pipe so the rest of the daemon can stay on Node's `net` module. The
+ * pipe name is random, generated once and kept in the user-private daemon dir
+ * (#253): a predictable name would let another local process squat the pipe
+ * and collect the session token that clients present.
  *
  * @param {object} config
  */
 export function daemonSocketPath(config = {}) {
   if (process.platform === 'win32') {
-    const user = userInfo().username.replace(/[^a-zA-Z0-9_.-]/g, '-')
-    return `\\\\.\\pipe\\lazyhub-${user}`
+    const namePath = join(dirname(daemonPidPath(config)), 'daemon.pipe')
+    mkdirSync(dirname(namePath), { recursive: true })
+    try {
+      writeFileSync(namePath, randomBytes(16).toString('hex'), { flag: 'wx' })
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err
+    }
+    return `\\\\.\\pipe\\lazyhub-${readFileSync(namePath, 'utf8').trim()}`
   }
   return expandHome(config.daemon?.socket_path || '~/.config/lazyhub/daemon.sock')
 }

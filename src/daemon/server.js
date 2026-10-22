@@ -1,6 +1,7 @@
 import { createServer } from 'net'
-import { writeFileSync, unlinkSync, chmodSync, mkdirSync } from 'fs'
+import { unlinkSync, chmodSync } from 'fs'
 import { dirname } from 'path'
+import { assertPrivateDir, ensurePrivateDir, writePrivateFile } from '../secure-fs.js'
 import { runGh } from '../executor/core.js'
 import {
   daemonPidPath, daemonSocketPath, daemonTokenPath, ensureSocketDir, removeStaleSocket,
@@ -49,7 +50,9 @@ export function startDaemon(config = {}, env = process.env) {
   let account = null
 
   ensureSocketDir(socketPath)
-  mkdirSync(dirname(pidPath), { recursive: true, mode: 0o700 })
+  // pid file and session token share this dir: it must be ours and private.
+  ensurePrivateDir(dirname(pidPath))
+  assertPrivateDir(dirname(pidPath))
   removeStaleSocket(socketPath)
 
   const server = createServer(socket => {
@@ -194,10 +197,19 @@ export function startDaemon(config = {}, env = process.env) {
     idleTimer.unref?.()
   }
 
+  // Only remove files this process created: a failed bind (EADDRINUSE) must
+  // not delete a live daemon's socket, pid or token.
+  let bound = false
+  function remove(path) {
+    try { unlinkSync(path) } catch (err) {
+      if (err.code !== 'ENOENT') process.stderr.write(`lazyhub: daemon cleanup failed for ${path}: ${err.message}\n`)
+    }
+  }
   function cleanup() {
-    try { unlinkSync(pidPath) } catch { /* ignore */ }
-    try { unlinkSync(socketPath) } catch { /* ignore */ }
-    try { unlinkSync(tokenPath) } catch { /* ignore */ }
+    if (!bound) return
+    remove(pidPath)
+    remove(socketPath)
+    remove(tokenPath)
   }
 
   function shutdown(code = 0) {
@@ -205,10 +217,23 @@ export function startDaemon(config = {}, env = process.env) {
     server.close(() => process.exit(code))
   }
 
+  // Bind, chmod and token errors are fatal for a privileged endpoint: never
+  // leave a reachable socket whose mode or secret could not be set.
+  const fail = err => {
+    process.stderr.write(`lazyhub: daemon failed to start: ${err.message}\n`)
+    shutdown(1)
+  }
+  server.on('error', fail)
   server.listen(socketPath, () => {
-    if (process.platform !== 'win32') chmodSync(socketPath, 0o600)
-    session = issueSession(tokenPath)
-    writeFileSync(pidPath, String(process.pid), 'utf8')
+    bound = true
+    try {
+      if (process.platform !== 'win32') chmodSync(socketPath, 0o600)
+      session = issueSession(tokenPath)
+      writePrivateFile(pidPath, String(process.pid))
+    } catch (err) {
+      fail(err)
+      return
+    }
     process.stdout.write(JSON.stringify({ ok: true, socketPath, pid: process.pid }) + '\n')
     armIdleShutdown()
   })
