@@ -383,3 +383,67 @@ To prevent merge conflicts and "branch drift":
 - Root cause: the assistant predates the provider facade and was never migrated; the facade only exposed one-shot `getAICodeReview()`.
 - Fix: new `runAIChat()` in `src/ai/index.js` runs one tool-use round through `anthropic-api.js` / `openai-compatible.js` (new `chat()` + `toolResultMessages()` in each; Anthropic HTTP now lives in one `postMessages()` shared with `complete()`), honouring the explicit `[ai].provider` choice and existing local endpoints. It applies a timeout/cancellation signal and calls `logAiUsage()` once per round (tokens `null` when not reported; prompts, tool payloads and keys never logged). `ai-assistant.js` keeps only the loop, tools and history, which stay provider-native. A test asserts `api.anthropic.com` appears only in `anthropic-api.js`. Writes stay disabled (B-64). Every tool call of a round is now answered (parallel tool_use previously left all but the first without a result, a provider 400); mutating ones get the B-64 disabled error. Esc and unmount cancel an in-flight request.
 
+**B-66 — GHES users hit "no known GitHub host" at startup or a login prompt for the wrong host (#327)**
+- Symptom: GitHub Enterprise Server users got "none of the git remotes ... point to a known GitHub host" at startup, or a login prompt for the wrong host.
+- Root cause: bootstrap/onboarding set `GH_HOST` from the raw `origin` host without checking gh logins or resolving SSH aliases, and `detectRepo()` required the literal `GH_HOST` in the remote URL.
+- Fix: the remote host is resolved through `ssh -G`, `GH_HOST` is chosen from gh's authenticated hosts, repo parsing is host-agnostic, and a clear error is shown when nothing matches.
+
+**B-67 — Test suite was not hermetic and e2e keys hit the previous screen (#309, #291)**
+- Symptom: the suite failed intermittently and differed between machines: a developer's custom icons were baked into snapshots, config tests rewrote the real config, and keys sometimes reached the previous screen.
+- Root cause: tests resolved `os.homedir()` to the real HOME, and the e2e driver used timers while the mocked `useInput` re-registered in a passive effect.
+- Fix: global temp-HOME setup plus a real-config guard (`src/test/setup-hermetic.js`, `src/test/global-guard.js`), and act-based key delivery (`src/test/input-bus.js`, `src/test/input-driver.jsx`).
+
+**B-68 — CI green did not imply the release graph built (#305, #282)**
+- Symptom: a passing CI run did not mean the release workflow could install and build.
+- Root cause: CI deleted `package-lock.json` and re-resolved (workaround for npm/cli#4828) while release ran `npm ci` against the committed lockfile.
+- Fix: all workflows run `npm ci` against the committed lockfile, which already carries every platform binding; dependency identity is logged and enforced by `scripts/record-toolchain.mjs`.
+
+**B-69 — Daemon files created with default permissions, predictable Windows pipe name, unsafe startup failure paths (#321, #253)**
+- Symptom: the daemon pid file was created with the default umask; the Windows pipe name was predictable; a failed bind could delete a live daemon's socket/token; a chmod or token failure left a reachable socket.
+- Root cause: `daemon/server.js` predated `secure-fs` and had no startup error path; `daemon/lifecycle.js` derived the pipe name from the username.
+- Fix: the pid/token directory is created and asserted private, the pid file is written via `writePrivateFile`, `server.on('error')` and a try/catch around chmod/`issueSession`/pid write report to stderr and exit via `shutdown(1)`, and cleanup removes files only after a successful bind. The Windows pipe name is random, stored in `daemon.pipe` beside the pid file. Tests: `server.test.js` (pid dir tightened, 0600 files under umask 000, POSIX only), `lifecycle.test.js` (pipe name random, stable, not the username).
+
+**B-70 — Ollama default sent AI requests to api.openai.com (#310)**
+- Symptom: with `provider = "ollama"` and no base URL, AI requests (prompt, messages, repo, PR title/author, OpenAI key) went to `api.openai.com`.
+- Root cause: `camelAi()`, the schema default and `defaultConfig.toml` all pinned `openai_base_url` to `api.openai.com`, so the Ollama localhost fallback was unreachable.
+- Fix: the default is empty with a per-provider fallback, the API key is withheld from the default Ollama endpoint, and a legacy pinned value is ignored for Ollama. Regression test: `src/config.ai-defaults.test.js`.
+
+**B-71 — Packaged installs never created `lazyhub.toml` (#310)**
+- Symptom: packaged installs never wrote a default `lazyhub.toml`.
+- Root cause: `config.js` resolved `<dir>/config/defaultConfig.toml`, but the flat `dist/` bundle ships `dist/defaultConfig.toml`; the resulting error was swallowed.
+- Fix: reuse `DEFAULT_CONFIG_TOML_PATH` from `loader.js` and warn on failure. Regression test: `src/config/default-config-dist.test.js`.
+
+**B-72 — Remote config could change any setting; editor argv mis-parsed paths (#319)**
+- Symptom: a remote config (`[meta].config_url`) or its cached copy could change any setting, including the editor command, AI provider/endpoints, hosts and `config_url` itself; and the editor argv was built by substituting the file path into the command string before splitting it, so paths with spaces or a leading `-`/`+` were mis-parsed.
+- Root cause: remote config was merged wholesale after type-only validation; `custom_command` was substituted before tokenizing; the file path was passed as given.
+- Fix: remote config is allowlist-only (theme, layout, ui, diff, pane display text); the editor argv is tokenized first with placeholders substituted per token, and the file is passed as an absolute path in every branch.
+
+**B-73 — First-run repo picker rendered 12 of 30 repos and forgot the choice (#308, #280, #290)**
+- Symptom: the picker fetched 30 repos and moved the cursor through all of them but rendered only 12; repos past the page were unreachable; the chosen repo was forgotten next launch.
+- Root cause: `repos.slice(0, 12)` for rendering versus `repos.length` for the cursor bound; no search or lookup; the pick was not persisted.
+- Fix: rows are windowed from terminal height, selection is identity-keyed, search and a validated lookup were added, and `[defaults].repo` is saved on completion. Regression test: `src/bootstrap.repo.test.js`.
+
+**B-74 — Bootstrap gh calls bypassed `runGh()` (#322, #288)**
+- Symptom: bootstrap gh calls bypassed classification, call history and `GhError` typing.
+- Root cause: bootstrap predates the `runGh()` chokepoint and used execa directly; nothing enforced the invariant.
+- Fix: bootstrap routes through `runGh()` (new `interactive`/`combine` options, allowlist entries) and a static guard test, `src/gh-spawn-guard.test.js`, enforces it (`src/bootstrap.login.test.js` covers the login path).
+
+**B-75 — Onboarding and report copy conflated attribution with coverage (#334, #281)**
+- Symptom: onboarding said unattributed ("unknown") activity "counts as ungoverned", and the report implied "human" meant a verified person.
+- Root cause: the copy conflated actor attribution with operation coverage, which `report.js` computes only from observation quality.
+- Fix: a shared four-fact vocabulary; attribution is labelled as metadata, not identity or coverage (`docs/mockups/onboarding-report-attribution-separation.md`).
+
+**B-76 — PR list never loaded beyond 100 PRs (#336, part of #311)**
+- Symptom: scrolling to the bottom of a large repo's PR list never fetched more; a 1,200-PR fixture stayed at "100 items".
+- Root cause: `listPRs` clamped `filter.limit` to the single-call 100-node GraphQL cap while `list.jsx` grew `limit` by 100.
+- Fix: `listPRs` follows the GraphQL search cursor (at most 100 per call, sequential, capped at GitHub's 1,000-result search limit) and limit growth only happens after a full page. Regression test: cursor paging in `src/executor.test.js`.
+
+**B-77 — PR list filter bar overlapped itself at 80 columns (#336, part of #311)**
+- Symptom: at 80x24 the filter bar collapsed into overlapping text (`op/clos/merge· mine[O]open`).
+- Root cause: every filter-bar child could shrink.
+- Fix: children are `flexShrink={0}` and the key hint is shortened to `[s]scope [@]author` below 100 columns. Covered by the 80x24 journey in `test/pty/portability.js`.
+
+**B-78 — `?` did nothing in detail views; comments advertised a missing retry; modified keys matched bare letters (#340, part of #312)**
+- Symptom: `?` and the footer's "more keys" did nothing inside PR detail, diff and comments; the comments footer and error text advertised `r` (retry) with no handler; `Space` in Branches both started the leader window and checked out; Ctrl+R was read as `r`.
+- Root cause: the root handler returned for every `view` scope; comments had no refresh handler; `branch.checkout` and `app.leader` shared `Space`; `eventToTokens` always added the raw character.
+- Fix: the root handler lets `?`, `:` and `g` through at `view` scope; comments handle `list.refresh`; `branch.checkout` is `Enter`; modified keys match only their modified token. Tests: `src/config/keymap-registry.test.js`, `src/keystroke-budgets.e2e.test.jsx`.
