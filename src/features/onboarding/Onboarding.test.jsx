@@ -17,7 +17,7 @@ vi.mock('execa', () => ({ execa: vi.fn() }))
 
 import { execa } from 'execa'
 import { classifyGh } from '../../daemon/protocol.js'
-import { renderWithProviders, flush, cleanup, waitForExpectation } from '../../test/test-helpers.jsx'
+import { renderWithProviders, flush, cleanup, waitForExpectation, waitForInputReady } from '../../test/test-helpers.jsx'
 import { Onboarding } from './Onboarding.jsx'
 import { classifyFailure, shouldOnboard } from './flow.js'
 
@@ -56,7 +56,7 @@ const frame = view => view.lastFrame() || ''
 
 async function pick(view) {
   await waitForExpectation(() => expect(frame(view)).toContain('Pick a repository to observe'))
-  await flush(50) // let Ink attach its input handler before the keypress
+  await waitForInputReady(view)
   view.stdin.write('\r')
 }
 
@@ -99,6 +99,7 @@ describe('first-run onboarding', () => {
     expect(out).toContain('solo/pilot limits')
     expect(out).not.toMatch(/https?:\/\//)
 
+    await waitForInputReady(view)
     view.stdin.write('\r')
     await waitForExpectation(() => expect(view.onDone).toHaveBeenCalledWith({ status: 'completed', repo: 'octocat/hello' }))
     expectOnlyReads()
@@ -111,6 +112,7 @@ describe('first-run onboarding', () => {
     await waitForExpectation(() => expect(frame(view)).toContain('Not signed in to GitHub through gh.'))
     expect(frame(view)).toContain('gh auth login')
     expect(calls.map(c => c.args.join(' '))).toEqual(['api user'])
+    await waitForInputReady(view)
     view.stdin.write('q')
     await waitForExpectation(() => expect(view.onDone).toHaveBeenCalledWith({ status: 'cancelled' }))
     expectOnlyReads()
@@ -148,6 +150,7 @@ describe('first-run onboarding', () => {
     const view = start()
     await waitForExpectation(() => expect(frame(view)).toContain('GitHub API rate limit reached.'))
     stubGh()
+    await waitForInputReady(view)
     view.stdin.write('r')
     await waitForExpectation(() => expect(frame(view)).toContain('Pick a repository to observe'))
     expectOnlyReads()
@@ -171,6 +174,7 @@ describe('first-run onboarding', () => {
     const view = start()
     await pick(view)
     await waitForExpectation(() => expect(frame(view)).toContain('Coverage ('))
+    await waitForInputReady(view)
     view.stdin.write('b')
     await waitForExpectation(() => expect(frame(view)).toContain('Pick a repository to observe'))
     expect(view.onDone).not.toHaveBeenCalled()

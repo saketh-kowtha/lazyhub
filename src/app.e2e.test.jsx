@@ -1,11 +1,11 @@
 import React from 'react'
 import { Text, useInput } from 'ink'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { __sendInput } from 'ink'
+import { sendInput } from './test/input-bus.js'
+import { InputDriver } from './test/input-driver.jsx'
 import { App } from './app.jsx'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
-const inputHandlers = vi.hoisted(() => new Set())
 const exitSpy = vi.hoisted(() => vi.fn())
 
 vi.mock('ink', async () => {
@@ -14,15 +14,7 @@ vi.mock('ink', async () => {
   return {
     ...actual,
     useApp: () => ({ exit: exitSpy }),
-    useInput: (handler) => {
-      React.useEffect(() => {
-        inputHandlers.add(handler)
-        return () => inputHandlers.delete(handler)
-      }, [handler])
-    },
-    __sendInput: (input, key = {}) => {
-      for (const handler of [...inputHandlers]) handler(input, key)
-    },
+    useInput: (await import('./test/input-bus.js')).mockUseInput(React),
   }
 })
 
@@ -93,21 +85,6 @@ vi.mock('./features/prs/diff.jsx', () => ({
   PRDiff: ({ prNumber }) => <Text>{`PR DIFF ${prNumber}`}</Text>,
 }))
 
-function InputDriver({ events }) {
-  React.useEffect(() => {
-    let alive = true
-    ;(async () => {
-      for (const event of events) {
-        if (!alive) return
-        __sendInput(event.input || '', event.key || {})
-        await new Promise(resolve => setTimeout(resolve, 0))
-      }
-    })()
-    return () => { alive = false }
-  }, [events])
-
-  return null
-}
 
 describe('App shell user flows', () => {
   afterEach(() => {
@@ -179,11 +156,8 @@ describe('App shell user flows', () => {
         <InputDriver events={[{ input: 'o' }]} />
       </>
     )
-    // Wait for the detail view (and its re-registered input handler) before
-    // sending Esc; a fixed timer between the two keys races on slow runners.
     await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DETAIL 7'))
-    await flush(30)
-    __sendInput('', { escape: true })
+    await sendInput('', { escape: true })
     await waitForExpectation(() => expect(view.lastFrame()).toContain('PRS LIST'))
   })
 

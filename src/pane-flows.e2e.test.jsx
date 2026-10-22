@@ -1,6 +1,7 @@
 import React from 'react'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-import { __sendInput } from 'ink'
+import { sendInput } from './test/input-bus.js'
+import { InputDriver } from './test/input-driver.jsx'
 import { execa } from 'execa'
 import { useGh } from './hooks/useGh.js'
 import {
@@ -30,22 +31,13 @@ import {
   waitForExpectation,
 } from './test/test-helpers.jsx'
 
-const inputHandlers = vi.hoisted(() => new Set())
 
 vi.mock('ink', async () => {
   const React = await import('react')
   const actual = await vi.importActual('ink')
   return {
     ...actual,
-    useInput: (handler) => {
-      React.useEffect(() => {
-        inputHandlers.add(handler)
-        return () => inputHandlers.delete(handler)
-      }, [handler])
-    },
-    __sendInput: (input, key = {}) => {
-      for (const handler of [...inputHandlers]) handler(input, key)
-    },
+    useInput: (await import('./test/input-bus.js')).mockUseInput(React),
   }
 })
 
@@ -88,25 +80,6 @@ function ghResult(data, extra = {}) {
   return { data, loading: false, error: null, refetch: vi.fn(), ...extra }
 }
 
-function InputDriver({ events }) {
-  React.useEffect(() => {
-    let alive = true
-    ;(async () => {
-      for (const event of events) {
-        if (!alive) return
-        if (event.wait) {
-          await new Promise(resolve => setTimeout(resolve, event.wait))
-          continue
-        }
-        __sendInput(event.input || '', event.key || {})
-        await new Promise(resolve => setTimeout(resolve, 0))
-      }
-    })()
-    return () => { alive = false }
-  }, [events])
-
-  return null
-}
 
 describe('Pane E2E user flows', () => {
   beforeEach(() => {
@@ -220,7 +193,6 @@ describe('Pane E2E user flows', () => {
         <IssueList repo="owner/repo" onSelectIssue={onSelectIssue} />
         <InputDriver events={[
           { input: 'x' },
-          { wait: 20 },
         ]} />
       </>
     )
@@ -228,9 +200,8 @@ describe('Pane E2E user flows', () => {
     await waitForExpectation(() => {
       expect(closeView.lastFrame()).toContain('Close issue #11')
     })
-    __sendInput('', { leftArrow: true })
-    await flush(20)
-    __sendInput('', { return: true })
+    await sendInput('', { leftArrow: true })
+    await sendInput('', { return: true })
     await waitForExpectation(() => {
       expect(closeIssue).toHaveBeenCalledWith('owner/repo', 11)
     })
@@ -239,17 +210,12 @@ describe('Pane E2E user flows', () => {
   it('protects the current branch from pointless checkout and requires typed confirmation for deletion', async () => {
     deleteBranch.mockResolvedValue(undefined)
 
-    const currentView = renderWithProviders(
-      <>
-        <BranchList repo="owner/repo" />
-        <InputDriver events={[
-          { wait: 80 },
-          { input: 'j' },
-          { wait: 60 },
-          { key: { return: true } },
-        ]} />
-      </>
-    )
+    const currentView = renderWithProviders(<BranchList repo="owner/repo" />)
+    // The current branch resolves asynchronously (dynamic execa import); keys sent
+    // before the current-branch marker renders would open the checkout prompt.
+    await waitForExpectation(() => expect(currentView.lastFrame()).toContain('► '))
+    await sendInput('j')
+    await sendInput('', { return: true })
 
     await waitForExpectation(() => {
       expect(currentView.lastFrame()).toContain('Already on "main"')
@@ -261,11 +227,8 @@ describe('Pane E2E user flows', () => {
         <BranchList repo="owner/repo" />
         <InputDriver events={[
           { input: 'D' },
-          { wait: 100 },
           { input: 'feature-1' },
-          { wait: 100 },
           { key: { leftArrow: true } },
-          { wait: 60 },
           { key: { return: true } },
         ]} />
       </>
@@ -303,9 +266,7 @@ describe('Pane E2E user flows', () => {
         <ActionList repo="owner/repo" />
         <InputDriver events={[
           { input: 'X' },
-          { wait: 60 },
           { key: { leftArrow: true } },
-          { wait: 40 },
           { key: { return: true } },
         ]} />
       </>
@@ -337,9 +298,7 @@ describe('Pane E2E user flows', () => {
         <NotificationList repo="owner/repo" onNavigateTo={onNavigateTo} />
         <InputDriver events={[
           { input: 'M' },
-          { wait: 60 },
           { key: { leftArrow: true } },
-          { wait: 40 },
           { key: { return: true } },
         ]} />
       </>
