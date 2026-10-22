@@ -11,13 +11,34 @@ updates:
     cooldown:
       default-days: 7
     groups:
-      runtime-dependencies:
-        dependency-type: production
+      # Libraries bundled into dist/ and shipped to users (#282). Matched by
+      # name because bundling makes them devDependencies.
+      shipped:
+        patterns:
+          - chalk
+          - execa
+          - highlight.js
+          - ink
+          - react
+          - react-dom
+          - smol-toml
+          - string-width
+          - timeago.js
         update-types:
           - minor
           - patch
-      dev-dependencies:
+      dev-tooling:
         dependency-type: development
+        exclude-patterns:
+          - chalk
+          - execa
+          - highlight.js
+          - ink
+          - react
+          - react-dom
+          - smol-toml
+          - string-width
+          - timeago.js
         update-types:
           - minor
           - patch
