@@ -37,7 +37,7 @@ import {
 // Resolved dynamically (not via `new URL(..., import.meta.url)`) so esbuild leaves
 // it as a runtime read instead of trying to bundle the .toml as an asset.
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url))
-const DEFAULT_CONFIG_TOML_PATH = join(MODULE_DIR, 'defaultConfig.toml')
+export const DEFAULT_CONFIG_TOML_PATH = join(MODULE_DIR, 'defaultConfig.toml')
 
 const CONFIG_DIR = join(homedir(), '.config', 'lazyhub')
 export const USER_CONFIG_PATH = join(CONFIG_DIR, 'lazyhub.toml')
