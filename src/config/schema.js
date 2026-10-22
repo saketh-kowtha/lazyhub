@@ -58,6 +58,19 @@ export const BUILTIN_SCOPES = {
 
 // ─── Canonical JS defaults (mirror of defaultConfig.toml) ───────────────────────
 
+const REPO_SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/
+
+/**
+ * Whether text is a well-formed GitHub owner/name: no leading "-" (never a gh
+ * flag), no "." or ".." name (never a path segment), GitHub's length limits.
+ *
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isOwnerName(text) {
+  return REPO_SLUG_RE.test(text) && !text.endsWith('.')
+}
+
 export const DEFAULT_CONFIG = {
   meta: {
     schema_version: SCHEMA_VERSION,
@@ -70,6 +83,8 @@ export const DEFAULT_CONFIG = {
   defaults: {
     pr_scope: 'mine',
     ai_provider: 'claude-code',
+    repo: '',
+    repo_host: '',
   },
   app: {
     active_panes: ['focus', 'prs', 'issues', 'branches', 'actions', 'notifications'],
@@ -345,6 +360,8 @@ const META_SPEC = {
 }
 
 const DEFAULTS_SPEC = {
+  repo:        { type: 'string', validate: (v) => (v === '' || isOwnerName(v) ? null : 'must be owner/name') },
+  repo_host:   { type: 'string', validate: (v) => (v === '' || /^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:\d{1,5})?$/.test(v) ? null : 'must be a host name') },
   pr_scope:    { type: 'string', enum: ['mine', 'reviewing', 'all'] },
   ai_provider: { type: 'string', enum: ['claude-code', 'codex', 'gemini-cli', 'anthropic-api', 'openai-compatible'] },
 }

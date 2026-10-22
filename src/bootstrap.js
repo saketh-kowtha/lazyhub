@@ -8,7 +8,7 @@
  */
 
 import { execa } from 'execa'
-import { writeDefaultConfig } from './config.js'
+import { loadSavedRepo, saveDefaultRepo, writeDefaultConfig } from './config.js'
 import readline from 'readline'
 
 // ─── Step 1: detect gh ────────────────────────────────────────────────────────
@@ -408,6 +408,8 @@ async function pickRepoInteractive(repos) {
 export async function bootstrap(renderApp, { repo: chosenRepo } = /** @type {{repo?: string}} */ ({})) {
   // Write default config on first run
   writeDefaultConfig()
+  // Reached with a chosenRepo only when first-run onboarding completed (cancel exits earlier).
+  if (chosenRepo) saveDefaultRepo(chosenRepo)
 
   // Step 1 — detect gh
   const ghInstalled = await detectGh()
@@ -461,7 +463,9 @@ export async function bootstrap(renderApp, { repo: chosenRepo } = /** @type {{re
   }
 
   // Step 3 — detect repo context
-  let repo = chosenRepo || await detectRepo() // chosenRepo: picked in the first-run flow
+  // Precedence: repo picked this launch in onboarding > repo detected from the
+  // current directory > repo saved by onboarding ([defaults].repo) > interactive picker.
+  let repo = chosenRepo || await detectRepo() || loadSavedRepo()
   if (!repo) {
     const repos = await listRepos()
     repo = await pickRepoInteractive(repos)

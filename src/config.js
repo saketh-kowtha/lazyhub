@@ -201,6 +201,28 @@ export function saveConfig(patch) {
 }
 
 /**
+ * Repository saved by first-run onboarding ([defaults].repo), or null.
+ * It is only a fallback: a repository detected from the current directory wins.
+ * @returns {string|null} "owner/name"
+ */
+export function loadSavedRepo() {
+  const { repo, repo_host: host } = loadTomlConfig().defaults ?? {}
+  if (!repo) return null
+  // A repo saved under another host must not be queried on this one.
+  if (host && host.toLowerCase() !== (process.env.GH_HOST || 'github.com').toLowerCase()) return null
+  return repo
+}
+
+/**
+ * Persist the repository chosen when onboarding completed ([defaults].repo),
+ * through the same private-mode writer as every other config write.
+ * @param {string} repo "owner/name"
+ */
+export function saveDefaultRepo(repo) {
+  writeTomlConfig({ defaults: { repo, repo_host: process.env.GH_HOST || 'github.com' } })
+}
+
+/**
  * Create lazyhub.toml from bundled defaults if it does not exist; otherwise tighten
  * its permissions and migrate legacy pinned pane icons.
  * @param {string} [configPath] user config path (defaults to CONFIG_PATH)

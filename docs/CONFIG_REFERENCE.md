@@ -12,6 +12,13 @@ The single source of truth is `~/.config/lazyhub/lazyhub.toml`.
   resolve PR review threads over the IDE socket. Reads and navigation always
   work. Local-only: a remote `config_url` cannot set it.
 - `[actions.*]` stores key bindings plus label/description metadata for help, docs, and AI guidance.
+- `[defaults].repo` (`"owner/name"`, default empty) is written once, when first-run
+  onboarding completes (cancelling writes nothing). Precedence at startup: the
+  repository picked in a first-run flow for this launch, then the repository
+  detected from the current directory (remote URL or `gh repo view`), then
+  `[defaults].repo`, then the interactive picker. The saved value is a fallback
+  only: running lazyhub inside a repository always opens that repository. Edit or
+  clear the key (and `repo_host`, the host it was saved under; a saved repo is ignored when `GH_HOST` differs) by hand, or rerun `lazyhub --onboarding`, to change it.
 - `[state]` stores auto-managed runtime state migrated from the old `state.json`.
 - `[ai.second_opinion]` controls cross-model review routing for agent-authored
   PRs. It defaults to `enabled = true`; `[ai.second_opinion.map]` maps detected
