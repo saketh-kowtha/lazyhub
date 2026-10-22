@@ -1,9 +1,10 @@
 import { createServer } from 'net'
-import { writeFileSync, unlinkSync, chmodSync, mkdirSync } from 'fs'
+import { unlinkSync, chmodSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
+import { assertPrivateDir, writePrivateFile } from '../secure-fs.js'
 import { runGh } from '../executor/core.js'
 import {
-  daemonPidPath, daemonSocketPath, daemonTokenPath, ensureSocketDir, removeStaleSocket,
+  daemonPidPath, daemonSocketPath, daemonTokenPath, ensureSocketDir, isEndpointLive, removeStaleSocket,
 } from './lifecycle.js'
 import { DaemonCache } from './cache.js'
 import { EventBus } from './event-bus.js'
@@ -49,8 +50,10 @@ export function startDaemon(config = {}, env = process.env) {
   let account = null
 
   ensureSocketDir(socketPath)
+  // pid file and session token share this dir: it must be ours and private.
+  // Create 0700, then verify (no symlink, ours) before anything is written in it.
   mkdirSync(dirname(pidPath), { recursive: true, mode: 0o700 })
-  removeStaleSocket(socketPath)
+  assertPrivateDir(dirname(pidPath))
 
   const server = createServer(socket => {
     clients.add(socket)
@@ -194,10 +197,19 @@ export function startDaemon(config = {}, env = process.env) {
     idleTimer.unref?.()
   }
 
+  // Only remove files this process created: a failed bind (EADDRINUSE) must
+  // not delete a live daemon's socket, pid or token.
+  let bound = false
+  function remove(path) {
+    try { unlinkSync(path) } catch (err) {
+      if (err.code !== 'ENOENT') process.stderr.write(`lazyhub: daemon cleanup failed for ${path}: ${err.message}\n`)
+    }
+  }
   function cleanup() {
-    try { unlinkSync(pidPath) } catch { /* ignore */ }
-    try { unlinkSync(socketPath) } catch { /* ignore */ }
-    try { unlinkSync(tokenPath) } catch { /* ignore */ }
+    if (!bound) return
+    remove(pidPath)
+    remove(socketPath)
+    remove(tokenPath)
   }
 
   function shutdown(code = 0) {
@@ -205,13 +217,38 @@ export function startDaemon(config = {}, env = process.env) {
     server.close(() => process.exit(code))
   }
 
-  server.listen(socketPath, () => {
-    if (process.platform !== 'win32') chmodSync(socketPath, 0o600)
-    session = issueSession(tokenPath)
-    writeFileSync(pidPath, String(process.pid), 'utf8')
+  // Bind, chmod and token errors are fatal for a privileged endpoint: never
+  // leave a reachable socket whose mode or secret could not be set.
+  const fail = err => {
+    process.stderr.write(`lazyhub: daemon failed to start: ${err.message}\n`)
+    shutdown(1)
+  }
+  server.once('listening', () => {
+    bound = true
+    try {
+      if (process.platform !== 'win32') chmodSync(socketPath, 0o600)
+      session = issueSession(tokenPath)
+      writePrivateFile(pidPath, String(process.pid))
+    } catch (err) {
+      fail(err)
+      return
+    }
     process.stdout.write(JSON.stringify({ ok: true, socketPath, pid: process.pid }) + '\n')
     armIdleShutdown()
   })
+  // Never unlink before bind: an occupied path is probed first, and only a
+  // dead (refused) socket we own is removed, then bind is retried once.
+  let retried = false
+  server.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
+    if (err.code !== 'EADDRINUSE' || retried || process.platform === 'win32') return fail(err)
+    retried = true
+    isEndpointLive(socketPath).then(live => {
+      if (live) return fail(new Error(`daemon already running at ${socketPath}`))
+      try { removeStaleSocket(socketPath) } catch (e) { return fail(e) }
+      server.listen(socketPath)
+    })
+  })
+  server.listen(socketPath)
 
   process.once('SIGINT', () => shutdown(0))
   process.once('SIGTERM', () => shutdown(0))

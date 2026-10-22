@@ -56,3 +56,22 @@ describe.skipIf(process.platform === 'win32')('daemon socket hardening', () => {
     expect(() => ensureSocketDir(join(root, 'daemon.sock'))).toThrow(/not owned/)
   })
 })
+
+describe('daemon Windows pipe name', () => {
+  it('is random, stable per install, and not derived from the username', () => {
+    const dir = mkdtempSync(join(process.cwd(), '.lazyhub-daemon-test-'))
+    const other = mkdtempSync(join(process.cwd(), '.lazyhub-daemon-test-'))
+    tempDirs.push(dir, other)
+    const config = { daemon: { pid_file: join(dir, 'd.pid') } }
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+    try {
+      const first = daemonSocketPath(config)
+      expect(first).toMatch(/^\\\\\.\\pipe\\lazyhub-[0-9a-f]{32}$/)
+      expect(daemonSocketPath(config)).toBe(first)
+      expect(daemonSocketPath({ daemon: { pid_file: join(other, 'd.pid') } })).not.toBe(first)
+    } finally {
+      Object.defineProperty(process, 'platform', platform)
+    }
+  })
+})

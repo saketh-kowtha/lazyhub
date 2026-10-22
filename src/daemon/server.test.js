@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'fs'
+import { spawn } from 'child_process'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
 import { connect } from 'net'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -17,6 +18,7 @@ beforeEach(() => {
   dirs.push(process.env.LAZYHUB_CACHE_DIR)
 })
 afterEach(async () => {
+  vi.restoreAllMocks()
   await new Promise(resolve => (daemon ? daemon.server.close(resolve) : resolve()))
   daemon = null
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
@@ -108,5 +110,72 @@ describe('daemon startup', () => {
       const { startDaemon } = await import('./server.js')
       expect(() => startDaemon({}, process.env)).toThrow(/NODE_OPTIONS/)
     } finally { delete process.env.NODE_OPTIONS }
+  })
+})
+
+describe.skipIf(process.platform === 'win32')('daemon file permissions', () => {
+  it('tightens a loose pid dir and writes 0600 pid/socket files under a permissive umask', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lh-d-'))
+    dirs.push(dir)
+    chmodSync(dir, 0o755)
+    const config = { daemon: { socket_path: join(dir, 's.sock'), pid_file: join(dir, 'd.pid') } }
+    const { startDaemon } = await import('./server.js')
+    const old = process.umask(0o000)
+    try {
+      daemon = startDaemon(config, { PATH: '/bin' })
+      await new Promise(resolve => daemon.server.once('listening', resolve))
+    } finally {
+      process.umask(old)
+    }
+    expect(statSync(dir).mode & 0o077).toBe(0)
+    expect(statSync(join(dir, 'd.pid')).mode & 0o077).toBe(0)
+    expect(statSync(join(dir, 's.sock')).mode & 0o077).toBe(0)
+  })
+})
+
+describe.skipIf(process.platform === 'win32')('daemon startup failure handling', () => {
+  function paths() {
+    const dir = mkdtempSync(join(tmpdir(), 'lh-d-'))
+    dirs.push(dir)
+    return { dir, config: { daemon: { socket_path: join(dir, 's.sock'), pid_file: join(dir, 'd.pid') } } }
+  }
+
+  it('does not delete a live daemon socket, pid or token when a second daemon starts', async () => {
+    const { dir, config } = paths()
+    const { startDaemon } = await import('./server.js')
+    daemon = startDaemon(config, { PATH: '/bin' })
+    await new Promise(resolve => daemon.server.once('listening', resolve))
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined)
+    const err = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    startDaemon(config, { PATH: '/bin' })
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(1))
+    expect(err.mock.calls.join('')).toMatch(/already running/)
+    for (const name of ['s.sock', 'd.pid', 'daemon.token']) expect(statSync(join(dir, name))).toBeDefined()
+    expect(await rawExchange(join(dir, 's.sock'), '{"v":1,"id":"1","type":"status"}\n')).toMatchObject({ id: '1' })
+  })
+
+  it('replaces a dead socket left by a crashed daemon', async () => {
+    const { dir, config } = paths()
+    const sock = join(dir, 's.sock')
+    const child = spawn(process.execPath, ['-e', `require('net').createServer().listen(${JSON.stringify(sock)},()=>console.log('up'))`], { stdio: ['ignore', 'pipe', 'ignore'] })
+    await new Promise(resolve => child.stdout.once('data', resolve))
+    child.kill('SIGKILL')
+    await new Promise(resolve => child.once('exit', resolve))
+    expect(statSync(sock).isSocket()).toBe(true)
+    const { startDaemon } = await import('./server.js')
+    daemon = startDaemon(config, { PATH: '/bin' })
+    await new Promise(resolve => daemon.server.once('listening', resolve))
+    expect(await rawExchange(sock, '{"v":1,"id":"2","type":"status"}\n')).toMatchObject({ id: '2' })
+  })
+
+  it('refuses a non-socket file at the socket path and exits non-zero without deleting it', async () => {
+    const { dir, config } = paths()
+    writeFileSync(join(dir, 's.sock'), 'keep')
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const { startDaemon } = await import('./server.js')
+    startDaemon(config, { PATH: '/bin' })
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(1))
+    expect(readFileSync(join(dir, 's.sock'), 'utf8')).toBe('keep')
   })
 })
