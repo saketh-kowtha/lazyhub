@@ -109,7 +109,8 @@ allow_writes = false   # true lets editor integrations reply to/resolve review t
 [ui]
 density       = "compact"   # compact | comfortable
 show_hints    = true
-no_color      = false       # respects $NO_COLOR
+no_color      = false       # also honored when $NO_COLOR is set and non-empty
+icons         = "auto"      # auto | unicode | ascii (auto: ASCII on TERM=linux/dumb, non-UTF-8 locales, legacy Windows consoles)
 high_contrast = false
 
 # ── Keymaps ──────────────────────────────────────────────────────────────

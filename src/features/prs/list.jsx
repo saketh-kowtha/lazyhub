@@ -156,10 +156,10 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     setCursor(next)
     if (next < scrollOffset) setScrollOffset(next)
     if (next >= scrollOffset + effectiveHeight) setScrollOffset(next - effectiveHeight + 1)
-    if (next >= items.length - 10 && !loading) {
+    if (next >= items.length - 10 && !loading && items.length >= limit) {
       setLimit(l => l + 100)
     }
-  }, [cursor, items.length, scrollOffset, effectiveHeight, loading])
+  }, [cursor, items.length, limit, scrollOffset, effectiveHeight, loading])
 
   const openDialog = useCallback((name) => { setDialog(name) }, [])
   const closeDialog = useCallback(() => setDialog(null), [])

@@ -152,6 +152,77 @@ jobs:
             -v "$PWD:/app" -w /app node:22-bookworm \
             node test/pty/memory.js
 
+  # Same journey against a 1,200-PR / 1,000-file-diff fixture (#311 scale): the PR
+  # list must page past the first 100 rows and stay inside the same RSS budget.
+  memory-budget-scale:
+    name: TUI memory budget at scale (512 MB)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (lockfile-free)
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Scale journey under a 512 MB limit
+        run: |
+          docker run --rm -m 512m --memory-swap 512m -e LAZYHUB_SCALE=1 \
+            -v "$PWD:/app" -w /app node:22-bookworm \
+            node test/pty/memory.js
+
+  # Terminal portability (#311): ASCII-only, uncolored 80x24 journey on TERM=linux.
+  portability-smoke:
+    name: TERM=linux PTY smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (locked)
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: TERM=linux, LANG=C, NO_COLOR journey at 80x24
+        run: npm run test:portability
+
+  # musl libc (#311): build and packed-install smoke on Alpine / Node 20 (the
+  # engines floor). node-pty is a dev-only native module, so scripts are skipped.
+  alpine-smoke:
+    name: Alpine (musl) smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build and packed-install smoke on node:20-alpine
+        run: |
+          docker run --rm -v "$PWD:/app" -w /app node:20-alpine sh -c '
+            set -e
+            npm ci --ignore-scripts --no-audit --no-fund
+            npm run build
+            node scripts/packed-install-smoke.mjs
+            node dist/lazyhub.js --version'
+
   windows-smoke:
     name: Windows smoke
     runs-on: windows-latest

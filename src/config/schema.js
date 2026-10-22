@@ -129,6 +129,7 @@ export const DEFAULT_CONFIG = {
     density: 'compact',
     show_hints: true,
     no_color: false,
+    icons: 'auto',
     high_contrast: false,
   },
   keymaps: {
@@ -417,6 +418,7 @@ const UI_SPEC = {
   density:       { type: 'string', enum: ['compact', 'comfortable'] },
   show_hints:    { type: 'boolean' },
   no_color:      { type: 'boolean' },
+  icons:         { type: 'string', enum: ['auto', 'unicode', 'ascii'] },
   high_contrast: { type: 'boolean' },
 }
 

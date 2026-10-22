@@ -17,6 +17,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { render, useInput, useApp } from 'ink'
 import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
+import { terminalStdout } from './theme/terminal.js'
 import { KeyScopeProvider, useActiveScope, useKeyScope } from './keyscope.js'
 import { loadConfig, CONFIG_PATH } from './config.js'
 import { ConfigProvider } from './config/index.js'
@@ -362,7 +363,8 @@ export function renderApp() {
             <App repo={repo} />
           </KeyScopeProvider>
         </ThemeProvider>
-      </ConfigProvider>
+      </ConfigProvider>,
+      { stdout: terminalStdout() }
     )
 
     // When Ink exits (useApp().exit() called), also restore terminal

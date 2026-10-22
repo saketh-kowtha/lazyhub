@@ -162,11 +162,35 @@ describe('listPRs()', () => {
     expect(args.find(arg => String(arg).startsWith('searchQuery='))).toContain('author:alice')
   })
 
-  it('caps PR list pagination at the single-call GraphQL search limit', async () => {
+  it('caps each GraphQL search call at 100 nodes', async () => {
     mockSuccess({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { limit: 250 })
     const [, args] = execa.mock.calls[0]
     expect(args).toContain('limit=100')
+    expect(execa).toHaveBeenCalledTimes(1)
+  })
+
+  it('follows the search cursor until the requested count is reached (#311)', async () => {
+    const page = (from, count, next) => ({
+      data: { search: { nodes: Array.from({ length: count }, (_, i) => ({ __typename: 'PullRequest', number: from + i })), pageInfo: { hasNextPage: Boolean(next), endCursor: next } } },
+    })
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(page(1, 100, 'c100')), stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(page(101, 50, 'c150')), stderr: '' })
+    const prs = await listPRs('owner/repo', { limit: 150 })
+    expect(prs).toHaveLength(150)
+    expect(execa).toHaveBeenCalledTimes(2)
+    const [, first] = execa.mock.calls[0]
+    const [, second] = execa.mock.calls[1]
+    expect(first.some(arg => String(arg).startsWith('after='))).toBe(false)
+    expect(second).toContain('after=c100')
+    expect(second).toContain('limit=50')
+  })
+
+  it('stops paging when the server reports no further page', async () => {
+    mockSuccess({ data: { search: { nodes: [{ __typename: 'PullRequest', number: 1 }], pageInfo: { hasNextPage: false, endCursor: 'x' } } } })
+    expect(await listPRs('owner/repo', { limit: 500 })).toHaveLength(1)
+    expect(execa).toHaveBeenCalledTimes(1)
   })
 
   it('normalizes GraphQL response to the legacy list shape', () => {
