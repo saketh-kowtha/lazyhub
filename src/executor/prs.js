@@ -3,6 +3,8 @@
 import { getRepo, runGh } from './core.js'
 
 const PR_LIST_MAX_GRAPHQL_NODES = 100
+// GitHub search never returns more than 1,000 results, so paging stops there.
+const PR_LIST_MAX_RESULTS = 1000
 const PR_SEARCH_STATES = new Set(['open', 'closed', 'merged'])
 
 function compact(value) {
@@ -102,11 +104,12 @@ export function normalizePRListGraphQL(result) {
 export async function listPRs(repo, filter = {}) {
   const r = getRepo(repo)
   const [owner, name] = r.split('/')
-  const limit = Math.max(1, Math.min(Number(filter.limit || PR_LIST_MAX_GRAPHQL_NODES), PR_LIST_MAX_GRAPHQL_NODES))
+  const wanted = Math.max(1, Math.min(Number(filter.limit || PR_LIST_MAX_GRAPHQL_NODES), PR_LIST_MAX_RESULTS))
   const queryText = prSearchQuery(r, filter)
   const query = `
-    query($owner: String!, $name: String!, $searchQuery: String!, $limit: Int!) {
-      search(type: ISSUE, first: $limit, query: $searchQuery) {
+    query($owner: String!, $name: String!, $searchQuery: String!, $limit: Int!, $after: String) {
+      search(type: ISSUE, first: $limit, after: $after, query: $searchQuery) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           __typename
           ... on PullRequest {
@@ -149,15 +152,25 @@ export async function listPRs(repo, filter = {}) {
       repository(owner: $owner, name: $name) { id }
     }
   `
-  const result = await runGh([
-    'api', 'graphql',
-    '-f', `query=${query}`,
-    '-f', `owner=${owner}`,
-    '-f', `name=${name}`,
-    '-f', `searchQuery=${queryText}`,
-    '-F', `limit=${limit}`,
-  ])
-  return normalizePRListGraphQL(result)
+  // Page through the search connection (<=100 nodes per call, sequentially) until `wanted` rows are in.
+  const nodes = []
+  let after = null
+  while (nodes.length < wanted) {
+    const result = await runGh([
+      'api', 'graphql',
+      '-f', `query=${query}`,
+      '-f', `owner=${owner}`,
+      '-f', `name=${name}`,
+      '-f', `searchQuery=${queryText}`,
+      '-F', `limit=${Math.min(PR_LIST_MAX_GRAPHQL_NODES, wanted - nodes.length)}`,
+      ...(after ? ['-f', `after=${after}`] : []),
+    ])
+    const search = result?.data?.search
+    nodes.push(...(search?.nodes || []))
+    if (!search?.pageInfo?.hasNextPage || !search.pageInfo.endCursor) break
+    after = search.pageInfo.endCursor
+  }
+  return normalizePRListGraphQL({ data: { search: { nodes } } })
 }
 
 /**

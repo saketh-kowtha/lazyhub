@@ -19,6 +19,8 @@ The single source of truth is `~/.config/lazyhub/lazyhub.toml`.
   `[defaults].repo`, then the interactive picker. The saved value is a fallback
   only: running lazyhub inside a repository always opens that repository. Edit or
   clear the key (and `repo_host`, the host it was saved under; a saved repo is ignored when `GH_HOST` differs) by hand, or rerun `lazyhub --onboarding`, to change it.
+- `[ui].icons` (`auto` | `unicode` | `ascii`, default `auto`) controls the ASCII icon fallback. `auto` switches to ASCII on `TERM=linux` or `dumb`, a non-UTF-8 `LC_ALL`/`LC_CTYPE`/`LANG` (e.g. `C`), and legacy Windows consoles (no `WT_SESSION`/`TERM_PROGRAM`). Every symbol is replaced by an ASCII character of the same width.
+- `[ui].no_color` (default `false`) drops all colors, keeping bold/inverse. The `NO_COLOR` environment variable (non-empty) does the same.
 - `[state]` stores auto-managed runtime state migrated from the old `state.json`.
 - `[ai.second_opinion]` controls cross-model review routing for agent-authored
   PRs. It defaults to `enabled = true`; `[ai.second_opinion.map]` maps detected
@@ -37,6 +39,8 @@ or in another user-owned section.
   child processes lazyhub runs at once; extra calls queue first-in-first-out.
   Interactive `gh auth login` is never queued. This is a process-level knob, not
   a TOML key.
+
+- `NO_COLOR` (non-empty) behaves like `[ui].no_color = true`. Color depth (truecolor, 256, 16) follows `COLORTERM`/`TERM`, and `FORCE_COLOR`/`--no-color` are honored.
 
 ## Regeneration
 

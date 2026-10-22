@@ -11,53 +11,18 @@
 // `npm run build && npm run test:memory` on Linux) and set the default to the
 // new baseline plus ~40%.
 import assert from 'assert/strict'
-import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'fs'
 import { execFileSync } from 'child_process'
 import { tmpdir } from 'os'
 import { join, delimiter } from 'path'
 import pty from 'node-pty'
+import { installGhStub } from './fixtures.js'
 
 const ROOT = new URL('../..', import.meta.url).pathname
 const BIN = join(ROOT, 'dist', 'lazyhub.js')
 const BUDGET_MB = Number(process.env.LAZYHUB_RSS_BUDGET_MB || 150)
-
-const PR = {
-  number: 186, title: 'PTY harness fixture PR', state: 'OPEN', author: { login: 'octocat' }, labels: [],
-  reviewRequests: [], statusCheckRollup: [], reviewDecision: 'REVIEW_REQUIRED', updatedAt: '2026-06-13T00:00:00Z',
-  isDraft: false, headRefName: 'feature/pty', baseRefName: 'main', assignees: [], body: 'Fixture body',
-  mergeable: 'MERGEABLE', autoMergeRequest: null, url: 'https://github.com/o/r/pull/186',
-}
-const DIFF = ['alpha', 'beta', 'gamma'].map(n =>
-  `diff --git a/src/${n}.js b/src/${n}.js\n--- a/src/${n}.js\n+++ b/src/${n}.js\n@@ -1,3 +1,3 @@\n const ${n} = 1\n-const old = 1\n+const next = 2\n`).join('')
-
-function installGhStub(dir, traceFile) {
-  const binDir = join(dir, 'bin')
-  mkdirSync(binDir, { recursive: true })
-  const ghPath = join(binDir, 'gh')
-  writeFileSync(ghPath, `#!/usr/bin/env node
-const fs = require('fs')
-const args = process.argv.slice(2)
-const trace = ${JSON.stringify(traceFile)}
-fs.appendFileSync(trace, 'S ' + Date.now() + '\\n')
-process.on('exit', () => fs.appendFileSync(trace, 'E ' + Date.now() + '\\n'))
-const out = value => { process.stdout.write(typeof value === 'string' ? value : JSON.stringify(value)); process.exit(0) }
-const wait = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
-wait(60) // a real gh call is never instant; keeps overlap measurable
-if (args.includes('--version')) out('gh version 2.0.0\\n')
-if (args[0] === 'auth' && args[1] === 'token') out('stub-auth\\n')
-if (args[0] === 'auth' && args[1] === 'status') out('github.com\\n  ✓ Logged in to github.com account octocat (stub)\\n')
-if (args[0] === 'api' && args[1] === 'user') out('octocat\\n')
-if (args[0] === 'api' && args[1] === 'graphql') out({ data: { search: { nodes: [{ __typename: 'PullRequest', ...${JSON.stringify(PR)}, labels: { nodes: [] }, reviewRequests: { nodes: [] }, statusCheckRollup: { nodes: [] }, assignees: { nodes: [] } }] } } })
-if (args[0] === 'repo' && args[1] === 'view') out({ name: 'r', owner: { login: 'o' } })
-if (args[0] === 'pr' && args[1] === 'list') out([${JSON.stringify(PR)}])
-if (args[0] === 'pr' && args[1] === 'diff') out(${JSON.stringify(DIFF)})
-if (args[0] === 'pr' && args[1] === 'view') out(${JSON.stringify({ ...PR, reviews: [], files: [], additions: 3, deletions: 3, changedFiles: 3, mergeStateStatus: 'CLEAN', headRefOid: 'abc123' })})
-if (args[0] === 'api' && /\\/branches/.test(args[1] || '')) out([{ name: 'main', protected: true, commit: { sha: 'abc123' } }])
-out([])
-`, 'utf8')
-  chmodSync(ghPath, 0o755)
-  return binDir
-}
+// LAZYHUB_SCALE=1: 1,200 PRs and a 1,000-file diff (see fixtures.js); the journey scrolls the list to the end.
+const SCALE = process.env.LAZYHUB_SCALE === '1'
 
 function rssMb(pid) {
   try {
@@ -91,7 +56,7 @@ const STEP_MS = 1500
 const temp = mkdtempSync(join(tmpdir(), 'lazyhub-mem-'))
 const traceFile = join(temp, 'gh-trace')
 appendFileSync(traceFile, '')
-const stubBin = installGhStub(temp, traceFile)
+const stubBin = installGhStub(temp, traceFile, { scale: SCALE })
 let output = ''
 let peak = 0
 let term
@@ -109,8 +74,10 @@ try {
   const sampler = setInterval(() => { peak = Math.max(peak, rssMb(term.pid)) }, 50)
 
   // Fixed settle time per step: screen-scraping is unreliable on some Linux runners.
-  for (const keys of [null, '2', '\r', 'd', 'r']) {
-    if (keys) term.write(keys)
+  const journey = SCALE ? [null, '2', 'j'.repeat(95), 'j'.repeat(95), 'j'.repeat(95), '\r', 'd', 'J'.repeat(40), 'r'] : [null, '2', '\r', 'd', 'r']
+  for (const keys of journey) {
+    // Ink reads a multi-char chunk as one input event, so repeats go one key at a time.
+    if (keys && keys.length > 1 && /^(.)\1+$/.test(keys)) { for (const key of keys) { term.write(key); await sleep(6) } } else if (keys) term.write(keys)
     await sleep(STEP_MS)
   }
   peak = Math.max(peak, rssMb(term.pid))
@@ -119,10 +86,13 @@ try {
   clearInterval(sampler)
 
   const plain = output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
-  assert.match(plain, /src\/(alpha|beta|gamma)\.js/, 'journey never reached the diff view; the measurement would be meaningless')
+  assert.match(plain, /src\/(alpha|beta|gamma|file\d{4})\.js/, 'journey never reached the diff view; the measurement would be meaningless')
+  // Scale: the list must have paged past the first 100 rows (numbers count down from 1200).
+  const lowestPr = Math.min(...[...plain.matchAll(/Scale PR #(\d+)/g)].map(m => Number(m[1])))
   const gh = maxConcurrentGh(traceFile)
-  const result = { peakRssMb: Math.round(peak * 10) / 10, budgetMb: BUDGET_MB, maxConcurrentGh: gh.max, ghCalls: gh.total }
+  const result = { peakRssMb: Math.round(peak * 10) / 10, budgetMb: BUDGET_MB, maxConcurrentGh: gh.max, ghCalls: gh.total, ...(SCALE ? { scale: true, lowestPrSeen: lowestPr } : {}) }
   process.stdout.write(`${JSON.stringify(result)}\n`)
+  if (SCALE) assert.ok(lowestPr <= 1100, `PR list never paged past the first 100 rows (lowest PR seen: #${lowestPr})`)
   assert.ok(peak > 0, 'could not sample the lazyhub process RSS')
   assert.ok(peak <= BUDGET_MB, `TUI peak RSS ${result.peakRssMb} MB exceeds budget ${BUDGET_MB} MB`)
 } finally {

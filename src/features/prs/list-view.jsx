@@ -67,7 +67,7 @@ export function PRListView({
   return (
     <Box flexDirection="column" flexGrow={1}>
       <Box paddingX={1} gap={1} overflow="hidden">
-        <Box gap={0}>
+        <Box gap={0} flexShrink={0}>
           {[['open', t.pr.open], ['closed', t.pr.closed], ['merged', t.pr.merged]].map(([state, color], i) => (
             <React.Fragment key={state}>
               {i > 0 && <Text color={t.ui.dim}>/</Text>}
@@ -75,10 +75,12 @@ export function PRListView({
             </React.Fragment>
           ))}
         </Box>
-        <Text color={t.ui.dim}>·</Text>
-        <Text color={sortMode === 'oldest' ? t.ci.pending : scope === 'own' ? t.ui.selected : scope === 'reviewing' ? t.ci.pending : t.ui.muted} bold>
-          {sortMode === 'oldest' ? '↑ oldest' : scope === 'own' ? 'mine' : scope === 'reviewing' ? 'reviewing' : 'all'}
-        </Text>
+        <Box flexShrink={0}><Text color={t.ui.dim}>·</Text></Box>
+        <Box flexShrink={0}>
+          <Text color={sortMode === 'oldest' ? t.ci.pending : scope === 'own' ? t.ui.selected : scope === 'reviewing' ? t.ci.pending : t.ui.muted} bold>
+            {sortMode === 'oldest' ? '↑ oldest' : scope === 'own' ? 'mine' : scope === 'reviewing' ? 'reviewing' : 'all'}
+          </Text>
+        </Box>
         {authorFilter && (
           <>
             <Text color={t.ui.dim}>·</Text>
@@ -89,7 +91,9 @@ export function PRListView({
         {loading && items.length > 0 && <Text color={t.ui.dim}>⟳</Text>}
         {statusMsg
           ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
-          : <Text color={t.ui.dim}>[{filterKeys.filterOpen}]open [{filterKeys.filterClosed}]closed [{filterKeys.filterMerged}]merged [s]scope [@]author</Text>
+          : <Text color={t.ui.dim} wrap="truncate">
+              {termCols >= 100 ? `[${filterKeys.filterOpen}]open [${filterKeys.filterClosed}]closed [${filterKeys.filterMerged}]merged ` : ''}[s]scope [@]author
+            </Text>
         }
         {items.length >= config.pageSize && <Text color={t.ui.dim}> ({items.length})</Text>}
       </Box>
