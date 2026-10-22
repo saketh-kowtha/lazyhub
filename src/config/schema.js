@@ -70,6 +70,7 @@ export const DEFAULT_CONFIG = {
   defaults: {
     pr_scope: 'mine',
     ai_provider: 'claude-code',
+    repo: '',
   },
   app: {
     active_panes: ['focus', 'prs', 'issues', 'branches', 'actions', 'notifications'],
@@ -344,6 +345,7 @@ const META_SPEC = {
 }
 
 const DEFAULTS_SPEC = {
+  repo:        { type: 'string', validate: (v) => (v === '' || /^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9._-]+$/.test(v) ? null : 'must be owner/name') },
   pr_scope:    { type: 'string', enum: ['mine', 'reviewing', 'all'] },
   ai_provider: { type: 'string', enum: ['claude-code', 'codex', 'gemini-cli', 'anthropic-api', 'openai-compatible'] },
 }

@@ -201,6 +201,24 @@ export function saveConfig(patch) {
 }
 
 /**
+ * Repository saved by first-run onboarding ([defaults].repo), or null.
+ * It is only a fallback: a repository detected from the current directory wins.
+ * @returns {string|null} "owner/name"
+ */
+export function loadSavedRepo() {
+  return loadTomlConfig().defaults?.repo || null
+}
+
+/**
+ * Persist the repository chosen when onboarding completed ([defaults].repo),
+ * through the same private-mode writer as every other config write.
+ * @param {string} repo "owner/name"
+ */
+export function saveDefaultRepo(repo) {
+  writeTomlConfig({ defaults: { repo } })
+}
+
+/**
  * Create lazyhub.toml from bundled defaults if it does not exist; otherwise tighten
  * its permissions and migrate legacy pinned pane icons.
  * @param {string} [configPath] user config path (defaults to CONFIG_PATH)

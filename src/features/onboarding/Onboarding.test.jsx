@@ -19,7 +19,7 @@ import { execa } from 'execa'
 import { classifyGh } from '../../daemon/protocol.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation, waitForInputReady } from '../../test/test-helpers.jsx'
 import { Onboarding } from './Onboarding.jsx'
-import { classifyFailure, shouldOnboard } from './flow.js'
+import { classifyFailure, isRepoSlug, listWindowSize, shouldOnboard, windowStart } from './flow.js'
 
 const fixture = () => JSON.parse(readFileSync(new URL('../../watch-only/fixtures/pr-activity.json', import.meta.url), 'utf8'))
 const ok = body => ({ exitCode: 0, stdout: JSON.stringify(body), stderr: '' })
@@ -35,10 +35,12 @@ function stubGh(mode = {}) {
     calls.push({ bin, args })
     if (mode.user) return mode.user
     if (args[0] === 'api' && args[1] === 'user') return ok({ login: 'octocat' })
+    if (args[0] === 'repo' && args[1] === 'view' && args[2] !== '--json' && mode.lookup) return mode.lookup(args)
     if (args[0] === 'repo' && args[1] === 'view') {
       return args.includes('nameWithOwner') ? ok({ nameWithOwner: 'octocat/hello' })
         : ok({ id: 'R_1', nameWithOwner: args[2], url: `https://github.com/${args[2]}` })
     }
+    if (args[0] === 'api' && args[1].startsWith('user/repos') && mode.list) return mode.list
     if (args[0] === 'api' && args[1].startsWith('user/repos')) return ok([{ full_name: 'octocat/hello' }, { full_name: 'acme/platform' }])
     if (args[0] === 'api' && args[1].includes('/rulesets')) return mode.rulesets || ok([])
     if (args[0] === 'api' && args[1] === 'graphql') return mode.graphql || ok(mode.activity || fixture())
@@ -178,6 +180,175 @@ describe('first-run onboarding', () => {
     view.stdin.write('b')
     await waitForExpectation(() => expect(frame(view)).toContain('Pick a repository to observe'))
     expect(view.onDone).not.toHaveBeenCalled()
+  })
+})
+
+const manyRepos = n => ok(Array.from({ length: n }, (_, i) => ({ full_name: `acme/repo-${String(i).padStart(2, '0')}` })))
+const selectedLine = view => frame(view).split('\n').find(l => l.includes('▶')) || ''
+const listReady = view => waitForExpectation(() => expect(frame(view)).toContain('Pick a repository to observe'))
+const type = async (view, text) => { view.stdin.write(text); await flush(40) }
+
+describe('repository selection (#280)', () => {
+  it('lists with explicit pagination through a typed read, and keeps the selected row visible at 24 rows', async () => {
+    stubGh({ list: manyRepos(40) })
+    const view = start()
+    await listReady(view)
+    await flush(50)
+    const listCall = calls.find(c => c.args[1]?.startsWith('user/repos'))
+    expect(listCall.args[1]).toContain('per_page=100')
+    expect(classifyGh(listCall.args)).toBe('read')
+    expect(frame(view).split('\n').length).toBeLessThanOrEqual(24)
+    for (let n = 1; n <= 40; n += 1) {
+      await type(view, 'j')
+      expect(selectedLine(view)).toContain(`acme/repo-${String(n - 1).padStart(2, '0')}`) // row 0 is the current-directory repo
+      expect(frame(view).split('\n').length).toBeLessThanOrEqual(24)
+    }
+    expect(frame(view)).toContain('of 41')
+  })
+
+  it('rapid navigation clamps at both ends and Enter observes the highlighted row', async () => {
+    stubGh({ list: manyRepos(40) })
+    const view = start()
+    await listReady(view)
+    await flush(50)
+    view.stdin.write('j'.repeat(200))
+    await waitForExpectation(() => expect(selectedLine(view)).toContain('acme/repo-39'))
+    view.stdin.write('k'.repeat(200))
+    await waitForExpectation(() => expect(selectedLine(view)).toContain('octocat/hello'))
+    view.stdin.write('j'.repeat(13))
+    await waitForExpectation(() => expect(selectedLine(view)).toContain('acme/repo-12'))
+    await flush(50) // let Ink re-attach its input handler after the last render
+    view.stdin.write('\r')
+    await waitForExpectation(() => expect(frame(view)).toContain('acme/repo-12'))
+    await waitForExpectation(() => expect(frame(view)).toContain('Coverage ('))
+    view.stdin.write('\r')
+    await waitForExpectation(() => expect(view.onDone).toHaveBeenCalledWith({ status: 'completed', repo: 'acme/repo-12' }))
+    expectOnlyReads()
+  })
+
+  it('search filters loaded repos; the selection is bound to the repo, not the row index', async () => {
+    stubGh({ list: manyRepos(40) })
+    const view = start()
+    await listReady(view)
+    await flush(50)
+    view.stdin.write('jjjjj')
+    await waitForExpectation(() => expect(selectedLine(view)).toContain('acme/repo-04'))
+    await type(view, '/')
+    await type(view, 'repo-3')
+    expect(frame(view)).toContain('matching (41 loaded)')
+    expect(frame(view)).not.toContain('acme/repo-04')
+    view.stdin.write('\x1b')
+    await waitForExpectation(() => expect(selectedLine(view)).toContain('acme/repo-04'))
+  })
+
+  it('reaches a repository beyond the first page by validated owner/name lookup', async () => {
+    stubGh({ list: manyRepos(40), lookup: () => ok({ nameWithOwner: 'Other-Org/Rarely-Used' }) })
+    const view = start()
+    await listReady(view)
+    await flush(50)
+    await type(view, '/')
+    await type(view, 'other-org/rarely-used')
+    expect(selectedLine(view)).toContain('look up other-org/rarely-used on GitHub (read-only)')
+    view.stdin.write('\r')
+    await waitForExpectation(() => expect(frame(view)).toContain('Coverage ('))
+    expect(frame(view)).toContain('Other-Org/Rarely-Used')
+    view.stdin.write('\r')
+    await waitForExpectation(() => expect(view.onDone).toHaveBeenCalledWith({ status: 'completed', repo: 'Other-Org/Rarely-Used' }))
+    expect(calls.some(c => c.args.join(' ') === 'repo view other-org/rarely-used --json nameWithOwner')).toBe(true)
+    expectOnlyReads()
+    expect(readdirSync(home)).toEqual([])
+  })
+
+  it('a lookup the login cannot read stays on the list with a message', async () => {
+    stubGh({ lookup: () => fail('gh: Could not resolve to a Repository (HTTP 404)') })
+    const view = start()
+    await listReady(view)
+    await flush(50)
+    await type(view, '/')
+    await type(view, 'secret/hidden')
+    view.stdin.write('\r')
+    await waitForExpectation(() => expect(frame(view)).toContain('secret/hidden was not found, or your gh login cannot read it.'))
+    expect(frame(view)).toContain('Pick a repository to observe')
+    expect(view.onDone).not.toHaveBeenCalled()
+  })
+
+  it('Esc cancels an in-flight lookup so it cannot navigate afterwards', async () => {
+    let release
+    stubGh({ lookup: () => new Promise(resolve => { release = () => resolve(ok({ nameWithOwner: 'a/b' })) }) })
+    const view = start()
+    await listReady(view)
+    await flush(50)
+    await type(view, '/')
+    await type(view, 'a/b')
+    view.stdin.write('\r')
+    await waitForExpectation(() => expect(frame(view)).toContain('Checking a/b (read-only)'))
+    await flush(50)
+    view.stdin.write('\x1b')
+    await waitForExpectation(() => expect(frame(view)).not.toContain('Checking a/b'))
+    release()
+    await flush(80)
+    expect(frame(view)).toContain('Pick a repository to observe')
+    expect(frame(view)).not.toContain('Coverage (')
+  })
+
+  it('rejects malformed owner/name before any gh call', async () => {
+    expect(isRepoSlug('acme/platform')).toBe(true)
+    expect(isRepoSlug('--web/x')).toBe(false)
+    expect(isRepoSlug('a/b c')).toBe(false)
+    expect(isRepoSlug('a/b/c')).toBe(false)
+    expect(isRepoSlug('-x/y')).toBe(false)
+  })
+
+  it('empty results: says so and Enter does nothing', async () => {
+    const view = start({ loadSessionFn: async () => ({ login: 'octocat', repos: [], listError: null }) })
+    await listReady(view)
+    expect(frame(view)).toContain('No repositories found for this account.')
+    await flush(50)
+    view.stdin.write('\r')
+    await flush(50)
+    expect(view.onDone).not.toHaveBeenCalled()
+    await type(view, '/')
+    await type(view, 'zzz')
+    expect(frame(view)).toContain('Try owner/name to look one up.')
+  })
+
+  it('list failure and permission error fall back to the current directory repository', async () => {
+    for (const [stderr, why] of [['gh: HTTP 500 Server Error', 'error'], ['gh: Resource not accessible by personal access token (HTTP 403)', 'permission']]) {
+      stubGh({ list: fail(stderr) })
+      const view = start()
+      await listReady(view)
+      expect(frame(view)).toContain(`Repository list unavailable (${why})`)
+      expect(frame(view)).toContain('octocat/hello')
+      cleanup()
+      calls = []
+    }
+  })
+
+  it('cancelling mid-search leaves nothing on disk and only reads', async () => {
+    stubGh({ list: manyRepos(40) })
+    const view = start()
+    await listReady(view)
+    await flush(50)
+    await type(view, 'jjj')
+    view.stdin.write('q')
+    await waitForExpectation(() => expect(view.onDone).toHaveBeenCalledWith({ status: 'cancelled' }))
+    expectOnlyReads()
+    expect(readdirSync(home)).toEqual([])
+  })
+
+  it('windowing keeps the selected index inside the visible slice', () => {
+    expect(listWindowSize(24)).toBe(12)
+    expect(listWindowSize(10)).toBe(3)
+    for (const size of [3, 12]) {
+      for (const total of [1, 5, 14, 31, 100]) {
+        for (let sel = 0; sel < total; sel += 1) {
+          const start = windowStart(total, sel, size)
+          expect(sel).toBeGreaterThanOrEqual(start)
+          expect(sel).toBeLessThan(start + Math.min(size, total))
+          expect(start + Math.min(size, total)).toBeLessThanOrEqual(total)
+        }
+      }
+    }
   })
 })
 

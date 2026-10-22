@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'fs'
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, statSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { parse } from 'smol-toml'
@@ -152,5 +152,22 @@ page = 2
   it('loadConfig exposes [state] after writer updates', () => {
     writeState({ prScope: 'all' }, { configPath })
     expect(loadConfig({ configPath }).state.prScope).toBe('all')
+  })
+})
+
+describe('[defaults].repo (#290)', () => {
+  it('upserts the saved repo, keeps user comments, and writes a 0600 file', () => {
+    writeToml('# mine\n[defaults]\npr_scope = "all" # keep\n')
+    writeConfig({ defaults: { repo: 'acme/platform' } }, { configPath })
+    const text = readFileSync(configPath, 'utf8')
+    expect(text).toContain('# mine')
+    expect(text).toContain('pr_scope = "all" # keep')
+    expect(loadConfig({ configPath }).defaults.repo).toBe('acme/platform')
+    if (process.platform !== 'win32') expect(statSync(configPath).mode & 0o777).toBe(0o600)
+  })
+
+  it('drops a malformed saved repo when loading', () => {
+    writeToml('[defaults]\nrepo = "--not a repo"\n')
+    expect(loadConfig({ configPath }).defaults.repo).toBe('')
   })
 })

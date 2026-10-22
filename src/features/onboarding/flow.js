@@ -16,7 +16,10 @@ import { checkCoverage } from '../../cli/doctor/coverage.js'
 import { generateWatchOnlyReport } from '../../watch-only/index.js'
 import { CONFIG_PATH } from '../../config.js'
 
-const REPO_LIST_PATH = 'user/repos?per_page=30&sort=pushed'
+// One explicit, bounded page. Repositories beyond it are reached by validated
+// owner/name lookup (lookupRepo), not by silently paging the whole account.
+const REPO_LIST_PATH = 'user/repos?per_page=100&sort=pushed'
+const REPO_SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/
 
 /**
  * Whether to show the first-run flow. Never for non-interactive sessions or
@@ -74,6 +77,66 @@ export async function loadSession() {
   const repos = [...(current ? [current] : []), ...names.filter(n => n !== current)]
     .map(name => ({ name, current: name === current }))
   return { login, repos, listError }
+}
+
+/**
+ * Whether text is a well-formed owner/name (also keeps it safe as a gh argv).
+ *
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isRepoSlug(text) {
+  return REPO_SLUG_RE.test(text) && !text.endsWith('.')
+}
+
+/**
+ * Confirm a typed owner/name exists and is readable by the gh login (one typed
+ * read). Resolves to GitHub's canonical spelling.
+ *
+ * @param {string} slug  owner/name
+ * @returns {Promise<string>}
+ * @throws when the slug is malformed, missing or unreadable
+ */
+export async function lookupRepo(slug) {
+  if (!isRepoSlug(slug)) throw new Error('not found: invalid owner/name')
+  const view = await runGh(['repo', 'view', slug, '--json', 'nameWithOwner'])
+  const name = view?.nameWithOwner
+  if (typeof name !== 'string' || !isRepoSlug(name)) throw new Error('not found')
+  return name
+}
+
+/**
+ * Stable identity of a repository row: GitHub names are unique and
+ * case-insensitive, so selection survives list refreshes and filtering.
+ *
+ * @param {string} name  owner/name
+ * @returns {string}
+ */
+export const repoKey = name => name.toLowerCase()
+
+/**
+ * How many list rows fit (one spare row so Ink never fills the screen): see docs/mockups/onboarding-first-run-a-search.md.
+ *
+ * @param {number} termRows
+ * @param {number} [extraLines]  optional notices shown above the list
+ * @returns {number}
+ */
+export function listWindowSize(termRows, extraLines = 0) {
+  return Math.max(3, termRows - 12 - extraLines)
+}
+
+/**
+ * First visible index so that `selected` is inside a window of `size` rows.
+ *
+ * @param {number} total
+ * @param {number} selected
+ * @param {number} size
+ * @returns {number}
+ */
+export function windowStart(total, selected, size) {
+  if (total <= size) return 0
+  const start = selected - Math.floor(size / 2)
+  return Math.max(0, Math.min(start, total - size))
 }
 
 /**

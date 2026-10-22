@@ -11,8 +11,9 @@ never fall below the fold; the search line reuses the dim/selected token pair
 used by other filter prompts; footer lists exactly the keys that have handlers.
 
 Row budget at 24 rows: border 2, header 1, stepper 1, intro 2, prompt 1,
-search 1, range 1, footer 1 = 10 fixed (+1 when the list-unavailable notice or a
-lookup message shows). The window gets the rest and never fewer than 3 rows.
+search 1, range 1, footer rule + hints 2 = 11 fixed, plus one spare row so the
+frame never fills the screen (+1 each when the list-unavailable notice or a
+lookup message shows). The window gets the rest, never fewer than 3 rows.
 
 ## Step 1, 80x24, 31+ repositories, scrolled (selected row 14 stays in view)
 
@@ -33,7 +34,7 @@ lookup message shows). The window gets the rest and never fewer than 3 rows.
 │   octocat/hello-world                                                        │
 │   octocat/spoon-knife                                                        │
 │ / search · type owner/name to look up any repository                         │
-│ 5-13 of 31 (up 4, down 18)                                                   │
+│ 5-13 of 31                                                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
  / search │ j/k move │ Enter observe │ q quit (nothing is written)
 ```
