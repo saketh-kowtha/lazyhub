@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { mkdirSync, readFileSync } from 'fs'
 import { randomBytes } from 'crypto'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
@@ -7,7 +7,7 @@ import { spawn } from 'child_process'
 import {
   PROTOCOL_VERSION, MAX_MESSAGE_BYTES, daemonSpawnEnv, isUntrustedAgentContext, readSessionToken,
 } from './protocol.js'
-import { assertPrivateDir, prepareSocketPath } from '../secure-fs.js'
+import { assertPrivateDir, ensurePrivateDir, prepareSocketPath, writePrivateFile } from '../secure-fs.js'
 
 function expandHome(path) {
   if (!path) return path
@@ -26,13 +26,24 @@ function expandHome(path) {
 export function daemonSocketPath(config = {}) {
   if (process.platform === 'win32') {
     const namePath = join(dirname(daemonPidPath(config)), 'daemon.pipe')
-    mkdirSync(dirname(namePath), { recursive: true })
-    try {
-      writeFileSync(namePath, randomBytes(16).toString('hex'), { flag: 'wx' })
-    } catch (err) {
-      if (err.code !== 'EEXIST') throw err
+    const read = () => {
+      try {
+        const name = readFileSync(namePath, 'utf8').trim()
+        return /^[0-9a-f]{32}$/.test(name) ? name : null
+      } catch (err) {
+        if (err.code === 'ENOENT') return null
+        throw err
+      }
     }
-    return `\\\\.\\pipe\\lazyhub-${readFileSync(namePath, 'utf8').trim()}`
+    let name = read()
+    if (!name) {
+      // Atomic replace: a concurrent reader never sees a partial name.
+      ensurePrivateDir(dirname(namePath))
+      writePrivateFile(namePath, randomBytes(16).toString('hex'))
+      name = read()
+      if (!name) throw new Error(`could not persist daemon pipe name: ${namePath}`)
+    }
+    return `\\\\.\\pipe\\lazyhub-${name}`
   }
   return expandHome(config.daemon?.socket_path || '~/.config/lazyhub/daemon.sock')
 }
@@ -73,6 +84,25 @@ export function ensureSocketDir(socketPath) {
  */
 export function removeStaleSocket(socketPath) {
   prepareSocketPath(socketPath)
+}
+
+/**
+ * True unless nothing is listening at `socketPath`. Fails closed: only a
+ * definitive refusal/absence counts as "not live"; a timeout counts as live.
+ * @param {string} socketPath
+ * @param {number} [timeoutMs]
+ * @returns {Promise<boolean>}
+ */
+export function isEndpointLive(socketPath, timeoutMs = 500) {
+  return new Promise(resolve => {
+    const socket = connect(socketPath)
+    const timer = setTimeout(() => { socket.destroy(); resolve(true) }, timeoutMs)
+    socket.on('connect', () => { clearTimeout(timer); socket.destroy(); resolve(true) })
+    socket.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
+      clearTimeout(timer)
+      resolve(!(err.code === 'ECONNREFUSED' || err.code === 'ENOENT' || err.code === 'ENOTSOCK'))
+    })
+  })
 }
 
 /**

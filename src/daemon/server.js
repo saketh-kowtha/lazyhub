@@ -1,10 +1,10 @@
 import { createServer } from 'net'
-import { unlinkSync, chmodSync } from 'fs'
+import { unlinkSync, chmodSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
-import { assertPrivateDir, ensurePrivateDir, writePrivateFile } from '../secure-fs.js'
+import { assertPrivateDir, writePrivateFile } from '../secure-fs.js'
 import { runGh } from '../executor/core.js'
 import {
-  daemonPidPath, daemonSocketPath, daemonTokenPath, ensureSocketDir, removeStaleSocket,
+  daemonPidPath, daemonSocketPath, daemonTokenPath, ensureSocketDir, isEndpointLive, removeStaleSocket,
 } from './lifecycle.js'
 import { DaemonCache } from './cache.js'
 import { EventBus } from './event-bus.js'
@@ -51,9 +51,9 @@ export function startDaemon(config = {}, env = process.env) {
 
   ensureSocketDir(socketPath)
   // pid file and session token share this dir: it must be ours and private.
-  ensurePrivateDir(dirname(pidPath))
+  // Create 0700, then verify (no symlink, ours) before anything is written in it.
+  mkdirSync(dirname(pidPath), { recursive: true, mode: 0o700 })
   assertPrivateDir(dirname(pidPath))
-  removeStaleSocket(socketPath)
 
   const server = createServer(socket => {
     clients.add(socket)
@@ -223,8 +223,7 @@ export function startDaemon(config = {}, env = process.env) {
     process.stderr.write(`lazyhub: daemon failed to start: ${err.message}\n`)
     shutdown(1)
   }
-  server.on('error', fail)
-  server.listen(socketPath, () => {
+  server.once('listening', () => {
     bound = true
     try {
       if (process.platform !== 'win32') chmodSync(socketPath, 0o600)
@@ -237,6 +236,19 @@ export function startDaemon(config = {}, env = process.env) {
     process.stdout.write(JSON.stringify({ ok: true, socketPath, pid: process.pid }) + '\n')
     armIdleShutdown()
   })
+  // Never unlink before bind: an occupied path is probed first, and only a
+  // dead (refused) socket we own is removed, then bind is retried once.
+  let retried = false
+  server.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
+    if (err.code !== 'EADDRINUSE' || retried || process.platform === 'win32') return fail(err)
+    retried = true
+    isEndpointLive(socketPath).then(live => {
+      if (live) return fail(new Error(`daemon already running at ${socketPath}`))
+      try { removeStaleSocket(socketPath) } catch (e) { return fail(e) }
+      server.listen(socketPath)
+    })
+  })
+  server.listen(socketPath)
 
   process.once('SIGINT', () => shutdown(0))
   process.once('SIGTERM', () => shutdown(0))
