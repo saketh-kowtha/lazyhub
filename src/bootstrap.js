@@ -402,6 +402,25 @@ async function pickRepoInteractive(repos) {
   })
 }
 
+// ─── Open a PR/issue by reference (#315) ─────────────────────────────────────
+
+/**
+ * Decide whether `repo#number` is a PR or an issue with one read-only API call.
+ * Any failure defaults to 'pr'; the detail view then shows its normal error UI
+ * for not-found / no-access.
+ * @param {string} repo "owner/name"
+ * @param {number} number
+ * @returns {Promise<'pr'|'issue'>}
+ */
+export async function resolveItemKind(repo, number) {
+  try {
+    const out = await runGh(['api', `repos/${repo}/issues/${number}`, '--jq', 'has("pull_request")'], { json: false })
+    return String(out).trim() === 'false' ? 'issue' : 'pr'
+  } catch {
+    return 'pr'
+  }
+}
+
 // ─── Main bootstrap() ─────────────────────────────────────────────────────────
 
 /**
@@ -409,8 +428,10 @@ async function pickRepoInteractive(repos) {
  * @param renderApp
  * @param {object} [root0]
  * @param {string} [root0.repo] repository chosen in the first-run flow
+ * @param {{repo: string|null, number: number, kind: 'pr'|'issue'|null, host: string|null}|null} [root0.open]
+ *   validated PR/issue reference from the command line (see parseItemReference)
  */
-export async function bootstrap(renderApp, { repo: chosenRepo } = /** @type {{repo?: string}} */ ({})) {
+export async function bootstrap(renderApp, { repo: chosenRepo, open = null } = /** @type {{repo?: string, open?: any}} */ ({})) {
   // Write default config on first run
   writeDefaultConfig()
   // Reached with a chosenRepo only when first-run onboarding completed (cancel exits earlier).
@@ -422,6 +443,9 @@ export async function bootstrap(renderApp, { repo: chosenRepo } = /** @type {{re
     printInstallInstructions(process.platform)
     process.exit(1)
   }
+
+  // A reference URL names its host (already checked against the allowlist).
+  if (open?.host) process.env.GH_HOST = open.host
 
   // Pick the GHE host from the git remote, but only if gh is logged in to it
   // (SSH aliases and ssh-only hostnames are not API hosts). An explicit
@@ -470,7 +494,12 @@ export async function bootstrap(renderApp, { repo: chosenRepo } = /** @type {{re
   // Step 3 — detect repo context
   // Precedence: repo picked this launch in onboarding > repo detected from the
   // current directory > repo saved by onboarding ([defaults].repo) > interactive picker.
-  let repo = chosenRepo || await detectRepo() || loadSavedRepo()
+  // A reference names its repo; a bare #N / N needs the current directory's repo.
+  let repo = open ? (open.repo || await detectRepo()) : (chosenRepo || await detectRepo() || loadSavedRepo())
+  if (open && !repo) {
+    console.error(`\n  ✗ #${open.number} needs a repository: run inside a clone, or use owner/repo#${open.number}.\n`)
+    process.exit(2)
+  }
   if (!repo) {
     const repos = await listRepos()
     repo = await pickRepoInteractive(repos)
@@ -480,6 +509,12 @@ export async function bootstrap(renderApp, { repo: chosenRepo } = /** @type {{re
     }
   }
   process.env.GHUI_REPO = repo
+
+  if (open) {
+    const kind = open.kind || await resolveItemKind(repo, open.number)
+    if (kind === 'issue') process.env.GHUI_ISSUE = String(open.number)
+    else { process.env.GHUI_PR = String(open.number); process.env.GHUI_VIEW = 'detail' }
+  }
 
   // Step 4 — hand off to Ink
   if (typeof renderApp === 'function') {

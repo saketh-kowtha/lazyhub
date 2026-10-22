@@ -15,6 +15,7 @@ vi.mock('./config.js', () => ({
 import { execa } from 'execa'
 import { loadSavedRepo, saveDefaultRepo } from './config.js'
 import { bootstrap } from './bootstrap.js'
+import { classifyGh } from './daemon/protocol.js'
 
 /**
  * gh works; the current directory has this remote.
@@ -65,5 +66,70 @@ describe('bootstrap repository precedence and persistence', () => {
     await bootstrap(vi.fn(), { repo: 'picked/repo' })
     expect(process.env.GHUI_REPO).toBe('picked/repo')
     expect(saveDefaultRepo).toHaveBeenCalledExactlyOnceWith('picked/repo')
+  })
+})
+
+describe('bootstrap opening a PR/issue by reference (#315)', () => {
+  const OPEN_ENV = ['GHUI_PR', 'GHUI_ISSUE', 'GHUI_VIEW']
+  let saved
+  beforeEach(() => {
+    saved = Object.fromEntries(OPEN_ENV.map(k => [k, process.env[k]]))
+    for (const k of OPEN_ENV) delete process.env[k]
+  })
+  afterEach(() => {
+    for (const k of OPEN_ENV) {
+      if (saved[k] === undefined) delete process.env[k]
+      else process.env[k] = saved[k]
+    }
+  })
+
+  const ghCalls = () => execa.mock.calls.filter(([bin]) => bin === 'gh').map(([, args]) => args)
+  const isResolve = args => args[0] === 'api' && String(args[1]).startsWith('repos/')
+  const stubKind = answer => execa.mockImplementation(async (bin, args) => ({
+    exitCode: 0, stdout: bin === 'gh' && isResolve(args) ? answer : 'ok\n', stderr: '',
+  }))
+
+  it('resolves owner/repo#N with one read-only call and opens the PR detail', async () => {
+    stubKind('true')
+    await bootstrap(vi.fn(), { open: { repo: 'o/r', number: 7, kind: null, host: null } })
+    expect(process.env.GHUI_REPO).toBe('o/r')
+    expect(process.env.GHUI_PR).toBe('7')
+    expect(process.env.GHUI_VIEW).toBe('detail')
+    const resolves = ghCalls().filter(isResolve)
+    expect(resolves.map(a => a[1])).toEqual(['repos/o/r/issues/7'])
+    expect(classifyGh(resolves[0])).toBe('read')
+    for (const args of ghCalls()) expect(classifyGh(args)).not.toBe('write')
+  })
+
+  it('opens an issue when the number is not a PR', async () => {
+    stubKind('false')
+    await bootstrap(vi.fn(), { open: { repo: 'o/r', number: 9, kind: null, host: null } })
+    expect(process.env.GHUI_ISSUE).toBe('9')
+    expect(process.env.GHUI_PR).toBeUndefined()
+  })
+
+  it('a URL names kind and host: no resolve call, GH_HOST set to the allowed host', async () => {
+    stubEnv('cwd/repo')
+    await bootstrap(vi.fn(), { open: { repo: 'o/r', number: 3, kind: 'issue', host: 'ghe.example.com' } })
+    expect(process.env.GH_HOST).toBe('ghe.example.com')
+    expect(process.env.GHUI_ISSUE).toBe('3')
+    expect(ghCalls().some(isResolve)).toBe(false)
+  })
+
+  it('#N uses the current-directory repo, not the saved one', async () => {
+    stubEnv('cwd/repo')
+    loadSavedRepo.mockReturnValue('saved/repo')
+    await bootstrap(vi.fn(), { open: { repo: null, number: 5, kind: 'pr', host: null } })
+    expect(process.env.GHUI_REPO).toBe('cwd/repo')
+  })
+
+  it('#N outside a repository exits 2 with guidance instead of guessing', async () => {
+    stubEnv(null)
+    loadSavedRepo.mockReturnValue('saved/repo')
+    const exit = vi.spyOn(process, 'exit').mockImplementation(code => { throw new Error(`exit ${code}`) })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(bootstrap(vi.fn(), { open: { repo: null, number: 5, kind: null, host: null } })).rejects.toThrow('exit 2')
+    expect(err.mock.calls.flat().join('\n')).toMatch(/owner\/repo#5/)
+    exit.mockRestore(); err.mockRestore()
   })
 })

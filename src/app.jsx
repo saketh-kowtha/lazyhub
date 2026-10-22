@@ -81,12 +81,16 @@ export function App({ repo }) {
   const _initView   = process.env.GHUI_VIEW || 'list'
   const _validViews = ['list', 'detail', 'diff', 'comments']
 
-  const [pane, setPane]             = useState(_initPRNum ? 'prs' : _config.defaultPane)
+  // GHUI_ISSUE — `lazyhub owner/repo#N` resolved to an issue (#315)
+  const _initIssueNum = !_initPRNum && process.env.GHUI_ISSUE ? parseInt(process.env.GHUI_ISSUE, 10) : null
+
+  const [pane, setPane]             = useState(_initPRNum ? 'prs' : _initIssueNum ? 'issues' : _config.defaultPane)
   const [view, setView]             = useState(
-    _initPRNum && _validViews.includes(_initView) ? _initView : 'list'
+    _initPRNum && _validViews.includes(_initView) ? _initView : _initIssueNum ? 'detail' : 'list'
   )
   const [selectedItem, setSelectedItem] = useState(
-    _initPRNum && !isNaN(_initPRNum) ? { number: _initPRNum } : null
+    _initPRNum && !isNaN(_initPRNum) ? { number: _initPRNum }
+      : _initIssueNum && !isNaN(_initIssueNum) ? { number: _initIssueNum } : null
   )
   const [showHelp, setShowHelp]         = useState(false)
   const [showAI, setShowAI]             = useState(false)
