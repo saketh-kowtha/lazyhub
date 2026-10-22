@@ -5,9 +5,11 @@
 // Fails when peak RSS exceeds the budget. Run on the CI memory-limited job:
 //   systemd-run --user --scope -p MemoryMax=512M npm run test:memory
 //
-// Budget: LAZYHUB_RSS_BUDGET_MB (default below). To update it, run
-// `npm run build && npm run test:memory` on a Linux runner, read `peakRssMb`
-// from the printed JSON, and set the default to roughly baseline + 25%.
+// Budget: LAZYHUB_RSS_BUDGET_MB (default below). Measured baseline on
+// ubuntu-latest (node 22): 105 MB, so 150 MB leaves ~40% runner-variance margin.
+// To update it, read `peakRssMb` from the job's printed JSON (or run
+// `npm run build && npm run test:memory` on Linux) and set the default to the
+// new baseline plus ~40%.
 import assert from 'assert/strict'
 import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { execFileSync } from 'child_process'
