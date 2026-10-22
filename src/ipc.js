@@ -33,6 +33,9 @@
  *   review-comments { prNumber }   → { comments: [{ id, threadId, path, line, body, user, resolved }] }
  *   reply-thread { threadId, body } → { ok: true, commentId }
  *   resolve-thread { threadId }    → { ok: true }
+ *     — both are GitHub writes and are refused with
+ *       { ok: false, error: 'writes-disabled', message } unless [ipc].allow_writes
+ *       is true (local opt-in; default off). Allowed writes go through runGh().
  *   subscribe { event }             → subscribe this client to an event stream
  *   invalidate { repo? }            → request cache invalidation
  *   watch { event? }                → alias for subscribe, used by daemon clients
@@ -73,6 +76,13 @@ let _prForBranchHandler = _defaultGetPRStateForBranch
 let _reviewCommentsHandler = _defaultGetPRReviewComments
 let _replyThreadHandler = _defaultAddPRReviewThreadReply
 let _resolveThreadHandler = _defaultResolvePRReviewThread
+let _allowWrites = false
+
+const WRITES_DISABLED = {
+  ok: false,
+  error: 'writes-disabled',
+  message: 'Set [ipc] allow_writes = true in lazyhub.toml to reply/resolve from your editor',
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -194,6 +204,7 @@ function handleMessage(socket, raw) {
     }
 
     case 'reply-thread': {
+      if (!_allowWrites) { sendResponse(socket, id, WRITES_DISABLED); break }
       const { threadId, body } = msg
       if (!threadId || !body) {
         sendResponse(socket, id, { error: 'threadId and body are required' })
@@ -214,6 +225,7 @@ function handleMessage(socket, raw) {
     }
 
     case 'resolve-thread': {
+      if (!_allowWrites) { sendResponse(socket, id, WRITES_DISABLED); break }
       const { threadId: resolveThreadId, prNumber: resolvePrNumber } = msg
       if (!resolveThreadId) {
         sendResponse(socket, id, { error: 'threadId is required' })
@@ -256,8 +268,8 @@ function handleMessage(socket, raw) {
  * Start the IPC server.
  *
  * @param {object} opts
- * @param {Function} opts.getState           - returns current lazyhub state object
- * @param {Function} opts.onNavigate         - called when IDE sends a navigate request
+ * @param {Function} [opts.getState]         - returns current lazyhub state object
+ * @param {Function} [opts.onNavigate]       - called when IDE sends a navigate request
  * @param {Function} [opts.onPRForBranch]    - async (branch, repo) => { prNumber, ... }
  *                                             defaults to executor.getPRStateForBranch
  * @param {Function} [opts.onReviewComments] - async (repo, prNumber) => comments[]
@@ -266,12 +278,15 @@ function handleMessage(socket, raw) {
  *                                             defaults to executor.addPRReviewThreadReply
  * @param {Function} [opts.onResolveThread]  - async (threadId) => { ok }
  *                                             defaults to executor.resolvePRReviewThread
+ * @param {boolean} [opts.allowWrites]     - permit reply-thread/resolve-thread (default false)
  * @param {Function} [opts.onError]          - called with any bind/chmod/ownership error
  * @returns {string|null} socket path, or null when the endpoint could not be
  *                        secured (the error is logged and passed to onError)
  */
-export function startIPC({ getState, onNavigate, onPRForBranch, onReviewComments, onReplyThread, onResolveThread, onError } = {}) {
+export function startIPC({ getState, onNavigate, onPRForBranch, onReviewComments, onReplyThread, onResolveThread, allowWrites, onError } = {}) {
   if (_server) return socketPath()
+
+  _allowWrites = allowWrites === true
 
   if (getState)          _stateGetter           = getState
   if (onNavigate)        _navigateHandler       = onNavigate
@@ -369,6 +384,7 @@ export function stopIPC() {
   _server = null
   _cleanup = null
   _defaultPath = null
+  _allowWrites = false
   process.off('exit', cleanup)
   process.off('SIGINT', cleanup)
   process.off('SIGTERM', cleanup)

@@ -101,6 +101,7 @@ custom_command = ""
 
 [ipc]
 enabled = true
+allow_writes = false   # true lets editor integrations reply to/resolve review threads over the IDE socket
 
 # ── UI ───────────────────────────────────────────────────────────────────
 [ui]

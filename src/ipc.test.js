@@ -150,3 +150,46 @@ describe.skipIf(posix)('startIPC on Windows', () => {
     expect(a).toMatch(/^\\\\\.\\pipe\\lazyhub-[0-9a-f]{32}$/)
   })
 })
+
+describe.skipIf(!posix)('IDE socket GitHub writes', () => {
+  const request = (path, msg) => new Promise((resolve, reject) => {
+    const sock = connect(path)
+    let buf = ''
+    sock.on('connect', () => sock.write(JSON.stringify(msg) + '\n'))
+    sock.on('data', (d) => {
+      buf += d.toString()
+      if (buf.includes('\n')) { sock.end(); resolve(JSON.parse(buf.split('\n')[0])) }
+    })
+    sock.on('error', reject)
+  })
+  const start = async (opts) => {
+    const handlers = {
+      onReplyThread: vi.fn(async () => ({ ok: true, commentId: 7 })),
+      onResolveThread: vi.fn(async () => ({ ok: true })),
+    }
+    const path = ipc.startIPC({ ...handlers, ...opts })
+    await waitFor(() => existsSync(path))
+    return { path, ...handlers }
+  }
+
+  it('refuses reply-thread and resolve-thread by default without calling handlers', async () => {
+    const { path, onReplyThread, onResolveThread } = await start()
+    const reply = await request(path, { id: 1, type: 'reply-thread', threadId: 'T', body: 'hi' })
+    const resolve = await request(path, { id: 2, type: 'resolve-thread', threadId: 'T' })
+    for (const r of [reply, resolve]) {
+      expect(r).toMatchObject({ ok: false, error: 'writes-disabled' })
+      expect(r.message).toContain('allow_writes')
+    }
+    expect(onReplyThread).not.toHaveBeenCalled()
+    expect(onResolveThread).not.toHaveBeenCalled()
+    expect(await request(path, { id: 3, type: 'ping' })).toMatchObject({ pong: true })
+  })
+
+  it('runs the handlers when allowWrites is true', async () => {
+    const { path, onReplyThread, onResolveThread } = await start({ allowWrites: true })
+    expect(await request(path, { id: 1, type: 'reply-thread', threadId: 'T', body: 'hi' })).toMatchObject({ ok: true, commentId: 7 })
+    expect(await request(path, { id: 2, type: 'resolve-thread', threadId: 'T' })).toMatchObject({ ok: true })
+    expect(onReplyThread).toHaveBeenCalledWith('T', 'hi')
+    expect(onResolveThread).toHaveBeenCalledWith('T')
+  })
+})

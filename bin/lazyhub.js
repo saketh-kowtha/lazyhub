@@ -87,7 +87,7 @@ await ensureDaemon(cfg, new URL('./lazyhub.js', import.meta.url).pathname)
 
 // Start IPC server for IDE integrations (unless disabled in config)
 if (cfg.ipc?.enabled !== false) {
-  const socketPath = startIPC()
+  const socketPath = startIPC({ allowWrites: cfg.ipc?.allow_writes === true })
   if (socketPath) process.env.LAZYHUB_SOCKET = socketPath
 }
 
