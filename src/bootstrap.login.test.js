@@ -111,4 +111,11 @@ describe('bootstrap credential handling', () => {
       delete process.env.LAZYHUB_DAEMON_SOCKET
     }
   })
+
+  it('rejects interactive and combine outside their auth subcommands', async () => {
+    const { runGh } = await import('./executor/core.js')
+    await expect(runGh(['pr', 'list'], { interactive: true })).rejects.toThrow(/interactive/)
+    await expect(runGh(['auth', 'token'], { combine: true })).rejects.toThrow(/combine/)
+    expect(execa).not.toHaveBeenCalled()
+  })
 })

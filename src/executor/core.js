@@ -100,6 +100,13 @@ export async function runGh(args, opts = {}) {
   if (kind === 'unknown') {
     throw new GhError({ message: 'Operation is not an allowlisted gh command', stderr: '', exitCode: 1, args: redactArgs(args) })
   }
+  // Programmer-error guard: terminal-owning and merged-stream modes are for bootstrap only.
+  if (opts.interactive && !(args[0] === 'auth' && args[1] === 'login')) {
+    throw new TypeError('runGh: interactive is only allowed for `gh auth login`')
+  }
+  if (opts.combine && !(args[0] === 'auth' && args[1] === 'status')) {
+    throw new TypeError('runGh: combine is only allowed for `gh auth status`')
+  }
   const typed = kind === 'read' && !skipDaemon && process.env.LAZYHUB_DAEMON_SOCKET && stdin === undefined && json !== false
     ? toTypedRead(args)
     : null
