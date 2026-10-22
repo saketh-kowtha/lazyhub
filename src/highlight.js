@@ -12,9 +12,7 @@
  * (e.g. ```lua) now render unhighlighted, and untagged blocks are auto-detected
  * among these languages only.
  */
-import { createRequire } from 'module'
-
-const require = createRequire(import.meta.url)
+import loaders from './highlight-loaders.cjs'
 
 /** Every language registered, keyed by highlight.js module name. */
 export const HIGHLIGHT_LANGUAGES = [
@@ -33,9 +31,9 @@ let instance = null
  */
 export function getHljs() {
   if (!instance) {
-    const hljs = /** @type {import('highlight.js').HLJSApi} */ (require('highlight.js/lib/core'))
+    const hljs = loaders.core()
     for (const name of HIGHLIGHT_LANGUAGES) {
-      hljs.registerLanguage(name, require(`highlight.js/lib/languages/${name}`))
+      hljs.registerLanguage(name, loaders.languages[name]())
     }
     instance = hljs
   }
