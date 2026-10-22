@@ -1,5 +1,9 @@
 # DRAFT PLAN — lazyhub: from "works on my machine" to top-shelf OSS
 
+> **Historical (2026-06).** Product scope and stage order were amended on
+> 2026-10-21 (ARCHITECT_DECISIONS D12, ROADMAP); where this draft conflicts with
+> them, they win.
+>
 > Status: DRAFT for discussion. Not yet merged into ROADMAP.md / ARCHITECT_DECISIONS.md.
 > Date: 2026-06-10
 >

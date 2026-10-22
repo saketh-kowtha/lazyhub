@@ -14,7 +14,13 @@ The design goals are:
 
 ## Alpha boundaries
 
-Alpha is for solo maintainers and pilot repositories.
+Alpha is for solo maintainers and pilot repositories. As of 2026-10-21 (D12) the
+delivery stages are review Alpha (read-only, no App), optional approval, and
+demand-gated expansion. Model-proposed GitHub writes are disabled for review
+Alpha even when a human confirms them; human-typed management actions stay
+outside the read-only review context. Below, "Slice 1" is the containment and
+observation work and "Slice 2" is the optional approval stage; D1-D11 and the
+mitigations here apply unchanged to optional approval.
 
 - Slice 1 observes GitHub-side activity, disables unsafe agent write paths,
   hardens shipped local surfaces, reports coverage, and establishes a verifiable
