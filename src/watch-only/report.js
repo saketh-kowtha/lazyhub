@@ -107,7 +107,7 @@ export function explainReason(code) {
   if (/_truncated$/.test(c)) return ['activity beyond the read window was not observed', 're-run with a larger --limit or --max-pages']
   if (c.startsWith('repo_identity_unverified')) return ['the repository identity could not be verified', 'check `gh auth status` and the repository name']
   if (c.startsWith('ruleset_')) return ['rulesets could not be read, so approval rules are unknown', 'needs admin read access to rulesets; optional in watch-only']
-  if (c.startsWith('alternate_path_detected')) return ['a path that bypasses GitHub-side watching was detected', 'review it with `lazyhub doctor coverage`']
+  if (c.startsWith('alternate_path_detected')) return ['a path that bypasses GitHub-side watching was detected', 'review it with `lazyhub doctor --coverage`']
   return null
 }
 
