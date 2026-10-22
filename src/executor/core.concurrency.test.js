@@ -74,4 +74,16 @@ describe('runGh bounded concurrency', () => {
     calls[1].finish()
     await Promise.all([busy, login])
   })
+
+  it.each(['0', '-3', 'abc', '2x', '1e3', ''])('falls back to the default cap for %j', async value => {
+    process.env.LAZYHUB_GH_CONCURRENCY = value
+    const calls = deferredExeca()
+    const done = [1, 2, 3, 4, 5, 6].map(n => runGh(READ(n), { skipDaemon: true }))
+    await tick()
+    expect(calls).toHaveLength(4)
+    for (let i = 0; i < 6; i++) { await tick(); calls[i]?.finish() }
+    await tick()
+    calls.slice(4).forEach(c => c.finish())
+    await Promise.all(done)
+  })
 })

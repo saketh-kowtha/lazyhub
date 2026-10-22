@@ -169,8 +169,9 @@ const ghWaiters = []
 let ghInFlight = 0
 
 function ghConcurrencyLimit() {
-  const n = Number.parseInt(process.env.LAZYHUB_GH_CONCURRENCY ?? '', 10)
-  return Number.isInteger(n) && n > 0 ? n : GH_CONCURRENCY_DEFAULT
+  const raw = (process.env.LAZYHUB_GH_CONCURRENCY ?? '').trim()
+  const n = /^\d+$/.test(raw) ? Number(raw) : 0
+  return Number.isSafeInteger(n) && n > 0 ? n : GH_CONCURRENCY_DEFAULT
 }
 
 async function acquireGhSlot() {
