@@ -10,6 +10,7 @@
 import { execa } from 'execa'
 import { loadSavedRepo, saveDefaultRepo, writeDefaultConfig } from './config.js'
 import { runGh } from './executor/core.js'
+import { classifyHostMismatch } from './executor/classify.js'
 import readline from 'readline'
 
 // ─── Step 1: detect gh ────────────────────────────────────────────────────────
@@ -189,7 +190,7 @@ export async function detectAuthenticatedHost() {
  * remote's host is only used when gh is logged in to it; an SSH alias or a
  * separate SSH hostname must never become GH_HOST on its own.
  *
- * @returns {Promise<{host: string|null, note?: string, error?: string}>}
+ * @returns {Promise<{host: string|null, note?: string, error?: string, mismatch?: {needed: string, signedIn: string[]}}>}
  */
 export async function selectGhHost() {
   const remote = await resolveRemoteHost()
@@ -202,14 +203,12 @@ export async function selectGhHost() {
   }
   // Nothing logged in and the host is a real one: let the login flow offer it.
   if (hosts.length === 0 && remote.resolved) return { host: remote.host }
+  const mismatch = { needed: remote.host, signedIn: hosts }
+  const f = classifyHostMismatch(mismatch)
   return {
     host: null,
-    error: [
-      `  ✗ The git remote points at ${remote.host}, but gh is not logged in to it.`,
-      `    gh is logged in to: ${hosts.length ? hosts.join(', ') : '(nothing)'}`,
-      `    If ${remote.host} is your GitHub Enterprise host, run: gh auth login --hostname ${remote.host}`,
-      '    If it is an SSH alias or a different SSH hostname, set the API host: export GH_HOST=<host>',
-    ].join('\n'),
+    mismatch,
+    error: [`  ✗ ${f.cause}`, ...f.notes.map(n => `    ${n}`)].join('\n'),
   }
 }
 

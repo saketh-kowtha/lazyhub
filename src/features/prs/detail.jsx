@@ -29,6 +29,8 @@ import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
 import { sanitize, getMarkdownRows, TextInput } from '../../utils.js'
 import { Spinner } from '../../components/Spinner.jsx'
+import { FailureNotice } from '../../components/FailureNotice.jsx'
+import { classifyGhFailure } from '../../executor.js'
 import { PRDetailSkeleton } from '../../components/Skeleton.jsx'
 import { openInEditor, editorLabel } from '../../editor.js'
 import { loadConfig } from '../../config.js'
@@ -506,8 +508,8 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   if (error) {
     return (
       <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
-        <Text color={t.ci.fail}>⚠ Failed to load — [r] retry</Text>
-        <Text color={t.ui.dim} dimColor>{error.message}</Text>
+        <FailureNotice failure={classifyGhFailure(error)} />
+        <Text color={t.ui.dim}>[r] retry</Text>
       </Box>
     )
   }

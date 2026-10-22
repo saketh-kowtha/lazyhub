@@ -9,7 +9,7 @@ import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
-import { listIssues, listLabels, listCollaborators, closeIssue, createIssue, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees } from '../../executor.js'
+import { classifyGhFailure, listIssues, listLabels, listCollaborators, closeIssue, createIssue, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees } from '../../executor.js'
 import { sanitize, formatLogin, padEndWidth } from '../../utils.js'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
@@ -21,6 +21,8 @@ import { loadConfig } from '../../config.js'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
 import { useTheme } from '../../theme.js'
 import { IssueListSkeleton } from '../../components/Skeleton.jsx'
+import { FailureNotice } from '../../components/FailureNotice.jsx'
+import { EmptyState } from '../../components/EmptyState.jsx'
 
 const _appConfig = loadConfig()
 const _cfg = _appConfig.issues
@@ -334,10 +336,17 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
             />
           )
         })}
-        {!loading && items.length === 0 && (
-          <Box paddingX={2} paddingY={1}>
-            <Text color={t.ui.muted}>No {filterState} issues found. [f] cycle filter  [n] new issue  [r] refresh</Text>
+        {error && (
+          <Box paddingX={2} paddingY={1} flexDirection="column">
+            <FailureNotice failure={classifyGhFailure(error)} />
+            <Text color={t.ui.dim}>[r] retry</Text>
           </Box>
+        )}
+        {!loading && !error && items.length === 0 && (
+          <EmptyState
+            title={`No ${filterState} issues found.`}
+            actions={[{ key: 'f', label: 'cycle the open/closed filter' }, { key: 'n', label: 'new issue' }, { key: 'r', label: 'refresh' }]}
+          />
         )}
       </Box>
     </Box>

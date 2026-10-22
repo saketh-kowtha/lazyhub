@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'os'
 import { join, delimiter } from 'path'
 import pty from 'node-pty'
+import { GH_STDERR } from '../../src/executor/gh-stderr-fixtures.js'
 
 const ROOT = new URL('../..', import.meta.url).pathname
 const BIN = join(ROOT, 'dist', 'lazyhub.js')
@@ -67,6 +68,11 @@ if (process.env.LAZYHUB_GH_FAIL_ONCE_FILE && args[0] === 'api' && args[1] === 'g
     process.exit(1)
   }
 }
+if (process.env.LAZYHUB_GH_STUB_STDERR && ((args[0] === 'api' && args[1] === 'graphql') || (args[0] === 'pr' && args[1] === 'list'))) {
+  process.stderr.write(process.env.LAZYHUB_GH_STUB_STDERR)
+  process.exit(Number(process.env.LAZYHUB_GH_STUB_EXIT || 1))
+}
+if (process.env.LAZYHUB_GH_STUB_EMPTY && ((args[0] === 'api' && args[1] === 'graphql') || (args[0] === 'pr' && args[1] === 'list'))) json(args[0] === 'pr' ? [] : { data: { search: { nodes: [] } } })
 if (has('--version')) { process.stdout.write('gh version 2.0.0\\n'); process.exit(0) }
 if (args[0] === 'auth' && args[1] === 'token') { process.stdout.write('stub-auth\\n'); process.exit(0) }
 if (args[0] === 'auth' && args[1] === 'status') {
@@ -296,6 +302,25 @@ async function runDegradedFlow() {
   }
 }
 
+async function runDayOneErrorFlow({ name, env, expected }) {
+  const temp = mkdtempSync(join(tmpdir(), `lazyhub-pty-${name}-`))
+  const stubBin = installGhStub(temp)
+  let output = ''
+  let term
+  try {
+    term = spawnTerminal({ ...childEnv(stubBin, temp), ...env })
+    term.onData(data => { output += data })
+    await waitForScreen(() => output, /Focus|Pull Requests/, `${name} startup`)
+    term.write('2')
+    await waitForScreen(() => output, expected, `${name} message`)
+    term.write('q')
+    await waitForExit(term)
+  } finally {
+    try { term?.kill() } catch {}
+    rmSync(temp, { recursive: true, force: true })
+  }
+}
+
 async function runPerfFlow() {
   const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-perf-'))
   const stubBin = installGhStub(temp)
@@ -360,6 +385,16 @@ await runLazyhubFlow()
 await runReferenceFlow()
 await runCrashFlow()
 await runDegradedFlow()
+await runDayOneErrorFlow({
+  name: 'not-signed-in',
+  env: { LAZYHUB_GH_STUB_STDERR: GH_STDERR.not_signed_in.stderr, LAZYHUB_GH_STUB_EXIT: '4' },
+  expected: /You are not signed in to GitHub/,
+})
+await runDayOneErrorFlow({
+  name: 'empty-queue',
+  env: { LAZYHUB_GH_STUB_EMPTY: '1' },
+  expected: /No open pull requests/,
+})
 await runPerfFlow()
 await runSwrCacheFlow()
 

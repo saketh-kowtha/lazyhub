@@ -4,9 +4,10 @@
 
 import React, { useMemo } from 'react'
 import { Box, Text } from 'ink'
-import { listPRs, listIssues } from '../../executor.js'
+import { classifyGhFailure, listPRs, listIssues } from '../../executor.js'
 import { useGh } from '../../hooks/useGh.js'
 import { useTheme } from '../../theme.js'
+import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { sanitize, shortAge } from '../../utils.js'
 import { filterToGh } from './filter-to-gh.js'
 
@@ -49,7 +50,7 @@ export function TabPane({ pane, repo }) {
 	        </Box>
 	      ))}
       {loading && <Text color={t.ui.dim}>Loading…</Text>}
-      {error && <Text color={t.ci.fail}>⚠ {error.message}</Text>}
+      {error && <FailureNotice failure={classifyGhFailure(error)} />}
       {!loading && !error && <DashboardRows items={data || []} />}
     </Box>
   )
