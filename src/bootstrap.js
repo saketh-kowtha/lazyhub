@@ -279,6 +279,14 @@ async function runLoginFlow() {
     }
   }
 
+  // No terminal (CI, pipe): an interactive prompt would hang forever. Print
+  // guidance and return; bootstrap()'s checkAuth() then exits non-zero.
+  if (!process.stdin.isTTY) {
+    console.error('\n  ✗ Not authenticated and no interactive terminal is available.')
+    console.error('    Run `gh auth login` first, or set GH_TOKEN to a valid token.')
+    return
+  }
+
   const loginArgs = ['auth', 'login']
   if (ghHost) loginArgs.push('--hostname', ghHost)
   if (hasBrowser()) {
