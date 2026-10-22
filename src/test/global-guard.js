@@ -7,11 +7,17 @@ import { join } from 'node:path'
 
 const WATCHED = /^(lazyhub\.toml|config\.json|\.config-cache\.toml)$/
 
+function pointerState() {
+  // ~/.lazyhub-socket is written by the IPC server; tests must never create or alter it.
+  try { return createHash('sha256').update(readFileSync(join(homedir(), '.lazyhub-socket'))).digest('hex') } catch { return 'absent' }
+}
+
 function snapshot() {
   const dir = join(homedir(), '.config', 'lazyhub')
-  if (!existsSync(dir)) return 'absent'
+  const pointer = `pointer:${pointerState()}\n`
+  if (!existsSync(dir)) return `${pointer}absent`
   // Logs/sockets legitimately change while a real lazyhub runs; guard only config files.
-  return readdirSync(dir).filter((n) => WATCHED.test(n)).sort().map((name) => {
+  return pointer + readdirSync(dir).filter((n) => WATCHED.test(n)).sort().map((name) => {
     try {
       const p = join(dir, name)
       const st = statSync(p)
