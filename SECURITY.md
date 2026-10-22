@@ -31,6 +31,16 @@ Local-agent merge approval becomes `managed_gateway` only once Slice 2 ships the
 approval path; until then no approval path exists and doctor reports it as
 `advisory` or `ungoverned`, never `managed_gateway`.
 
+## Agent and assistant writes
+
+For review Alpha every model- or agent-originated GitHub write is disabled,
+including ones a human would confirm: the MCP server lists and accepts
+read-only tools only, and the in-TUI AI assistant is offered read-only tools
+only. A mutating call that still arrives returns a stable disabled error and
+never reaches GitHub. Writes you start yourself from the Lazyhub panes are
+unchanged. Confirmation prompts and input validation are not treated as
+authorization; writes return only with the governed approval path (Slice 2).
+
 ## Checking your own coverage: `lazyhub doctor --coverage`
 
 ```

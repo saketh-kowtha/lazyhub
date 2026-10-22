@@ -3,18 +3,16 @@
  *
  * Exposes a Claude tool-use loop that:
  *  - Executes read-only tools freely (up to MAX_TOOL_ROUNDS)
- *  - Intercepts mutating tools and returns them to the UI for confirmation
+ *  - Never offers mutating tools to the model; a mutating call that still
+ *    arrives gets a stable AI_MUTATIONS_DISABLED error (see executeMutatingTool)
  *  - Parses <<NAVIGATE:pane[:key=val]*>> markers for app navigation
  *
  * Direct fetch pattern (same as ai.js). No SDK dependency.
  */
 
-import { isRepoSlug, isPositiveId } from './input-validation.js'
 import {
   listPRs, getPR, getPRDiff, getPRChecks, listIssues, getIssue,
   listBranches, listRuns, getRepoInfo, listNotifications, listPRComments,
-  mergePR, closePR, closeIssue, addPRComment, addLabels, reviewPR,
-  rerunRun, cancelRun,
 } from './executor.js'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
@@ -44,7 +42,7 @@ const MAX_DIFF_CHARS    = 8000
 const MAX_TOOL_ROUNDS   = 6
 
 const MUTATING_TOOLS   = new Set(['merge_pr', 'close_pr', 'close_issue', 'add_pr_comment', 'add_labels', 'review_pr', 'rerun_run', 'cancel_run'])
-const DESTRUCTIVE_TOOLS = new Set(['merge_pr', 'close_pr', 'close_issue', 'cancel_run'])
+const AI_MUTATIONS_DISABLED = 'AI assistant mutating tools are disabled until governed authorization is available'
 
 // ─── Tool definitions ─────────────────────────────────────────────────────────
 
@@ -159,102 +157,6 @@ const TOOL_DEFINITIONS = [
       },
     },
   },
-  // ── Mutating (intercepted — requires user confirmation) ──
-  {
-    name: 'merge_pr',
-    description: 'Merge a pull request. The UI will ask for confirmation before executing.',
-    input_schema: {
-      type: 'object',
-      required: ['number'],
-      properties: {
-        number:   { type: 'number' },
-        strategy: { type: 'string', enum: ['merge', 'squash', 'rebase'], description: 'Merge strategy (default: merge)' },
-        message:  { type: 'string', description: 'Optional commit message' },
-      },
-    },
-  },
-  {
-    name: 'close_pr',
-    description: 'Close a pull request without merging. Requires confirmation.',
-    input_schema: {
-      type: 'object',
-      required: ['number'],
-      properties: {
-        number: { type: 'number' },
-      },
-    },
-  },
-  {
-    name: 'close_issue',
-    description: 'Close an issue. Requires confirmation.',
-    input_schema: {
-      type: 'object',
-      required: ['number'],
-      properties: {
-        number: { type: 'number' },
-      },
-    },
-  },
-  {
-    name: 'add_pr_comment',
-    description: 'Post a comment on a pull request. Requires confirmation.',
-    input_schema: {
-      type: 'object',
-      required: ['number', 'body'],
-      properties: {
-        number: { type: 'number' },
-        body:   { type: 'string', description: 'Comment text (Markdown)' },
-      },
-    },
-  },
-  {
-    name: 'add_labels',
-    description: 'Add labels to a PR or issue. Requires confirmation.',
-    input_schema: {
-      type: 'object',
-      required: ['number', 'labels'],
-      properties: {
-        number: { type: 'number' },
-        labels: { type: 'array', items: { type: 'string' } },
-        type:   { type: 'string', enum: ['pr', 'issue'], description: 'Target type (default: pr)' },
-      },
-    },
-  },
-  {
-    name: 'review_pr',
-    description: 'Submit a PR review (approve / request-changes / comment). Requires confirmation.',
-    input_schema: {
-      type: 'object',
-      required: ['number', 'event'],
-      properties: {
-        number: { type: 'number' },
-        event:  { type: 'string', enum: ['approve', 'request-changes', 'comment'] },
-        body:   { type: 'string' },
-      },
-    },
-  },
-  {
-    name: 'rerun_run',
-    description: 'Re-run failed jobs in a workflow run. Requires confirmation.',
-    input_schema: {
-      type: 'object',
-      required: ['runId'],
-      properties: {
-        runId: { type: 'number', description: 'Workflow run database ID' },
-      },
-    },
-  },
-  {
-    name: 'cancel_run',
-    description: 'Cancel a running workflow run. Requires confirmation.',
-    input_schema: {
-      type: 'object',
-      required: ['runId'],
-      properties: {
-        runId: { type: 'number', description: 'Workflow run database ID' },
-      },
-    },
-  },
 ]
 
 // ─── System prompt ────────────────────────────────────────────────────────────
@@ -269,7 +171,7 @@ function buildSystemPrompt(ctx = {}) {
 
   const lines = [
     `You are an AI assistant embedded in lazyhub, a GitHub TUI (terminal UI). Today is ${today}.`,
-    'You help users understand, navigate, and act on their GitHub repositories.',
+    'You help users understand and navigate their GitHub repositories.',
     '',
   ]
 
@@ -284,7 +186,7 @@ function buildSystemPrompt(ctx = {}) {
     '',
     '## Rules',
     '- NEVER fabricate data — always call a tool to fetch real information.',
-    '- For mutating actions (merge, close, comment, label, review, rerun, cancel): call the relevant mutating tool. The UI will intercept it, show the user a confirmation prompt, and execute only if confirmed. You do NOT need to warn the user about confirmation — that happens automatically.',
+    '- You have read-only access. You cannot merge, close, comment, label, review, rerun or cancel anything. If asked to, explain that write actions are disabled in the assistant and point to the lazyhub keyboard shortcut instead.',
     '- For navigation: embed a marker <<NAVIGATE:pane>> or <<NAVIGATE:pane:number=42>> anywhere in your text. Valid panes: prs, issues, branches, actions, notifications.',
     '  Example: "Here is PR #42. <<NAVIGATE:prs:number=42>>"',
     '- Keep responses concise and terminal-friendly — avoid heavy markdown formatting.',
@@ -310,49 +212,7 @@ function toolLabel(name, input) {
     case 'get_repo_info':     return 'fetching repo info…'
     case 'list_notifications':return 'listing notifications…'
     case 'list_pr_comments':  return `loading comments for PR #${input.number}…`
-    case 'merge_pr':          return `merging PR #${input.number}…`
-    case 'close_pr':          return `closing PR #${input.number}…`
-    case 'close_issue':       return `closing issue #${input.number}…`
-    case 'add_pr_comment':    return `posting comment on PR #${input.number}…`
-    case 'add_labels':        return `adding labels to #${input.number}…`
-    case 'review_pr':         return `submitting review on PR #${input.number}…`
-    case 'rerun_run':         return `rerunning workflow #${input.runId}…`
-    case 'cancel_run':        return `cancelling run #${input.runId}…`
     default:                  return `${name.replace(/_/g, ' ')}…`
-  }
-}
-
-// ─── Confirm message builder ──────────────────────────────────────────────────
-
-/**
- * Build a human-readable confirmation message for a mutating tool call.
- * @param {string} toolName
- * @param {object} input
- */
-function buildConfirmMessage(toolName, input) {
-  switch (toolName) {
-    case 'merge_pr':
-      return `Merge PR #${input.number} using --${input.strategy || 'merge'}${input.message ? ` — "${input.message}"` : ''}`
-    case 'close_pr':
-      return `Close PR #${input.number} (without merging)`
-    case 'close_issue':
-      return `Close issue #${input.number}`
-    case 'add_pr_comment': {
-      const preview = (input.body || '').slice(0, 60)
-      return `Post comment on PR #${input.number}: "${preview}${input.body?.length > 60 ? '…' : ''}"`
-    }
-    case 'add_labels':
-      return `Add labels [${(input.labels || []).join(', ')}] to ${input.type || 'pr'} #${input.number}`
-    case 'review_pr': {
-      const preview = input.body ? ` — "${input.body.slice(0, 40)}${input.body.length > 40 ? '…' : ''}"` : ''
-      return `Submit ${input.event} review on PR #${input.number}${preview}`
-    }
-    case 'rerun_run':
-      return `Re-run failed jobs in workflow run #${input.runId}`
-    case 'cancel_run':
-      return `Cancel workflow run #${input.runId}`
-    default:
-      return `Execute ${toolName}`
   }
 }
 
@@ -393,80 +253,29 @@ async function callReadOnlyTool(toolName, toolInput, repo) {
   }
 }
 
-// ─── Mutating tool executor (called by UI after confirmation) ─────────────────
-
-const MAX_TEXT_LENGTH = 65536
-const REVIEW_EVENTS = ['approve', 'request-changes', 'comment']
-
-function invalid(code, message) {
-  return Object.assign(new Error(message), { code })
-}
-
 /**
- * Runtime-validate model-supplied mutation input before dispatch. Fails closed
- * with stable error codes; model output is untrusted.
- * @param {string} toolName
- * @param {object} input
- * @param {string} repo
- */
-function validateMutationInput(toolName, input, repo) {
-  if (!MUTATING_TOOLS.has(toolName)) throw invalid('AI_UNKNOWN_TOOL', `Unknown mutating tool: ${toolName}`)
-  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
-    throw invalid('AI_INVALID_INPUT', 'Tool input must be an object')
-  }
-  if (!isRepoSlug(repo)) throw invalid('AI_INVALID_REPO', 'repo must be in owner/name form')
-  if (toolName === 'rerun_run' || toolName === 'cancel_run') {
-    if (!isPositiveId(input.runId)) throw invalid('AI_INVALID_ID', 'runId must be a positive integer')
-  } else if (!isPositiveId(input.number)) {
-    throw invalid('AI_INVALID_ID', 'number must be a positive integer')
-  }
-  for (const field of ['body', 'message']) {
-    const v = input[field]
-    if (v !== undefined && (typeof v !== 'string' || v.length > MAX_TEXT_LENGTH)) {
-      throw invalid('AI_INVALID_TEXT', `${field} must be a string of at most ${MAX_TEXT_LENGTH} characters`)
-    }
-  }
-  if (toolName === 'add_labels') {
-    // Issue/PR confusion: the resource type is an enum, never free-form.
-    if (input.type !== undefined && !['pr', 'issue'].includes(input.type)) {
-      throw invalid('AI_INVALID_RESOURCE_TYPE', 'type must be "pr" or "issue"')
-    }
-    if (!Array.isArray(input.labels) || input.labels.length === 0 || input.labels.length > 50 ||
-        input.labels.some(l => typeof l !== 'string' || !l || l.length > 100)) {
-      throw invalid('AI_INVALID_LABELS', 'labels must be 1-50 non-empty strings')
-    }
-  }
-  if (toolName === 'review_pr' && !REVIEW_EVENTS.includes(input.event)) {
-    throw invalid('AI_INVALID_ENUM', `event must be one of ${REVIEW_EVENTS.join(', ')}`)
-  }
-}
-
-/**
- * Execute a mutating tool after user confirmation.
+ * Route a model tool call: mutating names are denied, everything else is read-only.
  * @param {string} toolName
  * @param {object} toolInput
  * @param {string} repo
  */
-export async function executeMutatingTool(toolName, toolInput, repo) {
-  validateMutationInput(toolName, toolInput, repo)
-  switch (toolName) {
-    case 'merge_pr': {
-      const strategy = toolInput.strategy || 'merge'
-      if (!['merge', 'squash', 'rebase'].includes(strategy)) {
-        throw new Error('Administrative and unsupported merge strategies are disabled for agent-callable paths')
-      }
-      return mergePR(repo, toolInput.number, strategy, toolInput.message)
-    }
-    case 'close_pr':       return closePR(repo, toolInput.number)
-    case 'close_issue':    return closeIssue(repo, toolInput.number)
-    case 'add_pr_comment': return addPRComment(repo, toolInput.number, toolInput.body)
-    case 'add_labels':     return addLabels(repo, toolInput.number, toolInput.labels, toolInput.type || 'pr')
-    case 'review_pr':      return reviewPR(repo, toolInput.number, toolInput.event, toolInput.body || '')
-    case 'rerun_run':      return rerunRun(repo, toolInput.runId)
-    case 'cancel_run':     return cancelRun(repo, toolInput.runId)
-    default:
-      throw new Error(`Unknown mutating tool: ${toolName}`)
-  }
+function dispatchTool(toolName, toolInput, repo) {
+  if (MUTATING_TOOLS.has(toolName)) return executeMutatingTool(toolName, toolInput, repo)
+  return callReadOnlyTool(toolName, toolInput, repo)
+}
+
+// ─── Mutating tools: disabled ─────────────────────────────────────────────────
+
+/**
+ * Model-proposed GitHub writes are disabled for review Alpha, including
+ * human-confirmed ones (B-64, supersedes B-50). Always rejects with a stable
+ * code and never reaches the executor.
+ * @param {string} _toolName
+ * @param {object} _toolInput
+ * @param {string} _repo
+ */
+export async function executeMutatingTool(_toolName, _toolInput, _repo) {
+  throw Object.assign(new Error(AI_MUTATIONS_DISABLED), { code: 'AI_MUTATIONS_DISABLED' })
 }
 
 // ─── Navigation marker parser ─────────────────────────────────────────────────
@@ -497,26 +306,6 @@ function findNavInText(text) {
     if (navData) break
   }
   return navData
-}
-
-// ─── Tool result builder (provider-aware) — used by AIAssistant.jsx ──────────
-
-/**
- * Build the provider-specific message object for a tool result.
- * Push this into conversationRef.current after confirm/cancel.
- * @param {string} provider
- * @param {string} toolUseId
- * @param {string} content
- * @param {boolean} [isError]
- */
-export function buildToolResultMessage(provider, toolUseId, content, isError = false) {
-  if (provider === 'openai') {
-    return { role: 'tool', tool_call_id: toolUseId, content }
-  }
-  // Anthropic
-  const block = { type: 'tool_result', tool_use_id: toolUseId, content }
-  if (isError) block.is_error = true
-  return { role: 'user', content: [block] }
 }
 
 // ─── OpenAI tool definitions (converted from Anthropic input_schema format) ───
@@ -591,22 +380,9 @@ async function runAnthropicTurn({ messages, userMessage, repo, ctx, aiConfig, on
     if (toolUseBlock) {
       emit(toolLabel(toolUseBlock.name, toolUseBlock.input))
 
-      if (MUTATING_TOOLS.has(toolUseBlock.name)) {
-        return {
-          type:           'pending_action',
-          text:           textContent,
-          confirmMessage: buildConfirmMessage(toolUseBlock.name, toolUseBlock.input),
-          toolName:       toolUseBlock.name,
-          toolInput:      toolUseBlock.input,
-          toolUseId:      toolUseBlock.id,
-          isDestructive:  DESTRUCTIVE_TOOLS.has(toolUseBlock.name),
-          messages:       apiMessages,
-        }
-      }
-
       let toolResult
-      try { toolResult = await callReadOnlyTool(toolUseBlock.name, toolUseBlock.input, repo) }
-      catch (err) { toolResult = { error: err.message } }
+      try { toolResult = await dispatchTool(toolUseBlock.name, toolUseBlock.input, repo) }
+      catch (err) { toolResult = { error: err.message, code: err.code } }
 
       apiMessages.push({
         role:    'user',
@@ -706,24 +482,9 @@ async function runOpenAITurn({ messages, userMessage, repo, ctx, aiConfig, onSta
 
       emit(toolLabel(toolName, toolInput))
 
-      if (MUTATING_TOOLS.has(toolName)) {
-        // Strip system message from stored history (it's re-injected on every call)
-        const history = apiMessages.filter(m => m.role !== 'system')
-        return {
-          type:           'pending_action',
-          text:           textContent,
-          confirmMessage: buildConfirmMessage(toolName, toolInput),
-          toolName,
-          toolInput,
-          toolUseId:      tc.id,
-          isDestructive:  DESTRUCTIVE_TOOLS.has(toolName),
-          messages:       history,
-        }
-      }
-
       let toolResult
-      try { toolResult = await callReadOnlyTool(toolName, toolInput, repo) }
-      catch (err) { toolResult = { error: err.message } }
+      try { toolResult = await dispatchTool(toolName, toolInput, repo) }
+      catch (err) { toolResult = { error: err.message, code: err.code } }
 
       apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(toolResult) })
       continue
@@ -750,11 +511,6 @@ async function runOpenAITurn({ messages, userMessage, repo, ctx, aiConfig, onSta
  * @property {Array} [messages]
  * @property {object} [usage]
  * @property {string} [error]
- * @property {string} [confirmMessage]
- * @property {string} [toolName]
- * @property {object} [toolInput]
- * @property {string} [toolUseId]
- * @property {boolean} [isDestructive]
  */
 
 /**

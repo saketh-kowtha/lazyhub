@@ -3,7 +3,7 @@
  *
  * Full-screen content-area overlay triggered by Ctrl+A.
  * Shows conversation history, a single-line prompt, and handles
- * action confirmation + navigation prompts inline.
+ * navigation prompts inline. Read-only: model-proposed writes are disabled (B-64).
  */
 
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react'
@@ -13,14 +13,11 @@ import { useKeyScope } from '../keyscope.js'
 import { AppContext } from '../context.js'
 import { Spinner } from './Spinner.jsx'
 import { TextInput, sanitize } from '../utils.js'
-import { ConfirmDialog } from './dialogs/ConfirmDialog.jsx'
-import { runAssistantTurn, executeMutatingTool, buildToolResultMessage } from '../ai-assistant.js'
+import { runAssistantTurn } from '../ai-assistant.js'
 
 const PHASE = Object.freeze({
   IDLE:      'idle',
   THINKING:  'thinking',
-  CONFIRM:   'confirm',
-  EXECUTING: 'executing',
 })
 
 function fmtTime(date) {
@@ -63,7 +60,6 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
   const [messages,        setMessages]        = useState([])
   const [inputText,       setInputText]       = useState('')
   const [phase,           setPhase]           = useState(PHASE.IDLE)
-  const [pendingAction,   setPendingAction]   = useState(null)
   const [navPrompt,       setNavPrompt]       = useState(null)
   const [scrollOffset,    setScrollOffset]    = useState(0)
   const [thinkingStatus,  setThinkingStatus]  = useState('thinking…')
@@ -88,8 +84,7 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
 
   // ─── Key handler ─────────────────────────────────────────────────────────
   useInput((input, key) => {
-    if (phase === PHASE.THINKING || phase === PHASE.EXECUTING) return
-    if (phase === PHASE.CONFIRM) return  // ConfirmDialog owns keys in confirm phase
+    if (phase === PHASE.THINKING) return
 
     // Navigation prompt takes priority
     if (navPrompt) {
@@ -147,20 +142,6 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
         setPhase(PHASE.IDLE)
         break
 
-      case 'pending_action':
-        if (result.text) {
-          setMessages(prev => [...prev, { role: 'assistant', text: result.text, timestamp: new Date() }])
-        }
-        setPendingAction({
-          toolName:       result.toolName,
-          toolInput:      result.toolInput,
-          toolUseId:      result.toolUseId,
-          confirmMessage: result.confirmMessage,
-          isDestructive:  result.isDestructive,
-        })
-        setPhase(PHASE.CONFIRM)
-        break
-
       case 'navigate':
         if (result.text) {
           setMessages(prev => [...prev, { role: 'assistant', text: result.text, timestamp: new Date() }])
@@ -175,40 +156,6 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
         break
     }
   }, [inputText, phase, repo, pane, selectedItem, aiConfig])
-
-  // ─── Confirm / cancel action ──────────────────────────────────────────────
-  const handleConfirm = useCallback(async () => {
-    if (!pendingAction) return
-    setPhase(PHASE.EXECUTING)
-
-    const provider = aiConfig?.provider || 'anthropic'
-    try {
-      await executeMutatingTool(pendingAction.toolName, pendingAction.toolInput, repo)
-      conversationRef.current.push(
-        buildToolResultMessage(provider, pendingAction.toolUseId, JSON.stringify({ success: true }))
-      )
-      setMessages(prev => [...prev, { role: 'system', text: `✓ Done: ${pendingAction.confirmMessage}`, timestamp: new Date() }])
-    } catch (err) {
-      conversationRef.current.push(
-        buildToolResultMessage(provider, pendingAction.toolUseId, JSON.stringify({ error: err.message }), true)
-      )
-      setMessages(prev => [...prev, { role: 'system', text: `✗ Failed: ${err.message}`, timestamp: new Date() }])
-    }
-
-    setPendingAction(null)
-    setPhase(PHASE.IDLE)
-  }, [pendingAction, repo])
-
-  const handleCancel = useCallback(() => {
-    if (!pendingAction) return
-    const provider = aiConfig?.provider || 'anthropic'
-    conversationRef.current.push(
-      buildToolResultMessage(provider, pendingAction.toolUseId, JSON.stringify({ cancelled: true }))
-    )
-    setMessages(prev => [...prev, { role: 'system', text: 'Action cancelled', timestamp: new Date() }])
-    setPendingAction(null)
-    setPhase(PHASE.IDLE)
-  }, [pendingAction])
 
   // ─── Render ───────────────────────────────────────────────────────────────
   const provider  = aiConfig?.provider || 'anthropic'
@@ -243,7 +190,6 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
             <Text color={t.ui.dim}>Ask anything about this repo. Examples:</Text>
             <Text color={t.ui.dim}>  · how many open PRs does @alice have?</Text>
             <Text color={t.ui.dim}>  · show me failing CI checks on PR 42</Text>
-            <Text color={t.ui.dim}>  · merge this PR</Text>
             <Text color={t.ui.dim}>  · take me to the actions pane</Text>
           </Box>
         ) : (
@@ -272,18 +218,6 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
         </Box>
       )}
 
-      {/* ── Confirm dialog ── */}
-      {phase === PHASE.CONFIRM && pendingAction && (
-        <Box paddingX={1}>
-          <ConfirmDialog
-            message={pendingAction.confirmMessage}
-            destructive={pendingAction.isDestructive}
-            onConfirm={handleConfirm}
-            onCancel={handleCancel}
-          />
-        </Box>
-      )}
-
       {/* ── Input / status bar ── */}
       <Box
         paddingX={1}
@@ -291,8 +225,8 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
         borderTop={true} borderBottom={false} borderLeft={false} borderRight={false}
         borderColor={t.ui.border}
       >
-        {(phase === PHASE.THINKING || phase === PHASE.EXECUTING) ? (
-          <Spinner label={phase === PHASE.EXECUTING ? 'Executing…' : thinkingStatus} />
+        {phase === PHASE.THINKING ? (
+          <Spinner label={thinkingStatus} />
         ) : !hasApiKey ? (
           <Text color={t.ci?.fail || '#f85149'}>
             No API key — press [S] to open Settings → AI Provider
