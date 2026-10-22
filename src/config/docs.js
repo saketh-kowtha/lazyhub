@@ -63,6 +63,7 @@ export function generateConfigReferenceMarkdown(config = loadConfig()) {
       ['defaults.pr_scope', model.defaults.pr_scope || ''],
       ['defaults.ai_provider', model.defaults.ai_provider || ''],
       ['defaults.repo', model.defaults.repo || ''],
+      ['defaults.repo_host', model.defaults.repo_host || ''],
     ]),
     '',
     '## Panes',

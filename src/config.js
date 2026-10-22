@@ -206,7 +206,11 @@ export function saveConfig(patch) {
  * @returns {string|null} "owner/name"
  */
 export function loadSavedRepo() {
-  return loadTomlConfig().defaults?.repo || null
+  const { repo, repo_host: host } = loadTomlConfig().defaults ?? {}
+  if (!repo) return null
+  // A repo saved under another host must not be queried on this one.
+  if (host && host.toLowerCase() !== (process.env.GH_HOST || 'github.com').toLowerCase()) return null
+  return repo
 }
 
 /**
@@ -215,7 +219,7 @@ export function loadSavedRepo() {
  * @param {string} repo "owner/name"
  */
 export function saveDefaultRepo(repo) {
-  writeTomlConfig({ defaults: { repo } })
+  writeTomlConfig({ defaults: { repo, repo_host: process.env.GH_HOST || 'github.com' } })
 }
 
 /**

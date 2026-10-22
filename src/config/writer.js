@@ -21,7 +21,7 @@ import { USER_CONFIG_PATH } from './loader.js'
 import { isPlainObject } from './schema.js'
 
 const SECTION_RE = /^\s*(\[\[?)([^\]]+)(\]\]?)\s*(?:#.*)?$/
-const WRITABLE_DEFAULTS = new Set(['pr_scope', 'ai_provider', 'repo'])
+const WRITABLE_DEFAULTS = new Set(['pr_scope', 'ai_provider', 'repo', 'repo_host'])
 const WRITABLE_APP = new Set(['active_panes', 'default_pane', 'mouse', 'ai_review_enabled'])
 const WRITABLE_AI = new Set(['provider', 'model', 'anthropic_api_key', 'openai_api_key', 'openai_base_url'])
 const WRITABLE_OPENAI_COMPATIBLE = new Set(['base_url', 'api_key', 'model', 'timeout_ms'])

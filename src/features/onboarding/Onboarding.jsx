@@ -14,7 +14,7 @@ import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { Spinner } from '../../components/Spinner.jsx'
 import { sanitize } from '../../utils.js'
 import { selectGhHost } from '../../bootstrap.js'
-import { classifyFailure, explainGap, isRepoSlug, listWindowSize, lookupRepo, loadOnboardingReport, loadSession, repoKey, windowStart } from './flow.js'
+import { classifyFailure, explainGap, isOwnerName, listWindowSize, lookupRepo, loadOnboardingReport, loadSession, repoKey, windowStart } from './flow.js'
 
 const ERROR_COPY = {
   no_gh: ['GitHub CLI (gh) was not found.', 'Install it from https://cli.github.com, run `gh auth login`, then start lazyhub again.'],
@@ -136,7 +136,7 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
       .filter(r => !text || r.name.toLowerCase().includes(text))
       .map(r => ({ key: repoKey(r.name), name: r.name, current: r.current, lookup: false }))
     const slug = query.trim()
-    if (isRepoSlug(slug) && !repos.some(r => repoKey(r.name) === repoKey(slug))) {
+    if (isOwnerName(slug) && !repos.some(r => repoKey(r.name) === repoKey(slug))) {
       list.push({ key: LOOKUP_KEY + repoKey(slug), name: slug, current: false, lookup: true })
     }
     return list

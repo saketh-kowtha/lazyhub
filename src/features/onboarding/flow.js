@@ -15,11 +15,12 @@ import { fetchPullRequestActivityPage, resolveCurrentRepo } from '../../executor
 import { checkCoverage } from '../../cli/doctor/coverage.js'
 import { generateWatchOnlyReport } from '../../watch-only/index.js'
 import { CONFIG_PATH } from '../../config.js'
+import { isOwnerName } from '../../config/schema.js'
+export { isOwnerName }
 
 // One explicit, bounded page. Repositories beyond it are reached by validated
 // owner/name lookup (lookupRepo), not by silently paging the whole account.
 const REPO_LIST_PATH = 'user/repos?per_page=100&sort=pushed'
-const REPO_SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/
 
 /**
  * Whether to show the first-run flow. Never for non-interactive sessions or
@@ -80,16 +81,6 @@ export async function loadSession() {
 }
 
 /**
- * Whether text is a well-formed owner/name (also keeps it safe as a gh argv).
- *
- * @param {string} text
- * @returns {boolean}
- */
-export function isRepoSlug(text) {
-  return REPO_SLUG_RE.test(text) && !text.endsWith('.')
-}
-
-/**
  * Confirm a typed owner/name exists and is readable by the gh login (one typed
  * read). Resolves to GitHub's canonical spelling.
  *
@@ -98,10 +89,10 @@ export function isRepoSlug(text) {
  * @throws when the slug is malformed, missing or unreadable
  */
 export async function lookupRepo(slug) {
-  if (!isRepoSlug(slug)) throw new Error('not found: invalid owner/name')
+  if (!isOwnerName(slug)) throw new Error('not found: invalid owner/name')
   const view = await runGh(['repo', 'view', slug, '--json', 'nameWithOwner'])
   const name = view?.nameWithOwner
-  if (typeof name !== 'string' || !isRepoSlug(name)) throw new Error('not found')
+  if (typeof name !== 'string' || !isOwnerName(name)) throw new Error('not found')
   return name
 }
 

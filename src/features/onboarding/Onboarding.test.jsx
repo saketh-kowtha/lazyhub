@@ -19,7 +19,7 @@ import { execa } from 'execa'
 import { classifyGh } from '../../daemon/protocol.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation, waitForInputReady } from '../../test/test-helpers.jsx'
 import { Onboarding } from './Onboarding.jsx'
-import { classifyFailure, isRepoSlug, listWindowSize, shouldOnboard, windowStart } from './flow.js'
+import { classifyFailure, isOwnerName, listWindowSize, shouldOnboard, windowStart } from './flow.js'
 
 const fixture = () => JSON.parse(readFileSync(new URL('../../watch-only/fixtures/pr-activity.json', import.meta.url), 'utf8'))
 const ok = body => ({ exitCode: 0, stdout: JSON.stringify(body), stderr: '' })
@@ -292,11 +292,11 @@ describe('repository selection (#280)', () => {
   })
 
   it('rejects malformed owner/name before any gh call', async () => {
-    expect(isRepoSlug('acme/platform')).toBe(true)
-    expect(isRepoSlug('--web/x')).toBe(false)
-    expect(isRepoSlug('a/b c')).toBe(false)
-    expect(isRepoSlug('a/b/c')).toBe(false)
-    expect(isRepoSlug('-x/y')).toBe(false)
+    expect(isOwnerName('acme/platform')).toBe(true)
+    expect(isOwnerName('--web/x')).toBe(false)
+    expect(isOwnerName('a/b c')).toBe(false)
+    expect(isOwnerName('a/b/c')).toBe(false)
+    expect(isOwnerName('-x/y')).toBe(false)
   })
 
   it('empty results: says so and Enter does nothing', async () => {

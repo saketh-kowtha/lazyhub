@@ -37,6 +37,7 @@ name = "lazyhub-dark"    # lazyhub-dark | lazyhub-light | lazyhub-high-contrast 
 pr_scope    = "mine"          # mine | reviewing | all
 ai_provider = "claude-code"   # claude-code | codex | gemini-cli | anthropic-api | openai-compatible
 repo        = ""              # owner/name saved by first-run onboarding; used only when no repo is detected from the current directory
+repo_host   = ""              # host that repo belongs to; the saved repo is ignored under a different GH_HOST
 
 # ── App registry and pane metadata ───────────────────────────────────────
 [app]

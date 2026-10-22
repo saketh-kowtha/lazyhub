@@ -170,4 +170,16 @@ describe('[defaults].repo (#290)', () => {
     writeToml('[defaults]\nrepo = "--not a repo"\n')
     expect(loadConfig({ configPath }).defaults.repo).toBe('')
   })
+
+  it.each(['x/..', 'x/.', 'x/a.', '-x/y', 'a/b/c'])('drops traversal or flag-like saved repo %s', value => {
+    writeToml(`[defaults]\nrepo = "${value}"\n`)
+    expect(loadConfig({ configPath }).defaults.repo).toBe('')
+  })
+
+  it('round-trips repo_host and drops a malformed one', () => {
+    writeConfig({ defaults: { repo: 'acme/platform', repo_host: 'ghe.example.com' } }, { configPath })
+    expect(loadConfig({ configPath }).defaults.repo_host).toBe('ghe.example.com')
+    writeToml('[defaults]\nrepo_host = "bad host/"\n')
+    expect(loadConfig({ configPath }).defaults.repo_host).toBe('')
+  })
 })
