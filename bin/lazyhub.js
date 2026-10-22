@@ -42,6 +42,13 @@ if (process.argv[2] === 'doctor') {
   process.exit(await runDoctor(process.argv.slice(3)))
 }
 
+if (process.argv[2] === 'feedback') {
+  const { runFeedback } = await import('../src/cli/feedback.js')
+  const { loadConfig: loadTomlConfig } = await import('../src/config/loader.js')
+  const hosts = [loadTomlConfig().defaults?.repo_host].filter(Boolean)
+  process.exit(await runFeedback(process.argv.slice(3), { hosts }))
+}
+
 if (process.argv[2] === 'watch-only') {
   const { runWatchOnly } = await import('../src/cli/watch-only.js')
   process.exit(await runWatchOnly(process.argv.slice(3)))

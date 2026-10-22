@@ -21,7 +21,12 @@ function safeNumber(value) {
   return Number.isFinite(value) ? value : null
 }
 
-function cleanString(value) {
+/**
+ * Scrub tokens, auth headers, URLs and repo paths from a string (shared with lazyhub feedback).
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function cleanString(value) {
   return String(value)
     .replace(/\b(authorization|proxy-authorization|cookie)\s*[:=]\s*[^\n]*/gi, '$1: [redacted]')
     .replace(/\b(bearer|token|basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, '$1 [redacted]')

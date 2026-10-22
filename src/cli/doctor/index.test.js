@@ -14,4 +14,13 @@ describe('runDoctor', () => {
     expect(out.text()).toBe('')
     expect(err.text()).toMatch(/not both/)
   })
+
+  it('--help / -h print the real options and exit codes without running any check', async () => {
+    for (const flag of ['--help', '-h']) {
+      const out = sink()
+      expect(await runDoctor([flag], out, sink())).toBe(0)
+      for (const word of ['--config', '--coverage', '--repo', '--json', 'exactly one report', 'Exit codes']) expect(out.text()).toContain(word)
+      expect(out.text()).not.toContain('--ai')
+    }
+  })
 })

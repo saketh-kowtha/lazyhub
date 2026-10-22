@@ -79,6 +79,8 @@ describe('code-split bundle', () => {
     [['--mcp']],
     [['serve', '--status']],
     [['status']],
+    [['feedback', '--print']],
+    [['doctor', '--help']],
   ])('%j never loads ink, react or highlight.js', args => {
     const specs = loadedSpecifiers(args)
     expect(specs.filter(s => TUI_PACKAGES.test(s))).toEqual([])
@@ -139,7 +141,7 @@ describe('self-contained package (#282)', () => {
       expect(r.status).toBe(0)
       expect(r.stdout).toContain('owner/repo#123')
       expect(r.stdout).toContain('doctor')
-      expect(r.stdout).not.toContain('feedback')
+      expect(r.stdout).toContain('feedback')
     })
 
     it('an unknown flag prints usage to stderr and exits 2', () => {
