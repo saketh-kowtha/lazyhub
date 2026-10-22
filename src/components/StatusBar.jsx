@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useTheme } from '../theme.js'
 import { sanitize } from '../utils.js'
+import { firstActionKey } from '../config/actions.js'
 
 const PANE_META = {
   prs:           { icon: '⎇',  label: 'Pull Requests' },
@@ -54,7 +55,7 @@ export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode
   const errorText = degraded
     ? sanitize(ghHealth.failingCount > 1
       ? `${ghHealth.failingCount} calls failing: ${ghHealth.error?.message || ghHealth.error || 'gh failed'}`
-      : `${ghHealth.error?.message || ghHealth.error || 'gh failed'} - press r to retry`)
+      : `${ghHealth.error?.message || ghHealth.error || 'gh failed'} - press ${firstActionKey('list.refresh', 'r')} to retry`)
     : null
 
   return (

@@ -297,7 +297,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
         })}
         {!loading && items.length === 0 && (
           <Box paddingX={2} paddingY={1}>
-            <Text color={t.ui.muted}>No branches found. [r] refresh</Text>
+            <Text color={t.ui.muted}>No branches found. [{firstActionKey('list.refresh', 'r')}] refresh</Text>
           </Box>
         )}
       </Box>

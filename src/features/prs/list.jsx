@@ -198,18 +198,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     if (matchesAction('list.search', input, key, _actions)) { openDialog('fuzzy'); return }
 
     const focusedPR = !loading && items.length > 0 ? items[cursor] : null
-    if (matchesAction('pr.auto-merge', input, key, _actions) && canToggleAutoMergeFromList(focusedPR)) {
-      if (focusedPR.autoMergeRequest) {
-        disableAutoMerge(repo, focusedPR.number)
-          .then(() => { showStatus('✓ Auto-merge disabled'); refetch() })
-          .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
-      } else {
-        enableAutoMerge(repo, focusedPR.number, repoInfo?.squashMergeAllowed ? 'squash' : 'merge')
-          .then(() => { showStatus('⟳ Auto-merge enabled'); refetch() })
-          .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
-      }
-      return
-    }
+    if (matchesAction('pr.auto-merge', input, key, _actions) && canToggleAutoMergeFromList(focusedPR)) { openDialog('auto-merge'); return }
 
     // Filter state toggles (defaults: O/C/M) — press to toggle state in/out of active set
     if (FK.filterOpen && input === FK.filterOpen) {
@@ -387,6 +376,25 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
           } catch (err) {
             showStatus(`✗ Checkout: ${err.message}`, true)
           }
+        }}
+        onCancel={closeDialog}
+      />
+    )
+  }
+
+  if (dialog === 'auto-merge' && selectedPR) {
+    const disabling = !!selectedPR.autoMergeRequest
+    return (
+      <ConfirmDialog
+        message={`${disabling ? 'Disable' : 'Enable'} auto-merge on PR #${selectedPR.number}: ${sanitize(selectedPR.title)}?`}
+        onConfirm={() => {
+          closeDialog()
+          const request = disabling
+            ? disableAutoMerge(repo, selectedPR.number)
+            : enableAutoMerge(repo, selectedPR.number, repoInfo?.squashMergeAllowed ? 'squash' : 'merge')
+          request
+            .then(() => { showStatus(disabling ? '✓ Auto-merge disabled' : '⟳ Auto-merge enabled'); refetch() })
+            .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
         }}
         onCancel={closeDialog}
       />

@@ -74,10 +74,10 @@ try {
   const sampler = setInterval(() => { peak = Math.max(peak, rssMb(term.pid)) }, 50)
 
   // Fixed settle time per step: screen-scraping is unreliable on some Linux runners.
-  const journey = SCALE ? [null, '2', 'j'.repeat(95), 'j'.repeat(95), 'j'.repeat(95), '\r', 'd', 'J'.repeat(40), 'r'] : [null, '2', '\r', 'd', 'r']
+  const journey = SCALE ? [null, 'gp', 'j'.repeat(95), 'j'.repeat(95), 'j'.repeat(95), '\r', 'd', 'J'.repeat(40), 'r'] : [null, 'gp', '\r', 'd', 'r']
   for (const keys of journey) {
-    // Ink reads a multi-char chunk as one input event, so repeats go one key at a time.
-    if (keys && keys.length > 1 && /^(.)\1+$/.test(keys)) { for (const key of keys) { term.write(key); await sleep(6) } } else if (keys) term.write(keys)
+    // Ink reads a multi-char chunk as one input event, so repeats and chords go one key at a time.
+    if (keys && keys.length > 1 && (/^(.)\1+$/.test(keys) || keys === 'gp')) { for (const key of keys) { term.write(key); await sleep(keys === 'gp' ? 50 : 6) } } else if (keys) term.write(keys)
     await sleep(STEP_MS)
   }
   peak = Math.max(peak, rssMb(term.pid))

@@ -86,9 +86,10 @@ try {
   term.onData(data => { raw += data })
 
   const screens = {}
-  const steps = [['focus', null], ['prs', '2'], ['detail', '\r'], ['diff', 'd'], ['back', '\x1b'], ['list', '\x1b'], ['issues', '3']]
+  const steps = [['focus', null], ['prs', 'gp'], ['detail', '\r'], ['diff', 'd'], ['back', '\x1b'], ['list', '\x1b'], ['issues', 'gi']]
   for (const [name, keys] of steps) {
-    if (keys) term.write(keys)
+    // Chords go one key at a time (Ink reads "gp" as a single string).
+    if (keys) for (const ch of keys) { term.write(ch); await sleep(50) }
     await sleep(1500)
     const screen = new Screen()
     screen.feed(raw)

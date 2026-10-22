@@ -12,7 +12,8 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import chalk from 'chalk'
 import { getHljs } from '../../highlight.js'
-import { useKeymapInput } from '../../config/keymap.js'
+import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
+import { firstActionKey } from '../../config/actions.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo, reviewPR } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
@@ -20,6 +21,7 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
+import { contextFooterHints } from '../../ui/actions.js'
 import { AIReviewPane } from '../../components/AIReviewPane.jsx'
 import { getAICodeReview, AIError } from '../../ai/index.js'
 import { loadConfig } from '../../config.js'
@@ -385,48 +387,6 @@ function renderThreads(comments, t) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-const FOOTER_KEYS_UNIFIED = [
-  { key: 'j/k',  label: 'scroll' },
-  { key: 'gg/G', label: 'top/bottom' },
-  { key: ']/[',  label: 'file' },
-  { key: 'f',    label: 'jump to file' },
-  { key: ':',    label: 'go to line' },
-  { key: 'E',    label: 'open in editor' },
-  { key: 'c',    label: 'comment' },
-  { key: 'r/e/d', label: 'reply/edit/delete thread' },
-  { key: 'n/N',  label: 'next/prev thread or match' },
-  { key: 'a',    label: 'approve' },
-  { key: 'x',    label: 'request changes' },
-  { key: 'A',    label: 'AI review' },
-  { key: 'v',    label: 'comments' },
-  { key: 's',    label: 'split view' },
-  { key: 't',    label: 'file tree' },
-  { key: '/',    label: 'find' },
-  { key: 'S',    label: 'settings' },
-  { key: 'Esc',  label: 'back' },
-]
-
-const FOOTER_KEYS_SPLIT = [
-  { key: 'j/k',  label: 'scroll' },
-  { key: 'gg/G', label: 'top/bottom' },
-  { key: ']/[',  label: 'file' },
-  { key: 'f',    label: 'jump to file' },
-  { key: ':',    label: 'go to line' },
-  { key: 'E',    label: 'open in editor' },
-  { key: 'c',    label: 'comment' },
-  { key: 'r/e/d', label: 'reply/edit/delete thread' },
-  { key: 'n/N',  label: 'next/prev thread or match' },
-  { key: 'a',    label: 'approve' },
-  { key: 'x',    label: 'request changes' },
-  { key: 'A',    label: 'AI review' },
-  { key: 'v',    label: 'comments' },
-  { key: 's',    label: 'unified view' },
-  { key: 't',    label: 'file tree' },
-  { key: '/',    label: 'find' },
-  { key: 'S',    label: 'settings' },
-  { key: 'Esc',  label: 'back' },
-]
-
 // ─── Split view renderer ──────────────────────────────────────────────────────
 
 function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, colWidth, t) {
@@ -560,8 +520,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   const COMMENT_TYPES = ['comment', 'suggestion', 'request-changes']
   const [commentStatus, setCommentStatus] = useState(null)
   const [splitView, setSplitView] = useState(_diffCfg.defaultView === 'split')
-  const lastKeyRef  = useRef(null)
-  const lastKeyTimer = useRef(null)
+  const resolveAction = useActionResolver(['global', 'diff'])
+  const footerKeys = useMemo(
+    () => contextFooterHints('prs', 'diff').map(h => (h.label === 'split' && splitView ? { ...h, label: 'unified' } : h)),
+    [splitView],
+  )
+  const resolveConfirm = useActionResolver(['dialog'])
 
   // Feature: file tree view
   const [showTree, setShowTree] = useState(false)
@@ -674,23 +638,26 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
     }
   }
 
+  const openFilesInBrowser = () => {
+    import('execa').then(({ execa }) => {
+      const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
+      // prMeta.url comes from the GitHub API and already reflects the
+      // correct host (github.com or a GHES instance). Fall back to a
+      // GH_HOST-aware constructed URL if prMeta hasn't loaded yet.
+      const baseUrl = prMeta?.url
+        || `https://${process.env.GH_HOST || 'github.com'}/${repo}/pull/${prNumber}`
+      execa(cmd, [`${baseUrl}/files`]).catch(() => {})
+    })
+  }
+
   useKeymapInput((input, key) => {
+    const id = resolveAction(input, key)
+
     // Large diff warning intercept
     if (isLargeDiff && !diffWarningAck) {
       if (key.return) { setDiffWarningAck(true); return }
-      if (input === 'o') {
-        import('execa').then(({ execa }) => {
-          const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
-          // prMeta.url comes from the GitHub API and already reflects the
-          // correct host (github.com or a GHES instance). Fall back to a
-          // GH_HOST-aware constructed URL if prMeta hasn't loaded yet.
-          const baseUrl = prMeta?.url
-            || `https://${process.env.GH_HOST || 'github.com'}/${repo}/pull/${prNumber}`
-          execa(cmd, [`${baseUrl}/files`]).catch(() => {})
-        })
-        return
-      }
-      if (key.escape || input === 'q') { onBack(); return }
+      if (id === 'pr.open-browser') { openFilesInBrowser(); return }
+      if (id === 'app.back') { onBack(); return }
       return
     }
 
@@ -733,15 +700,15 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
 
     // showTree — capture j/k/Enter/Esc/t
     if (showTree) {
-      if (key.escape || input === 't') {
+      if (key.escape || id === 'diff.tree') {
         setShowTree(false)
         return
       }
-      if (input === 'j' || key.downArrow) {
+      if (id === 'cursor.down') {
         setTreeCursor(prev => Math.min(treeRows.length - 1, prev + 1))
         return
       }
-      if (input === 'k' || key.upArrow) {
+      if (id === 'cursor.up') {
         setTreeCursor(prev => Math.max(0, prev - 1))
         return
       }
@@ -764,7 +731,8 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
 
       // delete confirm
       if (compose.mode === 'delete') {
-        if (input === 'y') {
+        const confirm = resolveConfirm(input, key)
+        if (confirm === 'dialog.yes') {
           const deleteId = compose.commentId
           mutateComments(prev => (prev || []).filter(c => c.id !== deleteId))
           setCompose(null)
@@ -775,7 +743,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
               setCommentStatus(`Failed: ${err.message}`)
               setTimeout(() => setCommentStatus(null), 3000)
             })
-        } else if (input === 'n') {
+        } else if (confirm === 'dialog.no') {
           setCompose(null)
         }
         return
@@ -788,7 +756,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         return
       }
 
-      if ((key.ctrl && key.return) || (key.ctrl && (input === 'g' || input === '\x07'))) {
+      if ((key.ctrl && key.return) || resolveConfirm(input, key) === 'dialog.submit') {
         const body = compose.body.trim()
         if (compose.mode === 'new') {
           const row = rows[cursor]
@@ -856,7 +824,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
         return
       }
       // Ctrl+E opens editor — bare 'e' is a normal character handled by TextInput
-      if (key.ctrl && input === 'e' && compose.mode !== 'delete') {
+      if (resolveConfirm(input, key) === 'dialog.editor' && compose.mode !== 'delete') {
         const edited = openEditorSync(compose.body)
         setCompose(c => ({ ...c, body: edited }))
         return
@@ -866,12 +834,12 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
 
     if (dialog) return
 
-    if (input === 'm' && prMeta?.state === 'OPEN') { setDialog('merge'); return }
-    if (input === 'a' && prMeta?.state === 'OPEN') { setDialog('approve-body'); return }
-    if (input === 'x' && prMeta?.state === 'OPEN') { setDialog('reqchanges-body'); return }
+    if (id === 'pr.merge' && prMeta?.state === 'OPEN') { setDialog('merge'); return }
+    if (id === 'pr.approve' && prMeta?.state === 'OPEN') { setDialog('approve-body'); return }
+    if (id === 'pr.request-changes' && prMeta?.state === 'OPEN') { setDialog('reqchanges-body'); return }
 
-    // E — open current file at current line in editor
-    if (input === 'E') {
+    // open current file at current line in editor
+    if (id === 'pr.open-editor') {
       const row = rows[cursor]
       if (row?.filename) {
         const line = row.newLine || row.oldLine || 1
@@ -880,129 +848,91 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
       return
     }
 
-    if (input === 'f') { setFileJumpActive(true); return }
+    if (id === 'pr.open-browser') { openFilesInBrowser(); return }
+    if (id === 'diff.file-jump') { setFileJumpActive(true); return }
+    if (id === 'list.refresh') { refetch(); return }
 
-    // gg → jump to top
-    if (input === 'g') {
-      if (lastKeyRef.current === 'g') {
-        clearTimeout(lastKeyTimer.current)
-        lastKeyRef.current = null
-        jumpTo(0)
-        return
-      }
-      lastKeyRef.current = 'g'
-      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
-      return
-    }
-    lastKeyRef.current = null
-
-    if (input === 'G')  { jumpTo(rows.length - 1); return }
+    if (id === 'cursor.top') { jumpTo(0); return }
+    if (id === 'cursor.bottom') { jumpTo(rows.length - 1); return }
     // Esc: clear find query first, then go back on second Esc
     if (key.escape && findQuery) { setFindQuery(''); return }
-    if (key.escape || input === 'q') { onBack(); return }
-    if (input === 'v')  { onViewComments(); return }
-    if (input === 'j' || key.downArrow) { moveCursor(1);  return }
-    if (input === 'k' || key.upArrow)   { moveCursor(-1); return }
+    if (id === 'app.back') { onBack(); return }
+    if (id === 'pr.comments') { onViewComments(); return }
+    if (id === 'cursor.down') { moveCursor(1);  return }
+    if (id === 'cursor.up')   { moveCursor(-1); return }
 
-    if (input === ']') {
+    if (id === 'diff.next-file') {
       const next = fileStartIndices.find(i => i > cursor)
       if (next != null) jumpTo(next)
       return
     }
-    if (input === '[') {
+    if (id === 'diff.prev-file') {
       const prev = [...fileStartIndices].reverse().find(i => i < cursor)
       if (prev != null) jumpTo(prev)
       return
     }
 
-    // n/N: next/prev thread or match
-    if (input === 'n') {
-      if (findQuery && findMatches.length > 0) {
-        jumpToMatch('next')
-      } else {
-        const next = commentThreadIndices.find(i => i > cursor)
-        if (next != null) jumpTo(next)
-      }
+    // next/prev comment thread
+    if (id === 'diff.next-thread') {
+      const next = commentThreadIndices.find(i => i > cursor)
+      if (next != null) jumpTo(next)
       return
     }
-    if (input === 'N') {
-      if (findQuery && findMatches.length > 0) {
-        jumpToMatch('prev')
-      } else {
-        const prev = [...commentThreadIndices].reverse().find(i => i < cursor)
-        if (prev != null) jumpTo(prev)
-      }
+    if (id === 'diff.prev-thread') {
+      const prev = [...commentThreadIndices].reverse().find(i => i < cursor)
+      if (prev != null) jumpTo(prev)
       return
     }
+    // next/prev search match
+    if (id === 'diff.find-next') { if (findQuery && findMatches.length > 0) jumpToMatch('next'); return }
+    if (id === 'diff.find-prev') { if (findQuery && findMatches.length > 0) jumpToMatch('prev'); return }
 
-    if (input === 's') { setSplitView(v => !v); return }
+    if (id === 'diff.split') { setSplitView(v => !v); return }
 
-    // t: toggle file tree
-    if (input === 't') {
+    // toggle file tree
+    if (id === 'diff.tree') {
       setShowTree(v => !v)
       setTreeCursor(0)
       return
     }
 
-    // /: open find (only when not in compose/tree/findActive)
-    if (input === '/') {
+    // open find (only when not in compose/tree/findActive)
+    if (id === 'list.search') {
       setFindActive(true)
       return
     }
 
-    if (input === ':') { setGotoActive(true); setGotoInput(''); return }
+    if (id === 'diff.goto-line') { setGotoActive(true); setGotoInput(''); return }
 
-    if (input === 'c') {
-      const row = rows[cursor]
-      if (row && row.type !== 'file-header') {
-        setCompose({ mode: 'new', commentType: 'comment', body: '' })
-      }
-      return
-    }
-
-    // e/d — edit/delete on thread at cursor line (no fallback action)
-    if (input === 'e' || input === 'd') {
+    // comment / reply / edit / delete act on the thread at the cursor line
+    if (id === 'diff.comment' || id === 'diff.edit-comment' || id === 'diff.delete-comment') {
       const row = rows[cursor]
       const isCodeRow = row && row.type !== 'file-header' && row.filename
       const lineNum = isCodeRow ? (row.newLine ?? row.oldLine) : null
       const lineKey = lineNum != null ? `${row.filename}:${lineNum}` : null
       const lineComments = lineKey ? commentsByLine.get(lineKey) : null
-      if (lineComments?.length) {
-        const sorted = [...lineComments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-        const lastComment = sorted[sorted.length - 1]
-        if (input === 'e' && lastComment) {
-          setCompose({ mode: 'edit', commentId: lastComment.id, body: lastComment.body || '' })
-        } else if (input === 'd' && lastComment) {
-          setCompose({ mode: 'delete', commentId: lastComment.id, commentBody: lastComment.body || '' })
-        }
-      }
-      return
-    }
-
-    // r — reply on thread at cursor line, or refetch if no thread there
-    if (input === 'r') {
-      const row = rows[cursor]
-      const isCodeRow = row && row.type !== 'file-header' && row.filename
-      const lineNum = isCodeRow ? (row.newLine ?? row.oldLine) : null
-      const lineKey = lineNum != null ? `${row.filename}:${lineNum}` : null
-      const lineComments = lineKey ? commentsByLine.get(lineKey) : null
-      if (lineComments?.length) {
-        const sorted = [...lineComments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-        const roots = sorted.filter(c => !c.inReplyToId)
-        const rootId = roots[0]?.id
+      const sorted = lineComments?.length
+        ? [...lineComments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+        : []
+      const lastComment = sorted[sorted.length - 1]
+      if (id === 'diff.comment') {
+        const rootId = sorted.filter(c => !c.inReplyToId)[0]?.id
         if (rootId) setCompose({ mode: 'reply', rootCommentId: rootId, body: '' })
-      } else {
-        refetch()
+        else if (row && row.type !== 'file-header') setCompose({ mode: 'new', commentType: 'comment', body: '' })
+      } else if (lastComment && id === 'diff.edit-comment') {
+        setCompose({ mode: 'edit', commentId: lastComment.id, body: lastComment.body || '' })
+      } else if (lastComment) {
+        setCompose({ mode: 'delete', commentId: lastComment.id, commentBody: lastComment.body || '' })
       }
       return
     }
 
-    // A — trigger AI code review
-    if (input === 'A') {
+    // trigger AI code review
+    if (id === 'diff.ai-review') {
       if (aiReviewLoading) return
       const config = loadConfig()
       if (config.aiReviewEnabled === false) {
-        setAiReviewError('AI Code Review is disabled in Settings (s)')
+        setAiReviewError('AI Code Review is disabled in Settings (,)')
         setTimeout(() => setAiReviewError(null), 3000)
         return
       }
@@ -1201,7 +1131,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   )
   if (error) return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Text color={t.ci.fail}>⚠ Failed to load diff — r to retry</Text>
+      <Text color={t.ci.fail}>⚠ Failed to load diff — {firstActionKey('list.refresh', 'r')} to retry</Text>
     </Box>
   )
 
@@ -1405,7 +1335,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
           </Box>
         )
       })()}
-      <FooterKeys keys={splitView ? FOOTER_KEYS_SPLIT : FOOTER_KEYS_UNIFIED} />
+      <FooterKeys keys={footerKeys} />
     </Box>
   )
 }

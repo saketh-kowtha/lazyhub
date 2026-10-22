@@ -95,6 +95,9 @@
       <table id="tbl-global">
         <tr><td><kbd>Tab</kbd></td><td>Next pane</td></tr>
         <tr><td><kbd>Shift+Tab</kbd></td><td>Previous pane</td></tr>
+        <tr><td><kbd>g</kbd> <kbd>h</kbd> / <kbd>p</kbd> / <kbd>i</kbd> / <kbd>b</kbd> / <kbd>a</kbd> / <kbd>n</kbd></td><td>Go to Home / PRs / Issues / Branches / Actions / Notifications (a which-key popup lists them after <kbd>g</kbd>)</td></tr>
+        <tr><td><kbd>,</kbd></td><td>Settings</td></tr>
+        <tr><td><kbd>:</kbd></td><td>Command palette (fuzzy match, recent actions first)</td></tr>
         <tr><td><kbd>q</kbd></td><td>Back / quit (confirms if unsaved)</td></tr>
         <tr><td><kbd>?</kbd></td><td>Toggle context-aware help overlay</td></tr>
         <tr><td><kbd>r</kbd></td><td>Refresh current pane (bypass cache)</td></tr>
@@ -116,7 +119,7 @@
       <table id="tbl-prs">
         <tr><td><kbd>Enter</kbd></td><td>Open PR detail view</td></tr>
         <tr><td><kbd>d</kbd></td><td>Open diff view</td></tr>
-        <tr><td><kbd>c</kbd></td><td>Checkout PR branch locally</td></tr>
+        <tr><td><kbd>b</kbd></td><td>Checkout PR branch locally</td></tr>
         <tr><td><kbd>m</kbd></td><td>Merge (pick merge/squash/rebase)</td></tr>
         <tr><td><kbd>a</kbd></td><td>Approve PR</td></tr>
         <tr><td><kbd>x</kbd></td><td>Request changes</td></tr>
@@ -132,11 +135,15 @@
         <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Scroll lines down / up</td></tr>
         <tr><td><kbd>]</kbd></td><td>Jump to next file</td></tr>
         <tr><td><kbd>[</kbd></td><td>Jump to previous file</td></tr>
-        <tr><td><kbd>n</kbd></td><td>Next comment thread</td></tr>
-        <tr><td><kbd>N</kbd></td><td>Previous comment thread</td></tr>
-        <tr><td><kbd>c</kbd></td><td>Comment on cursor line</td></tr>
+        <tr><td><kbd>}</kbd></td><td>Next comment thread</td></tr>
+        <tr><td><kbd>{</kbd></td><td>Previous comment thread</td></tr>
+        <tr><td><kbd>n</kbd> / <kbd>N</kbd></td><td>Next / previous search match</td></tr>
+        <tr><td><kbd>t</kbd> / <kbd>T</kbd></td><td>Jump to file / toggle file tree</td></tr>
+        <tr><td><kbd>g</kbd> <kbd>l</kbd></td><td>Go to line</td></tr>
+        <tr><td><kbd>c</kbd></td><td>Comment on cursor line (replies when the line has a thread)</td></tr>
+        <tr><td><kbd>e</kbd> / <kbd>Ctrl+X</kbd></td><td>Edit / delete your comment on the cursor line</td></tr>
         <tr><td><kbd>v</kbd></td><td>Switch to comments view</td></tr>
-        <tr><td><kbd>s</kbd></td><td>Toggle split / unified view</td></tr>
+        <tr><td><kbd>w</kbd></td><td>Toggle split / unified view</td></tr>
         <tr><td><kbd>gg</kbd></td><td>Jump to top</td></tr>
         <tr><td><kbd>G</kbd></td><td>Jump to bottom</td></tr>
         <tr><td><kbd>Esc</kbd></td><td>Back to PR detail</td></tr>
@@ -161,7 +168,7 @@
       <table id="tbl-issues">
         <tr><td><kbd>Enter</kbd></td><td>Open issue detail</td></tr>
         <tr><td><kbd>n</kbd></td><td>New issue (compose form)</td></tr>
-        <tr><td><kbd>x</kbd></td><td>Close issue (confirm dialog)</td></tr>
+        <tr><td><kbd>X</kbd></td><td>Close issue (confirm dialog)</td></tr>
         <tr><td><kbd>l</kbd></td><td>Edit labels (multi-select)</td></tr>
         <tr><td><kbd>A</kbd></td><td>Edit assignees (multi-select)</td></tr>
         <tr><td><kbd>f</kbd></td><td>Cycle filter: open → closed</td></tr>
@@ -174,9 +181,9 @@
     <div class="card">
       <div class="card-header"><span class="icon">⎇</span> Branch List</div>
       <table id="tbl-branches">
-        <tr><td><kbd>Space</kbd> / <kbd>Enter</kbd></td><td>Checkout branch</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>Checkout branch</td></tr>
         <tr><td><kbd>n</kbd></td><td>New branch (prompt for name + base)</td></tr>
-        <tr><td><kbd>D</kbd></td><td>Delete branch (confirm, warns if open PR)</td></tr>
+        <tr><td><kbd>Ctrl+X</kbd></td><td>Delete branch (confirm, warns if open PR)</td></tr>
         <tr><td><kbd>p</kbd></td><td>Push current branch to remote</td></tr>
       </table>
     </div>
@@ -188,7 +195,7 @@
       <div class="card-header"><span class="icon">▶</span> Actions List</div>
       <table id="tbl-actions">
         <tr><td><kbd>Enter</kbd> / <kbd>l</kbd></td><td>View run logs (log viewer)</td></tr>
-        <tr><td><kbd>R</kbd></td><td>Re-run failed jobs</td></tr>
+        <tr><td><kbd>Ctrl+R</kbd></td><td>Re-run failed jobs</td></tr>
         <tr><td><kbd>X</kbd></td><td>Cancel run (confirm dialog)</td></tr>
       </table>
     </div>
@@ -199,7 +206,7 @@
         <tr><td><kbd>gg</kbd></td><td>Jump to top</td></tr>
         <tr><td><kbd>G</kbd></td><td>Jump to bottom</td></tr>
         <tr><td><kbd>f</kbd></td><td>Filter by step name</td></tr>
-        <tr><td><kbd>R</kbd></td><td>Re-run this workflow</td></tr>
+        <tr><td><kbd>Ctrl+R</kbd></td><td>Re-run this workflow</td></tr>
         <tr><td><kbd>Esc</kbd></td><td>Back</td></tr>
       </table>
     </div>
@@ -211,8 +218,8 @@
       <div class="card-header"><span class="icon">●</span> Notification List</div>
       <table id="tbl-notifications">
         <tr><td><kbd>Enter</kbd></td><td>Open item (routes to correct pane)</td></tr>
-        <tr><td><kbd>m</kbd></td><td>Mark current as read</td></tr>
-        <tr><td><kbd>M</kbd></td><td>Mark all as read (confirm)</td></tr>
+        <tr><td><kbd>u</kbd></td><td>Mark current as read</td></tr>
+        <tr><td><kbd>U</kbd></td><td>Mark all as read (confirm)</td></tr>
       </table>
     </div>
   </div>

@@ -20,11 +20,11 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
-│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ↯  Actions  ·  owner/repo                                                               ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ Tab pane  ┊  Enter logs │ R re-run  ┊  r refresh │ S settings                   │ ? help"
+ j/k nav │ Tab pane  ┊  Enter / l logs │ Ctrl+R re-run │ X cancel                          │? help
+   ┊  r refresh │ , settings"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 branches 1`] = `
@@ -47,11 +47,11 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
-│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ⌥  Branches  ·  owner/repo                                                              ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ Tab pane  ┊  Enter checkout │ n new │ D delete  ┊  r refresh │ S settings       │ ? help"
+ j/k nav │ Tab pane  ┊  Enter checkout │ n new │ Ctrl+X delete │ p push                     │? help
+   ┊  r refresh │ , settings"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 command palette 1`] = `
@@ -60,15 +60,15 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
             ╔══════════════════════════════════════════════════════════════════════════╗
             ║ ▶  ▍ pr-list                                                             ║
             ║ ──────────────────────────────────────────────                           ║
-            ║ ▶ Approve PR                Submit an approving review for the focused … ║
-            ║   Checkout PR Branch             Checkout the pull request branch local… ║
-            ║   Close PR                     Close the focused pull request without m… ║
-            ║   Copy PR URL                     Copy the pull request URL to clipboard ║
-            ║   Cycle PR Scope                   Cycle filter: all → own → reviewing   ║
-            ║   Cycle Theme                      Switch to next available theme        ║
-            ║   Go to Actions                    Switch to the Actions pane            ║
-            ║   Go to Branches                   Switch to the Branches pane           ║
-            ║   Go to Issue #…                   Jump to a specific issue by number    ║
+            ║ ▶ Approve PR             a      Submit an approving review for the focu… ║
+            ║   Checkout PR Branch          b       Checkout the pull request branch … ║
+            ║   Close PR                  X      Close the focused pull request witho… ║
+            ║   Copy PR URL                 y        Copy the pull request URL to cli… ║
+            ║   Cycle PR Scope                s       Cycle filter: all → own → revie… ║
+            ║   Cycle Theme                              Switch to next available the… ║
+            ║   Go to Actions                    g a       Switch to the Actions pane  ║
+            ║   Go to Branches                   g b       Switch to the Branches pane ║
+            ║   Go to Issue #…                         Jump to a specific issue by nu… ║
             ║ [↑↓/Ctrl+np] nav  [Tab] fill  [Enter] run  [Esc] cancel                  ║
             ╚══════════════════════════════════════════════════════════════════════════╝
 
@@ -112,27 +112,27 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 "      ╭──────────────────────────────────────────────────────────────────────────────────────╮
       │                                                                                      │
       │  ⌨  Keyboard Reference — ⎇  Pull Requests list                  [Esc/Enter/?] close  │
-      │                                                                                      │
       │  ⎇  Pull Requests list───────────────────    Global (any view)                       │
       │                                              ──────────────────────────────────────  │
-      │  j/k                 nav                                                             │
-      │  EnterG              openbottom              Ctrl+A              AI assistant        │
-      │  d                   diff                    Tab                 pane                │
-      │  m                   merger                  r                   refresh             │
-      │  M                   auto-merge              o                   browser             │
-      │  a                   approve                 /                   search              │
-      │  l                   labelst changes         ?                   help                │
-      │  A                   assignees               S                   settings            │
-      │  c                   checkouts               Ctrl+D              debug state         │
-      │  y                   copy URL                q / Esc             back                │
-      │  o                   browser                                                         │
+      │  ggk                 Jump to the top down                                            │
+      │  r                 Refresh the active m      Ctrl+A              AI assistant        │
+      │  /                 lSearch the active        Tab                 pane                │
+      │  mnter              lMerge selected PR       o                   browser             │
+      │  a              TogglApprove selected PR     /                   search              │
+      │  x              sRequest changes on          ?                   help                │
+      │  A               seleEdit PR assignees       g h                 homeings            │
+      │  b                Checkout PR branch wers    g p                 PRs                 │
+      │  o                lCoOpen PR in browser      g i                 issues              │
+      │  f                 cCycle PR filter state    g b                 branches            │
+      │  M             Toggle merged PRs when        g n                 inboxns             │
+      │  @             auto-mFilter PRs by author    Ctrl+D              debug state         │
+      │  n                   Create a new PR         q / Esc             back                │
       │                                                                                      │
       │  ──────────────────────────────────────────────────────────────────────────────────  │
       │                                                                                      │
       │  Config: ~/.config/lazyhub/lazyhub.toml   Docs: https://saketh-kowtha.github.io/lgh  │
       ╰──────────────────────────────────────────────────────────────────────────────────────╯
-────────────────────────────────────────────────────────────────────────────────────────────────────
- ? / Esc / Enter close help"
+─? / Esc / Enter close help─────────────────────────────────────────────────────────────────────────"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 issue detail 1`] = `
@@ -159,7 +159,7 @@ assignee @octocat
 
  ⚑  Issues  ·  owner/repo                                                                ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k scroll │ l labels │ A assignees │ Esc back                                       │ ? more keys"
+ j/k nav │ c reply │ l labels │ A assignees │ o browser │ q / Esc back                     │ ? help"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 issue list 1`] = `
@@ -186,7 +186,7 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ⚑  Issues  ·  owner/repo                                                                ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ Tab pane  ┊  Enter open │ n new  ┊  r refresh │ S settings                      │ ? help"
+ j/k nav │ Tab pane  ┊  Enter open │ n new │ f filter  ┊  / search │ r refresh │ , settings│ ? help"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 notifications 1`] = `
@@ -213,7 +213,7 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ✦  Notifications  ·  owner/repo                                                         ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ Tab pane  ┊  r refresh │ S settings                                             │ ? help"
+ j/k nav │ Tab pane  ┊  Enter open │ u mark read │ U mark all  ┊  r refresh │ , settings   │ ? help"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 pr detail 1`] = `
@@ -240,7 +240,7 @@ labels testing ux
 
  ⎇  Pull Requests  ·  owner/repo                                                         ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k scroll │ d diff │ m merge │ a approve │ Esc back                                 │ ? more keys"
+ j/k nav │ d diff │ c checks │ a approve │ m merge │ v comments │ o browser │ q / Esc back │ ? help"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 pr list 1`] = `
@@ -266,8 +266,8 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ⎇  Pull Requests  ·  owner/repo                                                         ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ Tab pane  ┊  Enter open │ d diff │ f filter │ m merge │ M auto-merge             │? help
-   ┊  r refresh │ S settings"
+ j/k nav │ Tab pane  ┊  Enter open │ d diff │ a approve │ m merge │ f filter                │? help
+   ┊  / search │ r refresh │ , settings"
 `;
 
 exports[`major screen golden snapshots > covers wide PR list and diff frames > 120x30 diff view 1`] = `
@@ -332,6 +332,6 @@ exports[`major screen golden snapshots > covers wide PR list and diff frames > 1
 │ ? help · S cfg… ╰────────────────────────────────────────────────────────────────────────────────╯
  ⎇  Pull Requests  ·  owner/repo                                                         ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ Tab pane  ┊  Enter open │ d diff │ f filter │ m merge │ M auto-merge             │? help
-   ┊  r refresh │ S settings"
+ j/k nav │ Tab pane  ┊  Enter open │ d diff │ a approve │ m merge │ f filter                │? help
+   ┊  / search │ r refresh │ , settings"
 `;

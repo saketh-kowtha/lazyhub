@@ -19,6 +19,9 @@ import { render, useInput, useApp } from 'ink'
 import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
 import { terminalStdout } from './theme/terminal.js'
 import { KeyScopeProvider, useActiveScope, useKeyScope } from './keyscope.js'
+import { armPrefix, disarmPrefix, getArmedPrefix } from './config/keymap.js'
+import { prefixContinuations, registeredPrefixes } from './ui/actions.js'
+import { WhichKey } from './ui/WhichKey.jsx'
 import { loadConfig, CONFIG_PATH } from './config.js'
 import { ConfigProvider } from './config/index.js'
 import { migrateStateJsonToToml } from './config/migrate.js'
@@ -37,6 +40,15 @@ import { useGhHealth } from './hooks/useGhHealth.js'
 
 import { APP_CONFIG as _config, PANES } from './app-keys.js'
 import { renderAppView } from './app-views.jsx'
+
+const PANE_FOR_GO_ACTION = {
+  'go.home': 'home',
+  'go.prs': 'prs',
+  'go.issues': 'issues',
+  'go.branches': 'branches',
+  'go.actions': 'actions',
+  'go.notifications': 'notifications',
+}
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
@@ -102,6 +114,9 @@ export function App({ repo }) {
   const [showPalette, setShowPalette]   = useState(false)
   const [leaderActive, setLeaderActive] = useState(false)
   const leaderTimerRef = useRef(null)
+  // Which-key popup for an armed prefix key such as `g` (#312)
+  const [prefixPopup, setPrefixPopup] = useState(null)
+  const prefixTimerRef = useRef(null)
 
   const addToast = useCallback(({ message, variant = 'info', durationMs }) => {
     const id = Date.now() + Math.random()
@@ -174,6 +189,15 @@ export function App({ repo }) {
     }
   }, [PANES]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // go.* actions (g p, g i, ...) jump to a pane; digits are reserved for PR-detail sections (#201).
+  const goToPane = useCallback((target) => {
+    const resolved = target === 'home' ? (PANES.includes('focus') ? 'focus' : PANES[0]) : target
+    if (!PANES.includes(resolved) || resolved === pane) return
+    setPane(resolved)
+    setSelectedItem(null); setView('list')
+    setActionsBranch(null)
+  }, [pane]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── Global key handler ───────────────────────────────────────────────────
   useInput((input, key) => {
     if (isPerfEnabled()) pendingInputPerf.current.push(startTimer())
@@ -195,7 +219,8 @@ export function App({ repo }) {
     // At pane level, Tab/number/? are still valid (list pane doesn't block them).
     // At view/overlay/dialog/input, we must defer — EXCEPT for q/Esc when no
     // component at the active scope handles it (see below).
-    const highScope = activeScope !== 'global' && activeScope !== 'pane' && activeScope !== 'list'
+    const inView = activeScope === 'view' || activeScope === 'detail'
+    const highScope = activeScope !== 'global' && activeScope !== 'pane' && activeScope !== 'list' && !inView
     if (highScope || dialogActiveRef.current) {
       // q/Esc from the list view (pane scope active) should always quit/back.
       // This is the lazygit convention.  We allow it through even at 'view' scope
@@ -207,6 +232,37 @@ export function App({ repo }) {
       // highScope is false for 'pane', so this block isn't even entered.
       // The only problematic case would be if some intermediate component
       // incorrectly pushes 'view' scope while settings/logs are shown.
+      return
+    }
+
+    // Prefix keys (g): the next key picks a continuation from the registry.
+    const armed = getArmedPrefix()
+    if (armed) {
+      clearTimeout(prefixTimerRef.current)
+      disarmPrefix()
+      setPrefixPopup(null)
+      if (key.escape) return
+      const hit = prefixContinuations(armed.prefix, pane, view).find(c => c.global && c.key === input)
+      if (hit) goToPane(PANE_FOR_GO_ACTION[hit.actionId])
+      return
+    }
+    if (input && !key.ctrl && !key.meta && !showHelp && registeredPrefixes(_config.toml).has(input)) {
+      const items = prefixContinuations(input, pane, view)
+      armPrefix(input, items.filter(c => c.global).map(c => c.key))
+      setPrefixPopup({ prefix: input, items })
+      clearTimeout(prefixTimerRef.current)
+      prefixTimerRef.current = setTimeout(() => { disarmPrefix(); setPrefixPopup(null) }, 1500)
+      return
+    }
+
+    // Inside a full-screen view only help and the palette are global; every
+    // other key belongs to the view.
+    if (inView) {
+      if (matchesAction('app.help', input, key, _config.toml)) { setShowHelp(v => !v); return }
+      if (matchesAction('command-palette.open', input, key, _config.toml)) {
+        setShowPalette(true)
+        setAppMode('COMMAND')
+      }
       return
     }
 
@@ -236,18 +292,6 @@ export function App({ repo }) {
       ])
       setSelectedItem(null); setView('list')
       setActionsBranch(null)
-      return
-    }
-
-    // 1–9: jump directly to pane by position
-    const numKey = parseInt(input, 10)
-    if (!isNaN(numKey) && numKey >= 1 && numKey <= PANES.length) {
-      const target = PANES[numKey - 1]
-      if (target && target !== pane) {
-        setPane(target)
-        setSelectedItem(null); setView('list')
-        setActionsBranch(null)
-      }
       return
     }
 
@@ -334,7 +378,7 @@ export function App({ repo }) {
     if (view !== 'list' && appMode === 'VISUAL') setAppMode('NORMAL')
   }, [view, appMode])
 
-  return renderAppView({
+  const tree = renderAppView({
     actionsBranch, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
     exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail,
     goToDiff, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
@@ -343,6 +387,18 @@ export function App({ repo }) {
     showPalette, showSidebar, sidebarWidth, t, toasts, view,
   })
 
+  return (
+    <>
+      {tree}
+      {prefixPopup && (
+        <WhichKey
+          prefix={prefixPopup.prefix}
+          items={prefixPopup.items}
+          onClose={() => { clearTimeout(prefixTimerRef.current); disarmPrefix(); setPrefixPopup(null) }}
+        />
+      )}
+    </>
+  )
 }
 
 export function renderApp() {

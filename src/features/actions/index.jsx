@@ -16,6 +16,7 @@ import { useTheme } from '../../theme.js'
 import { Spinner } from '../../components/Spinner.jsx'
 import { ActionListSkeleton } from '../../components/Skeleton.jsx'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
+import { sanitize } from '../../utils.js'
 
 function StatusBadge({ run }) {
   const { t } = useTheme()
@@ -156,12 +157,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
     }
 
     if (matchesAction('workflow.rerun', input, key)) {
-      const run = items[cursor]
-      if (run) {
-        rerunRun(repo, run.databaseId)
-          .then(() => { showStatus('Re-run triggered'); refetch() })
-          .catch(err => showStatus(`Failed: ${err.message}`, true))
-      }
+      if (items[cursor]) setDialog('rerun')
       return
     }
 
@@ -186,6 +182,24 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
         lines={logLines}
         onClose={() => setDialog(null)}
       />
+    )
+  }
+
+  if (dialog === 'rerun' && items[cursor]) {
+    const run = items[cursor]
+    return (
+      <Box flexDirection="column" flexGrow={1}>
+        <ConfirmDialog
+          message={`Re-run failed jobs: ${sanitize(run.workflowName)} on ${sanitize(run.headBranch)}?`}
+          onConfirm={() => {
+            setDialog(null)
+            rerunRun(repo, run.databaseId)
+              .then(() => { showStatus('Re-run triggered'); refetch() })
+              .catch(err => showStatus(`Failed: ${err.message}`, true))
+          }}
+          onCancel={() => setDialog(null)}
+        />
+      </Box>
     )
   }
 
@@ -216,7 +230,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
     <Box flexDirection="column" flexGrow={1}>
       <Box paddingX={1} gap={1}>
         {branchFilter
-          ? <><Text color={t.ui.dim}>branch:</Text><Text color={t.ci.pending} bold>{branchFilter}</Text><Text color={t.ui.dim}>  [x] clear filter</Text></>
+          ? <><Text color={t.ui.dim}>branch:</Text><Text color={t.ci.pending} bold>{branchFilter}</Text><Text color={t.ui.dim}>{`  [${firstActionKey('workflow.clear-filter', 'F')}] clear filter`}</Text></>
           : <Text color={t.ui.dim}>all branches</Text>
         }
         {statusMsg && (
@@ -244,7 +258,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
         })}
         {!loading && items.length === 0 && (
           <Box paddingX={2} paddingY={1}>
-            <Text color={t.ui.muted}>No workflow runs found{branchFilter ? ` for branch "${branchFilter}"` : ''}. [r] refresh{branchFilter ? '  [x] clear filter' : ''}</Text>
+            <Text color={t.ui.muted}>No workflow runs found{branchFilter ? ` for branch "${branchFilter}"` : ''}. [{firstActionKey('list.refresh', 'r')}] refresh{branchFilter ? `  [${firstActionKey('workflow.clear-filter', 'F')}] clear filter` : ''}</Text>
           </Box>
         )}
       </Box>
