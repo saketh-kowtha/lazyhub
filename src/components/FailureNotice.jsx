@@ -9,6 +9,7 @@ import React from 'react'
 import { Box, Text } from 'ink'
 import { useTheme } from '../theme.js'
 import { failureGlyph } from '../executor.js'
+import { firstActionKey } from '../config/actions.js'
 
 /**
  * @param {object} props
@@ -28,7 +29,7 @@ export function FailureNotice({ failure, failedRepos = [] }) {
       {failure.fix && (
         <Text color={t.ui.muted}>{'  Fix:  '}<Text color={t.ui.selected} bold>{failure.fix}</Text></Text>
       )}
-      {failure.fixHint && <Text color={t.ui.muted}>{`  ${failure.fixHint}`}</Text>}
+      {failure.fixHint && <Text color={t.ui.muted}>{`  ${failure.fixHint.replace('{refresh-key}', firstActionKey('list.refresh', 'r'))}`}</Text>}
     </Box>
   )
 }

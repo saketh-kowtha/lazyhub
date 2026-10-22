@@ -232,7 +232,7 @@ export function classifyGhFailure(err, ctx = {}) {
     const h = named || host
     return failure('not_signed_in', 'blocked', 'You are not signed in to GitHub.', {
       fix: h === 'github.com' ? 'gh auth login' : `gh auth login --hostname ${h}`,
-      fixHint: 'In another terminal run the command, then come back and press r; no restart needed.',
+      fixHint: 'In another terminal run the command, then come back and press {refresh-key}; no restart needed.',
       notes: ['lazyhub uses your existing gh login and never asks for a token itself.'],
       subject: { host: h },
     })

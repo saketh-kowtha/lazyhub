@@ -6,6 +6,7 @@ import React, { useState, useContext, useMemo, useCallback } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
+import { firstActionKey } from '../../config/actions.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getIssue, addIssueComment, listLabels, listCollaborators, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
@@ -127,7 +128,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
   })
 
   if (loading) return <IssueDetailSkeleton />
-  if (error) return <Box paddingX={1}><Text color={t.ci.fail}>⚠ Failed — r to retry</Text></Box>
+  if (error) return <Box paddingX={1}><Text color={t.ci.fail}>⚠ Failed — {firstActionKey('list.refresh', 'r')} to retry</Text></Box>
   if (!issue) return null
 
   // ── Dialogs ────────────────────────────────────────────────────────────────
@@ -197,7 +198,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
       {statusMsg && <Text color={t.ci.pass}>{statusMsg}</Text>}
       
       <Box paddingX={1} gap={2} borderStyle="single" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} borderColor={t.ui.border}>
-        <Text color={t.ui.dim}>[r] reply  [l] labels  [A] assignees  [Esc] back</Text>
+        <Text color={t.ui.dim}>{`[${firstActionKey('issue.reply', 'c')}] reply  [${firstActionKey('issue.labels', 'l')}] labels  [${firstActionKey('issue.assignees', 'A')}] assignees  [Esc] back`}</Text>
       </Box>
     </Box>
   )

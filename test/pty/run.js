@@ -321,7 +321,7 @@ async function runDayOneErrorFlow({ name, env, expected }) {
     term = spawnTerminal({ ...childEnv(stubBin, temp), ...env })
     term.onData(data => { output += data })
     await waitForScreen(() => output, /Focus|Pull Requests/, `${name} startup`)
-    term.write('2')
+    await writeChord(term, 'gp')
     await waitForScreen(() => output, expected, `${name} message`)
     term.write('q')
     await waitForExit(term)

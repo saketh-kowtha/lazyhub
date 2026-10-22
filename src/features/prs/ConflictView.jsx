@@ -72,6 +72,8 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
   const [dialog,      setDialog]      = useState(null)
   const [busy,        setBusy]        = useState(false)
   const [setupStep,   setSetupStep]   = useState('')  // progress label during setup
+  // The commit-message editor shows once every file is staged; typed text must not arm the `g` prefix.
+  useKeyScope('input', files.length > 0 && files.every(f => f.staged))
 
   const showStatus = useCallback((msg, isError = false) => {
     setStatusMsg({ msg, isError })

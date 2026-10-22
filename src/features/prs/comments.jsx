@@ -10,6 +10,7 @@ import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
+import { firstActionKey } from '../../config/actions.js'
 import { contextFooterHints } from '../../ui/actions.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
@@ -220,7 +221,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   })
 
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading comments…</Text></Box>
-  if (error)   return <Box paddingX={1}><Text color={t.ci.fail}>⚠ Failed to load — r to retry</Text></Box>
+  if (error)   return <Box paddingX={1}><Text color={t.ci.fail}>⚠ Failed to load — {firstActionKey('list.refresh', 'r')} to retry</Text></Box>
 
   const visibleItems = flatComments.slice(scrollOffset, scrollOffset + visibleHeight)
 
@@ -300,7 +301,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
                 ))}
                 {isSelected && (
                   <Box gap={2} paddingLeft={2}>
-                    <Text color={t.ui.dim}>[r] reply  [e] edit  [d] delete  [R] resolve  [J] jump to diff</Text>
+                    <Text color={t.ui.dim}>{`[${firstActionKey('comment.reply', 'c')}] reply  [${firstActionKey('comment.edit', 'e')}] edit  [${firstActionKey('comment.delete', 'Ctrl+X')}] delete  [${firstActionKey('comment.resolve', 'z')}] resolve  [${firstActionKey('comment.jump', 'J')}] jump to diff`}</Text>
                   </Box>
                 )}
               </Box>

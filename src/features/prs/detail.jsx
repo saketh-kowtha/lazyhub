@@ -34,6 +34,7 @@ import { classifyGhFailure } from '../../executor.js'
 import { PRDetailSkeleton } from '../../components/Skeleton.jsx'
 import { openInEditor, editorLabel } from '../../editor.js'
 import { loadConfig } from '../../config.js'
+import { firstActionKey } from '../../config/actions.js'
 
 const _editorCfg = loadConfig().editor
 
@@ -256,6 +257,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   const [scrollY, setScrollY] = useState(0)
   const [dialog, setDialog]   = useState(null)
   const [adminMergeMsg, setAdminMergeMsg] = useState('')
+  const [rerunCheck, setRerunCheck] = useState(null) // check awaiting re-run confirmation
   const [searching, setSearching] = useState(false)
   const [searchText, setSearchText] = useState('')
   // Typed characters (search text, base branch) must never trigger actions.
@@ -402,12 +404,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
       }
       if (id === 'check.open-browser' && check) { openCheckInBrowser(check); return }
       if (id === 'check.log' && check) { openCheckLogs(check); return }
-      if (id === 'check.rerun' && check?.id) {
-        rerunCheckRun(repo, check.id)
-          .then(() => showStatus(`↺ Re-run triggered for ${check.name}`))
-          .catch(err => showStatus(`✗ Re-run failed: ${err.message}`, true))
-        return
-      }
+      if (id === 'check.rerun' && check?.id) { setRerunCheck(check); setDialog('rerun-check'); return }
       return
     }
 
@@ -469,18 +466,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
     if (id === 'pr.close' && open) { setDialog('close'); return }
     if (id === 'pr.draft' && open) { setDialog('draft'); return }
     if (id === 'pr.base' && open) { setDialog('base'); return }
-    if (id === 'pr.auto-merge' && open && !pr.isDraft) {
-      if (pr.autoMergeRequest) {
-        disableAutoMerge(repo, prNumber)
-          .then(() => { showStatus('✓ Auto-merge disabled'); refetch() })
-          .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
-      } else {
-        enableAutoMerge(repo, prNumber, repoInfo?.squashMergeAllowed ? 'squash' : 'merge')
-          .then(() => { showStatus('⟳ Auto-merge enabled'); refetch() })
-          .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
-      }
-      return
-    }
+    if (id === 'pr.auto-merge' && open && !pr.isDraft) { setDialog('auto-merge'); return }
     // If a search filter is active, Esc clears it first (second Esc exits)
     if (id === 'app.back' && searchText) { setSearchText(''); setScrollY(0); return }
     if (id === 'app.back') { onBack(); return }
@@ -501,7 +487,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
     return (
       <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
         <FailureNotice failure={classifyGhFailure(error)} />
-        <Text color={t.ui.dim}>[r] retry</Text>
+        <Text color={t.ui.dim}>[{firstActionKey('list.refresh', 'r')}] retry</Text>
       </Box>
     )
   }
@@ -527,6 +513,41 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
           mergePR(repo, pr.number, strategy, msg, { allowAdmin: strategy.startsWith('admin-') })
             .then(() => refetch())
             .catch(err => showStatus(`✗ Merge failed: ${err.message}`, true))
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
+  if (dialog === 'rerun-check' && rerunCheck) {
+    return (
+      <ConfirmDialog
+        message={`Re-run check ${sanitize(rerunCheck.name || String(rerunCheck.id))}?`}
+        onConfirm={() => {
+          const check = rerunCheck
+          setDialog(null)
+          rerunCheckRun(repo, check.id)
+            .then(() => showStatus(`↺ Re-run triggered for ${check.name}`))
+            .catch(err => showStatus(`✗ Re-run failed: ${err.message}`, true))
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
+  if (dialog === 'auto-merge' && pr) {
+    const disabling = !!pr.autoMergeRequest
+    return (
+      <ConfirmDialog
+        message={`${disabling ? 'Disable' : 'Enable'} auto-merge on PR #${pr.number}: ${sanitize(pr.title)}?`}
+        onConfirm={() => {
+          setDialog(null)
+          const request = disabling
+            ? disableAutoMerge(repo, prNumber)
+            : enableAutoMerge(repo, prNumber, repoInfo?.squashMergeAllowed ? 'squash' : 'merge')
+          request
+            .then(() => { showStatus(disabling ? '✓ Auto-merge disabled' : '⟳ Auto-merge enabled'); refetch() })
+            .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
         }}
         onCancel={() => setDialog(null)}
       />

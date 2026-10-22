@@ -38,6 +38,7 @@ import {
   reviewPR,
 } from '../executor.js'
 import { getActionConfig } from '../config/actions.js'
+import { sanitize } from '../utils.js'
 import { actionScopeMatches, buildEffectiveActionKeys } from '../config/keymap.js'
 
 // ─── Effective bindings (single source: TOML action table) ───────────────────
@@ -498,6 +499,8 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
 
   actions.push({
     id:       'pr.merge',
+    write:    true,
+    confirmText: (ctx) => `Merge PR #${ctx.selectedItem?.number} using the default strategy?`,
     label:    'Merge PR',
     hint:     'Merge the focused pull request (default strategy)',
     category: 'pr',
@@ -513,6 +516,8 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
 
   actions.push({
     id:       'pr.merge.squash',
+    write:    true,
+    confirmText: (ctx) => `Squash-merge PR #${ctx.selectedItem?.number}?`,
     label:    'Merge PR (squash)',
     hint:     'Squash-merge the focused pull request',
     category: 'pr',
@@ -528,6 +533,8 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
 
   actions.push({
     id:       'pr.merge.rebase',
+    write:    true,
+    confirmText: (ctx) => `Rebase-merge PR #${ctx.selectedItem?.number}?`,
     label:    'Merge PR (rebase)',
     hint:     'Rebase-merge the focused pull request',
     category: 'pr',
@@ -543,6 +550,8 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
 
   actions.push({
     id:       'pr.approve',
+    write:    true,
+    confirmText: (ctx) => `Approve PR #${ctx.selectedItem?.number}?`,
     label:    'Approve PR',
     hint:     'Submit an approving review for the focused pull request',
     category: 'pr',
@@ -558,6 +567,8 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
 
   actions.push({
     id:       'pr.request-changes',
+    write:    true,
+    confirmText: (ctx) => `Request changes on PR #${ctx.selectedItem?.number}?`,
     label:    'Request Changes on PR',
     hint:     'Submit a request-changes review for the focused pull request',
     category: 'pr',
@@ -573,6 +584,8 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
 
   actions.push({
     id:       'pr.checkout',
+    write:    true,
+    confirmText: (ctx) => `Check out the branch of PR #${ctx.selectedItem?.number} in the current directory?`,
     label:    'Checkout PR Branch',
     hint:     'Checkout the pull request branch locally',
     category: 'pr',
@@ -613,6 +626,9 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
 
   actions.push({
     id:       'pr.close',
+    write:    true,
+    confirmText: (ctx) => `Close PR #${ctx.selectedItem?.number} without merging?`,
+    destructive: true,
     label:    'Close PR',
     hint:     'Close the focused pull request without merging',
     category: 'pr',
@@ -677,7 +693,35 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
     },
   })
 
-  return actions.map(withRegistryKeys)
+  return actions.map(withRegistryKeys).map(guardWrite)
+}
+
+/**
+ * Confirmation is a property of the action: every write-classified action
+ * (`write: true`) needs the user's yes before it runs, whatever invoked it.
+ * The palette asks via confirmationFor(); guardWrite() makes run() fail closed
+ * for any caller that skipped the question.
+ * @param {object} action palette action
+ * @param {object} ctx run context ({ selectedItem, ... })
+ * @returns {{ message: string, destructive: boolean }|null} null when no confirmation is needed
+ */
+export function confirmationFor(action, ctx = {}) {
+  if (!action?.write) return null
+  const title = ctx.selectedItem?.title ? ` (${sanitize(String(ctx.selectedItem.title))})` : ''
+  const message = typeof action.confirmText === 'function' ? action.confirmText(ctx) : `${action.label}?`
+  return { message: `${message}${title}`, destructive: !!action.destructive }
+}
+
+function guardWrite(action) {
+  if (!action.write) return action
+  const run = action.run
+  return {
+    ...action,
+    run: (ctx = {}) => {
+      if (ctx._confirmed !== true) throw new Error(`${action.label} needs confirmation`)
+      return run(ctx)
+    },
+  }
 }
 
 // Palette ids that stand for a registry action under a different id.

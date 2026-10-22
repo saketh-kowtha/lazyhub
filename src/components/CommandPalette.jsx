@@ -17,7 +17,8 @@ import React, { useState, useMemo, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useTheme }   from '../theme.js'
 import { useKeyScope } from '../keyscope.js'
-import { buildActions, filterActions, recordActionUse, resolveContext } from '../ui/actions.js'
+import { buildActions, confirmationFor, filterActions, recordActionUse, resolveContext } from '../ui/actions.js'
+import { ConfirmDialog } from './dialogs/ConfirmDialog.jsx'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,7 @@ export function CommandPalette({ context, onClose, onNavigate, onTheme, onQuit, 
   const [query, setQuery]   = useState('')
   const [cursor, setCursor] = useState(0)
   const [status, setStatus] = useState(null)
+  const [pending, setPending] = useState(null) // { action, argsText, confirmation } awaiting yes/no
 
   const { pane, view = 'list', selectedItem, repo, themeName } = context || {}
   const activeContext = useMemo(() => resolveContext(pane, view), [pane, view])
@@ -65,6 +67,24 @@ export function CommandPalette({ context, onClose, onNavigate, onTheme, onQuit, 
 
   // Keep cursor in bounds when filtered list changes length
   const clampedCursor = Math.min(cursor, Math.max(0, filtered.length - 1))
+
+  const runAction = (action, argsText, confirmed) => {
+    recordActionUse(action.id)
+    try {
+      const result = action.run({ ...context, themeName, _args: argsText, _confirmed: confirmed })
+      if (result && typeof result.then === 'function') {
+        setStatus('Running…')
+        result
+          .then(() => { setStatus('✓ Done'); setTimeout(onClose, 600) })
+          .catch(err => { setStatus(`✗ ${err.message ?? String(err)}`); setTimeout(onClose, 2500) })
+      }
+      // If run() already called onClose() (most navigation actions do), we're done.
+      // If not (e.g. async exec actions), the status line will close us.
+    } catch (err) {
+      setStatus(`✗ ${err.message ?? String(err)}`)
+      setTimeout(onClose, 2500)
+    }
+  }
 
   useInput((raw, key) => {
     if (key.escape) { onClose(); return }
@@ -99,21 +119,10 @@ export function CommandPalette({ context, onClose, onNavigate, onTheme, onQuit, 
         ? query.trim().slice(action.label.length).trim()
         : ''
 
-      recordActionUse(action.id)
-      try {
-        const result = action.run({ ...context, themeName, _args: argsText })
-        if (result && typeof result.then === 'function') {
-          setStatus('Running…')
-          result
-            .then(() => { setStatus('✓ Done'); setTimeout(onClose, 600) })
-            .catch(err => { setStatus(`✗ ${err.message ?? String(err)}`); setTimeout(onClose, 2500) })
-        }
-        // If run() already called onClose() (most navigation actions do), we're done.
-        // If not (e.g. async exec actions), the status line will close us.
-      } catch (err) {
-        setStatus(`✗ ${err.message ?? String(err)}`)
-        setTimeout(onClose, 2500)
-      }
+      // Write actions ask first, whichever way they were reached (see confirmationFor).
+      const confirmation = confirmationFor(action, context)
+      if (confirmation) { setPending({ action, argsText, confirmation }); return }
+      runAction(action, argsText, false)
       return
     }
 
@@ -127,7 +136,18 @@ export function CommandPalette({ context, onClose, onNavigate, onTheme, onQuit, 
       setQuery(s => s + raw)
       setCursor(0)
     }
-  })
+  }, { isActive: !pending })
+
+  if (pending) {
+    return (
+      <ConfirmDialog
+        message={pending.confirmation.message}
+        destructive={pending.confirmation.destructive}
+        onConfirm={() => { const p = pending; setPending(null); runAction(p.action, p.argsText, true) }}
+        onCancel={() => { setPending(null); onClose() }}
+      />
+    )
+  }
 
   const MAX_VISIBLE = 9
   const displayedActions = filtered.slice(0, MAX_VISIBLE)

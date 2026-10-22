@@ -339,7 +339,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
         {error && (
           <Box paddingX={2} paddingY={1} flexDirection="column">
             <FailureNotice failure={classifyGhFailure(error)} />
-            <Text color={t.ui.dim}>[r] retry</Text>
+            <Text color={t.ui.dim}>[{firstActionKey('list.refresh', 'r', _actions)}] retry</Text>
           </Box>
         )}
         {!loading && !error && items.length === 0 && (

@@ -207,7 +207,7 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
         })}
         {!loading && items.length === 0 && (
           <Box paddingX={2} paddingY={1}>
-            <Text color={t.ui.muted}>No notifications. [r] refresh</Text>
+            <Text color={t.ui.muted}>No notifications. [{firstActionKey('list.refresh', 'r')}] refresh</Text>
           </Box>
         )}
       </Box>

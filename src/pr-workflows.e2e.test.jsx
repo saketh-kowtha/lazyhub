@@ -248,8 +248,10 @@ describe('PR detail and diff E2E flows', () => {
         />
         <InputDriver events={[
           { input: 'M' },
+          { input: 'y' },
           { input: 'c' },
           { input: 'r', key: { ctrl: true } },
+          { input: 'y' },
         ]} />
       </>
     )

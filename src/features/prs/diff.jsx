@@ -13,6 +13,7 @@ import { join } from 'path'
 import chalk from 'chalk'
 import { getHljs } from '../../highlight.js'
 import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
+import { firstActionKey } from '../../config/actions.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo, reviewPR } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
@@ -1130,7 +1131,7 @@ export function PRDiff({ prNumber, repo, onBack, onViewComments }) {
   )
   if (error) return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Text color={t.ci.fail}>⚠ Failed to load diff — r to retry</Text>
+      <Text color={t.ci.fail}>⚠ Failed to load diff — {firstActionKey('list.refresh', 'r')} to retry</Text>
     </Box>
   )
 

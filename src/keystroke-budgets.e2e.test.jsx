@@ -69,7 +69,7 @@ vi.mock('./executor.js', () => {
     'reviewPR', 'mergePR', 'closePR', 'checkoutBranch', 'enableAutoMerge', 'disableAutoMerge', 'markPRReady',
     'convertPRToDraft', 'editPRBase', 'requestReviewers', 'removeReviewers', 'addPRAssignees', 'removePRAssignees',
     'addLabels', 'removeLabels', 'listLabels', 'listCollaborators', 'rerunCheckRun', 'getCheckRunAnnotations',
-    'getCurrentBranch', 'createPR', 'listBranches',
+    'getCurrentBranch', 'createPR', 'listBranches', 'listRuns', 'rerunRun',
   ]
   return Object.fromEntries(fns.map(name => [name, vi.fn()]))
 })
@@ -95,6 +95,7 @@ const PR = {
   autoMergeRequest: null,
   statusCheckRollup: [{ id: 9001, name: 'CI / test', conclusion: 'FAILURE', url: 'https://example.test/check/1' }],
 }
+const RUN = { databaseId: 77, workflowName: 'CI', headBranch: 'main', status: 'completed', conclusion: 'failure', displayTitle: 'CI run', event: 'push', createdAt: '2026-06-06T10:00:00Z', updatedAt: '2026-06-06T10:00:00Z' }
 const DIFF = [
   'diff --git a/src/send.js b/src/send.js',
   '--- a/src/send.js',
@@ -203,6 +204,7 @@ describe('keystroke budgets', () => {
       if (fn === executor.getPRDiffStats) return ghResult({ additions: 2, deletions: 0, changedFiles: 1 })
       if (fn === executor.getPRDiff) return ghResult(DIFF)
       if (fn === executor.listPRComments) return ghResult(COMMENTS)
+      if (fn === executor.listRuns) return ghResult([RUN])
       return ghResult(null)
     })
     executor.reviewPR.mockResolvedValue(undefined)
@@ -231,4 +233,65 @@ describe('keystroke budgets', () => {
       expect(count).toBeLessThanOrEqual(task.budget)
     })
   }
+})
+
+// Every write-classified key shows a confirmation (or the review form) first,
+// and backing out performs no write. The palette path is covered in
+// components/CommandPalette.confirm.test.jsx.
+const CTRL_R = key('r', { ctrl: true }, 'Ctrl+R')
+const ESC = key('', { escape: true }, 'Esc')
+const WRITE_KEYS = [
+  { name: 'merge (m)', steps: [key('m'), ENTER, ENTER], cancel: key('n'), write: () => executor.mergePR },
+  { name: 'approve (a)', steps: [key('a'), text('lgtm')], cancel: ESC, write: () => executor.reviewPR },
+  { name: 'request changes (x)', steps: [key('x'), text('no')], cancel: ESC, write: () => executor.reviewPR },
+  { name: 'checkout (b)', steps: [key('b')], cancel: key('n'), write: () => executor.checkoutBranch },
+  { name: 'close PR in the list (X)', steps: [key('X')], cancel: key('n'), write: () => executor.closePR },
+  { name: 'close PR in detail (X)', steps: [ENTER, key('X')], cancel: key('n'), write: () => executor.closePR },
+  { name: 'auto-merge in the list (M)', steps: [key('M')], cancel: key('n'), write: () => executor.enableAutoMerge, confirmText: 'Enable auto-merge' },
+  { name: 'auto-merge in detail (M)', steps: [ENTER, key('M')], cancel: key('n'), write: () => executor.enableAutoMerge, confirmText: 'Enable auto-merge' },
+  { name: 're-run a check (Ctrl+R)', steps: [ENTER, key('c'), CTRL_R], cancel: key('n'), write: () => executor.rerunCheckRun, confirmText: 'Re-run check' },
+  { name: 're-run a workflow (Ctrl+R)', steps: [key('g'), key('a'), CTRL_R], cancel: key('n'), write: () => executor.rerunRun, confirmText: 'Re-run failed jobs' },
+]
+
+describe('write keys confirm first and cancel does nothing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    layoutState.cols = 120
+    useGh.mockImplementation((fn) => {
+      if (fn === executor.listPRs) return ghResult([PR])
+      if (fn === executor.getPR) return ghResult(PR)
+      if (fn === executor.getRepoInfo) return ghResult({ squashMergeAllowed: true, viewerPermission: 'WRITE' })
+      if (fn === executor.getPRChecks) return ghResult(PR.statusCheckRollup)
+      if (fn === executor.getBranchProtection) return ghResult({ requiredReviews: 1 })
+      if (fn === executor.listPRComments) return ghResult(COMMENTS)
+      if (fn === executor.listRuns) return ghResult([RUN])
+      return ghResult(null)
+    })
+    for (const fn of ['reviewPR', 'mergePR', 'closePR', 'checkoutBranch', 'enableAutoMerge', 'rerunCheckRun', 'rerunRun']) {
+      executor[fn].mockResolvedValue(undefined)
+    }
+  })
+  afterEach(() => { disarmPrefix(); cleanup() })
+
+  for (const w of WRITE_KEYS) {
+    it(`${w.name}: nothing is written on cancel`, async () => {
+      const view = renderWithProviders(<App repo="owner/repo" />)
+      await waitForExpectation(() => expect(view.lastFrame()).toContain('Retry in webhook sender'))
+      await flush(30)
+      await press(w.steps)
+      if (w.confirmText) await waitForExpectation(() => expect(view.lastFrame()).toContain(w.confirmText))
+      expect(w.write()).not.toHaveBeenCalled()
+      await press([w.cancel])
+      await flush(30)
+      expect(w.write()).not.toHaveBeenCalled()
+    })
+  }
+
+  it('auto-merge writes only after yes', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Retry in webhook sender'))
+    await flush(30)
+    await press([key('M'), key('y')])
+    await waitForExpectation(() => expect(executor.enableAutoMerge).toHaveBeenCalledTimes(1))
+  })
 })

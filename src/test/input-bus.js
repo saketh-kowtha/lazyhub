@@ -16,11 +16,13 @@ const handlers = new Set()
  * @returns {(handler: Function) => void} mocked useInput
  */
 export function mockUseInput(React) {
-  return (handler) => {
+  return (handler, opts) => {
+    const active = opts?.isActive !== false
     React.useEffect(() => {
+      if (!active) return undefined
       handlers.add(handler)
       return () => handlers.delete(handler)
-    }, [handler])
+    }, [handler, active])
   }
 }
 
