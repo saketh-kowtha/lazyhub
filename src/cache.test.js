@@ -29,6 +29,38 @@ describe('disk cache', () => {
     }
   })
 
+  it('evicts the least recently used in-memory entry once over the cap', async () => {
+    const { createLruCache } = await import('./cache.js')
+    const lru = createLruCache(2)
+    lru.set('a', 1)
+    lru.set('b', 2)
+    expect(lru.get('a')).toBe(1) // touch a, so b is now the oldest
+    lru.set('c', 3)
+    expect(lru.has('b')).toBe(false)
+    expect(lru.get('a')).toBe(1)
+    expect(lru.get('c')).toBe(3)
+    lru.set('a', 9) // overwrite does not grow the cache
+    expect(lru.size).toBe(2)
+  })
+
+  it('caps the number of on-disk entries, dropping the oldest first', async () => {
+    vi.resetModules()
+    const dir = mkdtempSync(join(tmpdir(), 'lazyhub-cache-test-'))
+    process.env.LAZYHUB_CACHE_DIR = dir
+    try {
+      const cache = await import('./cache.js')
+      for (const name of ['a', 'b', 'c', 'd']) cache.writeCache(name, name)
+      const { utimesSync } = await import('fs')
+      // Distinct mtimes so "oldest" is deterministic on coarse filesystems.
+      ;['a', 'b', 'c', 'd'].forEach((name, i) => utimesSync(join(dir, `${name}.json`), 1000 + i, 1000 + i))
+      cache.evictCache(Infinity, 2)
+      expect(readdirSync(dir).sort()).toEqual(['c.json', 'd.json'])
+    } finally {
+      delete process.env.LAZYHUB_CACHE_DIR
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('invalidates all entries for a mutated repository only', async () => {
     vi.resetModules()
     const dir = mkdtempSync(join(tmpdir(), 'lazyhub-cache-test-'))

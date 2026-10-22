@@ -122,6 +122,36 @@ jobs:
       - name: PTY E2E
         run: npm run test:pty
 
+  # TUI memory budget (#311): the Focus -> PRs -> detail -> diff journey inside a
+  # hard 512 MB container. Fails if the container OOMs or lazyhub's peak RSS
+  # exceeds LAZYHUB_RSS_BUDGET_MB (default lives in test/pty/memory.js).
+  memory-budget:
+    name: TUI memory budget (512 MB)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (lockfile-free)
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Journey under a 512 MB limit
+        run: |
+          docker run --rm -m 512m --memory-swap 512m \
+            -v "$PWD:/app" -w /app node:22-bookworm \
+            node test/pty/memory.js
+
   windows-smoke:
     name: Windows smoke
     runs-on: windows-latest

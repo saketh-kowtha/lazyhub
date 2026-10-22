@@ -10,6 +10,34 @@ import { ensurePrivateDir, writePrivateFile } from './secure-fs.js'
 
 export const CACHE_DIR = process.env.LAZYHUB_CACHE_DIR || join(homedir(), '.cache', 'lazyhub', 'data')
 const MAX_BYTES = 50 * 1024 * 1024
+const MAX_ENTRIES = 500
+
+/**
+ * Bounded in-memory map with least-recently-used eviction. Drop-in for the
+ * `get`/`set`/`delete`/`has`/`size` subset of Map that useGh needs.
+ * @param {number} maxEntries
+ */
+export function createLruCache(maxEntries) {
+  const map = new Map()
+  return {
+    get(key) {
+      if (!map.has(key)) return undefined
+      const value = map.get(key)
+      map.delete(key)
+      map.set(key, value) // re-insert: most recently used goes last
+      return value
+    },
+    set(key, value) {
+      map.delete(key)
+      map.set(key, value)
+      while (map.size > maxEntries) map.delete(map.keys().next().value)
+      return this
+    },
+    has: key => map.has(key),
+    delete: key => map.delete(key),
+    get size() { return map.size },
+  }
+}
 
 /**
  * Build a stable cache key from serializable parts.
@@ -90,10 +118,12 @@ export function invalidateRepoCache(repo) {
 }
 
 /**
- * Evict least-recently-modified entries until the cache is under maxBytes.
+ * Evict least-recently-modified entries until the cache is under maxBytes and
+ * maxEntries.
  * @param {number} maxBytes
+ * @param {number} maxEntries
  */
-export function evictCache(maxBytes = MAX_BYTES) {
+export function evictCache(maxBytes = MAX_BYTES, maxEntries = MAX_ENTRIES) {
   if (!existsSync(CACHE_DIR)) return
   const files = readdirSync(CACHE_DIR)
     .filter(file => file.endsWith('.json'))
@@ -108,9 +138,11 @@ export function evictCache(maxBytes = MAX_BYTES) {
     })
     .filter(Boolean)
   let total = files.reduce((sum, file) => sum + file.size, 0)
+  let count = files.length
   for (const file of files.sort((a, b) => a.mtime - b.mtime)) {
-    if (total <= maxBytes) break
+    if (total <= maxBytes && count <= maxEntries) break
     rmSync(file.full, { force: true })
     total -= file.size
+    count -= 1
   }
 }

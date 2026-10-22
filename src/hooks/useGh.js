@@ -5,11 +5,12 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { logger } from '../utils.js'
-import { cacheKey as makeDiskCacheKey, readCache, writeCache } from '../cache.js'
+import { cacheKey as makeDiskCacheKey, createLruCache, readCache, writeCache } from '../cache.js'
 import { recordGhFailure, recordGhSuccess } from './useGhHealth.js'
 
-// In-memory cache: key → { data, timestamp }
-const cache = new Map()
+// In-memory cache: key → { data, timestamp }, LRU-capped so a long session
+// (many repos/pages) cannot grow without bound.
+const cache = createLruCache(200)
 
 const DEFAULT_TTL = 30_000 // 30 seconds
 

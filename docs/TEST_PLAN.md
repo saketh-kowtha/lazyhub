@@ -2,7 +2,7 @@
 
 Goal: actively find bugs and edge cases before users do. Not just coverage numbers — tests that would have caught every bug already filed in the issue tracker.
 
-Current state: executor, ai, bootstrap, utils, cache, perf reporting, gh-health state, key config, and major Ink flows have Vitest coverage. The PTY harness (`npm run test:pty`) runs against `dist/lazyhub.js` when `node-pty` is available and covers smoke navigation plus crash restoration, degraded `gh` recovery, opt-in perf entries, and stale-while-revalidate first-frame cache behavior.
+Current state: executor, ai, bootstrap, utils, cache, perf reporting, gh-health state, key config, and major Ink flows have Vitest coverage. The PTY harness (`npm run test:pty`) runs against `dist/lazyhub.js` when `node-pty` is available and covers smoke navigation plus crash restoration, degraded `gh` recovery, opt-in perf entries, and stale-while-revalidate first-frame cache behavior. `npm run test:memory` (`test/pty/memory.js`) drives Focus -> PRs -> detail -> diff, reports peak RSS and max concurrent `gh` processes, and fails above the budget (`LAZYHUB_RSS_BUDGET_MB`, default in that file; update it from the printed `peakRssMb` of a Linux run plus ~25% margin). CI runs it in a 512 MB Docker container (`memory-budget` job).
 
 ---
 
