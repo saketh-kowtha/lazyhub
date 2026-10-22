@@ -165,12 +165,15 @@ export function toTypedRead(args, env = process.env) {
 const READ_COMMANDS = new Set([
   'pr list', 'pr view', 'pr diff', 'issue list', 'issue view', 'run list', 'run view',
   'release list', 'label list', 'gist list', 'gist view', 'repo view',
+  // Pre-TUI bootstrap (#288). None are typed reads, so never cached or daemon-served.
+  'repo list', 'auth status', 'auth token',
 ])
 /** State-changing gh commands the TUI issues; audited, never cached or retried. */
 const WRITE_COMMANDS = new Set([
   'pr merge', 'pr close', 'pr ready', 'pr review', 'pr comment', 'pr create', 'pr edit', 'pr checkout',
   'issue create', 'issue close', 'issue comment', 'issue edit',
   'run rerun', 'run cancel', 'gist delete',
+  'auth login',
 ])
 const API_BODY_FLAGS = new Set(['-f', '-F', '--field', '--raw-field'])
 const API_VALUE_FLAGS = new Set(['--jq', '-q', '--hostname'])
@@ -240,6 +243,7 @@ export function classifyGh(args) {
   try {
     if (!Array.isArray(args) || args.length === 0 || args.some(a => typeof a !== 'string')) return 'unknown'
     if (args[0] === 'api') return classifyApi(args)
+    if (args.length === 1 && args[0] === '--version') return 'read'
     const key = `${args[0]} ${args[1]}`
     if (READ_COMMANDS.has(key)) return 'read'
     if (WRITE_COMMANDS.has(key)) return 'write'

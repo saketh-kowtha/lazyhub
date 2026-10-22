@@ -81,6 +81,11 @@ export function getGhCallHistory() {
 	 * @param {boolean}  [opts.json]     false → never JSON.parse (return raw text);
 	 *                                   true/undefined → parse JSON, fall back to raw
 	 * @param {string}   [opts.stdin]    optional payload written to the gh stdin
+	 * @param {boolean}  [opts.interactive] inherit the terminal's stdio (e.g. `gh auth login`);
+	 *                                   nothing is captured, so the result is null. Pass
+	 *                                   timeout: 0 for flows that wait on the user.
+	 * @param {boolean}  [opts.combine]  return stdout and stderr interleaved as raw text
+	 *                                   (`gh auth status` reports on stderr)
 	 * @param {boolean}  [opts.skipDaemon] bypass the local daemon even when available
 	 * @param {number}   [opts.ttl]      daemon cache TTL override in ms
 	 * @returns {Promise<any>}           parsed JSON or raw string (null if empty)
@@ -94,6 +99,13 @@ export async function runGh(args, opts = {}) {
   const kind = classifyGh(args)
   if (kind === 'unknown') {
     throw new GhError({ message: 'Operation is not an allowlisted gh command', stderr: '', exitCode: 1, args: redactArgs(args) })
+  }
+  // Programmer-error guard: terminal-owning and merged-stream modes are for bootstrap only.
+  if (opts.interactive && !(args[0] === 'auth' && args[1] === 'login')) {
+    throw new TypeError('runGh: interactive is only allowed for `gh auth login`')
+  }
+  if (opts.combine && !(args[0] === 'auth' && args[1] === 'status')) {
+    throw new TypeError('runGh: combine is only allowed for `gh auth status`')
   }
   const typed = kind === 'read' && !skipDaemon && process.env.LAZYHUB_DAEMON_SOCKET && stdin === undefined && json !== false
     ? toTypedRead(args)
@@ -153,9 +165,9 @@ async function invalidateDaemonCache(repo) {
  * Spawn gh once (no retry) and parse its output. Callers classify first.
  *
  * @param {string[]} args
- * @param {{timeout?: number, json?: boolean, stdin?: string}} [opts]
+ * @param {{timeout?: number, json?: boolean, stdin?: string, interactive?: boolean, combine?: boolean}} [opts]
  */
-async function spawnGh(args, { timeout = GH_TIMEOUT, json, stdin } = {}) {
+async function spawnGh(args, { timeout = GH_TIMEOUT, json, stdin, interactive, combine } = {}) {
   const started = Date.now()
   // GH_HOST / GH_TOKEN are inherited by the child process from process.env
   // (we pass no curated env here — see ARCHITECT_DECISIONS invariant 4, which
@@ -165,7 +177,12 @@ async function spawnGh(args, { timeout = GH_TIMEOUT, json, stdin } = {}) {
   // `gh repo *`) and is rejected globally by `gh pr list`, `gh issue list`, etc.
   let result
   try {
-    const proc = execa('gh', args, { reject: false, timeout })
+    const proc = execa('gh', args, {
+      reject: false,
+      timeout,
+      stdio: interactive ? 'inherit' : 'pipe',
+      all: Boolean(combine),
+    })
     if (stdin !== undefined && proc.stdin) {
       proc.stdin.write(stdin)
       proc.stdin.end()
@@ -204,7 +221,7 @@ async function spawnGh(args, { timeout = GH_TIMEOUT, json, stdin } = {}) {
   }
 
   if (result.exitCode !== 0) {
-    const stderr = result.stderr || ''
+    const stderr = (combine ? result.all : result.stderr) || ''
     let message = `gh ${args.slice(0, 3).join(' ')} failed`
 
     if (stderr.includes('rate limit')) {
@@ -241,7 +258,7 @@ async function spawnGh(args, { timeout = GH_TIMEOUT, json, stdin } = {}) {
     exitCode: 0,
   })
   recordDuration('gh', ghOpName(args), Date.now() - started)
-  const stdout = result.stdout?.trim()
+  const stdout = (combine ? result.all : result.stdout)?.trim()
   if (!stdout) return null
 
   if (json === false) return stdout // caller wants raw text (diff, logs, …)
