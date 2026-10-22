@@ -306,7 +306,30 @@ To prevent merge conflicts and "branch drift":
 - Root cause: `auto-docs.mjs` targeted incorrect section indices and used fragile splicing logic; CI matrix included Node 20 which is no longer the target runtime.
 - Fix: Updated internal scripts to point to Section 21; simplified documentation auto-updates to append-only; restricted CI matrix to Node 22; updated LLM model string to stable `gemini-2.5-flash`.
 
-> B-55..B-58 are numbered after B-54, which PR #274 (consolidated Slice 1 bug log, still open when this was written) is expected to add. Renumber if #274 lands differently.
+**B-50 — Agent default scope was `full` and agent/AI tool inputs were not validated at runtime (#249, PR #264)**
+- Symptom: a fresh config granted the broadest agent scope, and malformed or type-confused inputs (resource type, IDs, enums, lengths) reached MCP/AI dispatch.
+- Root cause: schema default of `agent.default_scope` was not least-privilege; the MCP adapter and `executeMutatingTool` trusted input shape.
+- Fix: default is `read-only` in `src/config/schema.js` and `defaultConfig.toml`; a broader requested scope produces a config warning. Shared validators in `src/input-validation.js` enforce tool name, repo, IDs, enums and length limits with stable `MCP_*` / `AI_*` error codes; client-supplied scope metadata is never read.
+
+**B-51 — Daemon forwarded arbitrary `gh` argv and accepted unauthenticated control messages (#250, PR #266)**
+- Symptom: any local process able to reach the daemon socket could have it run caller-chosen `gh` commands and stop or invalidate it.
+- Root cause: `type: "gh"` passed caller argv to `runGh`; control messages had no authentication; the daemon inherited the launcher's environment.
+- Fix: passthrough removed in favour of typed allowlisted reads (`src/daemon/protocol.js`); privileged messages require a per-daemon session token (0600 file, expiring, revocable; expired secret is rotated); versioned, size-limited protocol with stable error codes; minimal spawn env; no auto-spawn from agent or non-TTY contexts; callers with identity env (`GH_TOKEN`, `GH_HOST`, `GH_CONFIG_DIR`) bypass the daemon; cache key includes host and account.
+
+**B-52 — Write-shaped `gh` invocations could bypass audit and cache invalidation; audit failure was swallowed (#251, PR #271)**
+- Symptom: unrecognised write forms were treated as reads, so they skipped audit and invalidation, and a failed audit write did not block the operation.
+- Root cause: `isGhMutation()` was a denylist of a few command names and flags; `writeAuditEntry` swallowed errors.
+- Fix: allowlisted `classifyGh()` returns read/write/unknown; unknown is refused before spawn, writes are audit-first (failure blocks), never cached, never sent to the daemon, never retried, and invalidate the repo cache afterwards (added in review). Only typed `READ_OPS` are cacheable. Audit entries carry an args hash, not argv.
+
+**B-53 — External AI CLI providers ran with the user's real HOME and the repo as cwd (#252, PR #268)**
+- Symptom: Claude Code, Codex and Gemini CLI providers could load repo or user instructions, hooks, plugins and MCP config.
+- Root cause: `spawnAndPipe` curated env but passed HOME through and set no cwd.
+- Fix: per-call isolated sandbox (empty 0700 cwd, throwaway HOME/TMPDIR/XDG), minimal env, per-CLI hardening flags, guaranteed cleanup including signal paths, provider reported unavailable when isolation or credentials are missing. In review, credential-file copying was removed in favour of env-key-only auth, because a sandboxed token refresh could invalidate the user's real login. Claude CLI `is_error` results with exit 0 now map to error codes instead of assistant text.
+
+**B-54 — Local files, sockets and debug exports were created with default permissions (#253, PR #269)**
+- Symptom: config, logs, caches and debug exports were readable under default umask; the IPC socket lived at a predictable `/tmp` path with unchecked pre-existing paths; debug exports contained raw `gh` argv and error text.
+- Root cause: raw `writeFileSync`/`appendFileSync`/`mkdirSync` at each writer, blind unlink-then-listen, ignored bind errors, unredacted debug state.
+- Fix: shared `src/secure-fs.js` (0700 dirs, 0600 files, atomic and no-follow writes, ownership/symlink/type checks before chmod or unlink); IPC socket in a verified private directory with surfaced bind errors; debug export uses allowlist redaction. Windows named-pipe ACLs and the daemon pid file remain out of scope.
 
 **B-55 — Default pane icons broke box borders (emoji-width and ambiguous-width glyphs)**
 - Symptom: Borders shifted, a blank row appeared at the sidebar Actions row and Focus rows jumped onto the sidebar line in recordings.
