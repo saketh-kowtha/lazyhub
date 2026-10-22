@@ -158,16 +158,17 @@ describe('first-run onboarding', () => {
     expectOnlyReads()
   })
 
-  it('unknown agent activity is surfaced as unattributed, not safe', async () => {
+  it('unattributed activity is shown as attribution, separate from coverage', async () => {
     const activity = fixture()
     const review = activity.data.repository.pullRequests.nodes[0].reviews.nodes[0]
     review.author = { login: 'mystery-helper', __typename: 'Bot' }
     stubGh({ activity })
     const view = start()
     await pick(view)
-    await waitForExpectation(() => expect(frame(view)).toContain('Activity: agent'))
-    expect(frame(view)).toMatch(/unknown [1-9]/)
-    expect(frame(view)).toContain('unattributed event(s): unknown is not safe')
+    await waitForExpectation(() => expect(frame(view)).toContain('Attribution (who GitHub says acted)'))
+    expect(frame(view)).toMatch(/unattributed [1-9]/)
+    expect(frame(view)).not.toContain('counts as ungoverned')
+    expect(frame(view)).toMatch(/pr_merge\s+advisory/) // unattributed activity does not change coverage
     expectOnlyReads()
   })
 

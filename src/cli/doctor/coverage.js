@@ -20,7 +20,7 @@
 import { runGh } from '../../executor.js'
 import { observeRepo } from '../../watch-only/observe.js'
 import { classifyObservation } from '../../watch-only/classify.js'
-import { buildReport, COVERAGE_STATES } from '../../watch-only/report.js'
+import { buildReport, COVERAGE_STATES, explainReason, wrapText } from '../../watch-only/report.js'
 import { sanitize } from '../../utils-core.js'
 import { detectAlternatePaths } from './detect.js'
 
@@ -182,6 +182,12 @@ export function formatCoverageReport(report, { json = false } = {}) {
     const why = op.downgrade_reasons.length ? ` [downgraded: ${op.downgrade_reasons.join(', ')}]` : ''
     lines.push(`  ${op.operation.padEnd(28)} ${op.coverage}${why}`)
   }
+  const explained = [...new Set(report.operations.flatMap(op => op.downgrade_reasons))].map(r => [r, explainReason(r)]).filter(([, e]) => e)
+  if (explained.length) {
+    lines.push('', 'Why coverage was downgraded (codes above stay authoritative):')
+    for (const [r, e] of explained) lines.push(...wrapText(`${r}: ${e[0]}. Next: ${e[1]}.`, 80, '  '))
+  }
+  lines.push('', ...wrapText('Coverage reflects observation quality only; who acted (attribution) never changes it.', 80, ''))
   lines.push('', 'Alternate paths (evidence, not proof):')
   for (const f of report.detections.findings) {
     const where = [...new Set(f.evidence.map(e => e.server ? `${e.agent}:${e.server}` : e.helper || e.client || e.source).filter(Boolean))]

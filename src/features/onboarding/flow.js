@@ -14,6 +14,7 @@ import { runGh } from '../../executor.js'
 import { fetchPullRequestActivityPage, resolveCurrentRepo } from '../../executor/activity.js'
 import { checkCoverage } from '../../cli/doctor/coverage.js'
 import { generateWatchOnlyReport } from '../../watch-only/index.js'
+import { explainReason } from '../../watch-only/report.js'
 import { CONFIG_PATH } from '../../config.js'
 import { isOwnerName } from '../../config/schema.js'
 export { isOwnerName }
@@ -166,16 +167,11 @@ export async function loadOnboardingReport(repo, { fetchPage = fetchPullRequestA
 }
 
 /**
- * Plain-language meaning of the gap codes a first-run user is likely to meet.
+ * Plain-language meaning of a gap code (shared wording: watch-only/report.js).
  *
  * @param {string} code
  * @returns {string}
  */
 export function explainGap(code) {
-  if (code === 'permission_missing') return 'your gh token cannot read this repository\'s pull requests'
-  if (code === 'rate_limited' || code === 'rate_limit_low') return 'GitHub rate limit reached; observation stopped early'
-  if (code === 'fetch_failed' || code === 'observation_unavailable') return 'activity could not be read'
-  if (code === 'pr_page_limit') return 'older pull requests were not observed'
-  if (/_truncated$/.test(code)) return 'activity beyond the read window was not observed'
-  return ''
+  return explainReason(code)?.[0] ?? ''
 }

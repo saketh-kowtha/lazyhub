@@ -9,6 +9,7 @@ import { generateWatchOnlyReport } from '../watch-only/index.js'
 import { resolveCurrentRepo } from '../executor/activity.js'
 import { DEFAULT_LIMIT, DEFAULT_MAX_PAGES } from '../watch-only/observe.js'
 import { sanitize } from '../utils-core.js'
+import { ATTRIBUTION_LABELS, COVERAGE_STATES, ENFORCEMENT_NOTE, describeAttribution, explainReason, wrapText } from '../watch-only/report.js'
 
 /**
  * @param {string[]} args
@@ -40,31 +41,37 @@ export function parseWatchOnlyArgs(args) {
  */
 export function formatWatchOnlyReport(report) {
   const o = report.observation
+  const wrap = (text, indent) => wrapText(text, 80, indent)
   const lines = [
     `lazyhub watch-only report: ${sanitize(report.repo)}`,
-    `observed ${o.pull_requests_examined} PR(s) in ${o.pages_fetched} page(s); nothing was enforced or written`,
+    `observed ${o.pull_requests_examined} PR(s) in ${o.pages_fetched} page(s); nothing was written`,
+    ...wrap(ENFORCEMENT_NOTE, ''),
     '',
-    'Coverage per operation (github_enforced | managed_gateway | advisory | ungoverned):',
+    ...wrap(`Operations (${COVERAGE_STATES.join(' | ')}). Coverage depends only on observation, never on who acted.`, ''),
   ]
   for (const op of report.operations) {
-    const a = op.observed.by_attribution
-    const seen = op.observed.total ? ` seen=${op.observed.total} (agent ${a.agent}, automation ${a.automation}, human ${a.human}, shared ${a.shared}, unknown ${a.unknown})` : ''
-    const why = op.downgrade_reasons.length ? ` [downgraded: ${op.downgrade_reasons.join(', ')}]` : ''
-    lines.push(`  ${op.operation.padEnd(28)} ${op.coverage}${why}${seen}`)
+    lines.push(`  ${op.operation}  coverage: ${op.coverage}`)
+    const state = `${op.observation.complete ? 'complete' : 'INCOMPLETE'}, ${op.observation.stale ? 'STALE' : 'fresh'}`
+    lines.push(...wrap(`observation: ${state}${op.downgrade_reasons.length ? ` [${op.downgrade_reasons.join(', ')}]` : ''}`, '    '))
+    for (const r of new Set(op.downgrade_reasons)) {
+      const e = explainReason(r)
+      if (e) lines.push(...wrap(`why: ${e[0]}. next: ${e[1]}.`, '      '))
+    }
+    if (op.observed.total) lines.push(...wrap(`attribution: ${op.observed.total} event(s): ${describeAttribution(op.observed.by_attribution)}`, '    '))
   }
   if (o.gaps.length) {
     lines.push('', 'Observation gaps:')
-    for (const g of o.gaps) lines.push(`  ${g.code}${g.pr ? ` (PR #${g.pr})` : ''}${g.detail ? `: ${sanitize(g.detail)}` : ''}`)
+    for (const g of o.gaps) lines.push(...wrapText(`${g.code}${g.pr ? ` (PR #${g.pr})` : ''}${g.detail ? `: ${sanitize(g.detail)}` : ''}`, 80, '  '))
   }
   if (o.rate_limit) lines.push('', `GraphQL rate limit remaining: ${o.rate_limit.remaining}`)
   if (report.staleness.stale) lines.push(`Data is stale (${report.staleness.age_seconds}s old).`)
   if (report.actors.length) {
-    lines.push('', 'Actors (audit metadata only; never used for authority):')
+    lines.push('', 'Actors (attribution: audit metadata only; never used for authority or coverage):')
     for (const a of report.actors.slice(0, 15)) {
-      lines.push(`  ${sanitize(a.login || a.registry_id || '(no github account)')}  ${a.class}${a.label ? ` [${sanitize(a.label)}]` : ''}  x${a.event_count}`)
+      lines.push(`  ${sanitize(a.login || a.registry_id || '(no github account)')}  ${ATTRIBUTION_LABELS[a.class] ?? a.class}${a.label ? ` [${sanitize(a.label)}]` : ''}  x${a.event_count}`)
     }
   }
-  lines.push('', ...report.notes.map(n => `- ${n}`))
+  lines.push('', ...report.notes.flatMap(n => wrapText(`- ${n}`, 80, '')))
   return `${lines.join('\n')}\n`
 }
 
