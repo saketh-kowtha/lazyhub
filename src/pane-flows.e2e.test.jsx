@@ -192,7 +192,7 @@ describe('Pane E2E user flows', () => {
       <>
         <IssueList repo="owner/repo" onSelectIssue={onSelectIssue} />
         <InputDriver events={[
-          { input: 'x' },
+          { input: 'X' },
         ]} />
       </>
     )
@@ -226,7 +226,7 @@ describe('Pane E2E user flows', () => {
       <>
         <BranchList repo="owner/repo" />
         <InputDriver events={[
-          { input: 'D' },
+          { input: 'x', key: { ctrl: true } },
           { input: 'feature-1' },
           { key: { leftArrow: true } },
           { key: { return: true } },
@@ -297,7 +297,7 @@ describe('Pane E2E user flows', () => {
       <>
         <NotificationList repo="owner/repo" onNavigateTo={onNavigateTo} />
         <InputDriver events={[
-          { input: 'M' },
+          { input: 'U' },
           { key: { leftArrow: true } },
           { key: { return: true } },
         ]} />
@@ -334,7 +334,7 @@ describe('Pane E2E user flows', () => {
     const resolveView = renderWithProviders(
       <>
         <PRComments repo="owner/repo" prNumber={55} onBack={() => {}} onJumpToDiff={onJumpToDiff} />
-        <InputDriver events={[{ input: 'R' }]} />
+        <InputDriver events={[{ input: 'z' }]} />
       </>
     )
     await flush(20)

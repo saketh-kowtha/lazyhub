@@ -12,7 +12,7 @@ describe('config docs metadata', () => {
     expect(model.actions.find(a => a.id === 'pr.merge')).toMatchObject({
       keys: ['m'],
       label: 'merge',
-      scope: 'pr-list',
+      scope: 'pr-list,pr-detail,diff',
     })
   })
 
@@ -20,6 +20,6 @@ describe('config docs metadata', () => {
     const markdown = generateConfigReferenceMarkdown(DEFAULT_CONFIG)
     expect(markdown).toContain('# lazyhub TOML Configuration Reference')
     expect(markdown).toContain('| prs | ⎇ | Pull Requests | Review and manage pull requests |')
-    expect(markdown).toContain('| pr.merge | m | merge | pr-list | Merge selected PR |')
+    expect(markdown).toContain('| pr.merge | m | merge | pr-list,pr-detail,diff | Merge selected PR |')
   })
 })

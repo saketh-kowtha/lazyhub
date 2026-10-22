@@ -3,6 +3,7 @@ import { Text, useInput } from 'ink'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { sendInput } from './test/input-bus.js'
 import { InputDriver } from './test/input-driver.jsx'
+import { disarmPrefix, getArmedPrefix } from './config/keymap.js'
 import { App } from './app.jsx'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
@@ -89,6 +90,7 @@ vi.mock('./features/prs/diff.jsx', () => ({
 describe('App shell user flows', () => {
   afterEach(() => {
     cleanup()
+    disarmPrefix()
   })
 
   it('opens PR detail from the list', async () => {
@@ -161,11 +163,51 @@ describe('App shell user flows', () => {
     await waitForExpectation(() => expect(view.lastFrame()).toContain('PRS LIST'))
   })
 
+  it('g opens a which-key popup and g i jumps to Issues (digits no longer jump)', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+
+    await sendInput('2')
+    expect(view.lastFrame()).toContain('PRS LIST')
+
+    await sendInput('g')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('go to / prefix'))
+    expect(view.lastFrame()).toContain('issues')
+    expect(getArmedPrefix()).not.toBeNull()
+
+    await sendInput('i')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('ISSUES LIST'))
+    expect(view.lastFrame()).not.toContain('go to / prefix')
+    expect(getArmedPrefix()).toBeNull()
+  })
+
+  it('Esc cancels a pending g prefix without navigating', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+    await sendInput('g')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('go to / prefix'))
+    await sendInput('', { escape: true })
+    await waitForExpectation(() => expect(view.lastFrame()).not.toContain('go to / prefix'))
+    expect(view.lastFrame()).toContain('PRS LIST')
+    expect(getArmedPrefix()).toBeNull()
+  })
+
+  it('g p returns to Pull Requests from another pane', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+    await sendInput('g')
+    await sendInput('b')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('BRANCHES LIST'))
+    await sendInput('g')
+    await sendInput('p')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PRS LIST'))
+  })
+
   it('opens settings from the shell', async () => {
     const view = renderWithProviders(
       <>
         <App repo="owner/repo" />
-        <InputDriver events={[{ input: 'S' }]} />
+        <InputDriver events={[{ input: ',' }]} />
       </>
     )
 

@@ -2,10 +2,10 @@
  * src/features/issues/detail.jsx — Issue detail pane
  */
 
-import React, { useState, useContext, useMemo, useCallback, useRef } from 'react'
+import React, { useState, useContext, useMemo, useCallback } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
-import { useKeymapInput } from '../../config/keymap.js'
+import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getIssue, addIssueComment, listLabels, listCollaborators, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
@@ -15,16 +15,8 @@ import { useTheme } from '../../theme.js'
 import { sanitize, getMarkdownRows, TextInput } from '../../utils.js'
 import { IssueDetailSkeleton } from '../../components/Skeleton.jsx'
 
-// Exported so app.jsx can use them if needed
-const FOOTER_KEYS = [
-  { key: 'r', label: 'reply' },
-  { key: 'l', label: 'labels' },
-  { key: 'A', label: 'assignees' },
-  { key: 'Esc', label: 'back' },
-]
-
 export function IssueDetail({ issueNumber, repo, onBack }) {
-  useKeyScope('pane')
+  useKeyScope('view')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
@@ -37,8 +29,9 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
   const [replyText, setReplyText] = useState('')
   const [statusMsg, setStatusMsg] = useState(null)
   const [dialog, setDialog] = useState(null)
-  const lastKeyRef   = useRef(null)
-  const lastKeyTimer = useRef(null)
+  // Typing a reply must never trigger actions.
+  useKeyScope('input', replyMode)
+  const resolveAction = useActionResolver(['global', 'issue-detail'])
 
   // Notify App when dialog opens/closes
   React.useEffect(() => {
@@ -113,35 +106,24 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
       return
     }
 
-    if (input === 'r') { setReplyMode(true); return }
-    if (input === 'l') { setDialog('labels'); return }
-    if (input === 'A') { setDialog('assignees'); return }
-    if (input === 'o' && issue?.url) {
+    const id = resolveAction(input, key)
+    if (id === 'issue.reply') { setReplyMode(true); return }
+    if (id === 'list.refresh') { refetch(); return }
+    if (id === 'issue.labels') { setDialog('labels'); return }
+    if (id === 'issue.assignees') { setDialog('assignees'); return }
+    if (id === 'issue.open-browser' && issue?.url) {
       import('execa').then(({ execa }) => {
         const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
         execa(cmd, [issue.url]).catch(() => {})
       })
       return
     }
-    if (key.escape || input === 'q') { onBack(); return }
+    if (id === 'app.back') { onBack(); return }
 
-    // gg → top
-    if (input === 'g') {
-      if (lastKeyRef.current === 'g') {
-        clearTimeout(lastKeyTimer.current)
-        lastKeyRef.current = null
-        setScrollY(0)
-        return
-      }
-      lastKeyRef.current = 'g'
-      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
-      return
-    }
-    lastKeyRef.current = null
-
-    if (input === 'G') { setScrollY(maxScroll); return }
-    if (input === 'j' || key.downArrow) { setScrollY(s => Math.min(maxScroll, s + 1)); return }
-    if (input === 'k' || key.upArrow)   { setScrollY(s => Math.max(0, s - 1)); return }
+    if (id === 'cursor.top') { setScrollY(0); return }
+    if (id === 'cursor.bottom') { setScrollY(maxScroll); return }
+    if (id === 'cursor.down') { setScrollY(s => Math.min(maxScroll, s + 1)); return }
+    if (id === 'cursor.up')   { setScrollY(s => Math.max(0, s - 1)); return }
   })
 
   if (loading) return <IssueDetailSkeleton />

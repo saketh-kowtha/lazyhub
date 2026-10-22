@@ -2,8 +2,15 @@
 
 Issue #312 (one verb per key, registry-driven footer/help, which-key, keystroke
 budgets), with #201 (`1`-`4` sections) and #177 (queue is read-only). Protocol B step 1.
-Not implemented. This file is a proposal for the maintainer to accept or amend before
-any handler is moved.
+
+**Status (2026-10-23): accepted with the maintainer decisions of 2026-10-22, and
+partly implemented.** Decisions applied below: global pane jumps are a GitHub-style
+`g` prefix (`g h` home, `g p` PRs, `g i` issues, `g b` branches, `g a` actions,
+`g n` inbox); digits `1`-`4` are reserved for PR-detail sections (#201) and no longer
+bound globally; the queue stays read-only, so the "approve" budget is measured
+queue -> PR detail (`Enter`, `a`, confirm = 3). Sections marked **(implemented)** are
+live in the registry (`defaultConfig.toml` `[actions.*]`, read through
+`src/ui/actions.js`); the rest is the remaining plan.
 
 ## 1. Inventory: how keys are bound today
 
@@ -69,39 +76,39 @@ keep their existing confirmation dialogs.
 | Verb | Key | Changes from today | Notes |
 |---|---|---|---|
 | Move | `j` `k` `Up` `Down` | none | |
-| Top / bottom | `gg` `G` | `Ctrl+G` removed from `dialog.top/bottom/filter-*` | frees `Ctrl+G` for submit only |
+| Top / bottom | `gg` `G` | **(implemented)** `Ctrl+G` removed from `dialog.top/bottom/filter-*`; the filter dialogs' jump keys are now `Ctrl+T` / `Ctrl+B` | `Ctrl+G` is submit only (guard test) |
 | Open (in app) | `Enter` | none | |
 | Open in browser | `o` | none; diff `o` opens `/files` today, becomes "this view's page" | one verb, target follows context |
 | Back | `Esc`, `q` | none | `q` quits only at root (already true) |
-| Sections / groups | `1`-`4` (PR detail), `1`-`5` (queue groups) | digits stop jumping panes | pane jumps move to `g` chords |
+| Sections / groups | `1`-`4` (PR detail), `1`-`5` (queue groups) | **(implemented)** digits no longer jump panes; the sections themselves land with #201 | pane jumps are `g` chords |
 | Prev / next item | `[` `]` | queue group, diff file | same verb: step one unit |
-| Prev / next thread | `{` `}` | was `N` / `n` in diff | frees `n`, `N` for "new" |
-| Go to (prefix) | `g` then `f` Home, `p` PRs, `i` issues, `b` branches, `a` actions, `n` inbox, `l` line, `m` manage | new; `:` stays the palette only | which-key shows the list |
+| Prev / next thread | `{` `}` | **(implemented)** was `N` / `n` in diff. `n` / `N` stay as next / previous search match in the diff only (no "new" verb exists there) | frees `n` for "new" in lists |
+| Go to (prefix) | `g` then `h` Home, `p` PRs, `i` issues, `b` branches, `a` actions, `n` inbox, `l` line (diff only) | **(implemented)** `g h` replaces `g f`; `g m` (manage) is not built; `:` stays the palette only | which-key popup lists the continuations valid in the current view |
 | Find / filter | `/` | none | |
-| Find file | `t` | diff `f` (file jump) merges into `t`; tree toggle becomes `T` | GitHub's `t` |
+| Find file | `t` | **(implemented)** diff `f` (file jump) merges into `t`; tree toggle becomes `T` | GitHub's `t` |
 | Palette | `:` or `Space Space` | diff go-to-line leaves `:` | |
 | Help | `?` | none | generated from the registry |
-| Settings | `,` | `S` removed (`,` is already in `[keymaps.global]`) | `S` becomes sort |
-| Refresh | `r` | reply leaves `r` | one key, all views |
-| New | `n` | PR `N` becomes `n` | issue, branch, PR |
-| Comment / reply | `c` | checkout leaves `c`; checks mode becomes section `3` | in a thread, `c` replies |
+| Settings | `,` | **(implemented)** `S` removed (`,` is the action's key now) | `S` becomes sort |
+| Refresh | `r` | **(implemented)** reply leaves `r` in the diff, comments and issue views | one key, all views |
+| New | `n` | **(implemented)** PR `N` becomes `n` | issue, branch, PR |
+| Comment / reply | `c` | **(implemented)** checkout leaves `c` (now `b`); in the diff, comments and issue views `c` replies when a thread is there. Checks mode keeps `c` in PR detail until section `3` exists (#201) | in a thread, `c` replies |
 | Edit | `e` | none | comment, PR title/body; `E` = open file in `$EDITOR` |
-| Delete | `Del` | comment `d` and branch `D` move here | destructive, always confirms |
+| Delete | `Ctrl+X` | **(implemented)** comment `d` and branch `D` move here. `Del` was rejected: Ink reports Backspace and Delete as the same key, so a mistyped Backspace could start a delete | destructive, always confirms |
 | Approve | `a` | none | |
 | Request changes | `x` | issue close leaves `x`; clear-filter leaves `x` | |
-| Resolve conversation | `z` | was `R` in comments | GitHub's word, no GitHub key exists |
-| Merge | `m` | `M` auto-merge removed; "Auto-merge when checks pass" becomes an option in the merge picker | notifications mark-read leaves `m` |
-| Close / cancel | `X` | issue close `x` becomes `X`; ConflictView abort `A` becomes `X` | one verb: stop this thing |
-| Draft / ready | `D` | branch delete leaves `D` | |
+| Resolve conversation | `z` | **(implemented)** was `R` in comments | GitHub's word, no GitHub key exists |
+| Merge | `m` | **(implemented)** notifications mark-read leaves `m` (now `u`). **Deferred:** `M` auto-merge is still bound; it needs the merge-picker option first | |
+| Close / cancel | `X` | **(implemented)** issue close `x` becomes `X`. **Deferred:** ConflictView abort `A` -> `X` (view not migrated) | one verb: stop this thing |
+| Draft / ready | `D` | **(implemented)** branch delete leaves `D` (now `Ctrl+X`) | |
 | Labels / assignees / reviewers | `l` / `A` / `R` | `R` rerun leaves; ConflictView `A`, diff `A` leave | |
-| Re-run checks | `Ctrl+R` | was `R` | in Checks section and Actions pane |
-| Checkout PR branch | `b` | was `c` | |
+| Re-run checks | `Ctrl+R` | **(implemented)** was `R` | in checks mode and the Actions pane |
+| Checkout PR branch | `b` | **(implemented)** was `c` | |
 | Copy URL | `y` | none | |
-| Scope / sort | `s` / `S` | diff split `s` becomes `w`; Settings save `s` removed (`Ctrl+G` exists) | |
-| Mark read / all read | `u` / `U` | was `m` / `M` | |
-| AI review | `Space a` stays; diff `A` leaves | | |
+| Scope / sort | `s` / `S` | **(implemented)** diff split `s` becomes `w`. **Deferred:** Settings save `s` removal (view not migrated); `S` -> sort | |
+| Mark read / all read | `u` / `U` | **(implemented)** was `m` / `M` | |
+| AI review | `Space a` stays; diff `A` leaves | **Deferred:** diff `A` stays as `diff.ai-review` because it has no other key; it is the one remaining `A` collision (assignees elsewhere) | |
 | Submit / editor in compose | `Ctrl+G` / `Ctrl+E` | none | readline wins inside text fields (see open questions) |
-| Edit config | palette only | global `E` removed | detail/diff `E` keeps "open in editor" |
+| Edit config | palette only | **(implemented)** global `E` removed | detail/diff `E` keeps "open in editor" |
 
 Net effect: every key in the conflict table ends with one verb, except the modal or
 contextual ones named in the notes (`Space` in dialogs, `Ctrl+A/E/K` versus readline,
@@ -190,6 +197,23 @@ Compose dialog (comment, approve body)
 
 ## 5. Top tasks and keystroke budgets
 
+**Measured (PTY-style e2e, `src/keystroke-budgets.e2e.test.jsx`, 80 and 120 columns).**
+The PR list stands in for the read-only queue. Counts exclude typed text.
+
+| # | Task | Keys | Count | Budget |
+|---|---|---|---|---|
+| 1 | Approve (queue -> detail) | `Enter`, `a`, `Ctrl+G` | 3 | 3 |
+| 2 | Open a failing check's log | `Enter`, `c`, `Enter` (2 from detail) | 3 | 3 |
+| 3 | Merge a ready PR | `m`, `Enter`, `Enter`, `y` | 4 | 4 |
+| 4 | Read the diff | `d` | 1 | 2 |
+| 5 | Request changes + comment | `x`, text, `Ctrl+G` | 2 + text | 3 + text |
+| 6 | Comment on a diff line | `d`, `j` x 2, `c`, text, `Ctrl+G` | 5 + text | 5 + text |
+| 7 | Resolve a review thread | `Enter`, `v`, `z` | 3 | 3 |
+| 8 | Check out a PR branch | `b`, `y` | 2 | 2 |
+| 9 | Open the PR in the browser | `o` | 1 | 1 |
+
+Task 10 (find by text) and the queue-group paths (`5`, section `3`) wait for #177 / #201.
+
 Assumptions for "today": launched inside a repo, default pane `focus`, persisted PR
 scope `own` (the default), target PR is the first row of its list. Counts were derived by
 reading the handlers, not by running the app; the PTY budget tests in #312 will replace
@@ -225,6 +249,11 @@ option inside `m`. Migrate view by view (diff, detail and comments first: 79 of 
 matches), enforcing a duplicate-binding guard test as each file moves.
 
 ## Open questions for the maintainer
+
+Resolved 2026-10-22: 1 (queue is read-only; approve is measured queue -> detail) and 2
+(digits retired from pane jumps in favour of `g` chords; no compatibility alias).
+Answered in the implementation: 3 (`Ctrl+X`, see Delete), 5 (breaking changes are listed
+in the #312 PR for release notes; no alias shipped). Still open: 4 and 6.
 
 1. Queue and writes: #177 says the review context has no reachable write shortcut,
    #312 budgets "approve from the queue in 3 keys". Which holds? Proposed: queue is

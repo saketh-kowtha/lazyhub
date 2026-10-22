@@ -3,11 +3,12 @@ import { Box, Text, useInput, useStdout } from 'ink'
 import { useTheme } from './theme.js'
 import { useKeyScope } from './keyscope.js'
 import { matchesAction } from './config/actions.js'
-import { APP_CONFIG as _config, GLOBAL_KEYS, PANE_ICONS, PANE_KEYS, PANE_LABELS, VIEW_KEYS } from './app-keys.js'
+import { APP_CONFIG as _config, GLOBAL_KEYS, PANE_ICONS, PANE_LABELS } from './app-keys.js'
+import { contextHelpRows } from './ui/actions.js'
 
 // ─── Help overlay — shown on ? from any view ─────────────────────────────────
 
-export function HelpOverlay({ pane, view, onClose }) {
+export function HelpOverlay({ pane, view, actionCtx, onClose }) {
   useKeyScope('overlay')
   const { t } = useTheme()
   const { stdout } = useStdout()
@@ -19,7 +20,7 @@ export function HelpOverlay({ pane, view, onClose }) {
   })
 
   const isListView = view === 'list'
-  const contextKeys = isListView ? (PANE_KEYS[pane] || []) : (VIEW_KEYS[view] || [])
+  const contextKeys = contextHelpRows(pane, view, actionCtx, _config.toml)
   const contextLabel = isListView
     ? `${PANE_ICONS[pane] || '○'}  ${PANE_LABELS[pane] || pane} list`
     : `${view.charAt(0).toUpperCase()}${view.slice(1)} view`

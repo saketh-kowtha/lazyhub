@@ -1,6 +1,10 @@
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Text } from 'ink'
 import { InputDriver } from './test/input-driver.jsx'
+import { sendInput } from './test/input-bus.js'
+import { armPrefix, disarmPrefix } from './config/keymap.js'
+import { useActiveScope } from './keyscope.js'
 import { useGh } from './hooks/useGh.js'
 import {
   getPR,
@@ -245,7 +249,7 @@ describe('PR detail and diff E2E flows', () => {
         <InputDriver events={[
           { input: 'M' },
           { input: 'c' },
-          { input: 'R' },
+          { input: 'r', key: { ctrl: true } },
         ]} />
       </>
     )
@@ -296,7 +300,7 @@ describe('PR detail and diff E2E flows', () => {
         />
         <InputDriver events={[
           { input: 'j' },
-          { input: 'r' },
+          { input: 'c' },
           { key: { escape: true } },
           { input: 'v' },
           { input: 'A' },
@@ -310,5 +314,54 @@ describe('PR detail and diff E2E flows', () => {
     expect(getAICodeReview).toHaveBeenCalledWith(expect.objectContaining({
       prTitle: 'Stabilize parser',
     }))
+  })
+})
+
+describe('registry dispatch safety in PR detail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useGh.mockImplementation((fn) => ghResult(fn === getPR
+      ? { number: 42, title: 'Stabilize parser', body: '', state: 'OPEN', isDraft: false, mergeable: 'MERGEABLE', labels: [], assignees: [], reviews: [], reviewRequests: [], statusCheckRollup: [], author: { login: 'alice' }, files: [] }
+      : null))
+  })
+  afterEach(() => { disarmPrefix(); cleanup() })
+
+  function ScopeProbe() {
+    return <Text>{`SCOPE ${useActiveScope()}`}</Text>
+  }
+
+  it('typed characters in the body search never trigger actions', async () => {
+    const view = renderWithProviders(
+      <>
+        <PRDetail repo="owner/repo" prNumber={42} onBack={() => {}} onOpenDiff={() => {}} />
+        <ScopeProbe />
+      </>
+    )
+    await flush(20)
+    expect(view.lastFrame()).toContain('SCOPE view')
+
+    await sendInput('/')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('SCOPE input'))
+    for (const ch of ['g', 'p', 'a', 'm', 'x']) await sendInput(ch)
+    expect(view.lastFrame()).toContain('gpamx')
+    expect(view.lastFrame()).not.toMatch(/Approve|Merge pull|Request changes/i)
+
+    await sendInput('', { escape: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('SCOPE view'))
+  })
+
+  it('an armed g prefix keeps its continuation keys away from the view', async () => {
+    const view = renderWithProviders(
+      <PRDetail repo="owner/repo" prNumber={42} onBack={() => {}} onOpenDiff={() => {}} />
+    )
+    await flush(20)
+
+    armPrefix('g', ['a', 'p'])
+    await sendInput('a')
+    expect(view.lastFrame()).not.toMatch(/Approve/)
+
+    disarmPrefix()
+    await sendInput('a')
+    await waitForExpectation(() => expect(view.lastFrame()).toMatch(/Approve/))
   })
 })

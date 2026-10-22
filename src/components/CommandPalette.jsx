@@ -17,7 +17,7 @@ import React, { useState, useMemo, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useTheme }   from '../theme.js'
 import { useKeyScope } from '../keyscope.js'
-import { buildActions, filterActions, resolveContext } from '../ui/actions.js'
+import { buildActions, filterActions, recordActionUse, resolveContext } from '../ui/actions.js'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -99,6 +99,7 @@ export function CommandPalette({ context, onClose, onNavigate, onTheme, onQuit, 
         ? query.trim().slice(action.label.length).trim()
         : ''
 
+      recordActionUse(action.id)
       try {
         const result = action.run({ ...context, themeName, _args: argsText })
         if (result && typeof result.then === 'function') {
@@ -167,13 +168,13 @@ export function CommandPalette({ context, onClose, onNavigate, onTheme, onQuit, 
                   {action.label}
                 </Text>
               </Box>
+              <Box width={9}>
+                <Text color={t.ui.selected} wrap="truncate">{action.keys?.[0] || ''}</Text>
+              </Box>
               {action.hint && (
                 <Text color={t.ui.dim} wrap="truncate">
                   {action.hint}
                 </Text>
-              )}
-              {action.keys?.length > 0 && !action.hint && (
-                <Text color={t.ui.dim}>[{action.keys.join(', ')}]</Text>
               )}
             </Box>
           )

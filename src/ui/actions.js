@@ -24,6 +24,11 @@
  *   'issues'    — visible when pane === 'issues'
  *
  * The palette resolves context via resolveContext(pane, view).
+ *
+ * Key bindings are NOT defined here. They live in the TOML action table
+ * (`[actions.*]` in defaultConfig.toml, rebindable through `[keymaps.*]`); this
+ * module reads the effective bindings so the footer, `?` help, the palette and
+ * the which-key popup all show what the keyboard really does (#312).
  */
 
 import {
@@ -32,6 +37,233 @@ import {
   closePR,
   reviewPR,
 } from '../executor.js'
+import { getActionConfig } from '../config/actions.js'
+import { actionScopeMatches, buildEffectiveActionKeys } from '../config/keymap.js'
+
+// ─── Effective bindings (single source: TOML action table) ───────────────────
+
+/**
+ * Effective keys for a registry action id, after `[keymaps.*]` rebinds/unbinds.
+ * @param {string} id registry action id (e.g. 'pr.approve')
+ * @param {object} [config] effective config
+ * @returns {string[]} key tokens, e.g. ['a'] or ['g p']
+ */
+export function boundKeys(id, config = getActionConfig()) {
+  return effectiveKeys(config)[id] || []
+}
+
+// buildEffectiveActionKeys walks every action; key handlers call this per press.
+const effectiveKeysCache = new WeakMap()
+function effectiveKeys(config) {
+  let keys = effectiveKeysCache.get(config)
+  if (!keys) {
+    keys = buildEffectiveActionKeys(config)
+    effectiveKeysCache.set(config, keys)
+  }
+  return keys
+}
+
+/**
+ * Keymap scopes live for a (pane, view) pair, most general first.
+ * @param {string} pane pane id
+ * @param {string} view 'list' | 'detail' | 'diff' | 'comments'
+ * @returns {string[]} keymap scopes live in that context
+ */
+export function contextScopes(pane, view = 'list') {
+  if (view === 'diff') return ['global', 'diff']
+  if (view === 'comments') return ['global', 'pr-comments']
+  if (view === 'detail') return ['global', pane === 'issues' ? 'issue-detail' : 'pr-detail']
+  const listScope = {
+    prs: 'pr-list', issues: 'issue-list', branches: 'branch-list',
+    actions: 'workflow-list', notifications: 'notification-list',
+  }[pane]
+  return listScope ? ['global', listScope] : ['global']
+}
+
+// Preconditions that hide an action from footer/help when it cannot run. `ctx`
+// is what the active view reports (onPaneState({ actionCtx })); a missing field
+// means "unknown", which keeps the action visible.
+const WHEN = {
+  'pr.merge':            c => c.prOpen !== false,
+  'pr.approve':          c => c.prOpen !== false,
+  'pr.request-changes':  c => c.prOpen !== false,
+  'pr.close':            c => c.prOpen !== false,
+  'pr.reviewers':        c => c.prOpen !== false,
+  'pr.draft':            c => c.prOpen !== false,
+  'pr.base':             c => c.prOpen !== false,
+  'pr.auto-merge':       c => c.prOpen !== false && c.isDraft !== true,
+  'pr.checks':           c => c.hasChecks !== false,
+  'diff.edit-comment':   c => c.lineHasThread !== false,
+  'diff.delete-comment': c => c.lineHasThread !== false,
+}
+
+// Footer priority per scope: ids only. Keys and labels come from the registry.
+const FOOTER_IDS = {
+  'pr-list': ['cursor.down', 'pr.open-selected', 'pr.diff', 'pr.approve', 'pr.merge', 'pr.filter-cycle', 'list.search'],
+  'issue-list': ['cursor.down', 'issue.open-selected', 'issue.new', 'issue.filter-cycle', 'list.search'],
+  'branch-list': ['cursor.down', 'branch.checkout', 'branch.new', 'branch.delete', 'branch.push'],
+  'workflow-list': ['cursor.down', 'workflow.logs', 'workflow.rerun', 'workflow.cancel'],
+  'notification-list': ['cursor.down', 'notification.open', 'notification.mark-read', 'notification.mark-all'],
+  'pr-detail': ['cursor.down', 'pr.diff', 'pr.checks', 'pr.approve', 'pr.merge', 'pr.comments', 'pr.open-browser', 'app.back'],
+  'issue-detail': ['cursor.down', 'issue.reply', 'issue.labels', 'issue.assignees', 'issue.open-browser', 'app.back'],
+  'diff': ['cursor.down', 'diff.next-file', 'diff.next-thread', 'diff.comment', 'diff.file-jump', 'diff.split', 'list.search', 'app.back'],
+  global: ['cursor.down'],
+  'pr-comments': ['cursor.down', 'comment.reply', 'comment.resolve', 'comment.jump', 'comment.filter', 'app.back'],
+}
+
+const FOOTER_GROUP = { nav: 1, meta: 3 }
+
+// Shared 'list' verbs a full-screen view does not implement (kept out of its help).
+const UNSUPPORTED = {
+  'pr-comments': new Set(['list.search']),
+  'issue-detail': new Set(['list.search']),
+}
+
+function visibleIn(id, ctx) {
+  const when = WHEN[id]
+  return !when || when(ctx || {})
+}
+
+function describeAction(id, config) {
+  const action = config?.actions?.[id]
+  const keys = boundKeys(id, config)
+  if (!action || keys.length === 0) return null
+  return { key: action.hint && keys.length > 1 ? action.hint : keys[0], label: action.label || id, group: action.group || '' }
+}
+
+/**
+ * Footer hints for a context, generated from the registry. Actions whose
+ * precondition fails, or that have no key, are left out. `?` is last.
+ * @param {string} pane pane id
+ * @param {string} view view id
+ * @param {object} [ctx] view-reported state used by action preconditions
+ * @param {object} [config] effective config
+ * @returns {{key: string, label: string}[]} footer items
+ */
+export function contextFooterHints(pane, view, ctx = {}, config = getActionConfig()) {
+  const scope = contextScopes(pane, view).at(-1)
+  const isList = view === 'list'
+  const ids = [
+    ...(FOOTER_IDS[scope] || ['cursor.down']),
+    ...(isList ? ['app.next-pane', 'list.refresh', 'app.settings'] : []),
+  ]
+  const seen = new Set()
+  const hints = []
+  for (const id of ids) {
+    if (!visibleIn(id, ctx)) continue
+    const hint = describeAction(id, config)
+    if (!hint) continue
+    const sig = `${hint.key}:${hint.label}`
+    if (seen.has(sig)) continue
+    seen.add(sig)
+    // List footers are grouped: navigation | actions | meta (FooterKeys draws the separators).
+    const item = { key: hint.key, label: hint.label }
+    if (isList) item.group = FOOTER_GROUP[hint.group] ?? 2
+    hints.push(item)
+  }
+  const help = describeAction('app.help', config)
+  if (help) hints.push({ key: help.key, label: help.label })
+  return hints
+}
+
+/**
+ * Every key valid in a context (for the `?` overlay), generated from the registry.
+ * @param {string} pane pane id
+ * @param {string} view view id
+ * @param {object} [ctx] view-reported state used by action preconditions
+ * @param {object} [config] effective config
+ * @returns {{key: string, label: string, group: string}[]} help rows
+ */
+export function contextHelpRows(pane, view, ctx = {}, config = getActionConfig()) {
+  const scopes = contextScopes(pane, view).filter(s => s !== 'global')
+  const rows = []
+  const seen = new Set()
+  for (const [id, action] of Object.entries(config?.actions || {})) {
+    if (!scopes.some(s => actionScopeMatches(action.scope, s))) continue
+    if (scopes.some(s => UNSUPPORTED[s]?.has(id))) continue
+    if (!visibleIn(id, ctx)) continue
+    const hint = describeAction(id, config)
+    if (!hint) continue
+    const sig = `${hint.key}:${hint.label}`
+    if (seen.has(sig)) continue
+    seen.add(sig)
+    rows.push({ key: hint.key, label: action.description || hint.label, group: hint.group })
+  }
+  return rows
+}
+
+/**
+ * Continuations of a prefix key (e.g. `g`) valid in a context, for the which-key popup.
+ * @param {string} prefix prefix key
+ * @param {string} pane pane id
+ * @param {string} view view id
+ * @param {object} [config] effective config
+ * @returns {{key: string, label: string, actionId: string, global: boolean}[]} continuations
+ */
+export function prefixContinuations(prefix, pane, view, config = getActionConfig()) {
+  const scopes = contextScopes(pane, view)
+  const out = []
+  for (const [id, action] of Object.entries(config?.actions || {})) {
+    if (!scopes.some(s => actionScopeMatches(action.scope, s))) continue
+    for (const token of boundKeys(id, config)) {
+      const m = token.match(/^(\S) (\S)$/)
+      if (m && m[1] === prefix) {
+        out.push({ key: m[2], label: action.label || id, actionId: id, global: action.scope === 'global' })
+      }
+    }
+  }
+  if (boundKeys('cursor.top', config).includes(`${prefix}${prefix}`)) {
+    out.unshift({ key: prefix, label: 'top of list', actionId: 'cursor.top', global: false })
+  }
+  return out
+}
+
+/**
+ * Prefix keys in use by the registry (first half of any two-key `x y` binding).
+ * @param {object} [config] effective config
+ * @returns {Set<string>} prefix keys
+ */
+export function registeredPrefixes(config = getActionConfig()) {
+  let prefixes = prefixCache.get(config)
+  if (!prefixes) {
+    prefixes = new Set()
+    for (const id of Object.keys(config?.actions || {})) {
+      for (const token of boundKeys(id, config)) {
+        const m = token.match(/^(\S) \S$/)
+        if (m) prefixes.add(m[1])
+      }
+    }
+    prefixCache.set(config, prefixes)
+  }
+  return prefixes
+}
+
+const prefixCache = new WeakMap()
+
+// ─── Recent use (session scope) ──────────────────────────────────────────────
+
+const recentUse = new Map()
+let useCounter = 0
+
+/**
+ * Remember that an action ran, so the palette ranks it higher next time.
+ * @param {string} id action id
+ */
+export function recordActionUse(id) {
+  recentUse.set(id, ++useCounter)
+}
+
+/** Forget recent use (tests). */
+export function resetActionUse() {
+  recentUse.clear()
+  useCounter = 0
+}
+
+// Bonus 9 for the most recent action, one less per later action, floor 1.
+function recencyBonus(id) {
+  const at = recentUse.get(id)
+  return at == null ? 0 : Math.max(1, 9 - (useCounter - at))
+}
 
 // ─── Fuzzy match algorithm ────────────────────────────────────────────────────
 
@@ -115,7 +347,7 @@ export function filterActions(actions, query, context, limit = 8) {
     const score = Math.max(labelScore, hintScore, idScore)
 
     if (score >= 0) {
-      results.push({ ...action, _score: score })
+      results.push({ ...action, _score: score + recencyBonus(action.id) })
     }
   }
 
@@ -445,5 +677,27 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
     },
   })
 
-  return actions
+  return actions.map(withRegistryKeys)
+}
+
+// Palette ids that stand for a registry action under a different id.
+const REGISTRY_ID = {
+  'global.help': 'app.help',
+  'global.refresh': 'list.refresh',
+  'global.quit': 'app.back',
+  'pr.open-diff': 'pr.diff',
+  'pr.scope.cycle': 'pr.scope-cycle',
+  'pane.prs': 'go.prs',
+  'pane.issues': 'go.issues',
+  'pane.branches': 'go.branches',
+  'pane.actions': 'go.actions',
+  'pane.notifications': 'go.notifications',
+}
+
+// Show the bindings the keyboard really has (rebinds included), not literals.
+function withRegistryKeys(action) {
+  const config = getActionConfig()
+  const id = REGISTRY_ID[action.id] || action.id
+  if (!config?.actions?.[id]) return action
+  return { ...action, keys: boundKeys(id, config) }
 }

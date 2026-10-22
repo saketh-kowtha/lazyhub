@@ -88,7 +88,7 @@ function matchesKeyToken(token, input, key) {
     case 'PageDown': return key.pageDown
     case 'PageUp': return key.pageUp
     case '<space><space>': return false
-    default: return input === token
+    default: return input === token && !key.ctrl && !key.meta
   }
 }
 
