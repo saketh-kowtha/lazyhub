@@ -436,34 +436,6 @@ describe('bootstrap() integration', () => {
         else process.env.GH_HOST = prevHost
     })
 
-    it('path D (GHE): auto-detects GH_HOST from a GHE remote before auth check', async () => {
-        const { bootstrap } = await import('./bootstrap.js')
-        const prevHost = process.env.GH_HOST
-        delete process.env.GH_HOST
-
-        execa
-            .mockResolvedValueOnce({ exitCode: 0, stdout: 'gh version 2.0.0' })                    // detectGh
-            .mockResolvedValueOnce({ exitCode: 0, stdout: 'git@github.enterprise.com:org/app.git' }) // detectHostFromRemote
-            .mockResolvedValueOnce({ exitCode: 0, stdout: 'ghe_token\n' })                          // checkAuth
-            .mockResolvedValueOnce({ exitCode: 0, stdout: 'git@github.enterprise.com:org/app.git' }) // detectRepo (git remote)
-
-        const renderApp = vi.fn()
-        await bootstrap(renderApp)
-
-        expect(process.env.GH_HOST).toBe('github.enterprise.com')
-        expect(process.env.GHUI_REPO).toBe('org/app')
-        expect(renderApp).toHaveBeenCalledOnce()
-
-        // checkAuth should have been called with --hostname github.enterprise.com
-        const authCall = execa.mock.calls.find(([bin, args]) =>
-            bin === 'gh' && Array.isArray(args) && args[0] === 'auth' && args[1] === 'token'
-        )
-        expect(authCall?.[1]).toEqual(['auth', 'token', '--hostname', 'github.enterprise.com'])
-
-        delete process.env.GH_HOST
-        if (prevHost !== undefined) process.env.GH_HOST = prevHost
-    })
-
     it('path D (GHE, no git repo): falls back to detectAuthenticatedHost when default auth check fails', async () => {
         const { bootstrap } = await import('./bootstrap.js')
         const prevHost = process.env.GH_HOST
@@ -514,5 +486,125 @@ describe('bootstrap() integration', () => {
 
         delete process.env.GH_HOST
         if (prevHost !== undefined) process.env.GH_HOST = prevHost
+    })
+})
+
+// ─── GHES host resolution (remote host vs. gh-authenticated host) ─────────────
+
+describe('GHES host resolution', () => {
+    const status = (...hosts) => hosts.map((h, i) => [
+        h, `  ✓ Logged in to ${h} account alice (keyring)`, `  - Active account: ${i === 0}`,
+    ].join('\n')).join('\n\n')
+
+    // Command-keyed execa mock: no real git/ssh/gh.
+    const mockCmds = ({ remote, ssh, authed = [], tokenHosts = authed }) => {
+        execa.mockImplementation(async (bin, args = []) => {
+            if (bin === 'gh' && args[0] === '--version') return { exitCode: 0, stdout: 'gh version 2.0.0' }
+            if (bin === 'git') return { exitCode: 0, stdout: remote }
+            if (bin === 'ssh') return ssh ? { exitCode: 0, stdout: `user git\nhostname ${ssh}\nport 22` } : { exitCode: 255, stdout: '' }
+            if (bin === 'gh' && args[0] === 'auth' && args[1] === 'status') {
+                return authed.length ? { exitCode: 0, stdout: '', stderr: status(...authed) } : { exitCode: 1, stdout: '', stderr: 'not logged in' }
+            }
+            if (bin === 'gh' && args[0] === 'auth' && args[1] === 'token') {
+                const host = args[3] || 'github.com'
+                return tokenHosts.includes(host) ? { exitCode: 0, stdout: 'tok\n' } : { exitCode: 1, stdout: '' }
+            }
+            return { exitCode: 1, stdout: '' }
+        })
+    }
+
+    let prevHost, prevRepo, errSpy
+    beforeEach(() => {
+        vi.clearAllMocks()
+        prevHost = process.env.GH_HOST
+        prevRepo = process.env.GHUI_REPO
+        delete process.env.GH_HOST
+        vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`exit:${code}`) })
+        errSpy = vi.spyOn(console, 'error').mockImplementation(() => { })
+        vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    })
+    afterEach(() => {
+        vi.restoreAllMocks()
+        if (prevHost === undefined) delete process.env.GH_HOST
+        else process.env.GH_HOST = prevHost
+        if (prevRepo === undefined) delete process.env.GHUI_REPO
+        else process.env.GHUI_REPO = prevRepo
+    })
+
+    const run = async () => {
+        const { bootstrap } = await import('./bootstrap.js')
+        const renderApp = vi.fn()
+        await bootstrap(renderApp)
+        return renderApp
+    }
+
+    it('remote host that gh is logged in to is used', async () => {
+        mockCmds({ remote: 'https://ghe.corp:8443/corp/app.git', authed: ['ghe.corp'] })
+        await run()
+        expect(process.env.GH_HOST).toBe('ghe.corp')
+        expect(process.env.GHUI_REPO).toBe('corp/app')
+    })
+
+    it('SSH alias is resolved with ssh -G (execa arg array, timeout)', async () => {
+        mockCmds({ remote: 'git@ghe-alias:corp/app.git', ssh: 'ghe.corp', authed: ['ghe.corp'] })
+        await run()
+        expect(execa).toHaveBeenCalledWith('ssh', ['-G', 'ghe-alias'], expect.objectContaining({ timeout: expect.any(Number) }))
+        expect(process.env.GH_HOST).toBe('ghe.corp')
+        expect(process.env.GHUI_REPO).toBe('corp/app')
+    })
+
+    it('ssh hostname differing from the API host falls back to the single authed GHES host', async () => {
+        mockCmds({ remote: 'git@ssh.ghe.corp:corp/app.git', ssh: 'ssh.ghe.corp', authed: ['github.com', 'ghe.corp'] })
+        await run()
+        expect(process.env.GH_HOST).toBe('ghe.corp')
+        expect(process.env.GHUI_REPO).toBe('corp/app')
+    })
+
+    it('parses ssh://user@host:port/owner/repo', async () => {
+        mockCmds({ remote: 'ssh://org-user@ghe.corp:2222/corp/app.git', ssh: 'ghe.corp', authed: ['ghe.corp'] })
+        await run()
+        expect(process.env.GH_HOST).toBe('ghe.corp')
+        expect(process.env.GHUI_REPO).toBe('corp/app')
+    })
+
+    it('explicit GH_HOST wins over the remote', async () => {
+        process.env.GH_HOST = 'other.corp'
+        mockCmds({ remote: 'git@ghe-alias:corp/app.git', ssh: 'ghe.corp', authed: ['ghe.corp', 'other.corp'] })
+        await run()
+        expect(process.env.GH_HOST).toBe('other.corp')
+        expect(execa).not.toHaveBeenCalledWith('ssh', expect.anything(), expect.anything())
+        expect(process.env.GHUI_REPO).toBe('corp/app')
+    })
+
+    it('github.com-only user with a git@github-personal: alias stays on github.com', async () => {
+        mockCmds({ remote: 'git@github-personal:me/app.git', ssh: 'github.com', authed: ['github.com'] })
+        await run()
+        expect(process.env.GH_HOST).toBeUndefined()
+        expect(process.env.GHUI_REPO).toBe('me/app')
+    })
+
+    it('unauthenticated unresolved alias: clear message, exit 1, no login attempted', async () => {
+        mockCmds({ remote: 'git@work-gh:corp/app.git', authed: ['github.com'] })
+        await expect(run()).rejects.toThrow('exit:1')
+        const msg = errSpy.mock.calls.map(c => c.join(' ')).join('\n')
+        expect(msg).toContain('work-gh')
+        expect(msg).toContain('github.com')
+        expect(msg).toContain('gh auth login --hostname work-gh')
+        expect(msg).toContain('export GH_HOST=')
+        expect(process.env.GH_HOST).toBeUndefined()
+        expect(execa.mock.calls.some(([b, a]) => b === 'gh' && a?.[0] === 'auth' && a?.[1] === 'login')).toBe(false)
+    })
+})
+
+describe('detectRepo (host-agnostic)', () => {
+    beforeEach(() => vi.clearAllMocks())
+
+    it.each([
+        ['git@ghe-alias:corp/app.git', 'corp/app'],
+        ['ssh://u@ghe.corp:2222/corp/app.git', 'corp/app'],
+        ['https://ghe.corp:8443/corp/my.app', 'corp/my.app'],
+    ])('parses %s without GH_HOST matching', async (url, expected) => {
+        execa.mockResolvedValue({ exitCode: 0, stdout: url })
+        expect(await detectRepo()).toBe(expected)
     })
 })
