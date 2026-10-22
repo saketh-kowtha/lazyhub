@@ -20,18 +20,14 @@ jobs:
           node-version: 22
           cache: npm
 
-      # Workaround for npm's optional-deps bug
-      # (https://github.com/npm/cli/issues/4828). Lockfiles generated on macOS
-      # omit Linux-specific native bindings for rollup/rolldown, so `npm ci`
-      # fails on ubuntu-latest. Even `npm install` respects the existing
-      # lockfile and skips the missing platform bindings. Removing the lockfile
-      # first forces a fresh resolution that includes the Linux bindings.
-      # Trade-off: CI no longer enforces lockfile determinism. Acceptable for a
-      # single-maintainer OSS project until npm 11+ ships the upstream fix.
-      - name: Install dependencies (lockfile-free)
-        run: |
-          rm -f package-lock.json
-          npm install --no-audit --no-fund
+      # Installs exactly the committed package-lock.json; `npm ci` fails if it
+      # disagrees with package.json. The lockfile carries every platform's
+      # optional native bindings (docs/RELEASING.md, "Dependency graph").
+      - name: Install dependencies (locked)
+        run: npm ci --no-audit --no-fund
+
+      - name: Record toolchain and lockfile identity
+        run: node scripts/record-toolchain.mjs --verify-clean
 
       - name: Lint
         run: npm run lint
@@ -62,13 +58,10 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
           path: .base-coverage
 
-      - name: Install base branch dependencies (lockfile-free)
+      - name: Install base branch dependencies (locked)
         if: github.event_name == 'pull_request'
         working-directory: .base-coverage
-        run: |
-          rm -f package-lock.json
-          npm install --no-audit --no-fund
-          npm install --no-audit --no-fund -D @vitest/coverage-v8@3.2.6
+        run: npm ci --no-audit --no-fund
 
       - name: Collect base branch coverage
         if: github.event_name == 'pull_request'
@@ -110,10 +103,11 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies (lockfile-free)
-        run: |
-          rm -f package-lock.json
-          npm install --no-audit --no-fund
+      - name: Install dependencies (locked)
+        run: npm ci --no-audit --no-fund
+
+      - name: Record toolchain and lockfile identity
+        run: node scripts/record-toolchain.mjs --verify-clean
 
       - name: Install tmux
         if: matrix.os == 'ubuntu-latest'
@@ -138,10 +132,11 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies (lockfile-free)
-        run: |
-          Remove-Item package-lock.json -Force
-          npm install --no-audit --no-fund
+      - name: Install dependencies (locked)
+        run: npm ci --no-audit --no-fund
+
+      - name: Record toolchain and lockfile identity
+        run: node scripts/record-toolchain.mjs --verify-clean
 
       - name: Build
         run: npm run build

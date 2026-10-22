@@ -63,6 +63,42 @@ and a short expiry. Do not reintroduce a broad automation token.
 5. Run `Promote` with the rc version only if you want to exercise dist-tag over
    OIDC; roll `latest` back afterwards (see Rollback).
 
+## Dependency Graph (one lockfile for CI, release, promote)
+
+Every workflow installs with `npm ci --no-audit --no-fund` from the committed
+`package-lock.json`. Nothing deletes or regenerates it. `npm ci` fails if the
+lockfile and `package.json` disagree, and every job then runs
+`node scripts/record-toolchain.mjs --verify-clean`, which logs (and writes to
+the job summary) the Node and npm versions, platform, and SHA-256 of
+`package-lock.json` / `package.json`, and fails if either differs from the
+committed copy. `release.yml` runs it before the build and again after, so a
+changed graph fails before `npm publish`. Compare the lockfile hash in the CI
+run for the tagged commit with the one in the Release run.
+
+Why CI used to delete the lockfile: it was a workaround for npm's optional-deps
+bug (npm/cli#4828). A lockfile generated on macOS could omit the Linux native
+bindings of rollup/rolldown/esbuild, so `npm ci` failed on ubuntu-latest. The
+committed lockfile now lists the bindings for every platform
+(`@rollup/rollup-*`, `@rolldown/binding-*`, `@esbuild/*`), so the workaround is
+no longer needed. Verify with a clean checkout:
+
+```bash
+npm ci --os=linux --cpu=x64      # also: --os=win32 --cpu=x64, --os=darwin --cpu=arm64
+ls node_modules/@rollup node_modules/@rolldown   # the matching binding is present
+```
+
+Regenerating a portable lockfile (only when dependencies change, never in CI):
+
+```bash
+rm -rf node_modules package-lock.json
+npm install --package-lock-only
+npm ci && git diff --stat package-lock.json
+```
+
+Then check that the platform bindings above are still listed in
+`package-lock.json` (`grep -c 'rollup-linux-x64-gnu\|rollup-win32-x64-msvc\|binding-linux-x64-gnu\|binding-win32-x64-msvc' package-lock.json`)
+before committing. Do not hand-edit the lockfile.
+
 ## Verification
 
 ```bash
