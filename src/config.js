@@ -7,18 +7,17 @@
  */
 
 import { readFileSync } from 'fs'
-import { dirname, join } from 'path'
+import { dirname } from 'path'
 import { ensurePrivateDir, tightenFile, writePrivateFile } from './secure-fs.js'
 import { logger } from './utils-core.js'
-import { fileURLToPath } from 'url'
 import { migrateLegacyPaneIcons } from './config/migrate.js'
-import { loadConfig as loadTomlConfig, USER_CONFIG_PATH } from './config/loader.js'
+import { loadConfig as loadTomlConfig, USER_CONFIG_PATH, DEFAULT_CONFIG_TOML_PATH } from './config/loader.js'
 import { DEFAULT_CONFIG } from './config/schema.js'
 import { readState as readTomlState, removeSectionTree, writeConfig as writeTomlConfig, writeState as writeTomlState } from './config/writer.js'
 
 export const BUILTIN_PANES = ['prs', 'issues', 'branches', 'actions', 'notifications']
 export const CONFIG_PATH = USER_CONFIG_PATH
-const DEFAULT_CONFIG_TOML_PATH = join(dirname(fileURLToPath(import.meta.url)), 'config', 'defaultConfig.toml')
+const OPENAI_DEFAULT_BASE_URL = 'https://api.openai.com/v1'
 
 function firstActionKey(actions, id, fallback) {
   const key = actions?.[id]?.keys?.[0]
@@ -29,13 +28,26 @@ function scopeFromToml(scope) {
   return scope === 'mine' ? 'own' : scope
 }
 
-function camelAi(ai = {}) {
+/**
+ * Project [ai] TOML into the legacy camelCase shape, resolving endpoint defaults per provider.
+ * @param {Object} [ai] raw [ai] table
+ * @returns {Object} legacy ai config
+ */
+export function camelAi(ai = {}) {
+  const provider = ai.provider || 'anthropic'
+  // Older releases pinned the OpenAI default URL into the user file; for Ollama that
+  // value is never intentional, so treat it as unset rather than leak to OpenAI.
+  const fileUrl = provider === 'ollama' && ai.openai_base_url === OPENAI_DEFAULT_BASE_URL ? '' : ai.openai_base_url
+  // Left empty when unset: each provider applies its own default endpoint (OpenAI ->
+  // api.openai.com, Ollama -> localhost), so no default host is ever assumed here.
+  const openaiBaseUrl = fileUrl || process.env.OPENAI_BASE_URL || ''
   return {
-    provider:        ai.provider || 'anthropic',
+    provider,
     model:           ai.model || '',
     anthropicApiKey: ai.anthropic_api_key || process.env.ANTHROPIC_API_KEY || '',
-    openaiApiKey:    ai.openai_api_key || process.env.OPENAI_API_KEY || '',
-    openaiBaseUrl:   ai.openai_base_url || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    // An OpenAI key must never ride along to Ollama's default (keyless, local) endpoint.
+    openaiApiKey:    provider === 'ollama' && !openaiBaseUrl ? '' : ai.openai_api_key || process.env.OPENAI_API_KEY || '',
+    openaiBaseUrl,
     openai_compatible: ai.openai_compatible || {},
   }
 }
@@ -210,6 +222,9 @@ export function writeDefaultConfig(configPath = CONFIG_PATH) {
       // Pane presentation ([panes.*]) is not pinned: those values are defaults, so
       // omitting them lets future default changes reach existing users.
       writePrivateFile(configPath, removeSectionTree(readFileSync(DEFAULT_CONFIG_TOML_PATH, 'utf8'), 'panes'))
-    } catch { /* non-fatal: defaults are bundled and loaded in-memory */ }
+    } catch (err) {
+      // Non-fatal: defaults are bundled and loaded in-memory.
+      logger.warn('config: could not write default lazyhub.toml', { error: err.message })
+    }
   }
 }

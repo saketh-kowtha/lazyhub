@@ -246,7 +246,7 @@ export const DEFAULT_CONFIG = {
     model: '',
     anthropic_api_key: '',
     openai_api_key: '',
-    openai_base_url: 'https://api.openai.com/v1',
+    openai_base_url: '',
     openai_compatible: {
       base_url: 'http://localhost:11434/v1',
       api_key: '',
