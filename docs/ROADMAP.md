@@ -108,7 +108,7 @@ Progress: items marked Done are merged; each PR lists its own residual gaps unde
 
 ## Beta - supervised execution and team operation
 
-Beta work must not block Alpha user learning.
+Beta work is labelled `stage:demand-gated` (except #140 and #234, which are `stage:approval`) and must not block Alpha user learning.
 
 | Area | Issues |
 |---|---|
