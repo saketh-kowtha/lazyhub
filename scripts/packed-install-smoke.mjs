@@ -7,9 +7,10 @@
 // Subprocesses use execFileSync with array args only. Exits non-zero on failure.
 
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const root = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const work = mkdtempSync(join(tmpdir(), 'lazyhub-packed-'))
@@ -44,6 +45,13 @@ try {
   // doctor exits non-zero when the temp HOME has no config; only its output matters here.
   const doctor = spawnSync('node', [bin, 'doctor', '--help'], { encoding: 'utf8', env, timeout: 30_000 })
   check(doctor.stdout.includes('Schema validation passed'), 'doctor --help runs (bundled ESM + lazy chunks load)')
+  // Evaluating the chunk that bundles Ink's layout engine proves yoga.wasm resolves from the installed dist/ (top-level await).
+  const dist = join(installed, 'dist')
+  const yogaChunk = readdirSync(dist).find(f => f.endsWith('.js') && readFileSync(join(dist, f), 'utf8').includes('./yoga.wasm'))
+  const yoga = yogaChunk
+    ? spawnSync('node', ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(join(dist, yogaChunk)).href)})`], { encoding: 'utf8', env, timeout: 30_000 })
+    : { status: 1, stderr: 'no chunk references ./yoga.wasm' }
+  check(yoga.status === 0, `bundled Ink layout engine loads yoga.wasm${yoga.status === 0 ? '' : `: ${yoga.stderr}`}`)
 } catch (err) {
   failures.push(`unexpected error: ${err.stdout || ''}${err.stderr || ''}${err.message}`)
   console.error(failures.at(-1))

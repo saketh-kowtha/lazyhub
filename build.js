@@ -49,9 +49,10 @@ async function writeThirdPartyLicenses(metafile) {
   for (const root of [...roots].sort()) {
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
     const files = await readdir(root)
-    const licenseFile = files.find(f => /^(licen[sc]e|copying)(\.|$)/i.test(f))
+    const licenseFile = files.find(f => /^(licen[sc]e|copying)([.-]|$)/i.test(f))
     const text = licenseFile ? (await readFile(join(root, licenseFile), 'utf8')).trim() : `License: ${pkg.license ?? 'UNKNOWN'} (no license file shipped by the package)`
-    entries.push(`${pkg.name}@${pkg.version} (${pkg.license ?? 'UNKNOWN'})\n\n${text}`)
+    const entry = `${pkg.name}@${pkg.version} (${pkg.license ?? 'UNKNOWN'})\n\n${text}`
+    if (!entries.includes(entry)) entries.push(entry) // same version nested under several parents
   }
   const header = 'Third-party software bundled into lazyhub (dist/*.js).\n'
   await writeFile(join('dist', 'THIRD_PARTY_LICENSES'), `${header}\n${entries.join('\n\n' + '-'.repeat(72) + '\n\n')}\n`)

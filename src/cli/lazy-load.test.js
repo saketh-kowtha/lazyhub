@@ -113,5 +113,10 @@ describe('self-contained package (#282)', () => {
     expect(existsSync(join(DIST, 'defaultConfig.toml'))).toBe(true)
     const licenses = readFileSync(join(DIST, 'THIRD_PARTY_LICENSES'), 'utf8')
     for (const name of ['ink@', 'react@', 'highlight.js@', 'yoga-wasm-web@', 'execa@']) expect(licenses).toContain(name)
+    // LICENSE-MIT.txt style names must be picked up, not fall back to the SPDX id.
+    expect(licenses).toMatch(/emoji-regex@[\d.]+ \(MIT\)\n\n[^]*?Permission is hereby granted/)
+    const entries = licenses.split(/\n-{72}\n/)
+    expect(entries.length).toBeGreaterThan(30)
+    expect(entries.filter(e => e.includes('no license file shipped')).length).toBeLessThan(5)
   })
 })
