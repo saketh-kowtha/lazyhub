@@ -55,6 +55,89 @@ const UNOBSERVABLE_PATHS = [
 const GITHUB_ENFORCED_MISSING = 'lazyhub/approval required check with pinned App source and ruleset verification not installed or verified in watch-only'
 const MANAGED_GATEWAY_MISSING = 'no lazyhub gateway/helper in the path in watch-only'
 
+/**
+ * Shared user-facing vocabulary (CLI, doctor, onboarding) so the three surfaces
+ * cannot drift. Four distinct facts per operation: the operation itself,
+ * observation quality (complete / fresh), enforcement (always none in
+ * watch-only) and attribution (who GitHub says acted; metadata only, never
+ * evidence of a verified human and never an input to coverage).
+ */
+export const ATTRIBUTION_LABELS = Object.freeze({
+  agent: 'known agent',
+  automation: 'known automation',
+  human: 'GitHub user (not proof of a human)',
+  shared: 'user + known agent',
+  unknown: 'unattributed',
+})
+
+export const ENFORCEMENT_NOTE = 'Enforcement: none. Watch-only blocks nothing and installs no required check, so no operation is github_enforced or managed_gateway.'
+
+export const ATTRIBUTION_NOTE = 'Attribution is who GitHub says acted. A GitHub user account does not prove a human wrote the change, and unattributed activity neither grants authority nor changes coverage.'
+
+/**
+ * Non-zero attribution counts as plain text, e.g. "known agent 2, unattributed 1".
+ * @param {Record<string, number>} counts
+ * @returns {string}
+ */
+export function describeAttribution(counts) {
+  const parts = Object.keys(ATTRIBUTION_LABELS).filter(k => counts[k] > 0).map(k => `${ATTRIBUTION_LABELS[k]} ${counts[k]}`)
+  return parts.length ? parts.join(', ') : 'none seen'
+}
+
+/** gap/downgrade code -> [what happened, safe next step]. Codes stay inspectable alongside. */
+const REASON_COPY = {
+  permission_missing: ['your gh token cannot read this repository\'s pull requests', 'check `gh auth status` and the token\'s repo read access'],
+  rate_limited: ['GitHub rate limit reached; observation stopped early', 'wait for the limit to reset, then re-run'],
+  rate_limit_low: ['GitHub rate limit nearly used up; observation stopped early', 'wait for the limit to reset, then re-run'],
+  fetch_failed: ['activity could not be read', 'check your network and `gh auth status`, then re-run'],
+  observation_unavailable: ['activity could not be read', 'check your network and `gh auth status`, then re-run'],
+  pr_page_limit: ['older pull requests were not observed', 're-run with a larger --max-pages'],
+  stale_observation: ['the data is older than 10 minutes', 're-run to refresh it'],
+  not_observable: ['this path cannot be seen from GitHub', 'nothing to do in watch-only; treat it as unwatched'],
+}
+
+/**
+ * Plain-language [what, next] for a gap code or downgrade reason, or null.
+ * @param {string} code  e.g. `pr_page_limit`, `observation_gap:reviews_truncated`, `stale_observation`
+ * @returns {[string, string]|null}
+ */
+export function explainReason(code) {
+  const c = String(code).replace(/^observation_gap:/, '')
+  if (REASON_COPY[c]) return REASON_COPY[c]
+  if (/_truncated$/.test(c)) return ['activity beyond the read window was not observed', 're-run with a larger --limit or --max-pages']
+  if (c.startsWith('repo_identity_unverified')) return ['the repository identity could not be verified', 'check `gh auth status` and the repository name']
+  if (c.startsWith('ruleset_')) return ['rulesets could not be read, so approval rules are unknown', 'needs admin read access to rulesets; optional in watch-only']
+  if (c.startsWith('alternate_path_detected')) return ['a path that bypasses GitHub-side watching was detected', 'review it with `lazyhub doctor coverage`']
+  return null
+}
+
+/**
+ * Word-wrap to `width` columns; continuation lines keep `indent`. Over-long words are hard-broken, never dropped.
+ * @param {string} text
+ * @param {number} width
+ * @param {string} indent
+ * @returns {string[]}
+ */
+export function wrapText(text, width, indent) {
+  const cont = `${indent}  `
+  const out = []
+  let line = indent
+  const flush = () => { out.push(line); line = cont }
+  for (let word of text.split(' ')) {
+    if (line.trim() && line.length + 1 + word.length > width) flush()
+    while (indent.length + word.length > width) {
+      if (line.trim()) flush()
+      const room = width - line.length
+      line += word.slice(0, room)
+      word = word.slice(room)
+      flush()
+    }
+    line += (line.trim() ? ' ' : '') + word
+  }
+  out.push(line)
+  return out
+}
+
 const emptyCounts = () => ({ agent: 0, automation: 0, human: 0, shared: 0, unknown: 0 })
 
 function actorSummary(events) {
@@ -154,6 +237,7 @@ export function buildReport(classified, { now = Date.now } = {}) {
       'Report is local; nothing was sent anywhere and nothing was written to GitHub.',
       'Actor classes are audit metadata only and never grant or bypass authority.',
       '"human" means a GitHub User account with no known-agent evidence, not a verified person.',
+      ATTRIBUTION_NOTE,
       'Local work that never reached GitHub is not observed.',
     ],
   }

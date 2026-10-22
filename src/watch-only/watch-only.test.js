@@ -12,7 +12,7 @@ import { execa } from 'execa'
 import { generateWatchOnlyReport } from './index.js'
 import { observeRepo } from './observe.js'
 import { classifyObservation } from './classify.js'
-import { buildReport } from './report.js'
+import { buildReport, explainReason } from './report.js'
 import { parseWatchOnlyArgs, formatWatchOnlyReport } from '../cli/watch-only.js'
 
 const fixture = () => JSON.parse(readFileSync(new URL('./fixtures/pr-activity.json', import.meta.url), 'utf8'))
@@ -168,5 +168,70 @@ describe('cli surface', () => {
     expect(text).toContain('pr_merge')
     expect(text).toContain('advisory')
     expect(text).not.toContain('\u001b')
+  })
+})
+
+describe('report wording keeps attribution, observation and enforcement distinct (#281)', () => {
+  const textOf = report => formatWatchOnlyReport(report)
+  const opBlock = (text, name) => text.split(/\n {2}(?! )/).find(b => b.startsWith(name))
+  const flat = text => text.replace(/\n\s*/g, ' ')
+
+  it('unknown actor + complete observation: advisory coverage, attribution never read as safety or coverage', async () => {
+    const text = textOf(await run())
+    expect(text).toContain('Enforcement: none')
+    expect(text).toContain('unattributed')
+    expect(text).not.toMatch(/unknown is not safe|counts as ungoverned/)
+    expect(opBlock(text, 'pr_review')).toMatch(/coverage: advisory\n\s+observation: complete, fresh/)
+    expect(opBlock(text, 'pr_review')).toContain('attribution:')
+  })
+
+  it('labels never present a GitHub user account as a verified human', async () => {
+    const text = textOf(await run())
+    expect(text).toContain('GitHub user (not proof of a human)')
+    expect(text).not.toMatch(/\bhuman \d/)
+    expect(flat(text)).toContain('does not prove a human wrote the change')
+  })
+
+  it('known actor + incomplete observation: ungoverned with a plain-language reason, next step and the raw code', async () => {
+    const page = fixture()
+    page.data.repository.pullRequests.nodes[0].reviews.pageInfo.hasNextPage = true
+    execa.mockResolvedValue(reply(page))
+    const block = opBlock(textOf(await run()), 'pr_review')
+    expect(block).toContain('coverage: ungoverned')
+    expect(block).toContain('INCOMPLETE')
+    expect(block).toContain('observation_gap:reviews_truncated')
+    expect(flat(block)).toMatch(/activity beyond the read window was not observed\. next: re-run/)
+  })
+
+  it('stale data is shown as stale with a refresh step, independent of attribution', async () => {
+    const classified = classifyObservation(await observeRepo({ repo: 'acme/widgets', now: () => NOW }))
+    const text = textOf(buildReport(classified, { now: () => NOW + 3_600_000 }))
+    expect(opBlock(text, 'pr_merge')).toContain('STALE')
+    expect(flat(text)).toContain('older than 10 minutes. next: re-run to refresh')
+  })
+
+  it('permission and rate-limit gaps explain themselves', async () => {
+    const page = fixture()
+    page.data.repository.pullRequests.pageInfo = { hasNextPage: true, endCursor: 'next' }
+    execa.mockResolvedValueOnce(reply(page)).mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'API rate limit exceeded' })
+    const text = flat(textOf(await run()))
+    expect(text).toContain('rate_limited')
+    expect(text).toContain('GitHub rate limit reached; observation stopped early. next: wait for the limit to reset')
+    expect(explainReason('permission_missing')[1]).toMatch(/gh auth status/)
+  })
+
+  it('renders within 80 columns without dropping the explanation', async () => {
+    const report = await run()
+    report.observation.gaps.push({ code: 'permission_missing', scope: 'pull_requests', operations: ['pr_merge'], detail: 'x'.repeat(150) })
+    const lines = textOf(report).split('\n')
+    expect(lines.filter(l => l.length > 80)).toEqual([])
+    expect(lines.join('').replace(/\s/g, '')).toContain('x'.repeat(150))
+  })
+
+  it('keeps JSON enums and shape: notes gain the attribution caveat only', async () => {
+    const report = await run()
+    expect(report.schema_version).toBe(1)
+    expect(report.operations.map(o => o.coverage).every(c => ['advisory', 'ungoverned'].includes(c))).toBe(true)
+    expect(report.notes.join(' ')).toContain('unattributed activity neither grants authority nor changes coverage')
   })
 })

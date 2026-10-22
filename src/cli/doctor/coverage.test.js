@@ -34,6 +34,15 @@ async function run(over = {}, fx = fixture()) {
 }
 const op = (r, name) => r.operations.find(o => o.operation === name)
 
+describe('doctor wording (#281)', () => {
+  it('explains downgrades in plain language and states that attribution does not change coverage', async () => {
+    const r = await run({ rulesets: async () => ({ status: 'permission_missing', count: null, names: [], approval_check_verified: false }) })
+    const text = formatCoverageReport(r).replace(/\n\s*/g, ' ')
+    expect(text).toContain('ruleset_permission_missing: rulesets could not be read')
+    expect(text).toContain('who acted (attribution) never changes it')
+  })
+})
+
 describe('doctor coverage states', () => {
   it('uses only the four states and never reports github_enforced or managed_gateway', async () => {
     const r = await run()

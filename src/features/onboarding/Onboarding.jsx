@@ -13,8 +13,9 @@ import { ThemeProvider, useTheme, readRawThemeCfg } from '../../theme.js'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { Spinner } from '../../components/Spinner.jsx'
 import { sanitize } from '../../utils.js'
+import { ATTRIBUTION_NOTE, describeAttribution, explainReason } from '../../watch-only/report.js'
 import { selectGhHost } from '../../bootstrap.js'
-import { classifyFailure, explainGap, isOwnerName, listWindowSize, lookupRepo, loadOnboardingReport, loadSession, repoKey, windowStart } from './flow.js'
+import { classifyFailure, isOwnerName, listWindowSize, lookupRepo, loadOnboardingReport, loadSession, repoKey, windowStart } from './flow.js'
 
 const ERROR_COPY = {
   no_gh: ['GitHub CLI (gh) was not found.', 'Install it from https://cli.github.com, run `gh auth login`, then start lazyhub again.'],
@@ -51,6 +52,17 @@ function Line({ children, color, bold = false }) {
   return <Text color={color ?? t.ui.muted} bold={bold} wrap="truncate-end">{children}</Text>
 }
 
+/**
+ * A row that wraps instead of truncating; used where it is the only place a limitation is explained.
+ *
+ * @param {{children?: any, color?: string}} props
+ * @returns {React.ReactElement}
+ */
+function Para({ children, color }) {
+  const { t } = useTheme()
+  return <Text color={color ?? t.ui.muted} wrap="wrap">{children}</Text>
+}
+
 function coverageColor(t, coverage) {
   return coverage === 'advisory' ? t.ci.pending : t.ci.fail
 }
@@ -59,7 +71,8 @@ function Report({ data }) {
   const { t } = useTheme()
   const { coverage, activity } = data
   const gaps = [...new Set(coverage.observation.gap_codes)]
-  const explained = gaps.map(explainGap).filter(Boolean)
+  const reasons = [...new Set(coverage.operations.flatMap(op => op.downgrade_reasons))]
+  const explained = reasons.map(r => [r, explainReason(r)]).filter(([, e]) => e)
   const a = activity?.by_attribution
   return (
     <Box flexDirection="column">
@@ -77,9 +90,11 @@ function Report({ data }) {
           <Text color={t.ui.dim}>{op.downgrade_reasons.length ? ` [downgraded: ${op.downgrade_reasons.map(sanitize).join(', ')}]` : ''}</Text>
         </Text></Box>
       ))}
-      {gaps.length > 0 && <Line color={t.ci.pending}>{`Gaps: ${gaps.join(', ')}${explained.length ? ` - ${explained[0]}` : ''}`}</Line>}
-      {a && <Line>{`Activity: agent ${a.agent} · automation ${a.automation} · human ${a.human} · shared ${a.shared} · unknown ${a.unknown}`}</Line>}
-      {a && a.unknown > 0 && <Line color={t.ci.pending}>{`  ${a.unknown} unattributed event(s): unknown is not safe, and counts as ungoverned.`}</Line>}
+      {gaps.length > 0 && <Para color={t.ci.pending}>{`Gaps: ${gaps.join(', ')}`}</Para>}
+      {explained.map(([r, e]) => <Box key={r}><Para color={t.ci.pending}>{`  ${sanitize(r)}: ${e[0]}. Next: ${e[1]}.`}</Para></Box>)}
+      <Line>Enforcement: none. Coverage reflects what was observed, not who acted.</Line>
+      {a && <Para>{`Attribution (who GitHub says acted): ${describeAttribution(a)}`}</Para>}
+      {a && <Para color={t.ui.dim}>{`  ${ATTRIBUTION_NOTE}`}</Para>}
       {SLICE2_NOTE.map(line => <Box key={line}><Line color={t.ui.dim}>{line}</Line></Box>)}
     </Box>
   )
