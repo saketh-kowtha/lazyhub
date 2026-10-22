@@ -47,8 +47,11 @@ jobs:
             exit 1
           fi
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies (locked)
+        run: npm ci --no-audit --no-fund
+
+      - name: Record toolchain and lockfile identity
+        run: node scripts/record-toolchain.mjs --verify-clean
 
       - name: Build promotion smoke artifact
         run: npm run build

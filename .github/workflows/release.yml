@@ -43,10 +43,20 @@ jobs:
             exit 1
           fi
 
-      - run: npm ci
+      - name: Install dependencies (locked)
+        run: npm ci --no-audit --no-fund
+
+      # Same script CI runs, so the lockfile hash logged here can be compared
+      # with the one logged by CI for this commit. Fails before publish if the
+      # install or build altered package.json / package-lock.json.
+      - name: Record toolchain and lockfile identity
+        run: node scripts/record-toolchain.mjs --verify-clean
 
       - name: Build
         run: npm run build
+
+      - name: Verify lockfile unchanged after build
+        run: node scripts/record-toolchain.mjs --verify-clean
 
       - name: Publish to npm
         run: npm publish --access public --tag next --provenance
