@@ -827,6 +827,45 @@ export function validateConfig(raw) {
   return { config: out, warnings }
 }
 
+// ─── Remote config allowlist ────────────────────────────────────────────────────
+
+// A remote config (`[meta].config_url`, or its cached copy) may only change
+// presentation settings. Deny by default: anything not listed here — editor,
+// ai, meta, defaults, agent, daemon, ipc, scopes, tabs, keymaps, actions, app,
+// features, state — is dropped, as is any pane field other than display text.
+const REMOTE_ALLOWED_SECTIONS = ['theme', 'layout', 'ui', 'diff']
+const REMOTE_ALLOWED_PANE_FIELDS = ['label', 'icon', 'description']
+
+/**
+ * Reduce a raw remote config to the keys a remote source is allowed to set.
+ * @param {*} raw parsed (unvalidated) remote TOML object
+ * @returns {{ config: Object, dropped: string[] }} filtered raw config + dotted names of dropped keys (never values)
+ */
+export function restrictRemoteConfig(raw) {
+  const config = {}
+  const dropped = []
+  if (!isPlainObject(raw)) return { config, dropped }
+  for (const [key, val] of Object.entries(raw)) {
+    if (REMOTE_ALLOWED_SECTIONS.includes(key)) {
+      config[key] = val
+    } else if (key === 'panes' && isPlainObject(val)) {
+      const panes = {}
+      for (const [id, pane] of Object.entries(val)) {
+        if (!isPlainObject(pane)) { dropped.push(`panes.${id}`); continue }
+        panes[id] = {}
+        for (const [k, v] of Object.entries(pane)) {
+          if (REMOTE_ALLOWED_PANE_FIELDS.includes(k)) panes[id][k] = v
+          else dropped.push(`panes.${id}.${k}`)
+        }
+      }
+      config.panes = panes
+    } else {
+      dropped.push(key)
+    }
+  }
+  return { config, dropped }
+}
+
 // ─── Merge ────────────────────────────────────────────────────────────────────
 
 /**

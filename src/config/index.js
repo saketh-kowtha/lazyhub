@@ -7,7 +7,8 @@
  *
  * The provider loads the local config synchronously for first render. If
  * `[meta].config_url` is set, it fetches the remote config once (HTTPS-only,
- * cached, fallback-on-failure) and merges it on top — "remote wins".
+ * cached, fallback-on-failure) and merges the presentation keys it may set (theme, layout, ui, diff, pane
+ * display text) on top; every other key is ignored.
  */
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'

@@ -9,7 +9,9 @@
  *
  * Remote config (`[meta].config_url`) is fetched asynchronously by the
  * ConfigProvider via `fetchRemoteConfig()` — HTTPS-only, cached locally, with the
- * cache as the fallback when the network/remote fails. See acceptance #6.
+ * cache as the fallback when the network/remote fails. Only presentation keys
+ * (theme, layout, ui, diff, pane display text) are accepted from a remote config.
+ * See acceptance #6.
  *
  * Security invariants (issue Hard rules):
  *   - TOML is data only; smol-toml never executes code from the file.
@@ -30,6 +32,7 @@ import {
   validateConfig,
   mergeConfig,
   mergePlatformKeymaps,
+  restrictRemoteConfig,
   expandConfigPaths,
   isPlainObject,
 } from './schema.js'
@@ -117,6 +120,18 @@ export function loadConfig(opts = {}) {
 }
 
 /**
+ * Filter a parsed remote config down to the keys a remote source may set,
+ * warning (by key name only) about each dropped key.
+ * @param {Object} parsed raw parsed remote/cached config
+ * @returns {Object} the allowed subset
+ */
+function restrictRemote(parsed) {
+  const { config, dropped } = restrictRemoteConfig(parsed)
+  for (const key of dropped) logger.warn(`config: remote config may not set "${key}" — ignored`)
+  return config
+}
+
+/**
  * Read and parse the local remote-config cache, if present.
  * @param {string} cachePath path to the cache file
  * @returns {Object|null} parsed config or null when missing/unreadable
@@ -124,7 +139,7 @@ export function loadConfig(opts = {}) {
 function readCache(cachePath) {
   if (!existsSync(cachePath)) return null
   try {
-    return parse(readFileSync(cachePath, 'utf8'))
+    return restrictRemote(parse(readFileSync(cachePath, 'utf8')))
   } catch (err) {
     logger.warn('config: cache file is unreadable — ignoring', { error: err.message })
     return null
@@ -137,8 +152,9 @@ function readCache(cachePath) {
  * URL, timeout, non-200, network error, bad TOML — falls back to the cached copy
  * (or null if none). Never throws.
  *
- * The returned object is unvalidated; callers should run it through
- * validateConfig() + mergeConfig() like a local file.
+ * The returned object is restricted to the keys a remote config may set
+ * (see restrictRemoteConfig) but is otherwise unvalidated; callers should run
+ * it through validateConfig() + mergeConfig() like a local file.
  *
  * @param {string} url HTTPS URL from [meta].config_url
  * @param {Object} [opts]
@@ -180,7 +196,7 @@ export async function fetchRemoteConfig(url, opts = {}) {
     } catch (err) {
       logger.warn('config: could not write remote config cache', { error: err.message })
     }
-    return parsed
+    return restrictRemote(parsed)
   } catch (err) {
     logger.warn(`config: failed to fetch config_url (${err.message}) — using cache`)
     return readCache(cachePath)
