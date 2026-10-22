@@ -18,6 +18,8 @@ export default defineConfig({
   plugins: [jsxInJsPlugin, react()],
   test: {
     environment: 'node',
+    globalSetup: ['src/test/global-guard.js'],
+    setupFiles: ['src/test/setup-hermetic.js'],
     include: ['src/**/*.{test,spec}.{jsx,js}'],
     coverage: {
       provider: 'v8',

@@ -1,27 +1,19 @@
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { __sendInput } from 'ink'
+import { sendInput } from './test/input-bus.js'
+import { InputDriver } from './test/input-driver.jsx'
 import { SettingsPane } from './features/settings/index.jsx'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
 const saveConfig = vi.hoisted(() => vi.fn())
 const loadConfigMock = vi.hoisted(() => vi.fn())
-const inputHandlers = vi.hoisted(() => new Set())
 
 vi.mock('ink', async () => {
   const React = await import('react')
   const actual = await vi.importActual('ink')
   return {
     ...actual,
-    useInput: (handler) => {
-      React.useEffect(() => {
-        inputHandlers.add(handler)
-        return () => inputHandlers.delete(handler)
-      }, [handler])
-    },
-    __sendInput: (input, key = {}) => {
-      for (const handler of [...inputHandlers]) handler(input, key)
-    },
+    useInput: (await import('./test/input-bus.js')).mockUseInput(React),
   }
 })
 
@@ -54,32 +46,13 @@ describe('Settings pane user flows', () => {
     cleanup()
   })
 
-  function InputDriver({ events }) {
-    React.useEffect(() => {
-      let alive = true
-      ;(async () => {
-        for (const event of events) {
-          if (!alive) return
-          if (event.wait) {
-            await new Promise(resolve => setTimeout(resolve, event.wait))
-            continue
-          }
-          __sendInput(event.input || '', event.key || {})
-          await new Promise(resolve => setTimeout(resolve, 0))
-        }
-      })()
-      return () => { alive = false }
-    }, [events])
-
-    return null
-  }
 
   it('toggles mouse support from the user settings list', async () => {
     const setMouseEnabled = vi.fn()
     const view = renderWithProviders(
       <>
         <SettingsPane onBack={() => {}} />
-        <InputDriver events={[{ input: 'j' }, { wait: 20 }, { key: { return: true } }]} />
+        <InputDriver events={[{ input: 'j' }, { key: { return: true } }]} />
       </>,
       { appContext: { setMouseEnabled } }
     )
@@ -96,11 +69,8 @@ describe('Settings pane user flows', () => {
         <SettingsPane onBack={() => {}} />
         <InputDriver events={[
           { key: { return: true } },
-          { wait: 20 },
           { input: 'j' },
-          { wait: 20 },
           { key: { return: true } },
-          { wait: 40 },
         ]} />
       </>
     )
@@ -118,7 +88,6 @@ describe('Settings pane user flows', () => {
         <SettingsPane onBack={() => {}} />
         <InputDriver events={[
           { key: { return: true } },
-          { wait: 40 },
         ]} />
       </>
     )
@@ -151,7 +120,6 @@ describe('Settings pane user flows', () => {
           { input: 'j' },
           { input: 'j' },
           { key: { return: true } },
-          { wait: 40 },
         ]} />
       </>
     )
@@ -183,14 +151,13 @@ describe('Settings pane user flows', () => {
 
     await flush(20)
     for (let i = 0; i < 5; i += 1) {
-      __sendInput('j')
-      await flush(10)
+      await sendInput('j')
     }
     await waitForExpectation(() => {
       expect(view.lastFrame()).toContain('AI Provider:')
       expect(view.lastFrame()).toContain('qwen2.5-coder:32b')
     })
-    __sendInput('s')
+    await sendInput('s')
     await waitForExpectation(() => {
       expect(saveConfig).toHaveBeenCalledWith(expect.objectContaining({
       ai: {

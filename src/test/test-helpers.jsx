@@ -60,4 +60,20 @@ export async function waitForExpectation(assertion, {
   throw lastError
 }
 
+/**
+ * Resolve once Ink's real useInput can see the screen currently on display.
+ * Ink re-subscribes its handler in a passive effect after every commit, so a frame
+ * being visible does not mean the matching handler is attached. React schedules
+ * those effects with setImmediate, so hopping the immediate queue after the frame
+ * is observed drains them (FIFO) -- no wall-clock sleep involved.
+ * @param {object} view the ink-testing-library render result
+ * @returns {Promise<void>} resolves once input handlers match the latest commit
+ */
+export async function waitForInputReady(view) {
+  await waitForExpectation(() => {
+    if (view.stdin.listenerCount('readable') === 0) throw new Error('Ink input handler not attached yet')
+  })
+  for (let i = 0; i < 2; i += 1) await new Promise(resolve => setImmediate(resolve))
+}
+
 export { cleanup }

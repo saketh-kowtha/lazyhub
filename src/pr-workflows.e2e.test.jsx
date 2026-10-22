@@ -1,6 +1,6 @@
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { __sendInput } from 'ink'
+import { InputDriver } from './test/input-driver.jsx'
 import { useGh } from './hooks/useGh.js'
 import {
   getPR,
@@ -20,22 +20,13 @@ import { PRDetail } from './features/prs/detail.jsx'
 import { PRDiff } from './features/prs/diff.jsx'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
-const inputHandlers = vi.hoisted(() => new Set())
 
 vi.mock('ink', async () => {
   const React = await import('react')
   const actual = await vi.importActual('ink')
   return {
     ...actual,
-    useInput: (handler) => {
-      React.useEffect(() => {
-        inputHandlers.add(handler)
-        return () => inputHandlers.delete(handler)
-      }, [handler])
-    },
-    __sendInput: (input, key = {}) => {
-      for (const handler of [...inputHandlers]) handler(input, key)
-    },
+    useInput: (await import('./test/input-bus.js')).mockUseInput(React),
   }
 })
 
@@ -96,25 +87,6 @@ function ghResult(data, extra = {}) {
   return { data, loading: false, error: null, refetch: vi.fn(), mutate: vi.fn(), ...extra }
 }
 
-function InputDriver({ events }) {
-  React.useEffect(() => {
-    let alive = true
-    ;(async () => {
-      for (const event of events) {
-        if (!alive) return
-        if (event.wait) {
-          await new Promise(resolve => setTimeout(resolve, event.wait))
-          continue
-        }
-        __sendInput(event.input || '', event.key || {})
-        await new Promise(resolve => setTimeout(resolve, 0))
-      }
-    })()
-    return () => { alive = false }
-  }, [events])
-
-  return null
-}
 
 describe('PR detail and diff E2E flows', () => {
   let currentPR
@@ -272,17 +244,16 @@ describe('PR detail and diff E2E flows', () => {
         />
         <InputDriver events={[
           { input: 'M' },
-          { wait: 30 },
           { input: 'c' },
-          { wait: 30 },
           { input: 'R' },
         ]} />
       </>
     )
 
-    await flush(160)
-    expect(enableAutoMerge).toHaveBeenCalledWith('owner/repo', 42, 'squash')
-    expect(rerunCheckRun).toHaveBeenCalledWith('owner/repo', 9001)
+    await waitForExpectation(() => {
+      expect(enableAutoMerge).toHaveBeenCalledWith('owner/repo', 42, 'squash')
+      expect(rerunCheckRun).toHaveBeenCalledWith('owner/repo', 9001)
+    })
     actionView.unmount()
 
     const closeView = renderWithProviders(
@@ -298,9 +269,7 @@ describe('PR detail and diff E2E flows', () => {
         />
         <InputDriver events={[
           { input: 'X' },
-          { wait: 60 },
           { key: { leftArrow: true } },
-          { wait: 40 },
           { key: { return: true } },
         ]} />
       </>
@@ -327,15 +296,10 @@ describe('PR detail and diff E2E flows', () => {
         />
         <InputDriver events={[
           { input: 'j' },
-          { wait: 20 },
           { input: 'r' },
-          { wait: 20 },
           { key: { escape: true } },
-          { wait: 20 },
           { input: 'v' },
-          { wait: 30 },
           { input: 'A' },
-          { wait: 80 },
         ]} />
       </>
     )
