@@ -116,6 +116,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Packed install smoke (zero runtime dependencies)
+        run: node scripts/packed-install-smoke.mjs
+
       - name: PTY E2E
         run: npm run test:pty
 
@@ -140,6 +143,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Packed install smoke (zero runtime dependencies)
+        run: node scripts/packed-install-smoke.mjs
 
       - name: Verify CLI starts
         shell: pwsh

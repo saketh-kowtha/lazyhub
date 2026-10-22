@@ -63,6 +63,29 @@ and a short expiry. Do not reintroduce a broad automation token.
 5. Run `Promote` with the rc version only if you want to exercise dist-tag over
    OIDC; roll `latest` back afterwards (see Rollback).
 
+## Self-contained package (no runtime dependencies)
+
+`build.js` bundles every runtime dependency (ink, react, execa, highlight.js,
+...) into `dist/`, and `package.json` has no `dependencies`: they are build
+inputs under `devDependencies`. `npm install -g lazyhub` therefore resolves no
+packages; users run exactly the lockfile-pinned build that CI tested and that
+provenance covers. Code splitting still keeps the TUI and highlight.js out of
+non-TUI commands (#302).
+
+- Assets the bundled code reads at runtime are copied into `dist/` by
+  `build.js`: `defaultConfig.toml` and `yoga.wasm` (Ink's layout engine).
+- `dist/THIRD_PARTY_LICENSES` is generated from the esbuild metafile (every
+  bundled package's license text) and ships in the tarball.
+- `ink/build/devtools.js` is stubbed (it only loads under `DEV=true` and needs
+  the uninstalled optional `react-devtools-core`).
+- CommonJS-only lazy loading must use literal `require()` calls (see
+  `src/highlight-loaders.cjs`); `createRequire` or computed requires are not
+  bundled and would break the packed install.
+- `scripts/packed-install-smoke.mjs` (run in CI on Linux, macOS and Windows)
+  packs the tree, installs it into an empty prefix with a temp HOME and checks
+  nothing else was installed. `src/cli/lazy-load.test.js` asserts `dist/` only
+  imports relative files and Node builtins.
+
 ## Dependency Graph (one lockfile for CI, release, promote)
 
 Every workflow installs with `npm ci --no-audit --no-fund` from the committed
