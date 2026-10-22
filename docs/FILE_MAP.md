@@ -31,7 +31,7 @@
 
 | File | Purpose |
 |---|---|
-| `src/ai-assistant.js` | AI assistant brain Exposes a Claude tool-use loop that: - Executes read-only tools freely (up to MAX_TOOL_ROUNDS) - Never offers mutating tools to the model; a mutating call that still arrives gets a stable AI_MUTATIONS_DISABLED error (see executeMutatingTool) - Parses <<NAVIGATE:pane[:key=val]*>> markers for app navigation Direct fetch pattern (same as ai.js). No SDK dependency. |
+| `src/ai-assistant.js` | AI assistant brain Exposes a Claude tool-use loop that: - Executes read-only tools freely (up to MAX_TOOL_ROUNDS) - Never offers mutating tools to the model; a mutating call that still arrives gets a stable AI_MUTATIONS_DISABLED error (see executeMutatingTool) - Parses <<NAVIGATE:pane[:key=val]*>> markers for app navigation Model requests go through runAIChat() in src/ai/index.js (no transport here). |
 | `src/ai.js` | DEPRECATED re-export shim. @deprecated Import from './ai/index.js' directly. This shim is kept for one release per the migration plan (spec §11). It will be removed in the next release. |
 | `src/ai/detect.js` | Provider auto-detection and selection. Phase 1 priority: claude-code → anthropic-api (codex → gemini-cli added in Phase 2) Override mechanisms (in order of precedence): 1. LAZYHUB_AI_PROVIDER env var — hardest override, useful for CI 2. Default priority list below Detection results are cached in-module for the session lifetime. Call clearDetectionCache() in tests to reset. |
 | `src/ai/error.js` | AIError class definition. Standalone module to avoid circular imports between index.js, parse.js, detect.js, and the provider modules. |
