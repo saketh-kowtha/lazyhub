@@ -67,6 +67,31 @@ Warm-cache output shape:
 
 Cold-cache behavior: prints `lazyhub: no data - open the app once` and exits 0.
 
+## Review Evidence (internal executor API, `schema_version` 1)
+
+Exposed by the `src/executor.js` barrel for the review-queue (#177) and PR detail
+(#127) views. Not a CLI or MCP surface. Read-only, one GraphQL call per read via
+`runGh()`; display evidence only, never an authorization input (every record
+carries `authority: "none"`).
+
+- `fetchReviewQueueEvidence({limit, scope:{org,repos}, after, cache})` returns
+  `{schema_version, kind:"review_queue", host, account, fetched_at, items[], group_counts, truncation:{review_requested,authored}, rate_limit, authority}`.
+  `truncation.<group>` is `{total, returned, has_more, next_cursor}`; pass the cursors back as `after`.
+- `fetchPRReviewEvidence(repo, number, {cache, force})` returns one item plus `rate_limit`.
+- Item: `{schema_version, identity:{host,repo,number,url,account}, context:{head,base}, facts, attention[], group:{group,because}, actor, untrusted, fetched_at, authority}`.
+- Every `facts.*` and `context.*` entry is `{value, source, fetched_at}`. A field GitHub
+  did not return has `value: "unknown"`; it is never defaulted to a safe value.
+  `required_checks` is always `unknown` (branch protection is not read).
+- `attention[]` is `{code, fact, value, source}`, deterministic and ordered, no scores.
+  `group` precedence: needs_my_review, ci_failing, changes_requested, unknown, waiting/ready;
+  `ready` needs approval, passing or absent checks and a known-mergeable PR.
+- `untrusted` holds sanitized, length-bounded PR title/body and unresolved-thread excerpts
+  (author prose); `actor.attribution` is always `unverified`. Never use either as a decision input.
+- Cache (`createEvidenceCache`) is in memory, partitioned by host, account and repo;
+  past its TTL a hit is `stale`. `diagnostics()` returns counts only.
+- Approval handoff: a record is a snapshot. Revalidation against the live head and exact
+  binding remain the approval work's job (#235/#244/#278); nothing may be authorized from a cached record.
+
 ## MCP Server
 
 Entrypoints: `lazyhub --mcp` and `lazyhub mcp-server`.
