@@ -31,18 +31,21 @@ export default defineConfig({
       exclude: [
         'src/**/*.{test,spec}.{js,jsx}',
         'src/test/**',
-        'src/cli/**',
-        'src/daemon/server.js',
         'src/features/prs/list-view.jsx',
         'node_modules/**',
         'bin/**',
         'integrations/nvim/**',
       ],
+      // #283: src/cli/** and src/daemon/server.js are measured (no blanket exclusions).
+      // Floors sit under the measured baseline with CI/platform margin (CI measured cli branches 81.7 vs 84.8 locally) (72.2/73.8/72.1/72.2 overall;
+      // cli 89.5/84.8/88.5/89.5; daemon 86.1/84.6/86.2/86.1). Never lower them.
       thresholds: {
-        statements: 48,
-        branches: 58,
-        functions: 45,
-        lines: 48,
+        statements: 69,
+        branches: 70,
+        functions: 69,
+        lines: 69,
+        'src/cli/**': { statements: 85, branches: 78, functions: 84, lines: 85 },
+        'src/daemon/**': { statements: 82, branches: 78, functions: 82, lines: 82 },
       },
     },
   },
