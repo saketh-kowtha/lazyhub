@@ -84,10 +84,11 @@
 | `src/features/prs/detail/Reviewers.jsx` | PR detail reviewer states and pending requests. |
 | `src/features/prs/diff-parser.js` | pure diff-parsing logic, no React/Ink deps. Extracted from diff.jsx so it can be unit-tested without mocking the entire Ink/chalk/hljs stack. |
 | `src/features/prs/diff.jsx` | PR diff view with syntax highlighting + line comments |
-| `src/features/prs/list-dialogs.jsx` | (no header — inferred: list-dialogs) |
-| `src/features/prs/list-row.jsx` | Maps a new-style token scheme object (src/theme/index.js) to the legacy `t.*` shape consumed by PR list sub-components. @param {object} scheme - Active scheme from useTheme().scheme @returns {{ ui: object, pr: object, ci: object, review: object }} |
-| `src/features/prs/list-view.jsx` | (no header — inferred: list-view) |
-| `src/features/prs/list.jsx` | PR list pane Props: repo         string listHeight   number   — visible row count from App onHover      fn(pr)   — called when cursor moves (for side panel) onSelectPR   fn(pr)   — called on Enter → full detail onOpenDiff   fn(pr)   — called on 'd' onPaneState  fn({loading, error, count}) |
+| `src/features/prs/list-dialog-view.jsx` | Active PR list dialog rendering and confirmed actions; no list state is owned here. |
+| `src/features/prs/list-dialogs.jsx` | PR label, collaborator and author pickers used by the list pane. |
+| `src/features/prs/list-row.jsx` | PR rows, expanded metadata and popover content; shared display summaries stay here. |
+| `src/features/prs/list-view.jsx` | PR list chrome, visible rows and popover placement; dialog state stays in PRList. |
+| `src/features/prs/list.jsx` | PR list state, persistence and key dispatch. Rendering lives in list-view.jsx; list-dialog-view.jsx routes active dialogs. Props: repo         string listHeight   number   — visible row count from App innerWidth   number   — available list width onSelectPR   fn(pr)   — called on Enter → full detail onOpenDiff   fn(pr)   — called on 'd' onPaneState  fn({loading, error, count}) |
 | `src/features/prs/NewPRDialog.jsx` | Smart New PR creation dialog. Features: - Auto-detects current branch and offers to use it as head - Validates head branch against remote (not pushed / has unpushed commits / no diff) - Validates base branch exists on GitHub - Offers to push branch to origin if needed - Shift+Tab for backward field navigation |
 
 ## Features — Issues
@@ -240,7 +241,7 @@ Test file counts by directory:
 | `src/daemon/` | 7 |
 | `src/executor/` | 4 |
 | `src/features/onboarding/` | 1 |
-| `src/features/prs/` | 4 |
+| `src/features/prs/` | 8 |
 | `src/features/prs/detail/` | 1 |
 | `src/features/tabs/` | 2 |
 | `src/hooks/` | 1 |
@@ -248,5 +249,5 @@ Test file counts by directory:
 | `src/ui/` | 2 |
 | `src/watch-only/` | 1 |
 
-**Total non-test source files:** 155
-**Total test files:** 80
+**Total non-test source files:** 156
+**Total test files:** 84

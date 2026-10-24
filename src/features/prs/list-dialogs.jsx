@@ -1,37 +1,41 @@
-// @ts-nocheck
-// TODO(#197): split PR dialog module needs typed imports/props in a follow-up pass.
-import React from 'react'
-import { Box } from 'ink'
+// @ts-check
+
+/** PR label, collaborator and author pickers used by the list pane. */
+import React, { useState } from 'react'
+import { Box, Text } from 'ink'
 import { useGh } from '../../hooks/useGh.js'
 import { listLabels, listCollaborators, addLabels, removeLabels, addPRAssignees, removePRAssignees, requestReviewers, removeReviewers } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
-import { TextInput } from '../../utils.js'
+import { TextInput, sanitize } from '../../utils.js'
+import { useKeyScope } from '../../keyscope.js'
+import { useKeymapInput } from '../../config/keymap.js'
 import { useTheme } from '../../theme/index.js'
 import { schemeToT } from './list-row.jsx'
 
-export function LabelDialog({ repo, pr, onClose }) {
+function PRSelectionDialog({ repo, pr, current, getOptions, field, loadingText, title = '', add, remove, onClose }) {
   const { scheme } = useTheme()
   const t = schemeToT(scheme)
-  const { data: allLabels, loading } = useGh(listLabels, [repo])
-  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading labels…</Text></Box>
+  const { data: options, loading } = useGh(getOptions, [repo])
+  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>{loadingText}</Text></Box>
 
-  const items = (allLabels || []).map(l => ({
-    id: l.name,
-    name: l.name,
-    color: l.color,
-    selected: pr.labels?.some(pl => pl.name === l.name) ?? false,
+  const selected = new Set(current)
+  const items = (options || []).map(option => ({
+    id: option[field],
+    name: sanitize(option[field]),
+    color: field === 'name' ? option.color : undefined,
+    selected: selected.has(option[field]),
   }))
 
   return (
     <MultiSelect
+      title={title}
       items={items}
       onSubmit={async (selectedIds) => {
-        const current = pr.labels?.map(l => l.name) || []
-        const toAdd    = selectedIds.filter(id => !current.includes(id))
+        const toAdd = selectedIds.filter(id => !current.includes(id))
         const toRemove = current.filter(id => !selectedIds.includes(id))
         try {
-          if (toAdd.length)    await addLabels(repo, pr.number, toAdd, 'pr')
-          if (toRemove.length) await removeLabels(repo, pr.number, toRemove, 'pr')
+          if (toAdd.length) await add(repo, pr.number, toAdd)
+          if (toRemove.length) await remove(repo, pr.number, toRemove)
         } catch { /* ignore */ }
         onClose()
       }}
@@ -40,34 +44,25 @@ export function LabelDialog({ repo, pr, onClose }) {
   )
 }
 
+const addPRLabels = (repo, number, labels) => addLabels(repo, number, labels, 'pr')
+const removePRLabels = (repo, number, labels) => removeLabels(repo, number, labels, 'pr')
+
+export function LabelDialog({ repo, pr, onClose }) {
+  return <PRSelectionDialog
+    repo={repo} pr={pr} onClose={onClose}
+    current={pr.labels?.map(label => label.name) || []}
+    getOptions={listLabels} field="name" loadingText="Loading labels…"
+    add={addPRLabels} remove={removePRLabels}
+  />
+}
+
 export function AssigneeDialog({ repo, pr, onClose }) {
-  const { scheme } = useTheme()
-  const t = schemeToT(scheme)
-  const { data: collabs, loading } = useGh(listCollaborators, [repo])
-  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators…</Text></Box>
-
-  const items = (collabs || []).map(c => ({
-    id: c.login,
-    name: c.login,
-    selected: pr.assignees?.some(a => a.login === c.login) ?? false,
-  }))
-
-  return (
-    <MultiSelect
-      items={items}
-      onSubmit={async (selectedIds) => {
-        const current = pr.assignees?.map(a => a.login) || []
-        const toAdd    = selectedIds.filter(id => !current.includes(id))
-        const toRemove = current.filter(id => !selectedIds.includes(id))
-        try {
-          if (toAdd.length)    await addPRAssignees(repo, pr.number, toAdd)
-          if (toRemove.length) await removePRAssignees(repo, pr.number, toRemove)
-        } catch { /* ignore */ }
-        onClose()
-      }}
-      onCancel={onClose}
-    />
-  )
+  return <PRSelectionDialog
+    repo={repo} pr={pr} onClose={onClose}
+    current={pr.assignees?.map(assignee => assignee.login) || []}
+    getOptions={listCollaborators} field="login" loadingText="Loading collaborators…"
+    add={addPRAssignees} remove={removePRAssignees}
+  />
 }
 
 // Simple inline author-search box
@@ -97,36 +92,11 @@ export function AuthorSearchDialog({ current, onSubmit, onCancel }) {
 }
 
 export function ReviewerDialog({ repo, pr, onClose }) {
-  const { scheme } = useTheme()
-  const t = schemeToT(scheme)
-  const { data: collabs, loading } = useGh(listCollaborators, [repo])
-  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators…</Text></Box>
-
-  const currentRequested = new Set(
-    (pr.reviewRequests || []).map(r => r.login || r.name).filter(Boolean)
-  )
-
-  const items = (collabs || []).map(c => ({
-    id: c.login,
-    name: c.login,
-    selected: currentRequested.has(c.login),
-  }))
-
-  return (
-    <MultiSelect
-      title="Request Reviewers"
-      items={items}
-      onSubmit={async (selectedIds) => {
-        const current = [...currentRequested]
-        const toAdd    = selectedIds.filter(id => !current.includes(id))
-        const toRemove = current.filter(id => !selectedIds.includes(id))
-        try {
-          if (toAdd.length)    await requestReviewers(repo, pr.number, toAdd)
-          if (toRemove.length) await removeReviewers(repo, pr.number, toRemove)
-        } catch { /* ignore */ }
-        onClose()
-      }}
-      onCancel={onClose}
-    />
-  )
+  const current = [...new Set((pr.reviewRequests || []).map(reviewer => reviewer.login || reviewer.name).filter(Boolean))]
+  return <PRSelectionDialog
+    repo={repo} pr={pr} onClose={onClose}
+    current={current} title="Request Reviewers"
+    getOptions={listCollaborators} field="login" loadingText="Loading collaborators…"
+    add={requestReviewers} remove={removeReviewers}
+  />
 }
