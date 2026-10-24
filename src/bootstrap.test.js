@@ -548,7 +548,7 @@ describe('GHES host resolution', () => {
     it('SSH alias is resolved with ssh -G (execa arg array, timeout)', async () => {
         mockCmds({ remote: 'git@ghe-alias:corp/app.git', ssh: 'ghe.corp', authed: ['ghe.corp'] })
         await run()
-        expect(execa).toHaveBeenCalledWith('ssh', ['-G', 'ghe-alias'], expect.objectContaining({ timeout: expect.any(Number) }))
+        expect(execa).toHaveBeenCalledWith('ssh', ['-G', '--', 'ghe-alias'], expect.objectContaining({ timeout: expect.any(Number) }))
         expect(process.env.GH_HOST).toBe('ghe.corp')
         expect(process.env.GHUI_REPO).toBe('corp/app')
     })
@@ -566,6 +566,14 @@ describe('GHES host resolution', () => {
         expect(process.env.GH_HOST).toBe('ghe.corp')
         expect(process.env.GHUI_REPO).toBe('corp/app')
     })
+
+    it.each(['git@-oProxyCommand=x:corp/app.git', 'ssh://u@-oFoo/corp/app.git', 'git@a$(id):corp/app.git'])(
+        'hostile remote %s never reaches ssh and sets no GH_HOST', async (remote) => {
+            mockCmds({ remote, ssh: 'evil.corp', authed: ['github.com', 'ghe.corp'] })
+            await run()
+            expect(execa.mock.calls.some(([b]) => b === 'ssh')).toBe(false)
+            expect(process.env.GH_HOST).toBeUndefined()
+        })
 
     it('explicit GH_HOST wins over the remote', async () => {
         process.env.GH_HOST = 'other.corp'
