@@ -10,6 +10,7 @@
  */
 
 import { runGh } from './core.js'
+import { isOwnerName } from '../config/schema.js'
 import { EVIDENCE_SCHEMA_VERSION, QUEUE_GROUPS, UNKNOWN, normalizePullRequestEvidence } from './evidence.js'
 
 const PR_ACTIVITY_QUERY = `
@@ -113,7 +114,6 @@ export async function resolveCurrentRepo() {
 
 const QUEUE_DEFAULT_LIMIT = 30
 const QUEUE_MAX_LIMIT = 50
-const SCOPE_NAME = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)?$/
 
 // Shared node selection. Every connection is explicitly bounded; truncation is
 // read back from pageInfo/totalCount rather than assumed absent.
@@ -191,12 +191,14 @@ function normalizeRateLimit(rl) {
   return { remaining: rl.remaining, cost: rl.cost, reset_at: rl.resetAt, low: rl.remaining <= rl.cost * 5 }
 }
 
+// Scope values become search qualifiers, so each must be a well-formed owner or
+// owner/name (config/schema.js isOwnerName): no spaces, no extra qualifiers.
 function scopeQualifiers(scope = {}) {
-  const pairs = [...(scope.org ? [['org', scope.org]] : []), ...(scope.repos || []).map(r => ['repo', r])]
-  for (const [, value] of pairs) {
-    if (!SCOPE_NAME.test(String(value))) throw new Error(`invalid scope "${value}", expected an org or owner/name`)
-  }
-  return pairs.map(([k, v]) => `${k}:${v}`).join(' ')
+  const org = scope.org
+  if (org && !isOwnerName(`${org}/x`)) throw new Error(`invalid scope org "${org}"`)
+  const repos = scope.repos || []
+  for (const r of repos) if (!isOwnerName(String(r))) throw new Error(`invalid scope repo "${r}", expected owner/name`)
+  return [...(org ? [`org:${org}`] : []), ...repos.map(r => `repo:${r}`)].join(' ')
 }
 
 /**
@@ -224,8 +226,9 @@ export async function fetchReviewQueueEvidence({ limit = QUEUE_DEFAULT_LIMIT, sc
     '-f', `authoredQuery=${base} author:@me`,
     '-F', `limit=${bound}`,
   ]
-  if (after.reviewRequested) args.push('-f', `reviewAfter=${after.reviewRequested}`)
-  if (after.authored) args.push('-f', `authoredAfter=${after.authored}`)
+  // Cursors travel as GraphQL variables (-f is a literal string), never inside the search text.
+  if (typeof after.reviewRequested === 'string' && after.reviewRequested) args.push('-f', `reviewAfter=${after.reviewRequested}`)
+  if (typeof after.authored === 'string' && after.authored) args.push('-f', `authoredAfter=${after.authored}`)
   const result = await runGh(args)
   const data = result?.data
   if (!data?.reviewRequested || !data?.authored) {
@@ -264,8 +267,6 @@ export async function fetchReviewQueueEvidence({ limit = QUEUE_DEFAULT_LIMIT, sc
     group_counts: Object.fromEntries(QUEUE_GROUPS.map(g => [g, items.filter(i => i.group.group === g).length])),
     truncation: { review_requested: truncation(data.reviewRequested), authored: truncation(data.authored) },
     rate_limit: normalizeRateLimit(data.rateLimit),
-    // Cached or fetched, this is display evidence only; it never authorizes an action.
-    authority: 'none',
   }
 }
 
@@ -284,7 +285,7 @@ export async function fetchReviewQueueEvidence({ limit = QUEUE_DEFAULT_LIMIT, sc
  */
 export async function fetchPRReviewEvidence(repo, number, { cache, force = false, now = Date.now } = {}) {
   const [owner, name] = String(repo || '').split('/')
-  if (!owner || !name || !SCOPE_NAME.test(repo)) throw new Error(`invalid repo "${repo}", expected owner/name`)
+  if (!owner || !name || !isOwnerName(repo)) throw new Error(`invalid repo "${repo}", expected owner/name`)
   const n = Number(number)
   if (!Number.isInteger(n) || n < 1) throw new Error(`invalid pull request number "${number}"`)
   const host = evidenceHost()

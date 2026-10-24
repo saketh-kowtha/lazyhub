@@ -73,7 +73,7 @@ describe('normalizePullRequestEvidence', () => {
     expect(e.untrusted.threads[0]).toMatchObject({ truncated: true })
     expect(e.untrusted.threads[0].excerpt.length).toBe(300)
     expect(e.actor.attribution).toBe('unverified')
-    expect(e.authority).toBe('none')
+    expect(e).not.toHaveProperty('authority')
   })
 
   it('reports a direct review request as the reason it is in my queue, a team request as unverified', () => {
@@ -133,7 +133,8 @@ describe('fetchReviewQueueEvidence', () => {
     expect(runGh.mock.calls[0][0]).toEqual(expect.arrayContaining(['-f', 'authoredAfter=A1']))
     expect(q.account).toBe(UNKNOWN)
     expect(q.rate_limit.remaining).toBe(UNKNOWN)
-    await expect(fetchReviewQueueEvidence({ scope: { repos: ['a/b author:evil'] } })).rejects.toThrow(/invalid scope/)
+    await expect(fetchReviewQueueEvidence({ scope: { repos: ['a/b author:evil'] } })).rejects.toThrow(/invalid scope repo/)
+    await expect(fetchReviewQueueEvidence({ scope: { org: 'acme/web' } })).rejects.toThrow(/invalid scope org/)
   })
 })
 

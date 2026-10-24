@@ -229,8 +229,6 @@ export function normalizePullRequestEvidence(node, { host, account, fetchedAt, r
       }),
     },
     fetched_at: fetchedAt,
-    // Display reliability only; this record never authorizes or blocks an action.
-    authority: 'none',
   }
 }
 

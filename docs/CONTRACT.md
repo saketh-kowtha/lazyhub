@@ -71,14 +71,13 @@ Cold-cache behavior: prints `lazyhub: no data - open the app once` and exits 0.
 
 Exposed by the `src/executor.js` barrel for the review-queue (#177) and PR detail
 (#127) views. Not a CLI or MCP surface. Read-only, one GraphQL call per read via
-`runGh()`; display evidence only, never an authorization input (every record
-carries `authority: "none"`).
+`runGh()`; display evidence only, never an authorization input.
 
 - `fetchReviewQueueEvidence({limit, scope:{org,repos}, after, cache})` returns
-  `{schema_version, kind:"review_queue", host, account, fetched_at, items[], group_counts, truncation:{review_requested,authored}, rate_limit, authority}`.
+  `{schema_version, kind:"review_queue", host, account, fetched_at, items[], group_counts, truncation:{review_requested,authored}, rate_limit}`.
   `truncation.<group>` is `{total, returned, has_more, next_cursor}`; pass the cursors back as `after`.
 - `fetchPRReviewEvidence(repo, number, {cache, force})` returns one item plus `rate_limit`.
-- Item: `{schema_version, identity:{host,repo,number,url,account}, context:{head,base}, facts, attention[], group:{group,because}, actor, untrusted, fetched_at, authority}`.
+- Item: `{schema_version, identity:{host,repo,number,url,account}, context:{head,base}, facts, attention[], group:{group,because}, actor, untrusted, fetched_at}`.
 - Every `facts.*` and `context.*` entry is `{value, source, fetched_at}`. A field GitHub
   did not return has `value: "unknown"`; it is never defaulted to a safe value.
   `required_checks` is always `unknown` (branch protection is not read).
