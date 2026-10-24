@@ -1,18 +1,12 @@
-#!/usr/bin/env node
-// Fixture-only stand-in for the GitHub CLI, used by `npm run demo` (scripts/demo.mjs)
-// so recordings are deterministic and never touch real GitHub data.
-// Modelled on the inline stub in test/pty/run.js; watch-only data reuses
-// src/watch-only/fixtures/pr-activity.json. Unknown commands print `[]`.
+// Demo fixture set (acme/rocket) for `npm run demo` (scripts/demo.mjs): recordings are
+// deterministic and never touch real GitHub data. Watch-only data reuses
+// src/watch-only/fixtures/pr-activity.json.
 // Set LAZYHUB_DEMO_GH_LOG=<file> to log every invocation while extending fixtures.
 import { appendFileSync, readFileSync } from 'node:fs'
 
 const REPO = 'acme/rocket'
-const args = process.argv.slice(2)
-if (process.env.LAZYHUB_DEMO_GH_LOG) appendFileSync(process.env.LAZYHUB_DEMO_GH_LOG, `${args.map(a => a.slice(0, 80)).join(' ')}\n`)
 
 const ago = hours => new Date(Date.now() - hours * 3600e3).toISOString()
-const out = value => { process.stdout.write(typeof value === 'string' ? value : JSON.stringify(value)); process.exit(0) }
-const gql = name => args.find(a => a.startsWith(`${name}=`))?.slice(name.length + 1)
 
 const check = (name, conclusion) => ({ __typename: 'CheckRun', name, status: 'COMPLETED', conclusion, startedAt: ago(3), completedAt: ago(2.9) })
 const pending = name => ({ __typename: 'CheckRun', name, status: 'IN_PROGRESS', conclusion: null, startedAt: ago(0.2), completedAt: null })
@@ -100,36 +94,39 @@ const RUNS = [
   createdAt: ago(age), updatedAt: ago(age - 0.05), url: `https://github.com/${REPO}/actions/runs/${9000 + i}`,
 }))
 
-const [a0, a1] = args
-if (args.includes('--version')) out('gh version 2.0.0 (demo)\n')
-if (a0 === 'auth' && a1 === 'token') out('demo-token\n')
-if (a0 === 'auth' && a1 === 'status') out('github.com\n  ✓ Logged in to github.com account demo-user (demo shim)\n')
-if (a0 === 'api' && a1 === 'user') out('demo-user\n')
-if (a0 === 'repo' && a1 === 'view') {
-  const wanted = args.find((a, i) => i > 1 && !a.startsWith('-') && args[i - 1] !== '--json')
-  out({ id: 'R_kgDODemoRocket', name: 'rocket', owner: { login: 'acme' }, nameWithOwner: wanted || REPO, url: `https://github.com/${wanted || REPO}`, defaultBranchRef: { name: 'main' } })
-}
-if (a0 === 'repo' && a1 === 'list') out([{ name: 'rocket', nameWithOwner: REPO }])
-if (a0 === 'api' && a1 === 'graphql') {
-  const query = gql('query') || ''
-  if (/pullRequests\(/.test(query)) {
-    const base = JSON.parse(readFileSync(new URL('../../src/watch-only/fixtures/pr-activity.json', import.meta.url), 'utf8'))
-    base.data.repository.nameWithOwner = REPO
-    out(base)
+export default function handle(args, out) {
+  if (process.env.LAZYHUB_DEMO_GH_LOG) appendFileSync(process.env.LAZYHUB_DEMO_GH_LOG, `${args.map(a => a.slice(0, 80)).join(' ')}\n`)
+  const gql = name => args.find(a => a.startsWith(`${name}=`))?.slice(name.length + 1)
+  const [a0, a1] = args
+  if (args.includes('--version')) out('gh version 2.0.0 (demo)\n')
+  if (a0 === 'auth' && a1 === 'token') out('demo-token\n')
+  if (a0 === 'auth' && a1 === 'status') out('github.com\n  ✓ Logged in to github.com account demo-user (demo shim)\n')
+  if (a0 === 'api' && a1 === 'user') out('demo-user\n')
+  if (a0 === 'repo' && a1 === 'view') {
+    const wanted = args.find((a, i) => i > 1 && !a.startsWith('-') && args[i - 1] !== '--json')
+    out({ id: 'R_kgDODemoRocket', name: 'rocket', owner: { login: 'acme' }, nameWithOwner: wanted || REPO, url: `https://github.com/${wanted || REPO}`, defaultBranchRef: { name: 'main' } })
   }
-  if (/reviewThreads/.test(query)) out({ data: { repository: { pullRequest: { reviewThreads: { nodes: [] } } } } })
-  if (/search\(/.test(query)) out({ data: { search: { nodes: PRS.map(prNode) }, repository: { id: 'R_kgDODemoRocket' } } })
-  out({ data: {} })
+  if (a0 === 'repo' && a1 === 'list') out([{ name: 'rocket', nameWithOwner: REPO }])
+  if (a0 === 'api' && a1 === 'graphql') {
+    const query = gql('query') || ''
+    if (/pullRequests\(/.test(query)) {
+      const base = JSON.parse(readFileSync(new URL('../../../src/watch-only/fixtures/pr-activity.json', import.meta.url), 'utf8'))
+      base.data.repository.nameWithOwner = REPO
+      out(base)
+    }
+    if (/reviewThreads/.test(query)) out({ data: { repository: { pullRequest: { reviewThreads: { nodes: [] } } } } })
+    if (/search\(/.test(query)) out({ data: { search: { nodes: PRS.map(prNode) }, repository: { id: 'R_kgDODemoRocket' } } })
+    out({ data: {} })
+  }
+  if (a0 === 'api' && /\/rulesets/.test(a1 || '')) out([{ id: 1, name: 'Protect main' }])
+  if (a0 === 'api' && /\/protection$/.test(a1 || '')) out({ requiredReviews: 1, requireCodeOwnerReviews: false, requireStatusChecks: true, requiredChecks: ['build', 'unit'] })
+  if (a0 === 'api' && /\/check-runs$/.test(a1 || '')) out(['build', 'unit', 'lint'].map((name, id) => ({ id, name, status: 'completed', conclusion: 'success', appName: 'GitHub Actions' })))
+  if (a0 === 'api' && /\/branches/.test(a1 || '')) out([{ name: 'main', protected: true, commit: { sha: 'a1b2c3d' } }, { name: 'feat/attitude-ctrl', protected: false, commit: { sha: 'd4e5f60' } }])
+  if (a0 === 'pr' && a1 === 'list') out(PRS.map(p => ({ ...prView(p), files: undefined })))
+  if (a0 === 'pr' && a1 === 'view') out(prView(PRS.find(p => args.includes(String(p.number))) || PRS[0]))
+  if (a0 === 'pr' && a1 === 'diff') out(DIFF)
+  if (a0 === 'issue' && a1 === 'list') out(ISSUES.map(issueList))
+  if (a0 === 'issue' && a1 === 'view') out(issueView(ISSUES.find(i => args.includes(String(i.number))) || ISSUES[0]))
+  if (a0 === 'run' && a1 === 'list') out(RUNS)
+  if (a0 === 'run' && a1 === 'view') out('build\tSet up job\t2026-01-01T00:00:00Z ok\n')
 }
-if (a0 === 'api' && /\/rulesets/.test(a1 || '')) out([{ id: 1, name: 'Protect main' }])
-if (a0 === 'api' && /\/protection$/.test(a1 || '')) out({ requiredReviews: 1, requireCodeOwnerReviews: false, requireStatusChecks: true, requiredChecks: ['build', 'unit'] })
-if (a0 === 'api' && /\/check-runs$/.test(a1 || '')) out(['build', 'unit', 'lint'].map((name, id) => ({ id, name, status: 'completed', conclusion: 'success', appName: 'GitHub Actions' })))
-if (a0 === 'api' && /\/branches/.test(a1 || '')) out([{ name: 'main', protected: true, commit: { sha: 'a1b2c3d' } }, { name: 'feat/attitude-ctrl', protected: false, commit: { sha: 'd4e5f60' } }])
-if (a0 === 'pr' && a1 === 'list') out(PRS.map(p => ({ ...prView(p), files: undefined })))
-if (a0 === 'pr' && a1 === 'view') out(prView(PRS.find(p => args.includes(String(p.number))) || PRS[0]))
-if (a0 === 'pr' && a1 === 'diff') out(DIFF)
-if (a0 === 'issue' && a1 === 'list') out(ISSUES.map(issueList))
-if (a0 === 'issue' && a1 === 'view') out(issueView(ISSUES.find(i => args.includes(String(i.number))) || ISSUES[0]))
-if (a0 === 'run' && a1 === 'list') out(RUNS)
-if (a0 === 'run' && a1 === 'view') out('build\tSet up job\t2026-01-01T00:00:00Z ok\n')
-out([])

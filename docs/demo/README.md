@@ -1,7 +1,7 @@
 # Demo recordings
 
 Deterministic, LLM-free recordings of lazyhub made with [VHS](https://github.com/charmbracelet/vhs).
-They run against a fixture-only `gh` (`scripts/demo/gh-shim.mjs`, fictional `acme/rocket` repo) with a
+They run against a fixture-only `gh` (`test/support/gh-shim/demo.mjs`, fictional `acme/rocket` repo) with a
 throwaway `HOME`, so no real GitHub data or personal config can leak in.
 
 ## Record locally
@@ -30,7 +30,7 @@ Outputs land in `docs/demo/out/` (GIFs, PNG screenshots, and `tour.mp4`).
    `Source docs/demo/tapes/_settings.tape` (shared font, theme, and the hidden env setup).
 2. Keep it under about 20 seconds. Wait on screen text (`Wait+Screen@30s /#142/`) rather than sleeping
    for app startup, and end with a short `Sleep` after the last `Screenshot` (VHS can drop it otherwise).
-3. If the flow needs new `gh` responses, extend `scripts/demo/gh-shim.mjs`. Run with
+3. If the flow needs new `gh` responses, extend `test/support/gh-shim/demo.mjs`. Run with
    `LAZYHUB_DEMO_GH_LOG=/path/to/log npm run demo -- <name>` to see which calls the app makes.
 
 ## CI
