@@ -73,7 +73,12 @@
 | `src/features/prs/ConflictView.jsx` | GitHub PR merge-conflict resolution Resolves conflicts for a GitHub PR by: 1. Checking out the PR branch locally 2. Merging the base branch to expose conflict markers 3. Opening each conflicting file in the configured editor 4. Staging resolved files 5. Committing + immediately pushing back to GitHub (updates the PR) Phases: CHECKING   — probing local git state SETUP      — branch not checked out or no merge in progress yet CONFLICTS  — mid-merge, files listed with resolution status COMMITTING — committing + pushing in one step DONE       — pushed, PR updated |
 | `src/features/prs/detail.jsx` | PR detail pane Scrollable view: j/k to scroll, gg/G top/bottom, / to search body |
 | `src/features/prs/diff-parser.js` | pure diff-parsing logic, no React/Ink deps. Extracted from diff.jsx so it can be unit-tested without mocking the entire Ink/chalk/hljs stack. |
-| `src/features/prs/diff.jsx` | PR diff view with syntax highlighting + line comments |
+| `src/features/prs/diff.jsx` | public PR diff view; composes state and rendering. |
+| `src/features/prs/diff/editor.js` | synchronous comment editor round-trip. |
+| `src/features/prs/diff/highlight.js` | language detection and cached terminal syntax highlighting. |
+| `src/features/prs/diff/render.jsx` | diff rows, dialogs, and overlays; actions come from state. |
+| `src/features/prs/diff/state.js` | diff loading, navigation, overlays, and action callbacks. |
+| `src/features/prs/diff/tree.js` | file-tree rows derived from parsed diff files. |
 | `src/features/prs/list-dialogs.jsx` | (no header — inferred: list-dialogs) |
 | `src/features/prs/list-row.jsx` | Maps a new-style token scheme object (src/theme/index.js) to the legacy `t.*` shape consumed by PR list sub-components. @param {object} scheme - Active scheme from useTheme().scheme @returns {{ ui: object, pr: object, ci: object, review: object }} |
 | `src/features/prs/list-view.jsx` | (no header — inferred: list-view) |
@@ -222,11 +227,12 @@ Test file counts by directory:
 | `src/cli/` | 2 |
 | `src/cli/doctor/` | 4 |
 | `src/components/` | 1 |
-| `src/config/` | 7 |
+| `src/config/` | 8 |
 | `src/daemon/` | 7 |
 | `src/executor/` | 2 |
 | `src/features/onboarding/` | 1 |
-| `src/features/prs/` | 3 |
+| `src/features/prs/` | 4 |
+| `src/features/prs/diff/` | 1 |
 | `src/features/tabs/` | 2 |
 | `src/hooks/` | 1 |
 | `src/theme/` | 1 |
