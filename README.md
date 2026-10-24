@@ -1,8 +1,8 @@
-# 🦥 lazyhub
+# lazyhub
 
-### The high-performance, keyboard-driven terminal UI for GitHub.
+**A terminal workspace for reviewing GitHub changes.** lazyhub helps maintainers inspect pull requests, diffs, review comments and checks from the keyboard, using the GitHub CLI session they already have.
 
-![lazyhub demo: PR list, detail and diff](docs/demo/out/tour.gif)
+![lazyhub PR review demo](docs/demo/out/tour.gif)
 
 [![CI](https://github.com/saketh-kowtha/lazyhub/actions/workflows/ci.yml/badge.svg)](https://github.com/saketh-kowtha/lazyhub/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/lazyhub?color=3fb950&label=npm)](https://www.npmjs.com/package/lazyhub)
@@ -10,144 +10,67 @@
 [![Homebrew](https://img.shields.io/badge/brew-install-orange?logo=homebrew)](https://github.com/saketh-kowtha/homebrew-tap)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**lazyhub** is a terminal UI (TUI) that wraps the GitHub CLI (`gh`) into a cohesive, Vim-inspired experience. Inspired by the legendary `lazygit`, it surfaces Pull Requests, Issues, Actions, and Notifications in a lightning-fast interface, allowing you to manage your entire GitHub workflow without your fingers ever leaving the home row.
+## Review a change in your terminal
 
----
+On current `main`, lazyhub provides the established GitHub workflow: browse pull requests, open their details, inspect a diff and conversation, read checks, and use the available review actions. It also has Issues, Branches, Actions and Notifications panes. The `Focus` pane is the default starting view.
 
-## ⚡️ Why lazyhub?
+The current main branch also includes a read-only first-run report and local coverage diagnostics. Run `lazyhub --onboarding` for the first-run flow, `lazyhub watch-only --repo owner/name` to inspect GitHub-visible PR activity, or `lazyhub doctor --coverage --repo owner/name` for a local coverage report. These reports describe what lazyhub could observe; they do not block, approve or enforce work. GitHub-side observation cannot see local work that was never pushed, and incomplete or stale observations are reported as gaps.
 
-Context switching is a flow-killer. Jumping between your terminal and a browser to approve a PR or check a CI log fragments your focus. **lazyhub** brings the entire GitHub Web UI into your terminal.
+The optional App-based approval stage is future work. No GitHub App or required check currently enforces Lazyhub approval. AI review, editor integrations and existing management actions are separate features; they are not required for the read-only review reports.
 
-- **🚀 Zero Latency:** No browser tabs, no heavy Electron apps. Just a raw, optimized TUI.
-- **🧠 AI-Native Review:** Integrated with Anthropic’s Claude 3.5 Sonnet to analyze diffs and suggest fixes with a single keystroke.
-- **🔍 Fuzzy Search Everything:** Filter lists, jump to files in a 5,000-line diff, or find a specific workflow run instantly.
-- **🎨 Elite Theming:** Includes Tokyo Night, Catppuccin, and GitHub Dark/Light presets. Fully customizable via JSON.
+The npm and Homebrew packages are the supported install channels. Their published versions can lag repository `main`; the review reports and commands above are available only in releases that include them. Check the installed release and its `--help` output if a command is unavailable.
 
----
+## Install
 
-## 🏗 Architecture
+Requirements: Node.js 20 or later and the [`gh` CLI](https://cli.github.com/). Authenticate with `gh auth login` before starting, or let an interactive lazyhub startup open the GitHub CLI login flow if no session is found. Check the session with `gh auth status`.
 
-lazyhub is built on a decoupled, reactive architecture using **React** and **Ink**. It treats the `gh` CLI as its primary data engine, ensuring your local authentication and enterprise configurations just work.
-
-```mermaid
-graph TD
-    User([User Input]) --> UI[React / Ink TUI]
-    UI --> Hook[useGh Hook / SWR Disk Cache]
-    UI --> Context[AppContext / State Management]
-    Hook --> Executor[executor.js Barrel / gh Chokepoint]
-    Hook --> AI[ai.js / Anthropic Claude API]
-    Executor --> GH[GitHub CLI / GraphQL & REST]
-    AI --> Claude[Claude 3.5 Sonnet]
-    GH --> API[GitHub API]
-```
-
-Operational notes:
-- Warm panes render from `~/.cache/lazyhub/data/` immediately, then refresh in the background.
-- `LAZYHUB_PERF=1 lazyhub` records local perf data; `lazyhub perf report` prints p50/p95/max by operation.
-- Fatal crashes restore the terminal and point users at `lazyhub --debug-state`.
-- Machine-facing contracts are documented in [`docs/CONTRACT.md`](./docs/CONTRACT.md) and [`docs/COMPATIBILITY.md`](./docs/COMPATIBILITY.md).
-
----
-
-## 🚀 Power User Features
-
-### 🤖 AI Inline Review (`A` key)
-Don't just look at code; understand it. While in the Diff View, press `A`. Claude scans your changes, identifies potential bugs or architectural smells, and lets you post those suggestions as real GitHub comments instantly.
-
-**Provider auth.** External AI CLIs (`claude`, `codex`, `gemini`) run in an isolated sandbox that never sees your repo or your logged-in config, so authenticate them with environment variables:
-
-| CLI | Set |
-|---|---|
-| Claude Code | `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) or `ANTHROPIC_API_KEY` |
-| Codex | `CODEX_API_KEY` or `OPENAI_API_KEY` |
-| Gemini CLI | `GEMINI_API_KEY` |
-
-### 🔭 Deep Diff Navigation
-- **`f` (File Jump):** Fuzzy search filenames within a PR to jump directly to the relevant hunk.
-- **`t` (File Tree):** Toggle a sidebar showing the directory structure of the changes.
-- **`s` (Split View):** Toggle between Unified and Side-by-Side diff modes.
-
-### 🛠 Extensible Custom Panes
-Need a view for your team's specific deployments or Gists? Define a custom pane in your `config.json`.
-```json
-"customPanes": {
-  "my-deploys": {
-    "label": "Deployments",
-    "icon": "🚀",
-    "command": "gh api repos/{repo}/deployments"
-  }
-}
-```
-
----
-
-## 📦 Installation
-
-| Channel | Command | Status |
-| --- | --- | --- |
-| npm | `npm install -g lazyhub` | Published |
-| Homebrew | `brew install saketh-kowtha/tap/lazyhub` | Published after npm `latest` promotion |
-| Scoop | `scoop install ./packaging/scoop/lazyhub.json` | Manifest prepared; bucket submission pending |
-| winget | See `packaging/winget/README.md` | Manifest prepared; winget-pkgs PR is manual |
-| Nix | `nix run github:saketh-kowtha/lazyhub` | Flake prepared; hash must be refreshed per release |
-| mise/asdf | `mise plugin install lazyhub ./packaging/mise` | Plugin seed prepared |
-
-### via Homebrew (Recommended)
-```bash
-brew install saketh-kowtha/tap/lazyhub
-```
-
-### via npm
-```bash
+```sh
 npm install -g lazyhub
 ```
 
-### Ambient status
-```bash
-lazyhub status --format tmux
-lazyhub status --format starship
-lazyhub status --format json
+Or install with Homebrew:
+
+```sh
+brew install saketh-kowtha/tap/lazyhub
 ```
 
-`status` reads only the local SWR cache, so it is safe for tmux and starship
-segments. Open the app once to seed the cache.
+Run `lazyhub` inside a GitHub repository to use that repository, or provide `--repo owner/name` to commands that accept it. On first run, lazyhub guides you through choosing a repository and creates `~/.config/lazyhub/lazyhub.toml` when setup completes; cancelling leaves no first-run selection behind. See [the TOML configuration reference](docs/CONFIG_REFERENCE.md).
 
----
+## A read-only report
 
-## 🎹 Keybindings (The Essentials)
-
-| Key | Action |
-| --- | --- |
-| `Tab` | Cycle Navigation Panes |
-| `j / k` | Navigate List / Scroll Content |
-| `Enter` | View Detail / Open PR |
-| `d` | Open Diff View |
-| `/` | Fuzzy Search Current List |
-| `A` | Trigger AI Review (in Diff) |
-| `m` | Merge PR (Pick Strategy) |
-| `r` | Refresh (Bypass Cache) |
-| `S` | Settings & Themes |
-| `?` | Full Keyboard Cheat Sheet |
-
----
-
-## 🤝 Contributing
-
-We welcome contributions from the community! Whether it's a bug fix, a new theme, or a feature request, check out our [ARCHITECTURE.md](./docs/ARCHITECTURE.md) to understand the project's internal invariants.
-
-```bash
-# Setup for development
-npm install
-npm run dev   # Auto-rebuild on change
-npm test      # Run Vitest suite
+```sh
+lazyhub watch-only --repo owner/name
+lazyhub doctor --coverage --repo owner/name
 ```
 
-Security issues and least-privilege setup: see [SECURITY.md](./SECURITY.md).
+`watch-only` reads PR timelines, commits, reviews and checks through `gh`. It requires no AI provider, GitHub App or agent/MCP configuration. The doctor report adds local repository identity and evidence about known alternate paths. Both are read-only and local. They describe observed evidence, not proof that every path was seen or controlled. See [the coverage contract](docs/CONTRACT.md) and [the threat model](docs/THREAT_MODEL.md).
 
----
+## Navigate
 
-## 📜 License
+Use `j`/`k` to move, `Tab` to switch panes, `Enter` to open an item, and `?` for the current view's help. In a pull request, inspect the conversation and checks or press `d` to open the diff. The help overlay is the source for available actions in each view.
+
+The app keeps its existing GitHub management features, including review and merge actions. These actions are separate from the read-only reports and follow the confirmation shown in the interface.
+
+`LAZYHUB_PERF=1 lazyhub` records local performance data; `lazyhub perf report` summarizes it. No analytics or crash reporting is sent. More about local data and disclosure is in [SECURITY.md](SECURITY.md).
+
+## Configuration
+
+Configuration is TOML, stored at `~/.config/lazyhub/lazyhub.toml`. For example:
+
+```toml
+[theme]
+name = "lazyhub-dark"
+
+[defaults]
+repo = "owner/name"
+```
+
+See [docs/CONFIG_REFERENCE.md](docs/CONFIG_REFERENCE.md) for supported keys and defaults. Custom panes are declared in TOML; their command filters are translated to `gh` arguments by lazyhub. See the configuration reference for the current schema.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the fixture-based development setup, contribution scope, validation commands and security guidance. Start with [the roadmap](docs/ROADMAP.md) to see the active stage and work order.
+
+## License
 
 MIT © [Saketh Kowtha](https://github.com/saketh-kowtha)
-
----
