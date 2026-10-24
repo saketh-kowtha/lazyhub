@@ -6,7 +6,7 @@
  *   npm run demo -- watch-only   # one tape (name without .tape)
  *
  * Deterministic and LLM-free: the tapes run against a fixture-only `gh`
- * (scripts/demo/gh-shim.mjs) with a throwaway HOME, so no real GitHub data,
+ * (test/support/gh-shim, the "demo" fixture set) with a throwaway HOME, so no real GitHub data,
  * credentials or personal config can appear in a recording.
  */
 import { execFile, execFileSync } from 'node:child_process'
@@ -16,12 +16,13 @@ import { delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
+import { installShim } from '../test/support/gh-shim/shim.mjs'
+
 const run = promisify(execFile)
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const TAPES = join(ROOT, 'docs', 'demo', 'tapes')
 const OUT = join(ROOT, 'docs', 'demo', 'out')
 const BIN = join(ROOT, 'dist', 'lazyhub.js')
-const SHIM = join(ROOT, 'scripts', 'demo', 'gh-shim.mjs')
 
 const shq = s => `'${String(s).replace(/'/g, `'\\''`)}'`
 
@@ -46,12 +47,10 @@ function listTapes(only) {
 
 function installWrappers(dir) {
   mkdirSync(dir, { recursive: true })
-  const wrappers = { gh: SHIM, lazyhub: BIN }
-  for (const [name, target] of Object.entries(wrappers)) {
-    const file = join(dir, name)
-    writeFileSync(file, `#!/bin/sh\nexec ${shq(process.execPath)} ${shq(target)} "$@"\n`)
-    chmodSync(file, 0o755)
-  }
+  installShim(dir, 'demo')
+  const file = join(dir, 'lazyhub')
+  writeFileSync(file, `#!/bin/sh\nexec ${shq(process.execPath)} ${shq(BIN)} "$@"\n`)
+  chmodSync(file, 0o755)
 }
 
 async function main() {

@@ -1,100 +1,17 @@
 import assert from 'assert/strict'
 import { spawnSync } from 'child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, delimiter } from 'path'
 import pty from 'node-pty'
+import { installShim } from '../support/gh-shim/shim.mjs'
 import { GH_STDERR } from '../../src/executor/gh-stderr-fixtures.js'
 
 const ROOT = new URL('../..', import.meta.url).pathname
 const BIN = join(ROOT, 'dist', 'lazyhub.js')
 
-function fixturePRs() {
-  return [{
-    number: 186,
-    title: 'PTY harness fixture PR',
-    state: 'OPEN',
-    author: { login: 'octocat' },
-    labels: [{ name: 'test' }],
-    reviewRequests: [],
-    statusCheckRollup: [{ state: 'SUCCESS', conclusion: 'SUCCESS' }],
-    reviewDecision: 'REVIEW_REQUIRED',
-    updatedAt: '2026-06-13T00:00:00Z',
-    isDraft: false,
-    headRefName: 'feature/pty',
-    baseRefName: 'main',
-    assignees: [],
-    body: 'Fixture body',
-    mergeable: 'MERGEABLE',
-    autoMergeRequest: null,
-    url: 'https://github.com/saketh-kowtha/lazyhub/pull/186',
-  }]
-}
-
-function fixtureIssues() {
-  return [{
-    number: 195,
-    title: 'Debug state fixture issue',
-    state: 'OPEN',
-    author: { login: 'octocat' },
-    labels: [],
-    assignees: [],
-    updatedAt: '2026-06-13T00:00:00Z',
-    body: 'Fixture issue',
-    milestone: null,
-    comments: 0,
-    url: 'https://github.com/saketh-kowtha/lazyhub/issues/195',
-  }]
-}
-
 function installGhStub(dir) {
-  const binDir = join(dir, 'bin')
-  const ghPath = join(binDir, 'gh')
-  mkdirSync(binDir, { recursive: true })
-  writeFileSync(ghPath, `#!/usr/bin/env node
-const fs = require('fs')
-const args = process.argv.slice(2)
-const has = value => args.includes(value)
-if (process.env.LAZYHUB_GH_LOG) fs.appendFileSync(process.env.LAZYHUB_GH_LOG, JSON.stringify(args) + '\\n')
-const json = value => { process.stdout.write(JSON.stringify(value)); process.exit(0) }
-const latency = Number(process.env.LAZYHUB_GH_LATENCY_MS || 0)
-if (latency > 0 && ((args[0] === 'api' && args[1] === 'graphql') || (args[0] === 'pr' && args[1] === 'list'))) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, latency)
-}
-if (process.env.LAZYHUB_GH_FAIL_ONCE_FILE && args[0] === 'api' && args[1] === 'graphql') {
-  if (!fs.existsSync(process.env.LAZYHUB_GH_FAIL_ONCE_FILE)) {
-    fs.writeFileSync(process.env.LAZYHUB_GH_FAIL_ONCE_FILE, 'failed')
-    process.stderr.write('stub gh failure: rate limit\\n')
-    process.exit(1)
-  }
-}
-if (process.env.LAZYHUB_GH_STUB_STDERR && ((args[0] === 'api' && args[1] === 'graphql') || (args[0] === 'pr' && args[1] === 'list'))) {
-  process.stderr.write(process.env.LAZYHUB_GH_STUB_STDERR)
-  process.exit(Number(process.env.LAZYHUB_GH_STUB_EXIT || 1))
-}
-if (process.env.LAZYHUB_GH_STUB_EMPTY && ((args[0] === 'api' && args[1] === 'graphql') || (args[0] === 'pr' && args[1] === 'list'))) json(args[0] === 'pr' ? [] : { data: { search: { nodes: [] } } })
-if (has('--version')) { process.stdout.write('gh version 2.0.0\\n'); process.exit(0) }
-if (args[0] === 'auth' && args[1] === 'token') { process.stdout.write('stub-auth\\n'); process.exit(0) }
-if (args[0] === 'auth' && args[1] === 'status') {
-  process.stdout.write('github.com\\n  ✓ Logged in to github.com account octocat (stub)\\n  - Active account: true\\n')
-  process.exit(0)
-}
-if (args[0] === 'api' && args[1] === 'user') { process.stdout.write('octocat\\n'); process.exit(0) }
-if (args[0] === 'api' && args[1] === 'graphql') json({ data: { search: { nodes: ${JSON.stringify(fixturePRs().map(pr => ({ __typename: 'PullRequest', ...pr, labels: { nodes: pr.labels }, reviewRequests: { nodes: [] }, statusCheckRollup: { nodes: pr.statusCheckRollup }, assignees: { nodes: pr.assignees } })))} } } })
-if (args[0] === 'repo' && args[1] === 'view') json({ name: 'lazyhub', owner: { login: 'saketh-kowtha' } })
-if (args[0] === 'repo' && args[1] === 'list') json([{ name: 'lazyhub', nameWithOwner: 'saketh-kowtha/lazyhub' }])
-if (args[0] === 'pr' && args[1] === 'list') json(${JSON.stringify(fixturePRs())})
-if (args[0] === 'pr' && args[1] === 'view') json(${JSON.stringify({ ...fixturePRs()[0], reviews: [], files: [], additions: 1, deletions: 0, changedFiles: 1, mergeStateStatus: 'CLEAN', headRefOid: 'abc123' })})
-if (args[0] === 'issue' && args[1] === 'list') json(${JSON.stringify(fixtureIssues())})
-if (args[0] === 'issue' && args[1] === 'view') json(${JSON.stringify(fixtureIssues()[0])})
-if (args[0] === 'run' && args[1] === 'list') json([{ databaseId: 1, name: 'CI', status: 'completed', conclusion: 'success', workflowName: 'CI', headBranch: 'main', event: 'push', createdAt: '2026-06-13T00:00:00Z', updatedAt: '2026-06-13T00:01:00Z', url: 'https://github.com/saketh-kowtha/lazyhub/actions/runs/1' }])
-if (args[0] === 'api' && args[1] === 'notifications') json([])
-if (args[0] === 'api' && /^repos\\/[^/]+\\/[^/]+\\/issues\\/\\d+$/.test(args[1] || '')) { process.stdout.write('true\\n'); process.exit(0) }
-if (args[0] === 'api' && /\\/branches/.test(args[1] || '')) json([{ name: 'main', protected: true, commit: { sha: 'abc123' } }, { name: 'feature/pty', protected: false, commit: { sha: 'def456' } }])
-json([])
-`, 'utf8')
-  chmodSync(ghPath, 0o755)
-  return binDir
+  return installShim(join(dir, 'bin'), 'pty')
 }
 
 function stripAnsi(text) {
