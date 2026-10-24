@@ -77,6 +77,10 @@ export function parseRemoteUrl(url) {
   return null
 }
 
+// The remote URL is attacker-controlled in a cloned repo: only plain hostnames
+// (no leading '-', no shell/terminal metacharacters) reach ssh, env or output.
+const isValidHost = (h) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/.test(h)
+
 /**
  * Resolve an SSH host (possibly a ~/.ssh/config alias) to the real hostname
  * with `ssh -G`. Returns null when ssh is missing or yields no hostname.
@@ -85,9 +89,10 @@ export function parseRemoteUrl(url) {
  */
 async function resolveSshHostname(alias) {
   try {
-    const result = await execa('ssh', ['-G', alias], { reject: false, timeout: 3000 })
+    // `--` ends option parsing; the alias is also charset-checked by the caller.
+    const result = await execa('ssh', ['-G', '--', alias], { reject: false, timeout: 3000 })
     const m = (result.stdout || '').match(/^hostname\s+(\S+)/m)
-    return m ? m[1] : null
+    return m && isValidHost(m[1]) ? m[1] : null
   } catch {
     return null
   }
@@ -104,7 +109,7 @@ async function resolveRemoteHost() {
     const result = await execa('git', ['remote', 'get-url', 'origin'], { reject: false })
     if (result.exitCode !== 0) return null
     const parsed = parseRemoteUrl(result.stdout.trim())
-    if (!parsed) return null
+    if (!parsed || !isValidHost(parsed.host)) return null
     if (!parsed.ssh) return { host: parsed.host, resolved: true }
     const real = await resolveSshHostname(parsed.host)
     // GitHub's SSH-over-443 endpoint is not an API host.
