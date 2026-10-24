@@ -243,8 +243,8 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
           paddingX={1} marginX={1}>
           {action.type === 'delete' && (
             <>
-              <Text color={t.ci.fail} bold>Delete comment by @{action.comment.user?.login}?</Text>
-              <Text color={t.ui.dim} wrap="truncate">  "{stripAnsi(action.comment.body || '').slice(0, 60)}"</Text>
+              <Text color={t.ci.fail} bold>Delete comment by @{sanitize(action.comment.user?.login)}?</Text>
+              <Text color={t.ui.dim} wrap="truncate">  "{sanitize(stripAnsi(action.comment.body || '').slice(0, 60))}"</Text>
               <Text color={t.ui.dim}>[y] confirm  [n / Esc] cancel</Text>
             </>
           )}
@@ -252,7 +252,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
             <>
               <Text color={t.ui.dim}>
                 {action.type === 'reply'
-                  ? `Reply to @${action.comment.user?.login}:`
+                  ? `Reply to @${sanitize(action.comment.user?.login)}:`
                   : `Edit comment:`}
               </Text>
               <TextInput
@@ -281,7 +281,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
               {/* Thread header — show once per root comment */}
               {comment._isRoot && (
                 <Box paddingX={1} gap={2}>
-                  <Text color={t.ui.selected} bold>{comment.path}</Text>
+                  <Text color={t.ui.selected} bold>{sanitize(comment.path)}</Text>
                   <Text color={t.ui.dim}>line {comment.line}</Text>
                 </Box>
               )}
@@ -289,7 +289,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
               <Box paddingX={isReply ? 4 : 2} flexDirection="column">
                 <Box gap={1}>
                   <Text color={t.diff.threadBorder}>{isReply ? '  ┗' : '┃'}</Text>
-                  <Text color={t.ui.selected} bold>@{comment.user?.login}</Text>
+                  <Text color={t.ui.selected} bold>@{sanitize(comment.user?.login)}</Text>
                   <Text color={t.ui.dim}>{shortAge(comment.createdAt)}</Text>
                   {isReply && <Text color={t.ui.dim}>(reply)</Text>}
                 </Box>
