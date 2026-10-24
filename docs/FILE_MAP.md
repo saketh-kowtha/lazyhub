@@ -21,6 +21,7 @@
 | `src/executor/branches.js` | Request reviewers for a PR. @param repo @param number @param reviewers |
 | `src/executor/classify.js` | turn a failed `gh` call into a plain-language failure (#313). One classifier, next to runGh(): it reads the GhError that runGh() throws (message, redacted stderr, exit code, args) and returns what happened, what it affects and the exact next step. Pure and offline: it never calls gh, so a rate-limit reset time is only shown when the caller already holds a `gh api rate_limit` result (ctx.rateLimit); otherwise it says it is unknown. Every string returned is passed through sanitize() and scrubbed of tokens and credentialed or one-time URLs, so callers can render it as is. |
 | `src/executor/core.js` | the ONLY place the `gh` CLI is invoked in lazyhub. `runGh(args, opts)` is the single chokepoint: every exported function routes through it. That gives one place to mock in tests, one place to type errors (GhError), and one place to instrument (timeout, future retry/observability). |
+| `src/executor/evidence.js` | pure review-evidence model (issue #175). No I/O. Turns one GraphQL PullRequest node into an evidence record for HUMAN inspection. Observation never grants authority (ARCHITECT_DECISIONS D1, THREAT_MODEL T1/T3/T7): nothing here is an approval input, and a cached record must never be treated as one. Exact binding and revalidation stay with the approval work (#235/#244/#278). Rules the shape enforces: - every computed fact is `{value, source, fetched_at}`; a field GitHub did not return is the literal `'unknown'`, never inferred safe; - attention reasons are deterministic and cite the fact they came from; there are no scores; - prose written by the PR author, agents or commenters lives only under `untrusted`, apart from `facts`; actor attribution is `unverified`. |
 | `src/executor/gh-error.js` | the error type thrown by `runGh()` in executor.js. Carries the sanitized stderr, exit code, and args so callers can render an actionable message without re-parsing gh output. Lives in its own module so the executor and its tests (and future contract tests) share one definition. |
 | `src/executor/gh-stderr-fixtures.js` | Realistic gh stderr/exit shapes for the day-one failures (#313). `confirmed: true` means verified against cli/cli source (gh-authored text) or captured from gh 2.89.0. `confirmed: false` marks GitHub-server message text that gh passes through verbatim and that cannot be reproduced without hitting a real rate-limited/SSO account (GraphQL SAML wording, GraphQL/search rate-limit wording, Go dial errors). Shared by the classifier test and the PTY gh stub. |
 | `src/executor/issues.js` | List issues with optional filters. @param repo @param filter |
@@ -232,12 +233,12 @@ Test file counts by directory:
 | `src/` | 25 |
 | `src/ai/` | 3 |
 | `src/ai/providers/` | 4 |
-| `src/cli/` | 3 |
+| `src/cli/` | 8 |
 | `src/cli/doctor/` | 4 |
 | `src/components/` | 3 |
 | `src/config/` | 8 |
 | `src/daemon/` | 7 |
-| `src/executor/` | 3 |
+| `src/executor/` | 4 |
 | `src/features/onboarding/` | 1 |
 | `src/features/prs/` | 4 |
 | `src/features/prs/detail/` | 1 |
@@ -247,5 +248,5 @@ Test file counts by directory:
 | `src/ui/` | 2 |
 | `src/watch-only/` | 1 |
 
-**Total non-test source files:** 154
-**Total test files:** 74
+**Total non-test source files:** 155
+**Total test files:** 80
