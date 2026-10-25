@@ -28,6 +28,7 @@ Commands:
 
 Options:
   --mouse                         enable mouse scrolling
+  --onboarding                    rerun first-run setup
   -v, --version                   print the version
   -h, --help                      print this help
 `
@@ -43,7 +44,8 @@ export function parseCliArgs(args, opts = {}) {
   if (args.includes('--help') || args.includes('-h')) return { help: true }
   const positional = []
   for (const arg of args) {
-    if (arg === '--mouse') continue
+    // Both are read later at startup: --mouse by the renderer, --onboarding by shouldOnboard().
+    if (arg === '--mouse' || arg === '--onboarding') continue
     if (arg.startsWith('-')) return { error: `unknown option: ${arg}` }
     positional.push(arg)
   }
