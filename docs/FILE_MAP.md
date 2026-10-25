@@ -83,7 +83,12 @@
 | `src/features/prs/detail/Metadata.jsx` | PR detail assignees and labels. |
 | `src/features/prs/detail/Reviewers.jsx` | PR detail reviewer states and pending requests. |
 | `src/features/prs/diff-parser.js` | pure diff-parsing logic, no React/Ink deps. Extracted from diff.jsx so it can be unit-tested without mocking the entire Ink/chalk/hljs stack. |
-| `src/features/prs/diff.jsx` | PR diff view with syntax highlighting + line comments |
+| `src/features/prs/diff.jsx` | public PR diff view; composes state and rendering. |
+| `src/features/prs/diff/editor.js` | synchronous comment editor round-trip. |
+| `src/features/prs/diff/highlight.js` | language detection and cached terminal syntax highlighting. |
+| `src/features/prs/diff/render.jsx` | diff rows, dialogs, and overlays; actions come from state. |
+| `src/features/prs/diff/state.js` | diff loading, navigation, overlays, and action callbacks. |
+| `src/features/prs/diff/tree.js` | file-tree rows derived from parsed diff files. |
 | `src/features/prs/list-dialogs.jsx` | (no header — inferred: list-dialogs) |
 | `src/features/prs/list-row.jsx` | Maps a new-style token scheme object (src/theme/index.js) to the legacy `t.*` shape consumed by PR list sub-components. @param {object} scheme - Active scheme from useTheme().scheme @returns {{ ui: object, pr: object, ci: object, review: object }} |
 | `src/features/prs/list-view.jsx` | (no header — inferred: list-view) |
@@ -242,11 +247,12 @@ Test file counts by directory:
 | `src/features/onboarding/` | 1 |
 | `src/features/prs/` | 4 |
 | `src/features/prs/detail/` | 1 |
+| `src/features/prs/diff/` | 1 |
 | `src/features/tabs/` | 2 |
 | `src/hooks/` | 1 |
 | `src/theme/` | 2 |
 | `src/ui/` | 2 |
 | `src/watch-only/` | 1 |
 
-**Total non-test source files:** 155
-**Total test files:** 80
+**Total non-test source files:** 160
+**Total test files:** 81
