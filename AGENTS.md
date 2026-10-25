@@ -235,12 +235,12 @@ hour.
 From the repo root, all three must pass clean before any PR:
 
 ```
-npm run lint && npm test && npm run build
+npm run lint && npm test && npm run build && npm run typecheck
 ```
 
 If something fails, fix it and rerun — never report success without a clean gate
-run you actually saw pass. `npm run typecheck` (tsc --noEmit) is not yet part of
-the required gate (tracked by #197) but is cheap to run and worth checking.
+run you actually saw pass. `npm run typecheck` (tsc --noEmit, #197) runs in CI's
+Check job, so it is part of the gate.
 
 ## Docs to update alongside the change
 
@@ -266,13 +266,11 @@ the required gate (tracked by #197) but is cheap to run and worth checking.
 | `docs/FILE_MAP.md` | Concept → owning file crosswalk | Before grepping; "where is X?" |
 | `docs/GLOSSARY.md` | Authoritative term definitions | Whenever an unfamiliar term appears |
 | `docs/ROADMAP.md` | Execution order / what to pick next | Picking the next item |
-| `docs/DRAFT_PLAN.md` | Full strategy doc ROADMAP is synced from | Understanding *why* the roadmap is ordered this way |
 | `docs/DESIGN_REVAMP.md` | Visual design system, theme tokens, screen layouts | Any UI / theme issue (Protocol B) |
 | `docs/DESIGN_REFERENCES.md` | Per-screen mockup variants + consistency rules | Any UI / theme issue (Protocol B) |
 | `docs/CI_SIMPLIFICATION.md` | CI/CD design | Touching `.github/workflows/` |
 | `docs/TEST_PLAN.md` | Test strategy, current coverage state | Writing/extending tests |
 | `docs/MANUAL_TEST_PLAN.md` | Pre-release smoke test steps | Before tagging a release |
-| `docs/POLISH.md` | UX polish backlog + product vision | Phase 3/wedge-feature work |
 | `docs/AI_PROVIDERS_SPEC.md` | Pluggable AI backend spec | Touching `src/ai/` |
 | `docs/CONFIG_REFERENCE.md` | Generated TOML config reference | Touching config schema/docs |
 | `docs/NVIM_INTEGRATION_SPEC.md` | Editor integration spec (IPC) | Touching `src/ipc.js` / `integrations/nvim/` |
