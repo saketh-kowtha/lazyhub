@@ -287,6 +287,7 @@ Project-wide decisions belong in `ARCHITECT_DECISIONS.md`. The following visual 
 | 3 | Theme consumption | Components use `useTheme()` tokens. Do not add raw color literals in feature components. |
 | 4 | Layout and width | Shared primitives own positioning and terminal-width calculations. Use the project's width helpers for displayed text, padding and truncation. |
 | 5 | Interaction | Every view remains keyboard operable; overlays close with the documented escape behavior and do not cause parent layout shifts. |
+| 6 | States and accessibility | Async work shows what is loading and stays cancellable. Errors are one line of cause plus one line of action, never a stack trace. Respect `NO_COLOR`. |
 
 ### 12.1 Popover positioning
 

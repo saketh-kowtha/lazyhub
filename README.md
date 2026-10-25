@@ -14,7 +14,7 @@
 
 On current `main`, lazyhub provides the established GitHub workflow: browse pull requests, open their details, inspect a diff and conversation, read checks, and use the available review actions. It also has Issues, Branches, Actions and Notifications panes. The `Focus` pane is the default starting view.
 
-The current main branch also includes a read-only first-run report and local coverage diagnostics. Run `lazyhub --onboarding` for the first-run flow, `lazyhub watch-only --repo owner/name` to inspect GitHub-visible PR activity, or `lazyhub doctor --coverage --repo owner/name` for a local coverage report. These reports describe what lazyhub could observe; they do not block, approve or enforce work. GitHub-side observation cannot see local work that was never pushed, and incomplete or stale observations are reported as gaps.
+The current main branch also includes a read-only first-run report and local coverage diagnostics. The first-run flow starts automatically on an interactive first launch. Run `lazyhub watch-only --repo owner/name` to inspect GitHub-visible PR activity, or `lazyhub doctor --coverage --repo owner/name` for a local coverage report. These reports describe what lazyhub could observe; they do not block, approve or enforce work. GitHub-side observation cannot see local work that was never pushed, and incomplete or stale observations are reported as gaps.
 
 The optional App-based approval stage is future work. No GitHub App or required check currently enforces Lazyhub approval. AI review, editor integrations and existing management actions are separate features; they are not required for the read-only review reports.
 

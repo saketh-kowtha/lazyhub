@@ -13,14 +13,13 @@ npm ci
 npm run build
 ```
 
-Run tests and lint before opening a pull request:
+Run the required gate before opening a pull request:
 
 ```sh
-npm run lint
-npm test
-npm run build
-npm run typecheck
+npm run lint && npm test && npm run build
 ```
+
+`npm run typecheck` is not yet part of the required gate (see AGENTS.md) but is cheap to run and worth checking.
 
 The test suite uses mocked GitHub CLI calls and temporary configuration. It should not access your real GitHub repositories or modify `~/.config/lazyhub`. To exercise terminal flows, run `npm run test:pty`; those flows use a fixture `gh` and a throwaway home directory. Optional portability checks are available through `npm run test:portability`.
 
