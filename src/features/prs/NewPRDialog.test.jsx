@@ -1,7 +1,7 @@
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync, writeFileSync } from 'fs'
-import { execaSync } from 'execa'
+import { spawnSync } from 'child_process'
 import { NewPRDialog } from './NewPRDialog.jsx'
 import { useTheme, resolveTheme } from '../../theme.js'
 import { createPR, getCurrentBranch, getRemoteBranch, getRepoInfo, pushBranch } from '../../executor.js'
@@ -29,7 +29,7 @@ vi.mock('../../executor.js', () => ({
   compareBranches: vi.fn().mockResolvedValue({ ahead_by: 1 }),
   pushBranch: vi.fn(), createPR: vi.fn(),
 }))
-vi.mock('execa', () => ({ execaSync: vi.fn() }))
+vi.mock('child_process', () => ({ spawnSync: vi.fn() }))
 
 describe('NewPRDialog form flow', () => {
   beforeEach(() => {
@@ -62,10 +62,10 @@ describe('NewPRDialog form flow', () => {
 
   it('runs the body editor with an argument array and uses its saved text', async () => {
     vi.stubEnv('EDITOR', 'test-editor --wait')
-    execaSync.mockImplementation((bin, args) => {
+    spawnSync.mockImplementation((bin, args) => {
       expect(readFileSync(args.at(-1), 'utf8')).toBe('')
       writeFileSync(args.at(-1), 'Edited body')
-      return { exitCode: 0 }
+      return { status: 0 }
     })
     const view = renderWithProviders(<NewPRDialog repo="owner/repo" onClose={vi.fn()} />)
     await flush()
@@ -73,7 +73,7 @@ describe('NewPRDialog form flow', () => {
     await sendInput('', { tab: true })
     await sendInput('', { tab: true })
     await sendInput('e', { ctrl: true })
-    expect(execaSync).toHaveBeenCalledWith('test-editor', ['--wait', expect.any(String)], { stdio: 'inherit' })
+    expect(spawnSync).toHaveBeenCalledWith('test-editor', ['--wait', expect.any(String)], { stdio: 'inherit' })
     expect(view.lastFrame()).toContain('Edited body')
   })
 

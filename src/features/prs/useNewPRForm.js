@@ -3,9 +3,7 @@
  * New PR form state, branch validation, editor, and submission lifecycle.
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
-// Editor only; all GitHub calls below use the typed executor.
-// eslint-disable-next-line no-restricted-imports
-import { execaSync } from 'execa'
+import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -191,8 +189,8 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
       tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
       const tmp = join(tmpDir, 'pr-body.md')
       writeFileSync(tmp, form.body || '', { mode: 0o600 })
-      const result = execaSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
-      if (result.exitCode !== 0) return
+      const result = spawnSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
+      if (result.status !== 0) return
       const content = readFileSync(tmp, 'utf8')
       setForm(f => ({ ...f, body: content }))
     } catch { /* ignore */ }
