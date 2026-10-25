@@ -102,7 +102,7 @@
 
 <div class="container">
   <h1>Getting Started</h1>
-  <p class="subtitle">Install lazyhub and go from zero to productive in under 5 minutes.</p>
+  <p class="subtitle">Install lazyhub, connect it to your existing GitHub CLI session, and review pull requests from the terminal.</p>
 
   <!-- ── Install ──────────────────────────────────────────────────────────── -->
   <h2>1 · Installation</h2>
@@ -110,7 +110,7 @@
   <h3>Prerequisites</h3>
   <ul>
     <li><strong>Node.js 20+</strong> — <code>node --version</code></li>
-    <li><strong>gh CLI</strong> — lazyhub will guide you through install + login if missing</li>
+    <li><strong>gh CLI</strong> — install it separately and authenticate with <code>gh auth login</code>; check the session with <code>gh auth status</code></li>
   </ul>
 
   <h3>Install lazyhub</h3>
@@ -121,8 +121,8 @@
 <span class="cmd">npx lazyhub</span>
 
 <span class="comment"># or from source</span>
-<span class="cmd">git clone https://github.com/saketh-kowtha/lazyhub &amp;&amp; cd lgh</span>
-<span class="cmd">npm install &amp;&amp; npm start</span></pre>
+<span class="cmd">git clone https://github.com/saketh-kowtha/lazyhub &amp;&amp; cd lazyhub</span>
+<span class="cmd">npm ci &amp;&amp; npm start</span></pre>
 
   <div class="tip">
     <strong>Tip:</strong> After global install, run <code>lazyhub</code> from any directory that contains a Git repo and it auto-detects the GitHub remote.
@@ -143,7 +143,7 @@
     <div class="step-num">2</div>
     <div class="step-body">
       <h3>Login</h3>
-      <p>If not already authenticated, lazyhub runs <code>gh auth login --web</code>. On headless systems (no browser), it prompts for a Personal Access Token instead.</p>
+      <p>lazyhub uses the GitHub CLI session on your machine. If no authenticated session is found, startup can invoke <code>gh auth login</code>; you can also authenticate before launching with that command.</p>
     </div>
   </div>
 
@@ -151,15 +151,15 @@
     <div class="step-num">3</div>
     <div class="step-body">
       <h3>Repo detection</h3>
-      <p>Inside a git repo with a GitHub remote? lazyhub auto-detects it. Outside a repo, it shows an arrow-key picker of your recent GitHub repos.</p>
+      <p>Inside a repository with a GitHub remote, lazyhub uses that repository. On the first interactive run, choose a repository from the list available to your GitHub CLI session; lazyhub saves that selection to TOML when setup completes.</p>
     </div>
   </div>
 
   <div class="step">
     <div class="step-num">4</div>
     <div class="step-body">
-      <h3>The TUI opens</h3>
-      <p>You're in. Navigate with <kbd>j</kbd>/<kbd>k</kbd>, switch panes with <kbd>Tab</kbd>, press <kbd>?</kbd> any time for context-aware help.</p>
+      <h3>Read-only first-run report</h3>
+      <p>The first-run flow displays a watch-only report about GitHub-visible PR activity and coverage. It does not approve, merge or block work; cancelling does not save the selected repository.</p>
     </div>
   </div>
 
@@ -229,7 +229,7 @@
     <li><kbd>c</kbd> on any line — add an inline comment</li>
     <li><kbd>n</kbd>/<kbd>N</kbd> — jump between comment threads</li>
     <li><kbd>]</kbd>/<kbd>[</kbd> — next/previous file</li>
-    <li><kbd>s</kbd> — toggle split/unified view</li>
+    <li><kbd>w</kbd> — toggle split/unified view</li>
   </ul>
 
   <!-- ── Search ───────────────────────────────────────────────────────────── -->
@@ -261,7 +261,7 @@
   </ul>
 
   <div class="warn">
-    <strong>Heads up:</strong> lazyhub requires <code>gh auth login</code> with at minimum <code>repo</code> and <code>read:org</code> scopes. Run <code>gh auth status</code> to check.
+    <strong>Heads up:</strong> lazyhub relies on the GitHub CLI's authenticated session. Run <code>gh auth status</code> to check it; repository access and organization policy still apply.
   </div>
 
   <h2>Next Steps</h2>
