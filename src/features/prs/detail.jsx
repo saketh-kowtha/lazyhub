@@ -1,13 +1,12 @@
 // @ts-nocheck
 // TODO(#197): PR detail view has legacy Ink prop inference noise pending typed props.
 /**
- * src/features/prs/detail.jsx — PR detail pane
+ * src/features/prs/detail.jsx — PR detail controller, navigation and dialogs
  * Scrollable view: j/k to scroll, gg/G top/bottom, / to search body
  */
 
 import React, { useState, useContext, useMemo, useRef } from 'react'
 import { Box, Text, useStdout } from 'ink'
-import { format } from 'timeago.js'
 import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
@@ -27,7 +26,7 @@ import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
-import { sanitize, getMarkdownRows, TextInput } from '../../utils.js'
+import { sanitize, TextInput } from '../../utils.js'
 import { Spinner } from '../../components/Spinner.jsx'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { classifyGhFailure } from '../../executor.js'
@@ -35,6 +34,10 @@ import { PRDetailSkeleton } from '../../components/Skeleton.jsx'
 import { openInEditor, editorLabel } from '../../editor.js'
 import { loadConfig } from '../../config.js'
 import { firstActionKey } from '../../config/actions.js'
+
+import { PRDetailHeader } from './detail/Header.jsx'
+import { buildContentRows } from './detail/content-rows.jsx'
+import { sortChecks } from './detail/Checks.jsx'
 
 const _editorCfg = loadConfig().editor
 
@@ -48,197 +51,6 @@ const MERGE_OPTIONS_ADMIN = [
   { value: 'admin-squash', label: '--admin --squash', description: 'Bypass branch protection + squash' },
   { value: 'admin-rebase', label: '--admin --rebase', description: 'Bypass branch protection + rebase' },
 ]
-
-function reviewStatusIcon(state, t) {
-  switch (state) {
-    case 'APPROVED':          return { icon: '✓', color: t.ci.pass }
-    case 'CHANGES_REQUESTED': return { icon: '✗', color: t.ci.fail }
-    case 'COMMENTED':         return { icon: '●', color: t.ui.muted }
-    default:                  return { icon: '○', color: t.ui.dim }
-  }
-}
-
-function prStateBadge(pr, t) {
-  if (pr.isDraft) return { icon: '⊘', color: t.pr.draft,   label: 'Draft'  }
-  if (pr.state === 'OPEN' && pr.mergeable === 'CONFLICTING')
-    return { icon: '●', color: t.pr.conflict || t.ci.pending, label: 'Conflict' }
-  switch (pr.state) {
-    case 'OPEN':   return { icon: '●', color: t.pr.open,   label: 'Open'   }
-    case 'MERGED': return { icon: '●', color: t.pr.merged, label: 'Merged' }
-    case 'CLOSED': return { icon: '●', color: t.pr.closed, label: 'Closed' }
-    default:       return { icon: '●', color: t.ui.muted,  label: pr.state }
-  }
-}
-
-// Build flat scrollable row array from PR data
-function buildContentRows(pr, checks, protection, cols, t, checkCursor = null) {
-  const rows = []
-  const push = (id, el) => rows.push({ id, el })
-  const sep  = (id) => push(id, <Box key={id} />)
-
-  // ── Assignees / Labels ────────────────────────────────────────────────────
-  if (pr.assignees?.length > 0 || pr.labels?.length > 0) {
-    if (pr.assignees?.length > 0) {
-      push('assignees', (
-        <Box key="assignees" paddingX={1} gap={1}>
-          <Text color={t.ui.dim}>Assigned</Text>
-          {pr.assignees.map(a => (
-            <Text key={a.login} color={t.ui.muted}>{a.login}</Text>
-          ))}
-        </Box>
-      ))
-    }
-    if (pr.labels?.length > 0) {
-      push('labels', (
-        <Box key="labels" paddingX={1} gap={1}>
-          {pr.labels.map(l => (
-            <Box key={l.name} paddingX={1} borderStyle="round" borderColor={`#${l.color}`}>
-              <Text color={`#${l.color}`}>{sanitize(l.name)}</Text>
-            </Box>
-          ))}
-        </Box>
-      ))
-    }
-    sep('sep-meta')
-  }
-
-  // ── Reviewers ─────────────────────────────────────────────────────────────
-  // Deduplicate: last non-PENDING state wins per login; pending requests fill gaps
-  const reviewStateMap = new Map()
-  for (const r of (pr.reviews || [])) {
-    if (r.author?.login) reviewStateMap.set(r.author.login, r.state)
-  }
-  for (const req of (pr.reviewRequests || [])) {
-    const login = req.login || req.name
-    if (login && !reviewStateMap.has(login)) reviewStateMap.set(login, 'PENDING')
-  }
-  const allReviewers = [...reviewStateMap.entries()].map(([login, state]) => ({ login, state }))
-  if (allReviewers.length > 0) {
-    push('rev-hdr', (
-      <Box key="rev-hdr" paddingX={1}>
-        <Text color={t.ui.dim} bold>Reviewers</Text>
-      </Box>
-    ))
-    allReviewers.forEach(r => {
-      const rs = reviewStatusIcon(r.state, t)
-      push(`rev-${r.login}`, (
-        <Box key={`rev-${r.login}`} paddingX={2} gap={1}>
-          <Text color={rs.color}>{rs.icon}</Text>
-          <Text color={t.ui.muted}>{r.login}</Text>
-          {r.state !== 'PENDING' && (
-            <Text color={rs.color} dimColor>{r.state.toLowerCase().replace(/_/g, ' ')}</Text>
-          )}
-        </Box>
-      ))
-    })
-    sep('sep-rev')
-  }
-
-  // ── CI Checks ─────────────────────────────────────────────────────────────
-  const rawChecks = (checks?.length > 0) ? checks : (pr.statusCheckRollup || [])
-  // Sort: failing first, then pending, then passing/skipped
-  const checkOrder = (c) => {
-    const s = c.conclusion || c.status || c.state || ''
-    if (/failure|error/i.test(s)) return 0
-    if (/pending|in_progress|queued/i.test(s)) return 1
-    if (/success/i.test(s)) return 2
-    return 3
-  }
-  const allChecks = [...rawChecks].sort((a, b) => checkOrder(a) - checkOrder(b))
-  if (allChecks.length > 0) {
-    const passing = allChecks.filter(c => /success/i.test(c.conclusion || c.status || c.state || '')).length
-    const failing = allChecks.filter(c => /failure|error/i.test(c.conclusion || c.status || c.state || '')).length
-    const pending = allChecks.filter(c => /pending|in_progress|queued/i.test(c.conclusion || c.status || c.state || '')).length
-    const skipped = allChecks.filter(c => /cancelled|skipped/i.test(c.conclusion || c.status || c.state || '')).length
-    const checksActive = checkCursor !== null
-    push('checks-hdr', (
-      <Box key="checks-hdr" paddingX={1} gap={2}>
-        <Text color={checksActive ? t.ui.selected : t.ui.dim} bold>Checks</Text>
-        {passing > 0 && <Text color={t.ci.pass}>✓ {passing}</Text>}
-        {failing > 0 && <Text color={t.ci.fail}>✗ {failing}</Text>}
-        {pending > 0 && <Text color={t.ci.pending}>● {pending}</Text>}
-        {skipped > 0 && <Text color={t.ui.dim}>⊘ {skipped}</Text>}
-        {checksActive && <Text color={t.ui.dim}>[j/k] nav  [Enter/o] open  [R] rerun  [Esc] exit</Text>}
-      </Box>
-    ))
-    allChecks.forEach((c, i) => {
-      const status = c.conclusion || c.status || c.state || ''
-      let icon, color
-      if      (/success/i.test(status))                    { icon = '✓'; color = t.ci.pass }
-      else if (/failure|error/i.test(status))              { icon = '✗'; color = t.ci.fail }
-      else if (/pending|in_progress|queued/i.test(status)) { icon = '●'; color = t.ci.pending }
-      else if (/cancelled|skipped/i.test(status))          { icon = '⊘'; color = t.ui.dim }
-      else                                                  { icon = '○'; color = t.ui.dim }
-      const name = (c.name || c.context || '').slice(0, 42)
-      const isSelected = checksActive && checkCursor === i
-      push(`check-${i}`, (
-        <Box key={`check-${i}`} paddingX={2} gap={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-          <Text color={color}>{icon}</Text>
-          <Text color={isSelected ? t.ui.selected : t.ui.muted} wrap="truncate">{name}</Text>
-          {isSelected && c.appName && <Text color={t.ui.dim}> ({c.appName})</Text>}
-        </Box>
-      ))
-    })
-    sep('sep-checks')
-  }
-
-  // ── Merge status ──────────────────────────────────────────────────────────
-  const mergeItems = []
-  if (pr.isDraft)                             mergeItems.push(<Text key="draft"    color={t.pr.draft}>⊘ Draft — not ready</Text>)
-  if (pr.mergeable === 'CONFLICTING')         mergeItems.push(<Text key="conflict" color={t.ci.fail}>✗ Has conflicts</Text>)
-  if (pr.mergeStateStatus === 'BLOCKED')      mergeItems.push(<Text key="blocked"  color={t.ci.fail}>✗ Blocked</Text>)
-  if (pr.mergeStateStatus === 'BEHIND')       mergeItems.push(<Text key="behind"   color={t.ci.pending}>● Behind base</Text>)
-  if (pr.mergeStateStatus === 'CLEAN')        mergeItems.push(<Text key="clean"    color={t.ci.pass}>✓ Ready to merge</Text>)
-  if (pr.mergeStateStatus === 'UNSTABLE')     mergeItems.push(<Text key="unstable" color={t.ci.pending}>● Unstable</Text>)
-  if (pr.mergeStateStatus === 'HAS_HOOKS')    mergeItems.push(<Text key="hooks"    color={t.ci.pass}>✓ Ready (hooks active)</Text>)
-  if (pr.autoMergeRequest)                    mergeItems.push(
-    <Text key="automerge" color={t.ci.pass}>⟳ Auto-merge on ({pr.autoMergeRequest.mergeMethod?.toLowerCase()})</Text>
-  )
-  push('merge-hdr', (
-    <Box key="merge-hdr" paddingX={1} gap={2}>
-      <Text color={t.ui.dim} bold>Merge</Text>
-      {mergeItems}
-    </Box>
-  ))
-  if (protection) {
-    if (protection.requiredReviews > 0) {
-      push('prot-reviews', (
-        <Box key="prot-reviews" paddingX={2}>
-          <Text color={t.ui.dim}>
-            Requires {protection.requiredReviews} review{protection.requiredReviews > 1 ? 's' : ''}
-            {protection.requireCodeOwnerReviews ? ' + CODEOWNERS' : ''}
-          </Text>
-        </Box>
-      ))
-    }
-    if (protection.requireStatusChecks && protection.requiredChecks?.length > 0) {
-      push('prot-checks', (
-        <Box key="prot-checks" paddingX={2}>
-          <Text color={t.ui.dim}>
-            Required: {protection.requiredChecks.slice(0, 3).join(', ')}
-            {protection.requiredChecks.length > 3 ? ` +${protection.requiredChecks.length - 3}` : ''}
-          </Text>
-        </Box>
-      ))
-    }
-  }
-  sep('sep-merge')
-
-  // ── Description ───────────────────────────────────────────────────────────
-  if (pr.body) {
-    push('body-hdr', (
-      <Box key="body-hdr" paddingX={1}>
-        <Text color={t.ui.dim} bold>Description</Text>
-      </Box>
-    ))
-    const mdRows = getMarkdownRows(pr.body, cols - 4, t)
-    mdRows.forEach((row, i) => {
-      push(`body-md-${i}`, row)
-    })
-  }
-
-  return rows
-}
 
 export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
   useKeyScope('view')
@@ -286,18 +98,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
     [pr, checks, protection, cols, t, checkCursor]
   )
 
-  // Sorted checks array (same ordering as in buildContentRows)
-  const allChecksForNav = useMemo(() => {
-    const raw = (checks?.length > 0) ? checks : (pr?.statusCheckRollup || [])
-    const order = (c) => {
-      const s = c.conclusion || c.status || c.state || ''
-      if (/failure|error/i.test(s)) return 0
-      if (/pending|in_progress|queued/i.test(s)) return 1
-      if (/success/i.test(s)) return 2
-      return 3
-    }
-    return [...raw].sort((a, b) => order(a) - order(b))
-  }, [checks, pr])
+  const allChecksForNav = useMemo(() => sortChecks(checks, pr), [checks, pr])
 
   // Tell the footer which actions can run for this PR (registry preconditions).
   const hasChecks = allChecksForNav.length > 0
@@ -690,36 +491,13 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
 
   // ── Detail view ────────────────────────────────────────────────────────────
 
-  const badge = prStateBadge(pr, t)
-
   return (
     <Box flexDirection="column" flexGrow={1}>
 
       {loading && <Box paddingX={1}><Text color={t.ui.muted}>refreshing…</Text></Box>}
 
       {/* ── Fixed title header ── */}
-      <Box flexDirection="column" paddingX={1} paddingY={0}
-        borderStyle="single" borderColor={t.ui.border}
-        borderTop={false} borderLeft={false} borderRight={false} borderBottom={true}>
-        <Box gap={1}>
-          <Text color={badge.color} bold>{badge.icon}</Text>
-          <Text color={t.ui.dim}>#{pr.number}</Text>
-          <Text bold color={t.ui.selected} wrap="truncate">{sanitize(pr.title)}</Text>
-        </Box>
-        <Box gap={1}>
-          <Text color={t.ui.muted}>{pr.author?.login}</Text>
-          <Text color={t.ui.dim}>·</Text>
-          <Text color={t.ui.dim}>{format(pr.updatedAt)}</Text>
-          <Text color={t.ui.dim}>·</Text>
-          <Text color={t.ui.muted}>{pr.baseRefName}</Text>
-          <Text color={t.ui.dim}>←</Text>
-          <Text color={t.ui.selected}>{pr.headRefName}</Text>
-          <Text color={t.ui.dim}>·</Text>
-          <Text color={t.ci.pass}>+{pr.additions || 0}</Text>
-          <Text color={t.ci.fail}>-{pr.deletions || 0}</Text>
-          <Text color={t.ui.dim}>{pr.changedFiles || 0} files</Text>
-        </Box>
-      </Box>
+      <PRDetailHeader pr={pr} />
 
       {/* ── Search bar ── */}
       {(searching || searchText) && (
