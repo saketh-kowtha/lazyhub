@@ -75,7 +75,13 @@
 |---|---|
 | `src/features/prs/comments.jsx` | PR comments/threads view Supports: reply, edit, delete per comment |
 | `src/features/prs/ConflictView.jsx` | GitHub PR merge-conflict resolution Resolves conflicts for a GitHub PR by: 1. Checking out the PR branch locally 2. Merging the base branch to expose conflict markers 3. Opening each conflicting file in the configured editor 4. Staging resolved files 5. Committing + immediately pushing back to GitHub (updates the PR) Phases: CHECKING   — probing local git state SETUP      — branch not checked out or no merge in progress yet CONFLICTS  — mid-merge, files listed with resolution status COMMITTING — committing + pushing in one step DONE       — pushed, PR updated |
-| `src/features/prs/detail.jsx` | PR detail pane Scrollable view: j/k to scroll, gg/G top/bottom, / to search body |
+| `src/features/prs/detail.jsx` | PR detail controller, navigation and dialogs Scrollable view: j/k to scroll, gg/G top/bottom, / to search body |
+| `src/features/prs/detail/Checks.jsx` | PR detail check summary, rows and shared navigation ordering. |
+| `src/features/prs/detail/content-rows.jsx` | Compose the PR detail's flat scroll window. Stable row IDs anchor checks and body search; description elements stay unwrapped for the existing text filter. |
+| `src/features/prs/detail/Header.jsx` | PR detail title, state badge and branch summary. |
+| `src/features/prs/detail/MergeStatus.jsx` | PR detail merge status and branch protection requirements. |
+| `src/features/prs/detail/Metadata.jsx` | PR detail assignees and labels. |
+| `src/features/prs/detail/Reviewers.jsx` | PR detail reviewer states and pending requests. |
 | `src/features/prs/diff-parser.js` | pure diff-parsing logic, no React/Ink deps. Extracted from diff.jsx so it can be unit-tested without mocking the entire Ink/chalk/hljs stack. |
 | `src/features/prs/diff.jsx` | PR diff view with syntax highlighting + line comments |
 | `src/features/prs/list-dialogs.jsx` | (no header — inferred: list-dialogs) |
@@ -235,11 +241,12 @@ Test file counts by directory:
 | `src/executor/` | 4 |
 | `src/features/onboarding/` | 1 |
 | `src/features/prs/` | 4 |
+| `src/features/prs/detail/` | 1 |
 | `src/features/tabs/` | 2 |
 | `src/hooks/` | 1 |
 | `src/theme/` | 2 |
 | `src/ui/` | 2 |
 | `src/watch-only/` | 1 |
 
-**Total non-test source files:** 149
-**Total test files:** 79
+**Total non-test source files:** 155
+**Total test files:** 80
