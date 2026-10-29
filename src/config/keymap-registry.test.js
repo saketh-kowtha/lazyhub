@@ -79,7 +79,7 @@ describe('Ctrl+G', () => {
 describe('registry coverage', () => {
   const VIEW_SOURCES = [
     'src/features/prs/detail.jsx',
-    'src/features/prs/diff.jsx',
+    'src/features/prs/diff/state.js',
     'src/features/prs/comments.jsx',
     'src/features/issues/detail.jsx',
   ]

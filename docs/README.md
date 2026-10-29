@@ -8,21 +8,22 @@ Architect specs, decisions, and reference material. Start here if you're picking
 2. **`GLOSSARY.md`** — definitions for every domain term (skim, jump back when you hit an unknown term)
 3. **`FILE_MAP.md`** — concept → owning files crosswalk (skim, jump back when you need "where is X?")
 4. The issue body (`gh issue view <N>`) — already cites which of the docs below to load
-5. Whatever doc the issue cites (`DESIGN_REVAMP.md`, `POLISH.md`, etc.)
+5. The reference doc cited by the issue (`DESIGN_REVAMP.md`, `CONFIG_REFERENCE.md`, etc.)
 
 ## Doc map
 
 | Doc | Purpose | Read when |
 |---|---|---|
 | `ARCHITECT_DECISIONS.md` | Locked cross-cutting decisions | Every fresh session |
-| `ROADMAP.md` | V1 execution order — which issue to pick next, what blocks what | Before opening a fresh issue |
+| `ROADMAP.md` | Current product stages, execution order and gates | Before opening a fresh issue |
 | `ARCHITECTURE.md` | High-level codebase architecture | Onboarding to the codebase; before cross-cutting refactors |
 | `GLOSSARY.md` | Authoritative definitions for every domain term | Whenever an unfamiliar term appears |
 | `FILE_MAP.md` | Concept → owning files crosswalk | Before greping; answers "where is X?" |
-| `DESIGN_REVAMP.md` | Visual design system, tokens, screen layouts | Any UI / theme issue |
+| `DESIGN_REVAMP.md` | Visual token and layout contracts; screen concepts are design references, not release status | Any UI / theme issue |
 | `CI_SIMPLIFICATION.md` | Phase D CI design | Touching `.github/workflows/` |
 | `MANUAL_TEST_PLAN.md` | Pre-release smoke test steps | Before tagging a release |
-| `POLISH.md` | UX polish backlog | Phase H, Phase C step 8 |
+| `POLISH.md` | Archived pointer to the current roadmap | Legacy references only |
+| `DRAFT_PLAN.md` | Archived strategy draft pointing to the current roadmap | Historical context only |
 | `AI_PROVIDERS_SPEC.md` | AI provider abstraction contract | Touching `src/ai/providers/` |
 | `NVIM_INTEGRATION_SPEC.md` | nvim plugin contract (CLI args + IPC) | Touching the nvim plugin or embedded mode |
 | `TEST_PLAN.md` | Legacy test plan (likely superseded by MANUAL_TEST_PLAN.md — verify before relying on it) | (Legacy) |
