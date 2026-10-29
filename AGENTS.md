@@ -269,6 +269,7 @@ Check job, so it is part of the gate.
 | `docs/DESIGN_REVAMP.md` | Visual design system, theme tokens, screen layouts | Any UI / theme issue (Protocol B) |
 | `docs/DESIGN_REFERENCES.md` | Per-screen mockup variants + consistency rules | Any UI / theme issue (Protocol B) |
 | `docs/CI_SIMPLIFICATION.md` | CI/CD design | Touching `.github/workflows/` |
+| `docs/AGENT_OPS.md` | Agent roles, label state machine, orchestrator safety | Running as an agent-ops agent; touching `scripts/agent-ops/` |
 | `docs/TEST_PLAN.md` | Test strategy, current coverage state | Writing/extending tests |
 | `docs/MANUAL_TEST_PLAN.md` | Pre-release smoke test steps | Before tagging a release |
 | `docs/AI_PROVIDERS_SPEC.md` | Pluggable AI backend spec | Touching `src/ai/` |

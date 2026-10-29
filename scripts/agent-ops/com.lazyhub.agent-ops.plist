@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: replace REPO_PATH, NODE_PATH (`dirname $(command -v node)`) and HOME_PATH, then see docs/AGENT_OPS.md "Install". -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.lazyhub.agent-ops</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string><string>-lc</string>
+    <string>NODE_PATH/node REPO_PATH/scripts/agent-ops/orchestrator.mjs</string>
+  </array>
+  <key>StartInterval</key><integer>1800</integer>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>HOME_PATH/Library/Logs/lazyhub-agent-ops.log</string>
+  <key>StandardErrorPath</key><string>HOME_PATH/Library/Logs/lazyhub-agent-ops.log</string>
+</dict>
+</plist>

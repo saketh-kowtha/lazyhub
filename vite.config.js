@@ -20,7 +20,7 @@ export default defineConfig({
     environment: 'node',
     globalSetup: ['src/test/global-guard.js'],
     setupFiles: ['src/test/setup-hermetic.js'],
-    include: ['src/**/*.{test,spec}.{jsx,js}'],
+    include: ['src/**/*.{test,spec}.{jsx,js}', 'scripts/**/*.test.mjs'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'json', 'html'],

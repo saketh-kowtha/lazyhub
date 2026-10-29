@@ -1,0 +1,31 @@
+{
+  "repo": "saketh-kowtha/lazyhub",
+  "maintainers": ["saketh-kowtha"],
+  "workRoot": "~/.local/share/lazyhub-agent-ops",
+  "maxJobsPerTick": 2,
+  "maxReviewRounds": 3,
+  "dailyCap": { "builder": 6, "reviewer": 10, "ops": 3 },
+  "timeoutMinutes": { "builder": 60, "reviewer": 30, "ops": 30 },
+  "roles": {
+    "builder": { "tool": "claude" },
+    "reviewer": { "tool": "codex" },
+    "ops": { "tool": "claude" }
+  },
+  "tools": {
+    "claude": {
+      "cmd": ["claude", "-p", "--permission-mode", "auto", "--settings", "{settings}", "--model", "{model}", "{prompt}"]
+    },
+    "codex": {
+      "cmd": ["codex", "exec", "--sandbox", "workspace-write", "-c", "sandbox_workspace_write.network_access=true", "-C", "{cwd}", "-m", "{model}", "{prompt}"]
+    },
+    "gemini": {
+      "unverified": true,
+      "cmd": ["gemini", "-m", "{model}", "-p", "{prompt}"]
+    }
+  },
+  "scheduled": [
+    { "name": "ci-triage", "role": "builder", "prompt": "ci-triage.md", "every": "day" },
+    { "name": "docs-sync", "role": "ops", "prompt": "docs-sync.md", "every": "day" },
+    { "name": "digest", "role": "ops", "prompt": "digest.md", "every": "week", "weekday": 1 }
+  ]
+}
