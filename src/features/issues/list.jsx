@@ -1,77 +1,26 @@
 // @ts-nocheck
 // TODO(#197): issue list view needs explicit item/dialog prop typedefs.
 /**
- * src/features/issues/list.jsx — Issue list pane
+ * Issue list controller: query, filters, cursor, input and dialog lifecycle.
  */
 
-import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
-import { Box, Text, useStdout } from 'ink'
-import { format } from 'timeago.js'
+import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
+import { useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
-import { classifyGhFailure, listIssues, listLabels, listCollaborators, closeIssue, createIssue, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees } from '../../executor.js'
-import { sanitize, formatLogin, padEndWidth } from '../../utils.js'
-import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
-import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
-import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
-import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
+import { listIssues } from '../../executor.js'
+import { sanitize } from '../../utils.js'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { loadConfig } from '../../config.js'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
 import { useTheme } from '../../theme.js'
-import { IssueListSkeleton } from '../../components/Skeleton.jsx'
-import { FailureNotice } from '../../components/FailureNotice.jsx'
-import { EmptyState } from '../../components/EmptyState.jsx'
+import { IssueListDialogs } from './list-dialogs.jsx'
+import { IssueListView } from './list-view.jsx'
 
 const _appConfig = loadConfig()
 const _cfg = _appConfig.issues
 const _actions = _appConfig.toml
-
-// ─── Age colour ───────────────────────────────────────────────────────────────
-
-function ageColor(updatedAt, t) {
-  if (!updatedAt) return t.ui.dim
-  const days = (Date.now() - new Date(updatedAt).getTime()) / 86_400_000
-  if (days < 3)  return t.ci.pass     // green  — fresh
-  if (days < 7)  return undefined     // default — normal
-  if (days < 14) return t.ci.pending  // yellow — getting stale
-  return t.ci.fail                     // red    — stale
-}
-
-function IssueStateBadge({ issue, t }) {
-  switch (issue.state) {
-    case 'OPEN':   return <Text color={t.issue.open}>●</Text>
-    case 'CLOSED': return <Text color={t.issue.closed}>●</Text>
-    default:       return <Text color={t.ui.muted}>●</Text>
-  }
-}
-
-const IssueRow = memo(({ issue, isSelected, t }) => {
-  const authorLogin   = padEndWidth(formatLogin(issue.author?.login, 12), 12)
-  const visibleLabels = (issue.labels || []).slice(0, 2)
-  const extraLabels   = (issue.labels || []).length - 2
-  const timeColor     = ageColor(issue.updatedAt, t)
-
-  return (
-    <Box paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-      <IssueStateBadge issue={issue} t={t} />
-      <Text> </Text>
-      <Text color={t.ui.dim} bold>#{String(issue.number).padEnd(5)}</Text>
-      <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
-        {sanitize(issue.title)}
-      </Text>
-      {visibleLabels.map(l => (
-        <Text key={l.name} color={`#${l.color}`}> [{l.name.slice(0, 14)}]</Text>
-      ))}
-      {extraLabels > 0 && (
-        <Text color={t.ui.muted}> +{extraLabels}</Text>
-      )}
-      <Text color={t.ui.muted}> {authorLogin}</Text>
-      <Text color={timeColor}> {format(issue.updatedAt)}</Text>
-    </Box>
-  )
-})
 
 export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, initialCursor = 0, initialScrollOffset = 0 }) {
   useKeyScope('pane')
@@ -198,7 +147,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
           : ['xclip', ['-selection', 'clipboard']]
         const proc = execa(cmd, args)
         proc.stdin?.end(issue.url)
-        proc.then(() => showStatus(`✓ Copied ${issue.url}`)).catch(() => showStatus('✗ Copy failed', true))
+        proc.then(() => showStatus(`✓ Copied ${sanitize(issue.url)}`)).catch(() => showStatus('✗ Copy failed', true))
       })
       return
     }
@@ -230,180 +179,37 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
   const selectedIssue = items[cursor]
   const visibleIssues = items.slice(scrollOffset, scrollOffset + visibleHeight)
 
-  if (dialog === 'fuzzy') {
-    const fuzzyItems = items.map(issue => ({ ...issue, authorLogin: issue.author?.login || '' }))
+  if (dialog === 'fuzzy' || dialog === 'new' || (selectedIssue && ['close', 'labels', 'assignees'].includes(dialog))) {
     return (
-      <Box flexDirection="column" flexGrow={1}>
-        <FuzzySearch
-          items={fuzzyItems}
-          searchFields={['title', 'number', 'authorLogin']}
-          onSubmit={(item) => {
-            const idx = items.findIndex(i => i.number === item.number)
-            if (idx !== -1) { setCursor(idx); setScrollOffset(Math.max(0, idx - 2)) }
-            setDialog(null)
-          }}
-          onCancel={() => setDialog(null)}
-        />
-      </Box>
+      <IssueListDialogs
+        dialog={dialog}
+        repo={repo}
+        items={items}
+        selectedIssue={selectedIssue}
+        setCursor={setCursor}
+        setScrollOffset={setScrollOffset}
+        onClose={() => setDialog(null)}
+        showStatus={showStatus}
+        refetch={refetch}
+      />
     )
-  }
-
-  if (dialog === 'close' && selectedIssue) {
-    return (
-      <Box flexDirection="column" flexGrow={1}>
-        <ConfirmDialog
-          message={`Close issue #${selectedIssue.number}: ${sanitize(selectedIssue.title)}?`}
-          destructive={true}
-          onConfirm={async () => {
-            setDialog(null)
-            try {
-              await closeIssue(repo, selectedIssue.number)
-              showStatus(`Closed #${selectedIssue.number}`)
-              refetch()
-            } catch (err) {
-              showStatus(`Failed: ${err.message}`, true)
-            }
-          }}
-          onCancel={() => setDialog(null)}
-        />
-      </Box>
-    )
-  }
-
-  if (dialog === 'new') {
-    return (
-      <Box flexDirection="column" flexGrow={1}>
-        <FormCompose
-          title="New Issue"
-          fields={[
-            { name: 'title', label: 'Title', type: 'text' },
-            { name: 'body', label: 'Body', type: 'multiline' },
-          ]}
-          onSubmit={async (values) => {
-            setDialog(null)
-            try {
-              await createIssue(repo, { title: values.title, body: values.body })
-              showStatus('Issue created')
-              refetch()
-            } catch (err) {
-              showStatus(`Failed: ${err.message}`, true)
-            }
-          }}
-          onCancel={() => setDialog(null)}
-        />
-      </Box>
-    )
-  }
-
-  if (dialog === 'labels' && selectedIssue) {
-    return <IssueLabelDialog repo={repo} issue={selectedIssue} onClose={() => { setDialog(null); refetch() }} />
-  }
-
-  if (dialog === 'assignees' && selectedIssue) {
-    return <IssueAssigneeDialog repo={repo} issue={selectedIssue} onClose={() => { setDialog(null); refetch() }} />
   }
 
   return (
-    <Box flexDirection="column" flexGrow={1}>
-      <Box paddingX={1} gap={1}>
-        <Text color={t.ui.dim}>filter:</Text>
-        <Text color={filterState === 'open' ? t.issue.open : t.issue.closed} bold>{filterState}</Text>
-        {sortMode === 'oldest' && (
-          <Text color={t.ci.pending} bold>↑ oldest</Text>
-        )}
-        <Text color={t.ui.dim}>  [{FK.filterOpen}] open  [{FK.filterClosed}] closed  [s] sort  [n] new</Text>
-        {statusMsg && (
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
-        )}
-      </Box>
-      <Box flexDirection="column" flexGrow={1}>
-        {loading && items.length === 0 && (
-          <IssueListSkeleton count={visibleHeight} />
-        )}
-        {loading && items.length > 0 && (
-          <Box paddingX={1}><Text color={t.ui.muted}>refreshing…</Text></Box>
-        )}
-        {visibleIssues.map((issue, i) => {
-          const idx = scrollOffset + i
-          const isSelected = idx === cursor
-
-          return (
-            <IssueRow
-              key={issue.number}
-              issue={issue}
-              isSelected={isSelected}
-              t={t}
-            />
-          )
-        })}
-        {error && (
-          <Box paddingX={2} paddingY={1} flexDirection="column">
-            <FailureNotice failure={classifyGhFailure(error)} />
-            <Text color={t.ui.dim}>[{firstActionKey('list.refresh', 'r', _actions)}] retry</Text>
-          </Box>
-        )}
-        {!loading && !error && items.length === 0 && (
-          <EmptyState
-            title={`No ${filterState} issues found.`}
-            actions={[{ key: firstActionKey('issue.filter-cycle', 'f', _actions), label: 'cycle the open/closed filter' }, { key: firstActionKey('issue.new', 'n', _actions), label: 'new issue' }, { key: firstActionKey('list.refresh', 'r', _actions), label: 'refresh' }]}
-          />
-        )}
-      </Box>
-    </Box>
-  )
-}
-
-function IssueLabelDialog({ repo, issue, onClose }) {
-  const { t } = useTheme()
-  const { data: allLabels, loading } = useGh(listLabels, [repo])
-  if (loading) return <Box><Text color={t.ui.muted}>Loading labels...</Text></Box>
-  const items = (allLabels || []).map(l => ({
-    id: l.name,
-    name: l.name,
-    color: l.color,
-    selected: issue.labels?.some(il => il.name === l.name),
-  }))
-  return (
-    <MultiSelect
+    <IssueListView
       items={items}
-      onSubmit={async (selectedIds) => {
-        const currentLabels = issue.labels?.map(l => l.name) || []
-        const toAdd = selectedIds.filter(id => !currentLabels.includes(id))
-        const toRemove = currentLabels.filter(id => !selectedIds.includes(id))
-        try {
-          if (toAdd.length) await addLabels(repo, issue.number, toAdd, 'issue')
-          if (toRemove.length) await removeLabels(repo, issue.number, toRemove, 'issue')
-        } catch {}
-        onClose()
-      }}
-      onCancel={onClose}
-    />
-  )
-}
-
-function IssueAssigneeDialog({ repo, issue, onClose }) {
-  const { t } = useTheme()
-  const { data: collabs, loading } = useGh(listCollaborators, [repo])
-  if (loading) return <Box><Text color={t.ui.muted}>Loading collaborators...</Text></Box>
-  const items = (collabs || []).map(c => ({
-    id: c.login,
-    name: c.login,
-    selected: issue.assignees?.some(a => a.login === c.login),
-  }))
-  return (
-    <MultiSelect
-      items={items}
-      onSubmit={async (selectedIds) => {
-        const current = issue.assignees?.map(a => a.login) || []
-        const toAdd    = selectedIds.filter(id => !current.includes(id))
-        const toRemove = current.filter(id => !selectedIds.includes(id))
-        try {
-          if (toAdd.length)    await addIssueAssignees(repo, issue.number, toAdd)
-          if (toRemove.length) await removeIssueAssignees(repo, issue.number, toRemove)
-        } catch { /* ignore */ }
-        onClose()
-      }}
-      onCancel={onClose}
+      loading={loading}
+      error={error}
+      filterState={filterState}
+      sortMode={sortMode}
+      statusMsg={statusMsg}
+      filterKeys={FK}
+      actions={_actions}
+      t={t}
+      visibleHeight={visibleHeight}
+      visibleIssues={visibleIssues}
+      scrollOffset={scrollOffset}
+      cursor={cursor}
     />
   )
 }
