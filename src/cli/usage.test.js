@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { parseCliArgs, USAGE } from './usage.js'
 
 describe('parseCliArgs', () => {
-  it('opens the plain TUI with no arguments and tolerates --mouse', () => {
+  it('opens the plain TUI with no arguments and tolerates --mouse and --onboarding', () => {
     expect(parseCliArgs([])).toEqual({ ref: null })
     expect(parseCliArgs(['--mouse'])).toEqual({ ref: null })
+    expect(parseCliArgs(['--onboarding'])).toEqual({ ref: null })
+    expect(USAGE).toContain('--onboarding')
   })
 
   it('returns help for --help/-h even beside other bad input', () => {

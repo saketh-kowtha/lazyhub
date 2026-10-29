@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>lazyhub — The GitHub TUI for Power Users</title>
+    <title>lazyhub — Review GitHub changes in your terminal</title>
+    <meta name="description" content="Review pull requests, inspect GitHub-visible evidence and check coverage from the terminal using your existing GitHub CLI session.">
     <style>
         :root {
             --bg: #0d1117;
@@ -165,7 +166,7 @@
     <header>
         <div class="logo">🦥</div>
         <h1>lazyhub</h1>
-        <p class="tagline">The terminal UI for GitHub you've been waiting for.</p>
+        <p class="tagline">Review GitHub changes from the terminal.</p>
         
         <div class="badge-group">
             <img src="https://img.shields.io/npm/v/lazyhub?color=3fb950&label=npm" alt="npm">
@@ -185,40 +186,40 @@
 
     <section class="features">
         <div class="feature-card">
-            <h3>🤖 AI Code Review</h3>
-            <p>Press <code>A</code> in any diff to have Claude 3.5 analyze your changes for bugs, performance leaks, and style improvements.</p>
+            <h3>🤖 Coverage &amp; Diagnostics</h3>
+            <p>On current main, use the read-only <code>watch-only</code> report, <code>doctor --coverage</code> diagnostics and <code>lazyhub feedback</code> to inspect GitHub-visible PR activity, observation gaps and local setup. None enforces approval.</p>
         </div>
         <div class="feature-card">
             <h3>⚡ Vim-Style Navigation</h3>
-            <p>Home-row focused navigation with <code>j/k</code> and lightning-fast pane switching. Context-switching is now a thing of the past.</p>
+            <p>Browse pull requests, issues, branches, workflow runs and notifications with keyboard navigation (<kbd>g p</kbd>, <kbd>g i</kbd>, <kbd>:</kbd> command palette), using the GitHub CLI session you already have.</p>
         </div>
         <div class="feature-card">
-            <h3>🔍 Fuzzy Search</h3>
-            <p>Instantly filter pull requests, issues, or branch lists. Jump to specific files in massive PRs with the <code>f</code> key.</p>
+            <h3>🔍 Direct PR &amp; Diff Review</h3>
+            <p>Open pull request details or launch directly with <code>lazyhub owner/repo#123</code>, inspect diffs and conversations, and read CI checks from the terminal.</p>
         </div>
         <div class="feature-card">
-            <h3>🎨 Elite Theming</h3>
-            <p>Beautifully crafted themes like Tokyo Night and Catppuccin built-in. Easily override colors via a simple JSON config.</p>
+            <h3>🎨 TOML Configuration &amp; Themes</h3>
+            <p>Configuration is TOML at <code>~/.config/lazyhub/lazyhub.toml</code>, including themes, keymaps and ASCII/<code>NO_COLOR</code> fallbacks. Published releases may lag current main; optional App-based approval enforcement is future work.</p>
         </div>
     </section>
 
     <section class="keybindings">
         <h2 style="margin-top: 0; color: #fff;">⌨️ Essential Keybindings</h2>
         <div class="kb-grid">
-            <div class="kb-item"><span>Cycle Panes</span> <span class="kb-key">Tab</span></div>
+            <div class="kb-item"><span>Cycle / Jump Panes</span> <span class="kb-key">Tab / g p</span></div>
             <div class="kb-item"><span>Navigate List</span> <span class="kb-key">j / k</span></div>
             <div class="kb-item"><span>Open Detail</span> <span class="kb-key">Enter</span></div>
             <div class="kb-item"><span>Open Diff</span> <span class="kb-key">d</span></div>
-            <div class="kb-item"><span>Fuzzy Search</span> <span class="kb-key">/</span></div>
-            <div class="kb-item"><span>AI Review</span> <span class="kb-key">A</span></div>
+            <div class="kb-item"><span>Search / Command Palette</span> <span class="kb-key">/ · :</span></div>
+            <div class="kb-item"><span>Show help</span> <span class="kb-key">?</span></div>
             <div class="kb-item"><span>Merge PR</span> <span class="kb-key">m</span></div>
-            <div class="kb-item"><span>Approve PR</span> <span class="kb-key">a</span></div>
+            <div class="kb-item"><span>GitHub approval action</span> <span class="kb-key">a</span></div>
         </div>
     </section>
 
     <footer>
         <p>Built with ❤️ using Ink and React by <a href="https://github.com/saketh-kowtha" style="color: var(--primary);">Saketh Kowtha</a></p>
-        <p style="font-size: 0.8rem;">Inspired by lazygit. Not an official GitHub product.</p>
+        <p style="font-size: 0.8rem;">Uses your GitHub CLI session. Reports describe observed evidence and do not enforce approval. Not an official GitHub product.</p>
     </footer>
 </div>
 

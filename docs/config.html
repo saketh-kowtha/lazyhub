@@ -98,14 +98,21 @@
 
   <p>Create the file if it doesn't exist — lazyhub uses sensible defaults for any missing keys.</p>
 
-  <h2>Full example</h2>
+  <h2>Quick TOML example</h2>
 
-  <pre>{
-  <span class="key">"panes"</span>: [<span class="str">"prs"</span>, <span class="str">"issues"</span>, <span class="str">"branches"</span>, <span class="str">"actions"</span>, <span class="str">"notifications"</span>],
-  <span class="key">"defaultPane"</span>: <span class="str">"prs"</span>
-}</pre>
+  <p>Configuration uses TOML. This example selects the default panes and theme, and saves a repository fallback:</p>
 
-  <h2>Schema reference</h2>
+  <pre>[app]
+active_panes = ["focus", "prs", "issues", "branches", "actions", "notifications"]
+default_pane = "focus"
+
+[theme]
+name = "lazyhub-dark"
+
+[defaults]
+repo = "owner/name"</pre>
+
+  <h2>Common settings</h2>
 
   <table class="schema-table">
     <thead>
@@ -113,25 +120,38 @@
     </thead>
     <tbody>
       <tr>
-        <td>panes</td>
+        <td>app.active_panes</td>
         <td>string[]</td>
-        <td>Which panes to show in the sidebar (and in what order). Omit any pane to hide it completely.</td>
-        <td>all panes</td>
+        <td>Visible panes and their Tab order. The default includes Focus, PRs, Issues, Branches, Actions and Notifications.</td>
+        <td>Focus + 5 panes</td>
       </tr>
       <tr>
-        <td>defaultPane</td>
+        <td>app.default_pane</td>
         <td>string</td>
-        <td>Which pane to open on startup. Must be one of the values in <code>panes</code>.</td>
-        <td>"prs"</td>
+        <td>Pane opened at startup. The default is <code>focus</code>.</td>
+        <td>"focus"</td>
+      </tr>
+      <tr>
+        <td>theme.name</td>
+        <td>string</td>
+        <td>Theme selected for the app; theme overrides can be set in <code>[theme.overrides]</code>.</td>
+        <td>lazyhub-dark</td>
+      </tr>
+      <tr>
+        <td>defaults.repo</td>
+        <td>string</td>
+        <td>Fallback repository in <code>owner/name</code> form when no repository is detected from the current directory.</td>
+        <td>empty</td>
       </tr>
     </tbody>
   </table>
 
-  <h2>panes</h2>
+  <h2>Active panes</h2>
 
-  <p>Controls which panes appear in the sidebar. Valid values:</p>
+  <p>Set <code>app.active_panes</code> to control which panes are shown and their Tab order. The default configuration includes:</p>
 
   <div class="pane-list">
+    <span class="pane-chip">focus</span>
     <span class="pane-chip">prs</span>
     <span class="pane-chip">issues</span>
     <span class="pane-chip">branches</span>
@@ -139,37 +159,19 @@
     <span class="pane-chip">notifications</span>
   </div>
 
-  <p>The order in the array determines the order in the sidebar and the Tab-cycling order.</p>
-
   <h3>Show only PRs and Issues</h3>
-  <pre>{
-  <span class="key">"panes"</span>: [<span class="str">"prs"</span>, <span class="str">"issues"</span>]
-}</pre>
+  <pre>[app]
+active_panes = ["prs", "issues"]
+default_pane = "prs"</pre>
 
-  <h3>Show everything except notifications</h3>
-  <pre>{
-  <span class="key">"panes"</span>: [<span class="str">"prs"</span>, <span class="str">"issues"</span>, <span class="str">"branches"</span>, <span class="str">"actions"</span>]
-}</pre>
-
-  <h3>Reorder: start with Issues</h3>
-  <pre>{
-  <span class="key">"panes"</span>: [<span class="str">"issues"</span>, <span class="str">"prs"</span>, <span class="str">"branches"</span>, <span class="str">"actions"</span>, <span class="str">"notifications"</span>],
-  <span class="key">"defaultPane"</span>: <span class="str">"issues"</span>
-}</pre>
+  <h3>Start with Issues</h3>
+  <pre>[app]
+active_panes = ["focus", "issues", "prs", "branches", "actions", "notifications"]
+default_pane = "issues"</pre>
 
   <div class="tip">
-    <strong>Tip:</strong> If <code>panes</code> contains an unrecognized value, lazyhub silently ignores it. If <code>panes</code> is empty or missing, all panes are shown.
+    <strong>Tip:</strong> If the selected <code>default_pane</code> is not active, lazyhub falls back to the first active pane.
   </div>
-
-  <h2>defaultPane</h2>
-
-  <p>Sets which pane is active when lazyhub starts. Must be one of the values in your <code>panes</code> array (or a valid pane name if <code>panes</code> is omitted).</p>
-
-  <pre>{
-  <span class="key">"defaultPane"</span>: <span class="str">"issues"</span>
-}</pre>
-
-  <p>If <code>defaultPane</code> is not in the visible panes list, lazyhub falls back to the first visible pane.</p>
 
   <h2>Editing the config live</h2>
 
@@ -183,25 +185,11 @@ mkdir -p ~/.config/lazyhub && $EDITOR ~/.config/lazyhub/lazyhub.toml</pre>
 
   <h2>Validation</h2>
 
-  <p>lazyhub validates the config on startup:</p>
-  <ul>
-    <li>Invalid JSON → prints a parse error, uses defaults, continues</li>
-    <li>Unknown keys → silently ignored (forward-compatible)</li>
-    <li>Invalid pane names → silently ignored</li>
-    <li>Empty <code>panes</code> array → falls back to showing all panes</li>
-  </ul>
+  <p>lazyhub validates TOML at startup. Invalid or unknown values produce warnings and are ignored; defaults fill in values that were not accepted.</p>
 
-  <h2>Future config options</h2>
+  <h2>Full reference</h2>
 
-  <p>These are planned for a future release and are not yet supported:</p>
-  <ul>
-    <li><code>theme</code> — custom color palette</li>
-    <li><code>cache.ttl</code> — override the 30-second data cache TTL</li>
-    <li><code>repo</code> — pin a default repo (instead of auto-detect)</li>
-    <li><code>editor</code> — override <code>$EDITOR</code> for compose views</li>
-  </ul>
-
-  <p><a href="https://github.com/saketh-kowtha/lazyhub/issues">Open an issue</a> if you want to request a specific config option.</p>
+  <p>This page covers common settings. See the <a href="CONFIG_REFERENCE.md">TOML configuration reference</a> for the full schema, environment variables, defaults and setup behavior.</p>
 </div>
 
 <footer>
