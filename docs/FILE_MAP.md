@@ -94,7 +94,9 @@
 | `src/features/prs/list-row.jsx` | PR rows, expanded metadata and popover content; shared display summaries stay here. |
 | `src/features/prs/list-view.jsx` | PR list chrome, visible rows and popover placement; dialog state stays in PRList. |
 | `src/features/prs/list.jsx` | PR list state, persistence and key dispatch. Rendering lives in list-view.jsx; list-dialog-view.jsx routes active dialogs. Props: repo         string listHeight   number   — visible row count from App innerWidth   number   — available list width onSelectPR   fn(pr)   — called on Enter → full detail onOpenDiff   fn(pr)   — called on 'd' onPaneState  fn({loading, error, count}) |
-| `src/features/prs/NewPRDialog.jsx` | Smart New PR creation dialog. Features: - Auto-detects current branch and offers to use it as head - Validates head branch against remote (not pushed / has unpushed commits / no diff) - Validates base branch exists on GitHub - Offers to push branch to origin if needed - Shift+Tab for backward field navigation |
+| `src/features/prs/NewPRDialog.jsx` | Smart New PR dialog: combines form state with rendering and claims dialog focus. |
+| `src/features/prs/NewPRDialogView.jsx` | New PR form rendering, validation indicators, and push confirmation screens. |
+| `src/features/prs/useNewPRForm.js` | New PR form state, branch validation, editor, and submission lifecycle. |
 
 ## Features — Issues
 
@@ -253,7 +255,7 @@ Test file counts by directory:
 | `src/executor/` | 4 |
 | `src/features/issues/` | 1 |
 | `src/features/onboarding/` | 1 |
-| `src/features/prs/` | 8 |
+| `src/features/prs/` | 9 |
 | `src/features/prs/detail/` | 1 |
 | `src/features/prs/diff/` | 1 |
 | `src/features/tabs/` | 2 |
@@ -262,5 +264,5 @@ Test file counts by directory:
 | `src/ui/` | 2 |
 | `src/watch-only/` | 1 |
 
-**Total non-test source files:** 167
-**Total test files:** 86
+**Total non-test source files:** 169
+**Total test files:** 87
