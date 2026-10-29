@@ -1,5 +1,7 @@
 // @ts-check
 
+/** PR list chrome, visible rows and popover placement; dialog state stays in PRList. */
+
 import React from 'react'
 import { Box, Text } from 'ink'
 import { PRListSkeleton } from '../../components/Skeleton.jsx'
