@@ -99,8 +99,14 @@
 
 | File | Purpose |
 |---|---|
-| `src/features/issues/detail.jsx` | Issue detail pane |
-| `src/features/issues/list.jsx` | Issue list pane |
+| `src/features/issues/detail-content.jsx` | Build the issue detail's scrollable labels, description and comment rows. |
+| `src/features/issues/detail-view.jsx` | Issue detail presentation: header, scrollable rows, reply form and footer. |
+| `src/features/issues/detail.jsx` | Issue detail controller: query, scrolling, reply and dialog lifecycle. |
+| `src/features/issues/dialogs.jsx` | Shared issue label and assignee editors; display names are sanitized, IDs stay raw. |
+| `src/features/issues/list-dialogs.jsx` | Issue list dialogs and their mutation feedback. |
+| `src/features/issues/list-row.jsx` | Issue list row presentation and age/state badges. |
+| `src/features/issues/list-view.jsx` | Issue list presentation: filter/status line, visible rows and loading/failure states. |
+| `src/features/issues/list.jsx` | Issue list controller: query, filters, cursor, input and dialog lifecycle. |
 
 ## Features — other
 
@@ -244,6 +250,7 @@ Test file counts by directory:
 | `src/config/` | 8 |
 | `src/daemon/` | 7 |
 | `src/executor/` | 4 |
+| `src/features/issues/` | 1 |
 | `src/features/onboarding/` | 1 |
 | `src/features/prs/` | 4 |
 | `src/features/prs/detail/` | 1 |
@@ -254,5 +261,5 @@ Test file counts by directory:
 | `src/ui/` | 2 |
 | `src/watch-only/` | 1 |
 
-**Total non-test source files:** 160
-**Total test files:** 81
+**Total non-test source files:** 166
+**Total test files:** 82
