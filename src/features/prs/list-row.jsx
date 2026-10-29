@@ -1,3 +1,4 @@
+/** PR rows, expanded metadata and popover content; shared display summaries stay here. */
 import React, { memo } from 'react'
 import { Box, Text } from 'ink'
 import { sanitize, shortAge, authorColor, truncateToWidth, formatLogin, padEndWidth, padStartWidth } from '../../utils.js'
@@ -101,6 +102,19 @@ function ReviewBadge({ pr, t }) {
 // Fixed columns: paddingX(2) + cursor(1) + badge(2) + num(7) + review(2) + CI_max(8) + author(13) + age(5) = 40; +4 buffer
 export const PR_ROW_FIXED_COLS = 44
 
+// Expanded rows and popovers use the same CI summary. The compact row badge
+// retains its separate status fallback for legacy status-only check payloads.
+function summarizeChecks(checks, t) {
+  const failing = checks.filter(check => /failure|error/i.test(check.state || check.conclusion || '')).length
+  const pending = checks.filter(check => /pending|in_progress|queued/i.test(check.state || check.conclusion || check.status || '')).length
+  return {
+    failing,
+    pending,
+    passing: checks.length - failing - pending,
+    ciColor: failing ? t.ci.fail : pending ? t.ci.pending : checks.length ? t.ci.pass : t.ui.dim,
+  }
+}
+
 // ─── Expanded detail shown below selected PR ─────────────────────────────────
 
 function PRExpandedDetail({ pr, t }) {
@@ -109,17 +123,14 @@ function PRExpandedDetail({ pr, t }) {
   const reviewers = (pr.reviewRequests || []).slice(0, 4)
   const bodyLine = (pr.body || '').trim().split('\n').find(l => l.trim()) || ''
 
-  const failing = checks.filter(c => /failure|error/i.test(c.state || c.conclusion || '')).length
-  const pending = checks.filter(c => /pending|in_progress|queued/i.test(c.state || c.conclusion || c.status || '')).length
-  const passing = checks.length - failing - pending
-  const ciColor = failing ? t.ci.fail : pending ? t.ci.pending : checks.length ? t.ci.pass : t.ui.dim
+  const { failing, pending, passing, ciColor } = summarizeChecks(checks, t)
   const ciParts = []
   if (passing) ciParts.push(`✓ ${passing}`)
   if (pending) ciParts.push(`● ${pending}`)
   if (failing) ciParts.push(`✗ ${failing}`)
   if (checks.length) ciParts.push(`/ ${checks.length}`)
 
-  const branch = [pr.headRefName, pr.baseRefName].filter(Boolean).join(' → ')
+  const branch = [pr.headRefName, pr.baseRefName].filter(Boolean).map(sanitize).join(' → ')
 
   return (
     <Box flexDirection="column" paddingLeft={4}>
@@ -131,12 +142,12 @@ function PRExpandedDetail({ pr, t }) {
       )}
       {labels.length > 0 && (
         <Text color={t.ui.dim} wrap="truncate">
-          {'◆  ' + labels.map(l => l.name).join('  ·  ')}
+          {'◆  ' + labels.map(l => sanitize(l.name)).join('  ·  ')}
         </Text>
       )}
       {reviewers.length > 0 && (
         <Text color={t.ui.dim} wrap="truncate">
-          {'◇  ' + reviewers.map(r => '@' + (r.login || r.name || '')).join('  ')}
+          {'◇  ' + reviewers.map(r => '@' + sanitize(r.login || r.name || '')).join('  ')}
         </Text>
       )}
       {bodyLine ? (
@@ -152,7 +163,7 @@ function PRExpandedDetail({ pr, t }) {
 // covers only its own width, so the title's tail would otherwise peek out beside it.
 export const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded, maskTitle = false }) => {
   // Use display-width-aware helpers so CJK/emoji authors don't break borders
-  const rawLogin    = String(pr.author?.login || '')
+  const rawLogin    = sanitize(pr.author?.login)
   const authorLogin = padEndWidth(formatLogin(rawLogin, 11), 11)
   const authorClr   = authorColor(pr.author?.login)
   const ageStr      = padStartWidth(shortAge(pr.updatedAt), 4)
@@ -221,8 +232,8 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
     : pr.state === 'OPEN'   ? t.pr.open
     : pr.state === 'MERGED' ? t.pr.merged
     : t.pr.closed
-  const author     = pr.author?.login || ''
-  const base       = pr.baseRefName || 'main'
+  const author     = sanitize(pr.author?.login)
+  const base       = sanitize(pr.baseRefName || 'main')
   const age        = shortAge(pr.updatedAt)
 
   // ── Body excerpt: first ~6 non-empty lines, truncated
@@ -235,9 +246,7 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
 
   // ── CI summary
   const checks   = pr.statusCheckRollup || []
-  const failing  = checks.filter(c => /failure|error/i.test(c.state || c.conclusion || '')).length
-  const pending  = checks.filter(c => /pending|in_progress|queued/i.test(c.state || c.conclusion || c.status || '')).length
-  const ciColor  = failing ? t.ci.fail : pending ? t.ci.pending : checks.length ? t.ci.pass : t.ui.dim
+  const { failing, pending, ciColor } = summarizeChecks(checks, t)
   const ciLabel  = checks.length === 0 ? 'no checks'
     : failing ? `✗ ${failing} failing`
     : pending ? `● ${pending} pending`
@@ -263,7 +272,7 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
       </Box>
       {/* Meta */}
       <Box paddingX={1}>
-        <Text color={stateColor}>{stateLabel}</Text>
+        <Text color={stateColor}>{sanitize(stateLabel)}</Text>
         <Text color={t.ui.dim}> · </Text>
         <Text color={t.ui.muted}>@{formatLogin(author, 12)}</Text>
         <Text color={t.ui.dim}> → </Text>
@@ -305,5 +314,3 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
 
 // Prevent rerenders when other rows change focus (only rerender on PR data change)
 export const PRDetailPopoverContentMemo = memo(PRDetailPopoverContent)
-
-// ─── PRList ───────────────────────────────────────────────────────────────────
