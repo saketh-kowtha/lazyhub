@@ -14,7 +14,7 @@
 
 On current `main`, lazyhub provides the established GitHub workflow: browse pull requests, open their details, inspect a diff and conversation, read checks, and use the available review actions. It also has Issues, Branches, Actions and Notifications panes. The `Focus` pane is the default starting view.
 
-The current main branch also includes a read-only first-run report and local coverage diagnostics. The first-run flow starts automatically on an interactive first launch. Run `lazyhub watch-only --repo owner/name` to inspect GitHub-visible PR activity, or `lazyhub doctor --coverage --repo owner/name` for a local coverage report. These reports describe what lazyhub could observe; they do not block, approve or enforce work. GitHub-side observation cannot see local work that was never pushed, and incomplete or stale observations are reported as gaps.
+The current main branch also includes a read-only first-run report and local coverage diagnostics. The first-run flow starts automatically on an interactive first launch (or with `lazyhub --onboarding`). Run `lazyhub <reference>` (such as `owner/repo#123`, `#123`, `123` or a PR/issue URL) to open a pull request or issue directly, `lazyhub watch-only --repo owner/name` to inspect GitHub-visible PR activity, `lazyhub doctor --coverage --repo owner/name` for a local coverage report, or `lazyhub feedback` to prepare a redacted diagnostics report. These reports describe what lazyhub could observe; they do not block, approve or enforce work. GitHub-side observation cannot see local work that was never pushed, and incomplete or stale observations are reported as gaps.
 
 The optional App-based approval stage is future work. No GitHub App or required check currently enforces Lazyhub approval. AI review, editor integrations and existing management actions are separate features; they are not required for the read-only review reports.
 
@@ -34,7 +34,7 @@ Or install with Homebrew:
 brew install saketh-kowtha/tap/lazyhub
 ```
 
-Run `lazyhub` inside a GitHub repository to use that repository, or provide `--repo owner/name` to commands that accept it. On first run, lazyhub guides you through choosing a repository and creates `~/.config/lazyhub/lazyhub.toml` when setup completes; cancelling leaves no first-run selection behind. See [the TOML configuration reference](docs/CONFIG_REFERENCE.md).
+Run `lazyhub` inside a GitHub repository to use that repository, pass a PR or issue reference such as `lazyhub owner/repo#123` or `lazyhub '#123'`, or provide `--repo owner/name` to commands that accept it. On first run (or with `lazyhub --onboarding`), lazyhub guides you through choosing a repository and creates `~/.config/lazyhub/lazyhub.toml` when setup completes; cancelling leaves no first-run selection behind. See [the TOML configuration reference](docs/CONFIG_REFERENCE.md).
 
 ## A read-only report
 
@@ -47,7 +47,7 @@ lazyhub doctor --coverage --repo owner/name
 
 ## Navigate
 
-Use `j`/`k` to move, `Tab` to switch panes, `Enter` to open an item, and `?` for the current view's help. In a pull request, inspect the conversation and checks or press `d` to open the diff. The help overlay is the source for available actions in each view.
+Use `j`/`k` to move, `Tab` to switch panes, `g` (`g h`, `g p`, `g i`, `g b`, `g a`, `g n`) to jump directly to a pane, `Enter` to open an item, `:` (or `<Space><Space>`) for the command palette, and `?` for the current view's help. In a pull request, inspect the conversation and checks or press `d` to open the diff. The help overlay is the source for available actions in each view.
 
 The app keeps its existing GitHub management features, including review and merge actions. These actions are separate from the read-only reports and follow the confirmation shown in the interface.
 

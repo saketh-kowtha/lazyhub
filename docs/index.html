@@ -186,31 +186,31 @@
 
     <section class="features">
         <div class="feature-card">
-            <h3>🤖 AI Code Review</h3>
-            <p>On current main, use the read-only <code>watch-only</code> report and <code>doctor --coverage</code> diagnostics to inspect GitHub-visible PR activity and observation gaps. Neither enforces approval.</p>
+            <h3>🤖 Coverage &amp; Diagnostics</h3>
+            <p>On current main, use the read-only <code>watch-only</code> report, <code>doctor --coverage</code> diagnostics and <code>lazyhub feedback</code> to inspect GitHub-visible PR activity, observation gaps and local setup. None enforces approval.</p>
         </div>
         <div class="feature-card">
             <h3>⚡ Vim-Style Navigation</h3>
-            <p>Browse pull requests, issues, branches, workflow runs and notifications with keyboard navigation, using the GitHub CLI session you already have.</p>
+            <p>Browse pull requests, issues, branches, workflow runs and notifications with keyboard navigation (<kbd>g p</kbd>, <kbd>g i</kbd>, <kbd>:</kbd> command palette), using the GitHub CLI session you already have.</p>
         </div>
         <div class="feature-card">
-            <h3>🔍 Fuzzy Search</h3>
-            <p>Open pull request details, inspect diffs and conversations, and read CI checks from the terminal.</p>
+            <h3>🔍 Direct PR &amp; Diff Review</h3>
+            <p>Open pull request details or launch directly with <code>lazyhub owner/repo#123</code>, inspect diffs and conversations, and read CI checks from the terminal.</p>
         </div>
         <div class="feature-card">
-            <h3>🎨 Elite Theming</h3>
-            <p>Configuration is TOML at <code>~/.config/lazyhub/lazyhub.toml</code>. Published releases may lag current main; optional App-based approval enforcement is future work.</p>
+            <h3>🎨 TOML Configuration &amp; Themes</h3>
+            <p>Configuration is TOML at <code>~/.config/lazyhub/lazyhub.toml</code>, including themes, keymaps and ASCII/<code>NO_COLOR</code> fallbacks. Published releases may lag current main; optional App-based approval enforcement is future work.</p>
         </div>
     </section>
 
     <section class="keybindings">
         <h2 style="margin-top: 0; color: #fff;">⌨️ Essential Keybindings</h2>
         <div class="kb-grid">
-            <div class="kb-item"><span>Cycle Panes</span> <span class="kb-key">Tab</span></div>
+            <div class="kb-item"><span>Cycle / Jump Panes</span> <span class="kb-key">Tab / g p</span></div>
             <div class="kb-item"><span>Navigate List</span> <span class="kb-key">j / k</span></div>
             <div class="kb-item"><span>Open Detail</span> <span class="kb-key">Enter</span></div>
             <div class="kb-item"><span>Open Diff</span> <span class="kb-key">d</span></div>
-            <div class="kb-item"><span>Fuzzy Search</span> <span class="kb-key">/</span></div>
+            <div class="kb-item"><span>Search / Command Palette</span> <span class="kb-key">/ · :</span></div>
             <div class="kb-item"><span>Show help</span> <span class="kb-key">?</span></div>
             <div class="kb-item"><span>Merge PR</span> <span class="kb-key">m</span></div>
             <div class="kb-item"><span>GitHub approval action</span> <span class="kb-key">a</span></div>
