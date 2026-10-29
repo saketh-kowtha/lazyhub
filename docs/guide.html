@@ -125,7 +125,7 @@
 <span class="cmd">npm ci &amp;&amp; npm start</span></pre>
 
   <div class="tip">
-    <strong>Tip:</strong> After global install, run <code>lazyhub</code> from any directory that contains a Git repo and it auto-detects the GitHub remote.
+    <strong>Tip:</strong> After global install, run <code>lazyhub</code> from any directory that contains a Git repo and it auto-detects the GitHub remote, or pass a PR or issue reference directly (e.g. <code>lazyhub owner/repo#123</code>, <code>lazyhub '#123'</code>, or a GitHub PR/issue URL).
   </div>
 
   <!-- ── First run ─────────────────────────────────────────────────────────── -->
@@ -151,7 +151,7 @@
     <div class="step-num">3</div>
     <div class="step-body">
       <h3>Repo detection</h3>
-      <p>Inside a repository with a GitHub remote, lazyhub uses that repository. On the first interactive run, choose a repository from the list available to your GitHub CLI session; lazyhub saves that selection to TOML when setup completes.</p>
+      <p>Inside a repository with a GitHub remote, lazyhub uses that repository. On the first interactive run (or when launched with <code>lazyhub --onboarding</code>), search with <kbd>/</kbd> or choose a repository from the list available to your GitHub CLI session (or type <code>owner/name</code> to look one up); lazyhub saves that selection to TOML when setup completes.</p>
     </div>
   </div>
 
@@ -198,7 +198,7 @@
     </div>
     <div class="workflow-card">
       <h4>Work on a branch</h4>
-      <p>Navigate to Branches → <kbd>Space</kbd> to checkout, or PRs → <kbd>c</kbd> to checkout PR branch</p>
+      <p>Navigate to Branches → <kbd>Enter</kbd> to checkout, or PRs → <kbd>b</kbd> to checkout PR branch</p>
     </div>
     <div class="workflow-card">
       <h4>Triage issues</h4>
@@ -206,11 +206,11 @@
     </div>
     <div class="workflow-card">
       <h4>Watch CI</h4>
-      <p>Actions pane → <kbd>Enter</kbd> to open run → <kbd>l</kbd> for logs → <kbd>R</kbd> to re-run failed</p>
+      <p>Actions pane → <kbd>Enter</kbd> / <kbd>l</kbd> for logs → <kbd>Ctrl+R</kbd> to re-run failed</p>
     </div>
     <div class="workflow-card">
       <h4>Clear notifications</h4>
-      <p>Notifications pane → <kbd>Enter</kbd> to open → <kbd>m</kbd> mark read → <kbd>M</kbd> mark all read</p>
+      <p>Notifications pane → <kbd>Enter</kbd> to open → <kbd>u</kbd> mark read → <kbd>U</kbd> mark all read</p>
     </div>
   </div>
 
@@ -226,9 +226,9 @@
 
   <ul>
     <li>Syntax highlighting adapts to the file language (JS, TS, Python, Go, Rust, …)</li>
-    <li><kbd>c</kbd> on any line — add an inline comment</li>
-    <li><kbd>n</kbd>/<kbd>N</kbd> — jump between comment threads</li>
-    <li><kbd>]</kbd>/<kbd>[</kbd> — next/previous file</li>
+    <li><kbd>c</kbd> on any line — add an inline comment or reply to an existing thread (<kbd>e</kbd> to edit, <kbd>Ctrl+X</kbd> to delete)</li>
+    <li><kbd>}</kbd>/<kbd>{</kbd> — jump between comment threads; <kbd>n</kbd>/<kbd>N</kbd> — next/previous search match</li>
+    <li><kbd>]</kbd>/<kbd>[</kbd> — next/previous file; <kbd>t</kbd>/<kbd>T</kbd> — find file / toggle file tree; <kbd>g</kbd> <kbd>l</kbd> — go to line</li>
     <li><kbd>w</kbd> — toggle split/unified view</li>
   </ul>
 
@@ -238,11 +238,10 @@
   <p>Press <kbd>/</kbd> in any list pane to open fuzzy search. Type to filter in real-time:</p>
 
   <ul>
-    <li><strong>PRs</strong> — title, number, author, labels, branch name</li>
-    <li><strong>Issues</strong> — title, number, author, labels, milestone</li>
-    <li><strong>Branches</strong> — branch name, last commit message</li>
-    <li><strong>Actions</strong> — workflow name, branch, trigger</li>
-    <li><strong>Notifications</strong> — title, repo, reason</li>
+    <li><strong>PRs</strong> — title, number, author, branch name</li>
+    <li><strong>Issues</strong> — title, number, author</li>
+    <li><strong>Branches</strong> — branch name</li>
+    <li><strong>Notifications</strong> — title, repo</li>
   </ul>
 
   <p>Matched characters are <strong>highlighted in bold</strong>. <kbd>↑</kbd>/<kbd>↓</kbd> navigate results, <kbd>Enter</kbd> selects, <kbd>Esc</kbd> cancels.</p>
@@ -251,13 +250,14 @@
   <h2>7 · Tips &amp; Tricks</h2>
 
   <ul>
-    <li>Press <kbd>?</kbd> in any view for context-aware keybinding help</li>
+    <li>Press <kbd>?</kbd> in any view for context-aware keybinding help, or <kbd>:</kbd> (or <kbd>Space</kbd> <kbd>Space</kbd>) for the command palette</li>
+    <li>Press <kbd>g</kbd> followed by <kbd>h</kbd>/<kbd>p</kbd>/<kbd>i</kbd>/<kbd>b</kbd>/<kbd>a</kbd>/<kbd>n</kbd> to jump directly to Home (Focus), PRs, Issues, Branches, Actions or Notifications</li>
     <li><kbd>gg</kbd> jumps to the top of any list, <kbd>G</kbd> jumps to the bottom</li>
     <li><kbd>r</kbd> force-refreshes the current pane (bypasses 30s cache)</li>
     <li><kbd>y</kbd> copies the URL of the selected item to clipboard</li>
     <li><kbd>o</kbd> opens the selected item in your browser</li>
     <li>Hide panes you don't use via <a href="config.html">lazyhub.toml</a> — fewer tabs = faster navigation</li>
-    <li>Use <kbd>f</kbd> to cycle between open/closed/merged states in any list</li>
+    <li>Use <kbd>f</kbd> to cycle between open/closed/merged states in PR and Issue lists</li>
   </ul>
 
   <div class="warn">

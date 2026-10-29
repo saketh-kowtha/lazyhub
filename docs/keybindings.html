@@ -96,9 +96,10 @@
         <tr><td><kbd>Tab</kbd></td><td>Next pane</td></tr>
         <tr><td><kbd>Shift+Tab</kbd></td><td>Previous pane</td></tr>
         <tr><td><kbd>g</kbd> <kbd>h</kbd> / <kbd>p</kbd> / <kbd>i</kbd> / <kbd>b</kbd> / <kbd>a</kbd> / <kbd>n</kbd></td><td>Go to Home / PRs / Issues / Branches / Actions / Notifications (a which-key popup lists them after <kbd>g</kbd>)</td></tr>
+        <tr><td><kbd>Ctrl+A</kbd></td><td>Open AI assistant overlay (read-only)</td></tr>
         <tr><td><kbd>,</kbd></td><td>Settings</td></tr>
-        <tr><td><kbd>:</kbd></td><td>Command palette (fuzzy match, recent actions first)</td></tr>
-        <tr><td><kbd>q</kbd></td><td>Back / quit (confirms if unsaved)</td></tr>
+        <tr><td><kbd>:</kbd> / <kbd>Space</kbd> <kbd>Space</kbd></td><td>Command palette (fuzzy match, recent actions first)</td></tr>
+        <tr><td><kbd>q</kbd> / <kbd>Esc</kbd></td><td>Back one level; <kbd>q</kbd> quits at the root, <kbd>Esc</kbd> never does</td></tr>
         <tr><td><kbd>?</kbd></td><td>Toggle context-aware help overlay</td></tr>
         <tr><td><kbd>r</kbd></td><td>Refresh current pane (bypass cache)</td></tr>
         <tr><td><kbd>o</kbd></td><td>Open current item in browser</td></tr>
@@ -108,6 +109,7 @@
         <tr><td><kbd>gg</kbd></td><td>Jump to top of list</td></tr>
         <tr><td><kbd>G</kbd></td><td>Jump to bottom of list</td></tr>
         <tr><td><kbd>y</kbd></td><td>Copy URL of selected item to clipboard</td></tr>
+        <tr><td><kbd>Ctrl+D</kbd></td><td>Write a local debug-state dump</td></tr>
       </table>
     </div>
   </div>
@@ -121,12 +123,30 @@
         <tr><td><kbd>d</kbd></td><td>Open diff view</td></tr>
         <tr><td><kbd>b</kbd></td><td>Checkout PR branch locally</td></tr>
         <tr><td><kbd>m</kbd></td><td>Merge (pick merge/squash/rebase)</td></tr>
+        <tr><td><kbd>M</kbd></td><td>Toggle auto-merge (or toggle merged filter when unavailable)</td></tr>
         <tr><td><kbd>a</kbd></td><td>Approve PR</td></tr>
         <tr><td><kbd>x</kbd></td><td>Request changes</td></tr>
+        <tr><td><kbd>X</kbd></td><td>Close PR</td></tr>
+        <tr><td><kbd>n</kbd></td><td>Create a new PR</td></tr>
         <tr><td><kbd>l</kbd></td><td>Edit labels (multi-select)</td></tr>
         <tr><td><kbd>A</kbd></td><td>Edit assignees (multi-select)</td></tr>
         <tr><td><kbd>R</kbd></td><td>Request reviewers (multi-select)</td></tr>
-        <tr><td><kbd>f</kbd></td><td>Cycle filter: open → closed → merged</td></tr>
+        <tr><td><kbd>f</kbd> / <kbd>O</kbd> / <kbd>C</kbd></td><td>Cycle filter (open → closed → merged) or toggle open / closed</td></tr>
+        <tr><td><kbd>s</kbd> / <kbd>@</kbd></td><td>Cycle PR scope / filter by author</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="icon">⎇</span> PR Detail</div>
+      <table id="tbl-pr-detail">
+        <tr><td><kbd>d</kbd></td><td>Open diff view</td></tr>
+        <tr><td><kbd>v</kbd></td><td>Open comments view</td></tr>
+        <tr><td><kbd>c</kbd></td><td>Enter checks navigation (<kbd>Enter</kbd> log, <kbd>o</kbd> browser, <kbd>Ctrl+R</kbd> re-run, <kbd>Esc</kbd> exit)</td></tr>
+        <tr><td><kbd>C</kbd></td><td>Resolve conflicts, or open Actions for this branch</td></tr>
+        <tr><td><kbd>D</kbd> / <kbd>B</kbd></td><td>Toggle draft state / change base branch</td></tr>
+        <tr><td><kbd>E</kbd></td><td>Open first changed file in $EDITOR</td></tr>
+        <tr><td><kbd>m</kbd> / <kbd>M</kbd></td><td>Merge PR / toggle auto-merge</td></tr>
+        <tr><td><kbd>a</kbd> / <kbd>x</kbd> / <kbd>X</kbd></td><td>Approve / request changes / close PR</td></tr>
+        <tr><td><kbd>l</kbd> / <kbd>A</kbd> / <kbd>R</kbd></td><td>Edit labels / assignees / reviewers</td></tr>
       </table>
     </div>
     <div class="card">
@@ -144,18 +164,20 @@
         <tr><td><kbd>e</kbd> / <kbd>Ctrl+X</kbd></td><td>Edit / delete your comment on the cursor line</td></tr>
         <tr><td><kbd>v</kbd></td><td>Switch to comments view</td></tr>
         <tr><td><kbd>w</kbd></td><td>Toggle split / unified view</td></tr>
+        <tr><td><kbd>E</kbd></td><td>Open cursor line in $EDITOR</td></tr>
+        <tr><td><kbd>A</kbd></td><td>Run AI code review of the diff</td></tr>
         <tr><td><kbd>gg</kbd></td><td>Jump to top</td></tr>
         <tr><td><kbd>G</kbd></td><td>Jump to bottom</td></tr>
         <tr><td><kbd>Esc</kbd></td><td>Back to PR detail</td></tr>
       </table>
     </div>
     <div class="card">
-      <div class="card-header"><span class="icon">💬</span> Comment Compose</div>
+      <div class="card-header"><span class="icon">💬</span> Comment Compose &amp; Threads</div>
       <table id="tbl-comment">
-        <tr><td><kbd>Tab</kbd></td><td>Next field</td></tr>
-        <tr><td><kbd>e</kbd></td><td>Open $EDITOR for full body</td></tr>
-        <tr><td><kbd>Ctrl+Enter</kbd></td><td>Submit comment</td></tr>
-        <tr><td><kbd>Ctrl+R</kbd></td><td>Submit and resolve thread</td></tr>
+        <tr><td><kbd>Tab</kbd></td><td>Cycle comment type / next field</td></tr>
+        <tr><td><kbd>Ctrl+E</kbd></td><td>Open $EDITOR for full body</td></tr>
+        <tr><td><kbd>Ctrl+G</kbd> / <kbd>Ctrl+Enter</kbd></td><td>Submit comment</td></tr>
+        <tr><td><kbd>z</kbd> / <kbd>J</kbd> / <kbd>f</kbd></td><td>In comments view: resolve thread / jump to diff / filter</td></tr>
         <tr><td><kbd>Esc</kbd></td><td>Cancel</td></tr>
       </table>
     </div>
@@ -166,12 +188,13 @@
     <div class="card">
       <div class="card-header"><span class="icon">○</span> Issue List</div>
       <table id="tbl-issues">
-        <tr><td><kbd>Enter</kbd></td><td>Open issue detail</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>Open issue detail (<kbd>c</kbd> to comment in detail view)</td></tr>
         <tr><td><kbd>n</kbd></td><td>New issue (compose form)</td></tr>
         <tr><td><kbd>X</kbd></td><td>Close issue (confirm dialog)</td></tr>
         <tr><td><kbd>l</kbd></td><td>Edit labels (multi-select)</td></tr>
         <tr><td><kbd>A</kbd></td><td>Edit assignees (multi-select)</td></tr>
-        <tr><td><kbd>f</kbd></td><td>Cycle filter: open → closed</td></tr>
+        <tr><td><kbd>f</kbd> / <kbd>O</kbd> / <kbd>C</kbd></td><td>Cycle filter (open → closed) or toggle open / closed</td></tr>
+        <tr><td><kbd>s</kbd></td><td>Cycle sort order</td></tr>
       </table>
     </div>
   </div>
@@ -197,6 +220,7 @@
         <tr><td><kbd>Enter</kbd> / <kbd>l</kbd></td><td>View run logs (log viewer)</td></tr>
         <tr><td><kbd>Ctrl+R</kbd></td><td>Re-run failed jobs</td></tr>
         <tr><td><kbd>X</kbd></td><td>Cancel run (confirm dialog)</td></tr>
+        <tr><td><kbd>F</kbd></td><td>Clear branch filter</td></tr>
       </table>
     </div>
     <div class="card">
@@ -205,8 +229,7 @@
         <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Scroll down / up</td></tr>
         <tr><td><kbd>gg</kbd></td><td>Jump to top</td></tr>
         <tr><td><kbd>G</kbd></td><td>Jump to bottom</td></tr>
-        <tr><td><kbd>f</kbd></td><td>Filter by step name</td></tr>
-        <tr><td><kbd>Ctrl+R</kbd></td><td>Re-run this workflow</td></tr>
+        <tr><td><kbd>f</kbd></td><td>Filter log lines</td></tr>
         <tr><td><kbd>Esc</kbd></td><td>Back</td></tr>
       </table>
     </div>
