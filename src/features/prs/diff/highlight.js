@@ -87,6 +87,7 @@ function htmlToChalk(html, bgColor, t) {
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
+        .replace(/&#x27;/g, "'")
       if (text) {
         const fg = colorStack.filter(Boolean).at(-1) || t.syntax.default
         parts.push(applyThemeStyle(text, fg, bgColor))
