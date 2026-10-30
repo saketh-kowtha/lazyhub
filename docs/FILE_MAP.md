@@ -254,6 +254,7 @@ Test file counts by directory:
 | `src/daemon/` | 7 |
 | `src/executor/` | 4 |
 | `src/features/issues/` | 1 |
+| `src/features/logs/` | 1 |
 | `src/features/onboarding/` | 1 |
 | `src/features/prs/` | 9 |
 | `src/features/prs/detail/` | 1 |
@@ -265,4 +266,4 @@ Test file counts by directory:
 | `src/watch-only/` | 1 |
 
 **Total non-test source files:** 169
-**Total test files:** 88
+**Total test files:** 89
