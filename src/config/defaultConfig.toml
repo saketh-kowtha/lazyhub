@@ -667,6 +667,38 @@ description = "Open issue in browser"
 scope = "issue-list,issue-detail"
 group = "action"
 
+[actions."tab.open-selected"]
+keys = ["Enter"]
+hint = "Enter"
+label = "open"
+description = "Open the selected item"
+scope = "tab-list"
+group = "action"
+
+[actions."tab.open-browser"]
+keys = ["o"]
+hint = "o"
+label = "browser"
+description = "Open the selected item in the browser"
+scope = "tab-list"
+group = "action"
+
+[actions."tab.next-section"]
+keys = ["]"]
+hint = "]/["
+label = "section"
+description = "Next section"
+scope = "tab-list"
+group = "nav"
+
+[actions."tab.prev-section"]
+keys = ["["]
+hint = "]/["
+label = "section"
+description = "Previous section"
+scope = "tab-list"
+group = "nav"
+
 [actions."issue.filter-cycle"]
 keys = ["f"]
 hint = "f"

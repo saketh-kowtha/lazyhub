@@ -113,7 +113,7 @@ export function renderAppView(ctx) {
             )}
           <Box flexDirection="column" flexGrow={1} overflow="hidden"
               justifyContent="center" alignItems="center">
-            <HelpOverlay pane={pane} view={view} actionCtx={paneState.actionCtx} onClose={() => setShowHelp(false)} />
+            <HelpOverlay pane={view === 'detail' && selectedItem?._kind ? selectedItem._kind : pane} view={view} actionCtx={paneState.actionCtx} onClose={() => setShowHelp(false)} />
           </Box>
           </Box>
           <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
@@ -243,8 +243,10 @@ export function renderAppView(ctx) {
   }
 
   if (view === 'detail' && selectedItem) {
-    const DetailPane = pane === 'issues' ? IssueDetail : PRDetail
-    const detailFooter = contextFooterHints(pane, 'detail', paneState.actionCtx, _config.toml)
+    // A dashboard tab (Focus) opens items of either kind; the item says which.
+    const detailKind = selectedItem._kind || pane
+    const DetailPane = detailKind === 'issues' ? IssueDetail : PRDetail
+    const detailFooter = contextFooterHints(detailKind, 'detail', paneState.actionCtx, _config.toml)
 
     return (
       <AppContext.Provider value={appCtx}>
@@ -252,16 +254,16 @@ export function renderAppView(ctx) {
           <Box flexDirection="column" flexGrow={1}>
             <ErrorBoundary>
               <DetailPane
-                {...(pane === 'issues'
+                {...(detailKind === 'issues'
                   ? { issueNumber: selectedItem.number }
                   : { prNumber: selectedItem.number })}
                 repo={repo}
                 onBack={goBack}
                 onOpenDiff={goToDiff}
-                onOpenConflict={pane === 'prs' ? goToConflict : undefined}
-                onOpenActions={pane === 'prs' ? goToActions : undefined}
-                onViewComments={pane === 'prs' ? goToComments : undefined}
-                onPaneState={pane === 'prs' ? onPaneState : undefined}
+                onOpenConflict={detailKind === 'prs' ? goToConflict : undefined}
+                onOpenActions={detailKind === 'prs' ? goToActions : undefined}
+                onViewComments={detailKind === 'prs' ? goToComments : undefined}
+                onPaneState={detailKind === 'prs' ? onPaneState : undefined}
               />
             </ErrorBoundary>
           </Box>
@@ -304,7 +306,7 @@ export function renderAppView(ctx) {
         }
         const customTab = (_config.customTabs || {})[pane]
         if (customTab) {
-          return <TabView tab={customTab} repo={repo} />
+          return <TabView tab={customTab} repo={repo} onOpenItem={(item, kind) => goToDetail({ ...item, _kind: kind })} />
         }
         return <Box paddingX={1}><Text color={t.ui.muted}>Unknown pane: {pane}</Text></Box>
       }
