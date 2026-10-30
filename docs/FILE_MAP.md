@@ -244,7 +244,7 @@ Test file counts by directory:
 
 | Directory | Test files |
 |---|---|
-| `src/` | 26 |
+| `src/` | 27 |
 | `src/ai/` | 3 |
 | `src/ai/providers/` | 4 |
 | `src/cli/` | 8 |
@@ -253,7 +253,10 @@ Test file counts by directory:
 | `src/config/` | 8 |
 | `src/daemon/` | 7 |
 | `src/executor/` | 4 |
+| `src/features/branches/` | 1 |
 | `src/features/issues/` | 1 |
+| `src/features/logs/` | 1 |
+| `src/features/notifications/` | 1 |
 | `src/features/onboarding/` | 1 |
 | `src/features/prs/` | 9 |
 | `src/features/prs/detail/` | 1 |
@@ -265,4 +268,4 @@ Test file counts by directory:
 | `src/watch-only/` | 1 |
 
 **Total non-test source files:** 169
-**Total test files:** 88
+**Total test files:** 92

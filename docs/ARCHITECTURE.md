@@ -462,3 +462,53 @@ To prevent merge conflicts and "branch drift":
 - Symptom: `?` in the PR list logged React's "two children with the same key, `M`" warning; duplicate keys can make rows duplicate or vanish on re-render.
 - Root cause: `HelpOverlay` (`src/app-panels.jsx`) keyed rows by the key token alone, but `pr.auto-merge` and `pr.filter-merged` are both bound to `M` in the pr-list scope.
 - Fix: rows are keyed by index plus key token (context and global columns). Test: `src/app.e2e.test.jsx` "help overlay rows have unique React keys".
+
+**B-80 — Multi-state PR filters (e.g. Open+Merged) only listed open PRs (#368)**
+- Symptom: with more than one state filter active in the PR pane, closed/merged PRs never appeared.
+- Root cause: `list.jsx` asks `listPRs` for `state: 'all'` on multi-state sets, but `prSearchQuery` treated unknown states as `open`.
+- Fix: `state: 'all'` now adds no state qualifier to the search query; the client-side filter narrows it. Regression test in `src/executor.test.js`.
+
+**B-81 — PR label/assignee/reviewer dialogs swallowed API errors (#376)**
+- Symptom: a rejected label, assignee or reviewer change closed the dialog silently, as if it had succeeded.
+- Root cause: `PRSelectionDialog` caught add/remove failures with an empty `catch`, and the list's status line was never passed to it.
+- Fix: the dialogs take an `onError` callback; `renderPRListDialog` wires it to a persistent error status. Regression test in `src/features/prs/list-dialogs.test.jsx`. The equivalent Issues dialogs (`src/features/issues/dialogs.jsx`) share the pattern and are left for the Issues pane owner.
+
+**B-82 — Notifications pane showed "No notifications" when the fetch failed**
+- Symptom: with an expired token or offline, the Notifications pane rendered "No notifications. [r] refresh" as if the inbox were empty; the failure was invisible.
+- Root cause: `NotificationList` destructured `error` from `useGh` but never rendered it; the empty state only checked `!loading && items.length === 0`.
+- Fix: render `FailureNotice` + retry hint on error (same as the Issues/PRs lists) and suppress the empty state while an error is present. Regression test: `src/features/notifications/notifications.test.jsx`.
+
+**B-83 — Issue list selection vanished when a refetch shrank the list**
+- Symptom: closing the last issue in the list (or any refetch returning fewer rows while the cursor was at the end) left no row highlighted, and Enter/`x`/labels/assignees silently did nothing until the user pressed `k`.
+- Root cause: `cursor` state was only clamped inside `moveCursor`; after the list shrank, `cursor` pointed past the end so `items[cursor]` was undefined.
+- Fix: `IssueList` clamps `cursor` and `scrollOffset` to the last row whenever the item count shrinks. Regression test: `issue list cursor after the list shrinks` in `src/features/issues/issues.test.jsx`. The same pattern exists in Notifications (mark-read removes rows) and is left for a follow-up with its own test.
+
+**B-85 — Debug Logs view crashed with `useStdout is not defined` (#372)**
+- Symptom: opening the Logs view showed an error instead of the log list.
+- Root cause: `src/features/logs/index.jsx` used `Box`, `Text` and `useStdout` without importing them from `ink`; the file is `@ts-nocheck` and every existing test mocks `LogPane`.
+- Fix: import them from `ink`. Regression test: `src/features/logs/index.test.jsx` renders the real `LogPane`.
+
+**B-86 — Branches pane kept marking the old branch as current after checkout or create (#384)**
+- Symptom: after checking out or creating a branch from the pane, the current-branch marker stayed on the previous branch and re-selecting it reported "Already on".
+- Root cause: `BranchList` read `git branch --show-current` once in a mount effect; neither action re-read it.
+- Fix: a shared `refreshCurrentBranch` runs on mount and after a successful checkout or create. Regression test: `src/features/branches/index.test.jsx`.
+
+**B-87 — Command palette / AI "go to PR or issue #N" only opened the list (#373)**
+- Symptom: `:` then `pr 42`, `#42` or `issue 17` (and the palette's "Open PR Detail" / "Open PR Diff") landed on the PR or issue list instead of that item; the AI assistant's navigation offers behaved the same.
+- Root cause: `handleAINavigate` in `src/app.jsx` ignored the `view` and `itemNumber` it was given (stashing them in a ref nothing reads), always forcing `view = 'list'`; it also left a stale `actionsBranch` filter behind.
+- Fix: when a valid `itemNumber` arrives with `view: 'detail'` (PRs, issues) or `'diff'` (PRs) the app selects that item and opens the view; otherwise it lands on the list and clears `actionsBranch`. Test: `src/app.e2e.test.jsx` "palette go to PR/issue #N opens that item".
+
+**B-89 — Saving a setting corrupted `lazyhub.toml` when the last section line had no trailing newline**
+- Symptom: with a hand-edited `[app]` section ending in `mouse = true` (no final newline), changing a setting that adds a new key (e.g. default pane) wrote `mouse = truedefault_pane = "prs"`, producing invalid TOML; the next launch discarded the whole user config.
+- Root cause: `upsertScalar` in `src/config/writer.js` spliced the new assignment after the section's last line without checking that line ended with `\n`.
+- Fix: terminate the preceding line before inserting. Regression test: `src/config/writer.test.js` ("upsert into a section whose last line has no trailing newline").
+
+**B-90 — Settings: Enter on "Page Size" locked the pane**
+- Symptom: selecting the Page Size row and pressing Enter showed no editor, and afterwards neither Esc, `q` nor any other key worked in Settings; the app also believed a dialog was open.
+- Root cause: the row set `dialog = 'pageSize'` but `SettingsPane` had no branch for it, so the list rendered while the key handler returned early for any non-null dialog.
+- Fix: `dialog === 'pageSize'` opens the existing `FieldEditor` (integer 1-100, saved to `[features.prs].page_size`; invalid input is discarded; Esc cancels). Tests: `src/settings-pane.e2e.test.jsx` (Page Size cases).
+
+**B-91 — Settings saved the whole resolved config instead of the edited key**
+- Symptom: toggling an unrelated setting (e.g. Mouse) wrote values resolved from the environment, and every other settings-owned key, into `lazyhub.toml`.
+- Root cause: `updateConfig()` passed the merged, fully resolved config to `saveConfig()`; `camelAi()` fills `ai.*ApiKey` from the environment and `patchToToml()` wrote them.
+- Fix: Settings saves only the patch it edited (`updateAI` saves only the edited `ai` fields), and `patchToToml()` skips an API key that equals the environment value when the file has none. Regression tests: `src/settings-persist.e2e.test.jsx`.
