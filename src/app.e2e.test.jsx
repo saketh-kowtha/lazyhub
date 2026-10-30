@@ -165,8 +165,7 @@ describe('App shell user flows', () => {
         <InputDriver events={[{ input: 'q' }]} />
       </>
     )
-    await flush(20)
-    expect(exitSpy).toHaveBeenCalledTimes(1)
+    await waitForExpectation(() => expect(exitSpy).toHaveBeenCalledTimes(1))
   })
 
   it('Esc still steps back from detail to the list', async () => {

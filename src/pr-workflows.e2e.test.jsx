@@ -208,10 +208,11 @@ describe('PR detail and diff E2E flows', () => {
       </>
     )
 
-    await flush(60)
-    expect(onOpenDiff).toHaveBeenCalledWith(expect.objectContaining({ number: 42 }))
-    expect(onViewComments).toHaveBeenCalled()
-    expect(onOpenConflict).toHaveBeenCalled()
+    await waitForExpectation(() => {
+      expect(onOpenDiff).toHaveBeenCalledWith(expect.objectContaining({ number: 42 }))
+      expect(onViewComments).toHaveBeenCalled()
+      expect(onOpenConflict).toHaveBeenCalled()
+    })
     conflictView.unmount()
 
     currentPR.mergeable = 'MERGEABLE'
@@ -230,8 +231,7 @@ describe('PR detail and diff E2E flows', () => {
       </>
     )
 
-    await flush(30)
-    expect(onOpenActions).toHaveBeenCalledWith('feature/parser')
+    await waitForExpectation(() => expect(onOpenActions).toHaveBeenCalledWith('feature/parser'))
   })
 
   it('supports auto-merge, check rerun mode, and closing from PR detail', async () => {
