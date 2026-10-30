@@ -94,7 +94,7 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
   try {
     if (useTmux) {
       const session = `lazyhub-pty-${Date.now()}`
-      const command = `(cd ${JSON.stringify(ROOT)} && PATH=${JSON.stringify(env.PATH)} HOME=${JSON.stringify(env.HOME)} USER=${JSON.stringify(env.USER)} GHUI_REPO=${env.GHUI_REPO} TERM=xterm-256color COLORTERM=truecolor NO_COLOR=1 LAZYHUB_NO_DAEMON=1 node ${JSON.stringify(BIN)}); echo "lazyhub exited: $?"; sleep 60`
+      const command = `(cd ${JSON.stringify(ROOT)} && PATH=${JSON.stringify(env.PATH)} HOME=${JSON.stringify(env.HOME)} USER=${JSON.stringify(env.USER)} GHUI_REPO=${env.GHUI_REPO} TERM=xterm-256color COLORTERM=truecolor NO_COLOR=1 LAZYHUB_NO_DAEMON=1 node ${JSON.stringify(BIN)} 2>${JSON.stringify(join(temp, 'tmux-stderr.log'))}); echo "lazyhub exited: $?"; sleep 60`
       const started = spawnSync('tmux', ['new-session', '-d', '-x', '80', '-y', '24', '-s', session, command])
       assert.equal(started.status, 0, started.stderr?.toString())
       const capture = () => {
@@ -107,7 +107,7 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
       } catch (error) {
         const info = [['list-panes', '-a', '-F', '#{pane_pid} dead=#{pane_dead} cmd=#{pane_current_command} alt=#{alternate_on} #{pane_width}x#{pane_height}'], ['capture-pane', '-apq', '-t', session]]
           .map(args => `$ tmux ${args[0]}\n${spawnSync('tmux', args).stdout}`).join('\n')
-        throw new Error(`${error.message}\n--- tmux diagnostics ---\n${info}\n${spawnSync('tmux', ['-V']).stdout}`)
+        throw new Error(`${error.message}\n--- tmux diagnostics ---\n${info}\nstderr: ${existsSync(join(temp, 'tmux-stderr.log')) ? readFileSync(join(temp, 'tmux-stderr.log'), 'utf8') : '(none)'}\n${spawnSync('ps', ['-eo', 'pid,ppid,etime,args']).stdout.toString().split('\n').filter(l => /lazyhub|node|gh/.test(l)).join('\n')}\n${spawnSync('tmux', ['-V']).stdout}`)
       }
       spawnSync('tmux', ['send-keys', '-t', session, 'g'])
       await new Promise(resolve => setTimeout(resolve, 50))
