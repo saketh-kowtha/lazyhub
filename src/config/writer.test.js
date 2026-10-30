@@ -23,6 +23,26 @@ function writeToml(text) {
 }
 
 describe('config writer', () => {
+  it.each([
+    '[app]\nmouse = true',
+    '[app]',
+    '[app]\n# keep this comment',
+    '[app]\nmouse = true\n',
+  ])('adds a setting on a separate line after %j', source => {
+    writeToml(source)
+
+    writeConfig({ app: { default_pane: 'prs' } }, { configPath })
+
+    const text = readFileSync(configPath, 'utf8')
+    const prefix = source.endsWith('\n') ? source : `${source}\n`
+    expect(text).toBe(`${prefix}default_pane = "prs"\n`)
+    expect(parse(text).app).toEqual({ ...parse(source).app, default_pane: 'prs' })
+    expect(loadConfig({ configPath }).app.default_pane).toBe('prs')
+
+    writeConfig({ app: { default_pane: 'prs' } }, { configPath })
+    expect(readFileSync(configPath, 'utf8')).toBe(text)
+  })
+
   it('writes [state] while preserving comments and user-owned sections', () => {
     writeToml(`# user comment
 [theme]

@@ -462,3 +462,8 @@ To prevent merge conflicts and "branch drift":
 - Symptom: `?` in the PR list logged React's "two children with the same key, `M`" warning; duplicate keys can make rows duplicate or vanish on re-render.
 - Root cause: `HelpOverlay` (`src/app-panels.jsx`) keyed rows by the key token alone, but `pr.auto-merge` and `pr.filter-merged` are both bound to `M` in the pr-list scope.
 - Fix: rows are keyed by index plus key token (context and global columns). Test: `src/app.e2e.test.jsx` "help overlay rows have unique React keys".
+
+**B-89 — Saving settings corrupted TOML without a trailing newline (#367)**
+- Symptom: adding a setting after `mouse = true` without a final newline produced `mouse = truedefault_pane = "prs"`, making the user config invalid on the next launch. A final comment could silently swallow the new setting.
+- Root cause: `upsertScalar` inserted a new assignment without terminating the preceding section line.
+- Fix: ensure the preceding line ends in a newline before inserting a missing key. Regression tests in `src/config/writer.test.js` cover a final assignment, bare section header, comment, and existing newline, including reload and repeat-save checks.
