@@ -146,6 +146,15 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Rebuild node-pty for the container libc
+        # The runner (ubuntu-26.04) compiles pty.node against a newer glibc than
+        # node:22-bookworm has, so the host-built binary cannot load in the
+        # container (#358). Rebuild it inside the same image, without the
+        # memory cap (node-gyp needs more than 512 MB).
+        run: |
+          docker run --rm -v "$PWD:/app" -w /app node:22-bookworm \
+            npm rebuild node-pty
+
       - name: Journey under a 512 MB limit
         run: |
           docker run --rm -m 512m --memory-swap 512m \
@@ -174,6 +183,15 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Rebuild node-pty for the container libc
+        # The runner (ubuntu-26.04) compiles pty.node against a newer glibc than
+        # node:22-bookworm has, so the host-built binary cannot load in the
+        # container (#358). Rebuild it inside the same image, without the
+        # memory cap (node-gyp needs more than 512 MB).
+        run: |
+          docker run --rm -v "$PWD:/app" -w /app node:22-bookworm \
+            npm rebuild node-pty
 
       - name: Scale journey under a 512 MB limit
         run: |

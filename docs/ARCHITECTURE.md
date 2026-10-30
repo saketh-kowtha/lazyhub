@@ -452,3 +452,8 @@ To prevent merge conflicts and "branch drift":
 - Symptom: individual and grouped dependency updates failed with `EOVERRIDE` / `dependency_file_not_resolvable` when the direct esbuild specification changed.
 - Root cause: `overrides.esbuild` duplicated the direct dependency's range; npm requires identical specifications for a direct dependency and its override, even when their ranges overlap.
 - Fix: reference the direct specification with `$esbuild`, retaining the transitive override without changing dependency versions or the lockfile. Regression test: `src/dependency-overrides.test.js` runs npm's offline lockfile validation after individual and grouped specification changes.
+
+**B-79 — TUI memory-budget CI jobs could not load node-pty in the container (#358)**
+- Symptom: `TUI memory budget (512 MB)` and `... at scale` failed with `Failed to load native module: pty.node, checked: build/Release, build/Debug, prebuilds/linux-x64` before the journey ran.
+- Root cause: the jobs installed on the `ubuntu-latest` runner (ubuntu-26.04), where node-pty compiles `pty.node` from source (1.1.0 ships no linux prebuilds), then bind-mounted that tree into `node:22-bookworm`; the host-built binary needs a newer glibc/libstdc++ than bookworm provides, so `dlopen` fails.
+- Fix: a `npm rebuild node-pty` step runs inside `node:22-bookworm` (uncapped, as node-gyp needs more than 512 MB) before each capped journey run. No dependency or lockfile change.
