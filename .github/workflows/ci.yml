@@ -86,6 +86,23 @@ jobs:
           json-final-path: coverage/coverage-final.json
           file-coverage-mode: changes-affected
 
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Shipped (runtime) dependencies only; fails on a known high or critical
+      # advisory. Required by main's branch protection.
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+
   pty:
     name: PTY E2E (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
