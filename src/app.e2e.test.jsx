@@ -8,6 +8,7 @@ import { App } from './app.jsx'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
 const exitSpy = vi.hoisted(() => vi.fn())
+const paletteProps = vi.hoisted(() => ({ current: null }))
 
 vi.mock('ink', async () => {
   const React = await import('react')
@@ -58,7 +59,9 @@ vi.mock('./components/StatusBar.jsx', () => ({ StatusBar: ({ pane, mode }) => <T
 vi.mock('./components/FooterKeys.jsx', () => ({ FooterKeys: () => null }))
 vi.mock('./components/ErrorBoundary.jsx', () => ({ ErrorBoundary: ({ children }) => children }))
 vi.mock('./components/AIAssistant.jsx', () => ({ AIAssistant: () => <Text>AI</Text> }))
-vi.mock('./components/CommandPalette.jsx', () => ({ CommandPalette: () => <Text>PALETTE</Text> }))
+vi.mock('./components/CommandPalette.jsx', () => ({
+  CommandPalette: (props) => { paletteProps.current = props; return <Text>PALETTE</Text> },
+}))
 vi.mock('./components/CustomPane.jsx', () => ({ CustomPane: () => <Text>CUSTOM</Text> }))
 vi.mock('./features/tabs/view.jsx', () => ({ TabView: () => <Text>TAB VIEW</Text> }))
 vi.mock('./features/issues/list.jsx', () => ({ IssueList: () => <Text>ISSUES LIST</Text> }))
@@ -218,6 +221,23 @@ describe('App shell user flows', () => {
     await sendInput('g')
     await sendInput('p')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('PRS LIST'))
+  })
+
+  it('palette "go to PR/issue #N" opens that item, not just the list (B-87)', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+    await sendInput(':')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PALETTE'))
+    paletteProps.current.onNavigate({ pane: 'issues', view: 'detail', itemNumber: 17 })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('ISSUE DETAIL 17'))
+    await flush(20)
+
+    await sendInput('', { escape: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('ISSUES LIST'))
+    await sendInput(':')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PALETTE'))
+    paletteProps.current.onNavigate({ pane: 'prs', view: 'diff', itemNumber: 42 })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DIFF 42'))
   })
 
   it('opens settings from the shell', async () => {
