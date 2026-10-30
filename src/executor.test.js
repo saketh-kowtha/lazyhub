@@ -155,6 +155,20 @@ describe('listPRs()', () => {
     expect(args.find(arg => String(arg).startsWith('searchQuery='))).toContain('state:closed')
   })
 
+  it.each([
+    ['all', ''],
+    ['open', ' state:open'],
+    ['merged', ' is:merged'],
+    [undefined, ' state:open'],
+    ['invalid', ' state:open'],
+  ])('builds the search query for state %s (#368)', async (state, qualifier) => {
+    mockSuccess({ data: { search: { nodes: [] } } })
+    await listPRs('owner/repo', { state, author: 'alice', label: 'bug' })
+    const [, args] = execa.mock.calls[0]
+    expect(args.find(arg => String(arg).startsWith('searchQuery=')))
+      .toBe(`searchQuery=repo:owner/repo is:pr${qualifier} author:alice label:"bug"`)
+  })
+
   it('passes author filter when provided', async () => {
     mockSuccess({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { author: 'alice' })

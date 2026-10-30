@@ -5,7 +5,7 @@ import { getRepo, runGh } from './core.js'
 const PR_LIST_MAX_GRAPHQL_NODES = 100
 // GitHub search never returns more than 1,000 results, so paging stops there.
 const PR_LIST_MAX_RESULTS = 1000
-const PR_SEARCH_STATES = new Set(['open', 'closed', 'merged'])
+const PR_SEARCH_STATES = new Set(['open', 'closed', 'merged', 'all'])
 
 function compact(value) {
   return String(value || '').replace(/"/g, '\\"').trim()
@@ -16,7 +16,7 @@ function prSearchQuery(repo, filter) {
   const parts = [`repo:${repo}`, 'is:pr']
   if (state === 'merged') {
     parts.push('is:merged')
-  } else {
+  } else if (state !== 'all') {
     parts.push(`state:${state}`)
   }
   if (filter.author) parts.push(`author:${compact(filter.author)}`)
