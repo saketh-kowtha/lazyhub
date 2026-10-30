@@ -114,6 +114,26 @@ describe('shared issue editor contracts', () => {
     })
   })
 
+  it.each([
+    ['list', 'labels', 'l', addLabels],
+    ['detail', 'labels', 'l', addLabels],
+    ['list', 'assignees', 'A', addIssueAssignees],
+    ['detail', 'assignees', 'A', addIssueAssignees],
+  ])('shows an error when a %s %s update fails instead of closing silently', async (pane, kind, key, add) => {
+    add.mockRejectedValue(new Error('403 forbidden'))
+    const view = await renderIssue(pane === 'list'
+      ? <IssueList repo="owner/repo" onSelectIssue={() => {}} />
+      : <IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
+    await flush(20)
+    await sendInput(key)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Filter:'))
+    await sendInput('', { downArrow: true })
+    await sendInput(' ')
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain(`Updating ${kind} failed: 403 forbidden`))
+  })
+
   it('keeps reply typing out of action handlers and submits through the issue executor', async () => {
     addIssueComment.mockResolvedValue(undefined)
     const view = await renderIssue(<IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />)

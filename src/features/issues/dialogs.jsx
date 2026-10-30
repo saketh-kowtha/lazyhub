@@ -10,7 +10,7 @@ import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { useTheme } from '../../theme.js'
 import { sanitize } from '../../utils.js'
 
-export function IssueLabelDialog({ repo, issue, onClose, loadingPadding = 0 }) {
+export function IssueLabelDialog({ repo, issue, onClose, onError, loadingPadding = 0 }) {
   const { t } = useTheme()
   const { data: allLabels, loading } = useGh(listLabels, [repo])
   if (loading) return <Box paddingX={loadingPadding}><Text color={t.ui.muted}>Loading labels...</Text></Box>
@@ -30,7 +30,9 @@ export function IssueLabelDialog({ repo, issue, onClose, loadingPadding = 0 }) {
         try {
           if (toAdd.length) await addLabels(repo, issue.number, toAdd, 'issue')
           if (toRemove.length) await removeLabels(repo, issue.number, toRemove, 'issue')
-        } catch {}
+        } catch (err) {
+          if (onError) onError(err)
+        }
         onClose()
       }}
       onCancel={onClose}
@@ -38,7 +40,7 @@ export function IssueLabelDialog({ repo, issue, onClose, loadingPadding = 0 }) {
   )
 }
 
-export function IssueAssigneeDialog({ repo, issue, onClose, loadingPadding = 0 }) {
+export function IssueAssigneeDialog({ repo, issue, onClose, onError, loadingPadding = 0 }) {
   const { t } = useTheme()
   const { data: collabs, loading } = useGh(listCollaborators, [repo])
   if (loading) return <Box paddingX={loadingPadding}><Text color={t.ui.muted}>Loading collaborators...</Text></Box>
@@ -57,7 +59,9 @@ export function IssueAssigneeDialog({ repo, issue, onClose, loadingPadding = 0 }
         try {
           if (toAdd.length)    await addIssueAssignees(repo, issue.number, toAdd)
           if (toRemove.length) await removeIssueAssignees(repo, issue.number, toRemove)
-        } catch { /* ignore */ }
+        } catch (err) {
+          if (onError) onError(err)
+        }
         onClose()
       }}
       onCancel={onClose}

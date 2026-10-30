@@ -8,7 +8,7 @@ import { format } from 'timeago.js'
 import { firstActionKey } from '../../config/actions.js'
 import { sanitize, TextInput } from '../../utils.js'
 
-export function IssueDetailView({ issue, t, visibleRows, maxScroll, scrollY, visibleHeight, contentRows, replyMode, replyText, setReplyText, doReply, statusMsg }) {
+export function IssueDetailView({ issue, t, visibleRows, maxScroll, scrollY, visibleHeight, contentRows, replyMode, replyText, setReplyText, doReply, statusMsg, statusIsError = false }) {
   const stateColor = issue.state === 'OPEN' ? t.issue.open : t.issue.closed
 
   return (
@@ -61,7 +61,7 @@ export function IssueDetailView({ issue, t, visibleRows, maxScroll, scrollY, vis
         </Box>
       )}
 
-      {statusMsg && <Text color={t.ci.pass}>{statusMsg}</Text>}
+      {statusMsg && <Text color={statusIsError ? t.ci.fail : t.ci.pass}>{statusMsg}</Text>}
 
       <Box paddingX={1} gap={2} borderStyle="single" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} borderColor={t.ui.border}>
         <Text color={t.ui.dim}>{`[${firstActionKey('issue.reply', 'c')}] reply  [${firstActionKey('issue.labels', 'l')}] labels  [${firstActionKey('issue.assignees', 'A')}] assignees  [Esc] back`}</Text>
