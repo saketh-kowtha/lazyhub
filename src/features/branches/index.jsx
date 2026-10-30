@@ -12,7 +12,7 @@ import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
-import { TextInput } from '../../utils.js'
+import { TextInput, sanitize } from '../../utils.js'
 import { BranchListSkeleton } from '../../components/Skeleton.jsx'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
 
@@ -27,12 +27,9 @@ const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t }) => {
       )}
       <Box flexGrow={1}>
         <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate">
-          {branch.name}
+          {sanitize(branch.name)}
         </Text>
       </Box>
-      {typeof branch.aheadBy === 'number' && typeof branch.behindBy === 'number' && (
-        <Text color={t.ui.dim}> ↑{branch.aheadBy} ↓{branch.behindBy}</Text>
-      )}
       {branch.protected && <Text color={t.ci.pending}> 🔒</Text>}
       {hasPR && <Text color={t.pr.open}> PR</Text>}
     </Box>
@@ -143,7 +140,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
     if (matchesAction('branch.checkout', input, key)) {
       if (selectedBranch) {
         if (selectedBranch.name === currentBranch) {
-          showStatus(`Already on "${selectedBranch.name}"`)
+          showStatus(`Already on "${sanitize(selectedBranch.name)}"`)
           return
         }
         setDialog('checkout')
@@ -173,7 +170,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
     return (
       <Box flexDirection="column" flexGrow={1}>
         <FuzzySearch
-          items={items.map(b => ({ ...b, title: b.name }))}
+          items={items.map(b => ({ ...b, title: sanitize(b.name) }))}
           searchFields={['name', 'title']}
           onSubmit={(item) => {
             const idx = items.findIndex(b => b.name === item.name)
@@ -190,14 +187,14 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
     return (
       <Box flexDirection="column" flexGrow={1}>
         <ConfirmDialog
-          message={`Checkout branch "${selectedBranch.name}"?`}
+          message={`Checkout branch "${sanitize(selectedBranch.name)}"?`}
           destructive={false}
           onConfirm={async () => {
             setDialog(null)
             try {
               const { execa } = await import('execa')
               await execa('git', ['checkout', selectedBranch.name], { cwd: process.cwd() })
-              showStatus(`✓ Checked out ${selectedBranch.name}`)
+              showStatus(`✓ Checked out ${sanitize(selectedBranch.name)}`)
               refreshCurrentBranch()
             } catch (err) {
               showStatus(`Failed: ${err.message}`, true)
@@ -211,19 +208,19 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
 
   if (dialog === 'delete' && selectedBranch) {
     const msg = hasOpenPR
-      ? `⚠ Branch "${selectedBranch.name}" has an open PR! Delete remote branch anyway?`
-      : `Delete remote branch "${selectedBranch.name}"? (local branch unaffected)`
+      ? `⚠ Branch "${sanitize(selectedBranch.name)}" has an open PR! Delete remote branch anyway?`
+      : `Delete remote branch "${sanitize(selectedBranch.name)}"? (local branch unaffected)`
     return (
       <Box flexDirection="column" flexGrow={1}>
         <ConfirmDialog
           message={msg}
           destructive={true}
-          requireText={selectedBranch.name}
+          requireText={sanitize(selectedBranch.name)}
           onConfirm={async () => {
             setDialog(null)
             try {
               await deleteBranch(repo, selectedBranch.name)
-              showStatus(`Deleted ${selectedBranch.name}`)
+              showStatus(`Deleted ${sanitize(selectedBranch.name)}`)
               refetch()
             } catch (err) {
               showStatus(`Failed: ${err.message}`, true)
