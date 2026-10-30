@@ -462,3 +462,13 @@ To prevent merge conflicts and "branch drift":
 - Symptom: `?` in the PR list logged React's "two children with the same key, `M`" warning; duplicate keys can make rows duplicate or vanish on re-render.
 - Root cause: `HelpOverlay` (`src/app-panels.jsx`) keyed rows by the key token alone, but `pr.auto-merge` and `pr.filter-merged` are both bound to `M` in the pr-list scope.
 - Fix: rows are keyed by index plus key token (context and global columns). Test: `src/app.e2e.test.jsx` "help overlay rows have unique React keys".
+
+**B-89 — Multiple PR state filters only fetched open PRs (#368)**
+- Symptom: Open+Merged showed only open PRs; Closed+Merged showed no PRs.
+- Root cause: the pane requested `state: 'all'`, but `prSearchQuery()` treated it as unknown and defaulted to `state:open`, excluding other states before client-side filtering.
+- Fix: recognize `all` and omit the search state qualifier while retaining other filters and the open default for missing/unknown states. Regression coverage: `src/executor.test.js`. Sibling sweep: Issues passes states directly to `gh`; Branches requests open PRs intentionally; Actions and Notifications have no equivalent state conversion.
+
+**B-90 — Issue editor tests intermittently lost the first key**
+- Symptom: the assignee editor test stayed on the issue list instead of opening the dialog.
+- Root cause: `sendInput()` took its handler snapshot before flushing pending mount effects; a visible frame or timer delay did not guarantee the input handler was registered.
+- Fix: mount the issue test views inside awaited `act()` so effects finish before input. A regression test sends `A` immediately after mounting without a timer delay. Sibling pane flows use their existing input driver; the shared input helper is unchanged.
