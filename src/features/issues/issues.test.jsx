@@ -129,6 +129,23 @@ describe('shared issue editor contracts', () => {
   })
 })
 
+describe('issue detail empty reply', () => {
+  it.each([['empty', ''], ['whitespace-only', '   ']])('does not post an %s reply and keeps the reply box open', async (_name, text) => {
+    addIssueComment.mockResolvedValue(undefined)
+    const view = await renderIssue(<IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
+    await flush(20)
+    await sendInput('c')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Reply:'))
+    if (text) await sendInput(text)
+    await sendInput('', { return: true })
+    await flush(20)
+    expect(addIssueComment).not.toHaveBeenCalled()
+    expect(view.lastFrame()).toContain('Reply:')
+    expect(view.lastFrame()).toContain('Reply cannot be empty')
+  })
+})
+
 describe('issue list cursor after the list shrinks', () => {
   it('keeps a valid selection when a refetch returns fewer issues', async () => {
     const second = { ...issue, number: 12, title: 'Second issue' }

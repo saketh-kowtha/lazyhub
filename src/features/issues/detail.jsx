@@ -50,7 +50,12 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
   const visibleRows = contentRows.slice(scrollY, scrollY + visibleHeight)
 
   const doReply = useCallback(() => {
-    const text = replyText
+    const text = replyText.trim()
+    if (!text) {
+      setStatusMsg('Reply cannot be empty')
+      setTimeout(() => setStatusMsg(null), 3000)
+      return
+    }
     setReplyMode(false)
     setReplyText('')
     addIssueComment(repo, issueNumber, text)
