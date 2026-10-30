@@ -94,7 +94,7 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
 
   try {
     if (useTmux) {
-      const session = `lazyhub-pty-${Date.now()}`
+      const session = `lazyhub-pty-${Date.now()}-${process.pid}`
       // The tmux server inherits this process's env, and Ink renders only the final frame when CI is set.
       const command = `(unset CI GITHUB_ACTIONS; cd ${JSON.stringify(ROOT)} && PATH=${JSON.stringify(env.PATH)} HOME=${JSON.stringify(env.HOME)} USER=${JSON.stringify(env.USER)} GHUI_REPO=${env.GHUI_REPO} TERM=xterm-256color COLORTERM=truecolor NO_COLOR=1 LAZYHUB_NO_DAEMON=1 node ${JSON.stringify(BIN)} 2>${JSON.stringify(join(temp, 'tmux-stderr.log'))}); echo "lazyhub exited: $?"; sleep 60`
       const started = spawnSync('tmux', ['new-session', '-d', '-x', '80', '-y', '24', '-s', session, command])
@@ -404,7 +404,7 @@ async function runTmuxResizeFlow() {
   const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-tmuxresize-'))
   const stubBin = installGhStub(temp)
   const env = childEnv(stubBin, temp)
-  const session = `lazyhub-resize-${Date.now()}`
+  const session = `lazyhub-resize-${Date.now()}-${process.pid}`
   const tmux = (...args) => spawnSync('tmux', args).stdout.toString()
   const command = `(unset CI GITHUB_ACTIONS; cd ${JSON.stringify(ROOT)} && PATH=${JSON.stringify(env.PATH)} HOME=${JSON.stringify(env.HOME)} USER=${JSON.stringify(env.USER)} GHUI_REPO=${env.GHUI_REPO} TERM=xterm-256color COLORTERM=truecolor NO_COLOR=1 LAZYHUB_NO_DAEMON=1 node ${JSON.stringify(BIN)} 2>${JSON.stringify(join(temp, 'tmux-stderr.log'))}); sleep 60`
   try {
