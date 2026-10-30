@@ -160,6 +160,7 @@ function upsertScalar(text, section, key, value) {
     }
   }
 
+  if (!lines[sectionEnd - 1].endsWith('\n')) lines[sectionEnd - 1] += '\n'
   lines.splice(sectionEnd, 0, `${assignment}\n`)
   return lines.join('')
 }
