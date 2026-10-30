@@ -50,13 +50,15 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
   const { data: prs } = useGh(listPRs, [repo, { state: 'open', limit: 100 }], { ttl: 120_000 })
   const [currentBranch, setCurrentBranch] = useState(null)
 
-  useEffect(() => {
+  const refreshCurrentBranch = useCallback(() => {
     import('execa').then(({ execa }) => {
       execa('git', ['branch', '--show-current'], { cwd: process.cwd() })
         .then(result => setCurrentBranch(result.stdout.trim()))
         .catch(() => {})
     })
   }, [])
+
+  useEffect(() => { refreshCurrentBranch() }, [refreshCurrentBranch])
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
@@ -196,6 +198,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
               const { execa } = await import('execa')
               await execa('git', ['checkout', selectedBranch.name], { cwd: process.cwd() })
               showStatus(`✓ Checked out ${selectedBranch.name}`)
+              refreshCurrentBranch()
             } catch (err) {
               showStatus(`Failed: ${err.message}`, true)
             }
@@ -256,6 +259,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
                 const { execa } = await import('execa')
                 await execa('git', ['checkout', '-b', name], { cwd: process.cwd() })
                 showStatus(`✓ Created and checked out ${name}`)
+                refreshCurrentBranch()
                 refetch()
               } catch (err) { showStatus(`Failed: ${err.message}`, true) }
             }}
