@@ -12,7 +12,7 @@ import { useKeymapInput } from '../../config/keymap.js'
 import { useTheme } from '../../theme/index.js'
 import { schemeToT } from './list-row.jsx'
 
-function PRSelectionDialog({ repo, pr, current, getOptions, field, loadingText, title = '', add, remove, onClose }) {
+function PRSelectionDialog({ repo, pr, current, getOptions, field, loadingText, title = '', add, remove, onClose, onError }) {
   const { scheme } = useTheme()
   const t = schemeToT(scheme)
   const { data: options, loading } = useGh(getOptions, [repo])
@@ -36,7 +36,9 @@ function PRSelectionDialog({ repo, pr, current, getOptions, field, loadingText, 
         try {
           if (toAdd.length) await add(repo, pr.number, toAdd)
           if (toRemove.length) await remove(repo, pr.number, toRemove)
-        } catch { /* ignore */ }
+        } catch (err) {
+          if (onError) onError(err)
+        }
         onClose()
       }}
       onCancel={onClose}
@@ -47,18 +49,18 @@ function PRSelectionDialog({ repo, pr, current, getOptions, field, loadingText, 
 const addPRLabels = (repo, number, labels) => addLabels(repo, number, labels, 'pr')
 const removePRLabels = (repo, number, labels) => removeLabels(repo, number, labels, 'pr')
 
-export function LabelDialog({ repo, pr, onClose }) {
+export function LabelDialog({ repo, pr, onClose, onError }) {
   return <PRSelectionDialog
-    repo={repo} pr={pr} onClose={onClose}
+    repo={repo} pr={pr} onClose={onClose} onError={onError}
     current={pr.labels?.map(label => label.name) || []}
     getOptions={listLabels} field="name" loadingText="Loading labels…"
     add={addPRLabels} remove={removePRLabels}
   />
 }
 
-export function AssigneeDialog({ repo, pr, onClose }) {
+export function AssigneeDialog({ repo, pr, onClose, onError }) {
   return <PRSelectionDialog
-    repo={repo} pr={pr} onClose={onClose}
+    repo={repo} pr={pr} onClose={onClose} onError={onError}
     current={pr.assignees?.map(assignee => assignee.login) || []}
     getOptions={listCollaborators} field="login" loadingText="Loading collaborators…"
     add={addPRAssignees} remove={removePRAssignees}
@@ -91,10 +93,10 @@ export function AuthorSearchDialog({ current, onSubmit, onCancel }) {
   )
 }
 
-export function ReviewerDialog({ repo, pr, onClose }) {
+export function ReviewerDialog({ repo, pr, onClose, onError }) {
   const current = [...new Set((pr.reviewRequests || []).map(reviewer => reviewer.login || reviewer.name).filter(Boolean))]
   return <PRSelectionDialog
-    repo={repo} pr={pr} onClose={onClose}
+    repo={repo} pr={pr} onClose={onClose} onError={onError}
     current={current} title="Request Reviewers"
     getOptions={listCollaborators} field="login" loadingText="Loading collaborators…"
     add={requestReviewers} remove={removeReviewers}
