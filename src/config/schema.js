@@ -165,6 +165,7 @@ export const DEFAULT_CONFIG = {
     'app.ai-assistant':      { keys: ['Ctrl+A'], hint: 'Ctrl+A', label: 'AI assistant', description: 'Open the AI assistant overlay', scope: 'global', group: 'global' },
     'app.next-pane':         { keys: ['Tab'], hint: 'Tab', label: 'pane', description: 'Cycle panes forward', scope: 'global', group: 'nav' },
     'app.prev-pane':         { keys: ['Shift+Tab'], hint: 'Shift+Tab', label: 'previous pane', description: 'Cycle panes backward', scope: 'global', group: 'nav' },
+    'app.jump-pane':         { keys: ['1', '2', '3', '4', '5', '6', '7', '8', '9'], hint: '1-9', label: 'jump to pane', description: 'Jump to the Nth active pane (list and detail views)', scope: 'global', group: 'nav' },
     'app.help':              { keys: ['?'], hint: '?', label: 'help', description: 'Toggle contextual help', scope: 'global', group: 'meta' },
     'app.settings':          { keys: [','], hint: ',', label: 'settings', description: 'Open settings', scope: 'global', group: 'meta' },
     'app.open-config':       { keys: [], hint: 'palette', label: 'edit config', description: 'Open lazyhub.toml in the editor (command palette)', scope: 'global', group: 'meta' },

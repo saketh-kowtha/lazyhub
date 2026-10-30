@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { useContext } from 'react'
 import { Text, useInput } from 'ink'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { sendInput } from './test/input-bus.js'
 import { InputDriver } from './test/input-driver.jsx'
 import { disarmPrefix, getArmedPrefix } from './config/keymap.js'
 import { App } from './app.jsx'
+import { AppContext } from './context.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
 const exitSpy = vi.hoisted(() => vi.fn())
@@ -75,7 +76,9 @@ vi.mock('./features/prs/comments.jsx', () => ({ PRComments: ({ prNumber }) => <T
 vi.mock('./features/prs/ConflictView.jsx', () => ({ ConflictView: ({ pr }) => <Text>{`CONFLICT ${pr.number}`}</Text> }))
 vi.mock('./features/prs/list.jsx', () => ({
   PRList: ({ onSelectPR, onOpenDiff }) => {
+    const { notifyDialog } = useContext(AppContext)
     useInput((input) => {
+      if (input === 'x') notifyDialog(true)
       if (input === 'o') onSelectPR({ number: 7, title: 'Open detail' })
       if (input === 'd') onOpenDiff({ number: 9, title: 'Open diff' })
     })
@@ -183,12 +186,52 @@ describe('App shell user flows', () => {
     await waitForExpectation(() => expect(view.lastFrame()).toContain('PRS LIST'))
   })
 
-  it('g opens a which-key popup and g i jumps to Issues (digits no longer jump)', async () => {
+  it('number keys jump to the Nth active pane from the list and from detail', async () => {
     const view = renderWithProviders(<App repo="owner/repo" />)
     await flush(20)
-
+    // panes in this harness: prs, issues, branches, actions, notifications
     await sendInput('2')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('ISSUES LIST'))
+    await sendInput('5')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('NOTIFICATIONS LIST'))
+    await sendInput('4')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('ACTIONS LIST'))
+    await sendInput('3')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('BRANCHES LIST'))
+    await sendInput('1')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PRS LIST'))
+    await sendInput('9') // out of range: ignored
+    await flush(10)
     expect(view.lastFrame()).toContain('PRS LIST')
+    await sendInput('o')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DETAIL 7'))
+    await sendInput('2')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('ISSUES LIST'))
+  })
+
+  it('number keys do nothing while a pane dialog (search, pickers) is open', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+    await sendInput('x') // mock PRList reports an open dialog, as list search does
+    await sendInput('2')
+    await flush(10)
+    expect(view.lastFrame()).toContain('PRS LIST')
+  })
+
+  it('number keys do nothing while the help overlay is open', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+    await sendInput('?')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Keyboard Reference'))
+    await sendInput('2')
+    await flush(10)
+    await sendInput('', { escape: true })
+    expect(view.lastFrame()).toContain('PRS LIST')
+  })
+
+  it('g opens a which-key popup and g i jumps to Issues', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
 
     await sendInput('g')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('go to / prefix'))
