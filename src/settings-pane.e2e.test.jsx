@@ -47,6 +47,41 @@ describe('Settings pane user flows', () => {
   })
 
 
+  it('Page Size opens an editor that saves, instead of locking the pane', async () => {
+    const view = renderWithProviders(
+      <>
+        <SettingsPane onBack={() => {}} />
+        <InputDriver events={[
+          { input: 'j' }, { input: 'j' }, { input: 'j' }, { input: 'j' },
+          { key: { return: true } },
+        ]} />
+      </>
+    )
+
+    await flush(120)
+    expect(view.lastFrame()).toContain('Page Size')
+    expect(view.lastFrame()).toContain('[Enter] confirm')
+  })
+
+  it('Page Size editor can be cancelled and the pane keeps responding', async () => {
+    const onBack = vi.fn()
+    renderWithProviders(
+      <>
+        <SettingsPane onBack={onBack} />
+        <InputDriver events={[
+          { input: 'j' }, { input: 'j' }, { input: 'j' }, { input: 'j' },
+          { key: { return: true } },
+          { key: { escape: true } },
+          { input: 'q' },
+        ]} />
+      </>
+    )
+
+    await flush(160)
+    expect(onBack).toHaveBeenCalledTimes(1)
+    expect(saveConfig).not.toHaveBeenCalled()
+  })
+
   it('toggles mouse support from the user settings list', async () => {
     const setMouseEnabled = vi.fn()
     const view = renderWithProviders(
