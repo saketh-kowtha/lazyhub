@@ -447,3 +447,8 @@ To prevent merge conflicts and "branch drift":
 - Symptom: `?` and the footer's "more keys" did nothing inside PR detail, diff and comments; the comments footer and error text advertised `r` (retry) with no handler; `Space` in Branches both started the leader window and checked out; Ctrl+R was read as `r`.
 - Root cause: the root handler returned for every `view` scope; comments had no refresh handler; `branch.checkout` and `app.leader` shared `Space`; `eventToTokens` always added the raw character.
 - Fix: the root handler lets `?`, `:` and `g` through at `view` scope; comments handle `list.refresh`; `branch.checkout` is `Enter`; modified keys match only their modified token. Tests: `src/config/keymap-registry.test.js`, `src/keystroke-budgets.e2e.test.jsx`.
+
+**B-79 — Dependabot esbuild updates failed with an override conflict (#355)**
+- Symptom: individual and grouped dependency updates failed with `EOVERRIDE` / `dependency_file_not_resolvable` when the direct esbuild specification changed.
+- Root cause: `overrides.esbuild` duplicated the direct dependency's range; npm requires identical specifications for a direct dependency and its override, even when their ranges overlap.
+- Fix: reference the direct specification with `$esbuild`, retaining the transitive override without changing dependency versions or the lockfile. Regression test: `src/dependency-overrides.test.js` runs npm's offline lockfile validation after individual and grouped specification changes.

@@ -244,7 +244,7 @@ Test file counts by directory:
 
 | Directory | Test files |
 |---|---|
-| `src/` | 25 |
+| `src/` | 26 |
 | `src/ai/` | 3 |
 | `src/ai/providers/` | 4 |
 | `src/cli/` | 8 |
@@ -265,4 +265,4 @@ Test file counts by directory:
 | `src/watch-only/` | 1 |
 
 **Total non-test source files:** 169
-**Total test files:** 87
+**Total test files:** 88
