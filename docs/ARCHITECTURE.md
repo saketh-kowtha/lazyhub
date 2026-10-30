@@ -87,6 +87,11 @@ To prevent merge conflicts and "branch drift":
 
 ## 21. Complete bug fix log (reference)
 
+> **Frozen at B-91.** New bug-fix entries go in `docs/bugs/<issue-number>.md`,
+> one file per bug (see `docs/bugs/README.md`), so parallel PRs never edit the
+> same lines. Numbers B-89, B-90 and B-91 were each used twice on 2026-10-30
+> by PRs written in parallel; both entries are kept.
+
 ### B-01 — comments.jsx: `useTheme` not imported
 - **Symptom:** App crashes when navigating to PR comments view
 - **Root cause:** `import { t } from '../../theme.js'` imports the static constant, but `const { t } = useTheme()` on the next line calls `useTheme` which was never imported → `ReferenceError`

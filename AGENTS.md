@@ -57,8 +57,11 @@ touches UI), follow the stricter of the two and say so in the PR body.
    PRs / Issues / Branches / Actions / Notifications panes. Check all five for
    the same defect and fix every instance in this PR.
 5. Run the **known bug classes checklist** below before opening the PR.
-6. Append a new `B-NN` entry to **`docs/ARCHITECTURE.md` §21** in the existing
-   format (Symptom / Root cause / Fix), continuing the numbering.
+6. Add a bug-log file **`docs/bugs/<issue-number>.md`** (Symptom / Root cause /
+   Fix / Regression test; format in `docs/bugs/README.md`). One file per bug,
+   named by its issue (or PR, if there is no issue) number, so parallel PRs
+   never edit the same lines. Do not edit `docs/ARCHITECTURE.md` §21; it is the
+   frozen log up to B-91.
 7. Gate (see below), then PR.
 
 ## Protocol B — UI / Design
@@ -116,7 +119,7 @@ touches UI), follow the stricter of the two and say so in the PR body.
 ## Known bug classes — self-review checklist (run before every PR)
 
 Every item below is a bug class that has actually shipped in this repo (full
-log: `docs/ARCHITECTURE.md` §21). Check each one that's relevant to your diff:
+log: `docs/bugs/` and, up to B-91, `docs/ARCHITECTURE.md` §21). Check each one that's relevant to your diff:
 
 - [ ] Every component using theme tokens has `const { t } = useTheme()` (or
   `const { scheme } = useTheme()`) actually imported and in scope — not just
@@ -244,13 +247,16 @@ Check job, so it is part of the gate.
 
 ## Docs to update alongside the change
 
-- **Bug fix (Protocol A):** append the `B-NN` entry to `docs/ARCHITECTURE.md`
-  §21 in the same PR.
+- **Bug fix (Protocol A):** add `docs/bugs/<issue-number>.md` in the same PR.
 - **Any item:** if `docs/ROADMAP.md` is now stale (item done, blocker resolved,
   reordered), update it in the same PR. ROADMAP drifts faster than
   ARCHITECT_DECISIONS — keep it honest.
-- **File added/removed/renamed:** run `npm run docs:refresh` to regenerate
-  `docs/FILE_MAP.md`.
+- **Do not edit `docs/FILE_MAP.md` in a PR**, even when you add, remove or
+  rename files. It is generated: the scheduled docs-sync job runs
+  `npm run docs:refresh` on `main`. Editing it in parallel PRs only makes
+  them conflict.
+- **Shared, append-only files are a conflict magnet.** Prefer a new file in a
+  directory (as `docs/bugs/` does) over appending to a shared list.
 
 ---
 
@@ -262,7 +268,8 @@ Check job, so it is part of the gate.
 | `CLAUDE.md` | Compatibility pointer to this file | Claude sessions only |
 | `docs/ARCHITECT_DECISIONS.md` | Locked cross-cutting decisions + spec discipline rules | Every session |
 | `docs/THREAT_MODEL.md` | Security claims, T1-T21, check-integrity boundary | Security-sensitive work |
-| `docs/ARCHITECTURE.md` | Codebase architecture, CI/branch strategy, invariants, full bug-fix log (§21) | Onboarding; any cross-cutting change; after any bug fix |
+| `docs/ARCHITECTURE.md` | Codebase architecture, CI/branch strategy, invariants, bug-fix log up to B-91 (§21) | Onboarding; any cross-cutting change |
+| `docs/bugs/` | Bug-fix log, one file per bug (`<issue-number>.md`) | After any bug fix; before fixing a bug (has it been seen before?) |
 | `docs/FILE_MAP.md` | Concept → owning file crosswalk | Before grepping; "where is X?" |
 | `docs/GLOSSARY.md` | Authoritative term definitions | Whenever an unfamiliar term appears |
 | `docs/ROADMAP.md` | Execution order / what to pick next | Picking the next item |
