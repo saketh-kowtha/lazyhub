@@ -94,7 +94,7 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
   try {
     if (useTmux) {
       const session = `lazyhub-pty-${Date.now()}`
-      const command = `cd ${JSON.stringify(ROOT)} && PATH=${JSON.stringify(env.PATH)} HOME=${JSON.stringify(env.HOME)} USER=${JSON.stringify(env.USER)} GHUI_REPO=${env.GHUI_REPO} TERM=xterm-256color COLORTERM=truecolor NO_COLOR=1 LAZYHUB_NO_DAEMON=1 node ${JSON.stringify(BIN)}`
+      const command = `(cd ${JSON.stringify(ROOT)} && PATH=${JSON.stringify(env.PATH)} HOME=${JSON.stringify(env.HOME)} USER=${JSON.stringify(env.USER)} GHUI_REPO=${env.GHUI_REPO} TERM=xterm-256color COLORTERM=truecolor NO_COLOR=1 LAZYHUB_NO_DAEMON=1 node ${JSON.stringify(BIN)}); echo "lazyhub exited: $?"; sleep 60`
       const started = spawnSync('tmux', ['new-session', '-d', '-x', '80', '-y', '24', '-s', session, command])
       assert.equal(started.status, 0, started.stderr?.toString())
       const capture = () => spawnSync('tmux', ['capture-pane', '-pt', session]).stdout.toString()

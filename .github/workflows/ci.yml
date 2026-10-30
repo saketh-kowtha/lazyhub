@@ -12,8 +12,44 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Markdown-only PRs skip every other job. Skipped jobs count as passing for
+  # required checks; `on.pull_request.paths-ignore` would instead leave them
+  # unreported and the PR BLOCKED, so the gate lives here.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Does the change touch anything besides Markdown?
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.sha }}
+        run: |
+          code=true
+          if [ "$EVENT" = "pull_request" ]; then
+            # Whole PR (merge-base to head), not just the last commit. A failed
+            # diff or an empty file list leaves code=true.
+            if files=$(git diff --name-only "$BASE...$HEAD") && [ -n "$files" ]; then
+              echo "$files"
+              if ! echo "$files" | grep -q -v -E '\.md$'; then code=false; fi
+            fi
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "code=$code"
+
   check:
     name: Check
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -95,6 +131,8 @@ jobs:
   # supported Node. Node 22 is covered by the coverage run in `check`.
   test-node20:
     name: Test (Node 20)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -114,6 +152,8 @@ jobs:
 
   audit:
     name: Dependency audit
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -129,13 +169,15 @@ jobs:
       - name: Audit runtime dependencies
         run: npm audit --omit=dev --audit-level=high
 
-  pty:
-    name: PTY E2E (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+  # Two explicit jobs, not a matrix: a matrix job skipped by a job-level `if`
+  # reports under the literal name `PTY E2E (${{ matrix.os }})`, so the required
+  # checks `PTY E2E (ubuntu-latest)` / `(macos-latest)` would never report on a
+  # Markdown-only PR.
+  pty-ubuntu:
+    name: PTY E2E (ubuntu-latest)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -153,8 +195,37 @@ jobs:
         run: node scripts/record-toolchain.mjs --verify-clean
 
       - name: Install tmux
-        if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y tmux
+
+      - name: Build
+        run: npm run build
+
+      - name: Packed install smoke (zero runtime dependencies)
+        run: node scripts/packed-install-smoke.mjs
+
+      - name: PTY E2E
+        run: npm run test:pty
+
+  pty-macos:
+    name: PTY E2E (macos-latest)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (locked)
+        run: npm ci --no-audit --no-fund
+
+      - name: Record toolchain and lockfile identity
+        run: node scripts/record-toolchain.mjs --verify-clean
 
       - name: Build
         run: npm run build
@@ -173,6 +244,8 @@ jobs:
   # journeys share one install, build and node-pty rebuild.
   memory-budget:
     name: TUI memory budget (512 MB)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -216,6 +289,8 @@ jobs:
   # Terminal portability (#311): ASCII-only, uncolored 80x24 journey on TERM=linux.
   portability-smoke:
     name: TERM=linux PTY smoke
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -240,6 +315,8 @@ jobs:
   # engines floor). node-pty is a dev-only native module, so scripts are skipped.
   alpine-smoke:
     name: Alpine (musl) smoke
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -257,6 +334,8 @@ jobs:
 
   windows-smoke:
     name: Windows smoke
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
     permissions:
       contents: read
