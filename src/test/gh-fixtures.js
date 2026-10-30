@@ -1,3 +1,4 @@
+// (Non-ASCII fixture text is written as \u escapes: src/theme/terminal.test.js scans shipped source for glyphs.)
 // Deterministic `gh` fixtures for the model-free QA suites (screen matrix, random keys).
 //
 // Install `routeExeca` as the mock for the `execa` module and the real executor,
@@ -9,8 +10,8 @@
 // layout that only works for short ASCII fails.
 
 const LONG = 'Rework the incremental diff renderer so very long titles that never fit on a single terminal row still truncate cleanly'
-const CJK = '修复宽字符截断问题：这是一个非常长的中文标题，用来检查终端显示宽度计算是否正确'
-const EMOJI = 'Ship 🚀 the 🎉 release ✅ checklist 👩‍💻 with ZWJ and flags 🇯🇵'
+const CJK = '\u{4FEE}\u{590D}\u{5BBD}\u{5B57}\u{7B26}\u{622A}\u{65AD}\u{95EE}\u{9898}\u{FF1A}\u{8FD9}\u{662F}\u{4E00}\u{4E2A}\u{975E}\u{5E38}\u{957F}\u{7684}\u{4E2D}\u{6587}\u{6807}\u{9898}\u{FF0C}\u{7528}\u{6765}\u{68C0}\u{67E5}\u{7EC8}\u{7AEF}\u{663E}\u{793A}\u{5BBD}\u{5EA6}\u{8BA1}\u{7B97}\u{662F}\u{5426}\u{6B63}\u{786E}'
+const EMOJI = 'Ship \u{1F680} the \u{1F389} release \u{2705} checklist \u{1F469}\u{200D}\u{1F4BB} with ZWJ and flags \u{1F1EF}\u{1F1F5}'
 
 export const PR_NODES = [
   prNode(101, LONG, 'alice', { reviewDecision: 'APPROVED', ci: 'SUCCESS' }),
@@ -27,7 +28,7 @@ function prNode(number, title, login, { reviewDecision = null, ci = 'SUCCESS', i
     title,
     state: 'OPEN',
     author: { login },
-    labels: { nodes: [{ name: 'a-very-long-label-name-that-keeps-going', color: 'd73a4a' }, { name: 'bug 🐛', color: '0e8a16' }] },
+    labels: { nodes: [{ name: 'a-very-long-label-name-that-keeps-going', color: 'd73a4a' }, { name: 'bug \u{1F41B}', color: '0e8a16' }] },
     reviewRequests: { nodes: [{ requestedReviewer: { __typename: 'User', login: 'reviewer-one', name: 'Reviewer One' } }] },
     statusCheckRollup: { contexts: { nodes: [{ __typename: 'CheckRun', name: 'build', status: 'COMPLETED', conclusion: ci === 'PENDING' ? null : ci, startedAt: '2026-06-06T10:00:00Z', completedAt: '2026-06-06T10:05:00Z' }] } },
     reviewDecision,
@@ -69,7 +70,7 @@ function issue(number, title, login) {
 export const BRANCHES = [
   { name: 'main', protected: true, commit: { sha: 'a'.repeat(40) } },
   { name: 'feature/' + 'x'.repeat(80), protected: false, commit: { sha: 'b'.repeat(40) } },
-  { name: 'fix/汉字-branch', protected: false, commit: { sha: 'c'.repeat(40) } },
+  { name: 'fix/\u{6C49}\u{5B57}-branch', protected: false, commit: { sha: 'c'.repeat(40) } },
   ...Array.from({ length: 40 }, (_, i) => ({ name: `topic/${i}`, protected: false, commit: { sha: String(i).padStart(40, 'd') } })),
 ]
 
@@ -114,7 +115,7 @@ export const DIFF = [
   ' const a = 1',
   `-const old = '${'o'.repeat(220)}'`,
   `+const next = '${'n'.repeat(220)}'`,
-  `+const cjk = '${'汉字'.repeat(60)}'`,
+  `+const cjk = '${'\u{6C49}\u{5B57}'.repeat(60)}'`,
   '+\tconst tabbed = 1',
   ' const b = 2',
   ' const c = 3',
@@ -170,9 +171,7 @@ export function routeExeca(cmd, args = []) {
 }
 
 function thenable(result) {
-  const p = Promise.resolve(result)
-  p.stdin = { write() {}, end() {} }
-  return p
+  return Object.assign(Promise.resolve(result), { stdin: { write() {}, end() {} } })
 }
 
 function route(cmd, args) {
