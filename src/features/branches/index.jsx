@@ -6,7 +6,8 @@ import React, { useState, useCallback, useEffect, useContext, useRef, memo } fro
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
-import { listBranches, deleteBranch, listPRs } from '../../executor.js'
+import { classifyGhFailure, listBranches, deleteBranch, listPRs } from '../../executor.js'
+import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { AppContext } from '../../context.js'
@@ -72,6 +73,15 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
   useEffect(() => {
     if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
   }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A refetch can shrink the list (deleted branch); keep the cursor on a real row.
+  useEffect(() => {
+    if (items.length > 0 && cursor > items.length - 1) {
+      const last = items.length - 1
+      setCursor(last)
+      setScrollOffset(Math.max(0, last - visibleHeight + 1))
+    }
+  }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     notifyDialog(!!dialog)
@@ -299,7 +309,13 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
             />
           )
         })}
-        {!loading && items.length === 0 && (
+        {error && (
+          <Box paddingX={2} paddingY={1} flexDirection="column">
+            <FailureNotice failure={classifyGhFailure(error)} />
+            <Text color={t.ui.dim}>[{firstActionKey('list.refresh', 'r')}] retry</Text>
+          </Box>
+        )}
+        {!loading && !error && items.length === 0 && (
           <Box paddingX={2} paddingY={1}>
             <Text color={t.ui.muted}>No branches found. [{firstActionKey('list.refresh', 'r')}] refresh</Text>
           </Box>
