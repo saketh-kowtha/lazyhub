@@ -90,15 +90,17 @@ export function SettingsPane({ onBack }) {
   ]
 
   const updateConfig = (patch) => {
-    const next = { ...config, ...patch }
-    setConfig(next)
-    saveConfig(next)
+    // Persist only what the user edited; `config` also holds values resolved
+    // from the environment and defaults, which must not be written back.
+    setConfig({ ...config, ...patch })
+    saveConfig(patch)
     if (patch.theme) setTheme(patch.theme)
     logger.info(`Config updated`, { component: 'Settings' })
   }
 
   const updateAI = (aiPatch) => {
-    updateConfig({ ai: { ...(config.ai || {}), ...aiPatch } })
+    setConfig(c => ({ ...c, ai: { ...(c.ai || {}), ...aiPatch } }))
+    saveConfig({ ai: aiPatch })
   }
 
   useKeymapInput((input, key) => {
