@@ -47,7 +47,7 @@ lazyhub doctor --coverage --repo owner/name
 
 ## Navigate
 
-Use `j`/`k` to move, `Tab` to switch panes, `g` (`g h`, `g p`, `g i`, `g b`, `g a`, `g n`) to jump directly to a pane, `Enter` to open an item, `:` (or `<Space><Space>`) for the command palette, and `?` for the current view's help. In a pull request, inspect the conversation and checks or press `d` to open the diff. The help overlay is the source for available actions in each view.
+Use `j`/`k` to move, `Tab` to switch panes, number keys `1`–`9` or `g` (`g h`, `g p`, `g i`, `g b`, `g a`, `g n`) to jump directly to a pane, `Enter` to open an item, `:` (or `<Space><Space>`) for the command palette, and `?` for the current view's help. In a pull request, inspect the conversation and checks or press `d` to open the diff. The help overlay is the source for available actions in each view.
 
 The app keeps its existing GitHub management features, including review and merge actions. These actions are separate from the read-only reports and follow the confirmation shown in the interface.
 

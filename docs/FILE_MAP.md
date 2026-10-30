@@ -150,13 +150,14 @@
 | `src/components/EmptyState.jsx` | teaching empty state (#313): says why the list is empty and names the next action as a key. Mockup: docs/mockups/day-one-errors.md §9. |
 | `src/components/ErrorBoundary.jsx` | catches render crashes, logs them, shows a minimal error box. |
 | `src/components/FailureNotice.jsx` | one plain-language failure (#313): glyph + cause, what is and is not affected, and the exact fix as a literal command. Fed by classifyGhFailure(); text is already scrubbed and sanitized there. Mockup: docs/mockups/day-one-errors.md. |
-| `src/components/FooterKeys.jsx` | footer key hint bar. Keys shape: { key, label, group? } When group numbers present, renders groups separated by ┊ (U+250A). Falls back to plain │ separators when no groups defined. |
+| `src/components/FooterKeys.jsx` | footer key hint bar. Always exactly two rows (rule + one hint line); it never wraps. When the hints do not fit the terminal width the lowest-priority keys (the LAST ones in `keys`) are dropped first; `?` help is kept for as long as there is any room, and a lone remaining hint is ellipsized. Keys shape: { key, label, group? }. Groups render separated by ┊ (U+250A). |
 | `src/components/Sidebar.jsx` | Navigation sidebar for switching between feature views. |
 | `src/components/Skeleton.jsx` | animated placeholder loaders for every list/detail pane. Each exported component mirrors the exact column layout of its real counterpart so the UI doesn't shift when data arrives. Animation: a single 700ms interval per skeleton component pulses all bars between ░ and ▒ — one setInterval total, not one per bar. |
 | `src/components/Spinner.jsx` | animated braille spinner for loading states |
 | `src/components/StatusBar.jsx` | Application status bar showing context and global state. |
 | `src/components/TabStrip.jsx` | horizontal pane tabs for compact mode (<80 cols). Props: panes (string[]), currentPane, paneLabels, paneIcons, onSelect |
 | `src/components/Toaster.jsx` | transient notification stack, max 3, bottom-right. Variants: success (2.5s), info (3s), warning (4s), error (sticky). Usage: call useToast() hook to get { toast } function. toast({ message, variant: 'success'|'info'|'warning'|'error' }) |
+| `src/components/TooSmall.jsx` | shown instead of a broken frame when the terminal is below the minimum size. |
 
 ## Hooks
 
@@ -164,8 +165,9 @@
 |---|---|
 | `src/hooks/useGh.js` | React hook that wraps executor calls with loading/error/data state and an in-memory TTL cache. |
 | `src/hooks/useGhHealth.js` | global degraded-state tracker for gh-backed requests. |
-| `src/hooks/useLayout.js` | responsive layout breakpoints based on terminal dimensions. Config overrides always win over breakpoint defaults. |
+| `src/hooks/useLayout.js` | useLayout: responsive layout breakpoints derived from the terminal size. `[layout]` config values are *preferences*: a breakpoint may override them when there is no room (a 24-column sidebar on a 60-column terminal is hidden, not obeyed). See "Responsive layout" in docs/DESIGN_REVAMP.md. too-small  < MIN_COLS x MIN_ROWS   one "terminal too small" message narrow     < 80 cols               no sidebar (tab strip), no preview medium     80-109 cols             sidebar, preview collapsed wide       110-179 cols            sidebar and preview ultrawide  >= 180 cols             wide + AI side panel |
 | `src/hooks/usePaneState.js` | preserve list/pane view state across navigation. State is stored in a Map on AppContext (via paneStateRef). Survives PRList unmount (back-nav from detail/diff). Cleared on explicit pane-switch (Tab, number key) by the App. Usage: const [state, setState] = usePaneState('prs', { cursor: 0, scrollOffset: 0, filterState: 'open', ... }) |
+| `src/hooks/useTerminalSize.js` | useTerminalSize: the single source of truth for the terminal's size. Subscribes to the stdout `resize` event and re-renders the caller with the new `{ columns, rows }`, trailing-debounced so a drag-resize (or a multiplexer relaying a burst of SIGWINCH) produces one render, not dozens. When the size changes it first wipes the screen, so cells the previous frame drew outside the new geometry (or that the terminal reflowed) never survive as stale text. Ink re-lays-out on resize by itself, but React state derived from `stdout.columns` (sidebar width, list height, footer fit) is only refreshed by a React render, which Ink does not trigger. Components must read the size from `useLayout()` / this hook rather than caching `stdout.columns`. |
 | `src/hooks/useVirtualList.js` | safe for repos with tens of thousands of items. Usage: const { cursor, scrollOffset, visibleItems, moveCursor, jumpTop, jumpBottom } = useVirtualList({ items, height }) // In JSX: visibleItems.map((item, i) => { const isSelected = scrollOffset + i === cursor ... }) |
 
 ## Configuration & Context
@@ -230,6 +232,7 @@
 | `src/input-validation.js` | shared runtime validators for untrusted agent/model-supplied input (MCP adapter, AI assistant). Dependency-free so the daemon can import it without pulling in UI code. |
 | `src/perf.js` | opt-in local NDJSON performance instrumentation. |
 | `src/secure-fs.js` | private-by-default filesystem helpers (#253). Every lazyhub-owned directory that may hold repository metadata, request arguments, config or IPC endpoints is created 0700 and every file 0600, regardless of the process umask. Existing paths are tightened in place (migration from releases that wrote with default modes). On win32 POSIX modes do not apply, so these helpers degrade to plain fs calls. This is defense in depth against other local accounts; a hostile process running as the same OS user is out of scope (docs/THREAT_MODEL.md). |
+| `src/test/gh-fixtures.js` | (no header — inferred: gh-fixtures) |
 | `src/test/global-guard.js` | Vitest globalSetup: snapshot the real config files, return a teardown that fails on change. @returns {() => void} teardown |
 | `src/test/input-bus.js` | Build a drop-in useInput replacement that registers handlers on the shared bus. @param {object} React the React module (passed in because vi.mock factories import it lazily) @returns {(handler: Function) => void} mocked useInput |
 | `src/test/input-driver.jsx` | Replays `events` ({ input, key } or { wait }) one at a time, each delivered via sendInput() so React has settled (render + passive effects) before the next key. Keep `events` referentially stable if the parent re-renders. |
@@ -247,28 +250,29 @@ Test file counts by directory:
 
 | Directory | Test files |
 |---|---|
-| `src/` | 28 |
+| `src/` | 30 |
 | `src/ai/` | 3 |
 | `src/ai/providers/` | 4 |
 | `src/cli/` | 8 |
 | `src/cli/doctor/` | 4 |
-| `src/components/` | 3 |
+| `src/components/` | 4 |
 | `src/config/` | 8 |
 | `src/daemon/` | 7 |
 | `src/executor/` | 5 |
-| `src/features/branches/` | 1 |
+| `src/features/actions/` | 3 |
+| `src/features/branches/` | 2 |
 | `src/features/issues/` | 1 |
 | `src/features/logs/` | 1 |
 | `src/features/notifications/` | 1 |
 | `src/features/onboarding/` | 1 |
-| `src/features/prs/` | 10 |
+| `src/features/prs/` | 12 |
 | `src/features/prs/detail/` | 1 |
 | `src/features/prs/diff/` | 1 |
 | `src/features/tabs/` | 2 |
-| `src/hooks/` | 1 |
+| `src/hooks/` | 2 |
 | `src/theme/` | 2 |
 | `src/ui/` | 2 |
 | `src/watch-only/` | 1 |
 
-**Total non-test source files:** 172
-**Total test files:** 95
+**Total non-test source files:** 175
+**Total test files:** 105
