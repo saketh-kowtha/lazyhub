@@ -19,6 +19,7 @@
 | `src/executor/actions.js` | List workflow runs. @param repo @param filter |
 | `src/executor/activity.js` | typed READ-ONLY GitHub activity methods for watch-only mode. Every call goes through runGh() (the single gh chokepoint) and is a GraphQL `query` or a `gh repo view`; nothing here mutates. One GraphQL round-trip returns, per pull request, the force-push timeline, reviews, commits and the head commit's check suites/runs, plus `rateLimit`, so observing N PRs does not cost N*4 REST calls. Integers go via -F, strings via -f; pagination is explicit (`first`/`last` on every connection, PR pages via cursor). |
 | `src/executor/branches.js` | Request reviewers for a PR. @param repo @param number @param reviewers |
+| `src/executor/ci-logs.js` | typed READ-ONLY fetch of a failed GitHub Actions job's log (issue #359, "Why is CI red?"). Everything goes through runGh(); args are arrays; nothing here mutates. The log is untrusted text. This module only fetches and classifies the outcome; parsing, redaction and sanitising live in src/features/prs/ci-log.js. The capture is capped (maxBuffer) so a huge log cannot balloon memory (#311): past the cap the state is 'too_large', never a silently truncated or partial log. |
 | `src/executor/classify.js` | turn a failed `gh` call into a plain-language failure (#313). One classifier, next to runGh(): it reads the GhError that runGh() throws (message, redacted stderr, exit code, args) and returns what happened, what it affects and the exact next step. Pure and offline: it never calls gh, so a rate-limit reset time is only shown when the caller already holds a `gh api rate_limit` result (ctx.rateLimit); otherwise it says it is unknown. Every string returned is passed through sanitize() and scrubbed of tokens and credentialed or one-time URLs, so callers can render it as is. |
 | `src/executor/core.js` | the ONLY place the `gh` CLI is invoked in lazyhub. `runGh(args, opts)` is the single chokepoint: every exported function routes through it. That gives one place to mock in tests, one place to type errors (GhError), and one place to instrument (timeout, future retry/observability). |
 | `src/executor/evidence.js` | pure review-evidence model (issue #175). No I/O. Turns one GraphQL PullRequest node into an evidence record for HUMAN inspection. Observation never grants authority (ARCHITECT_DECISIONS D1, THREAT_MODEL T1/T3/T7): nothing here is an approval input, and a cached record must never be treated as one. Exact binding and revalidation stay with the approval work (#235/#244/#278). Rules the shape enforces: - every computed fact is `{value, source, fetched_at}`; a field GitHub did not return is the literal `'unknown'`, never inferred safe; - attention reasons are deterministic and cite the fact they came from; there are no scores; - prose written by the PR author, agents or commenters lives only under `untrusted`, apart from `facts`; actor attribution is `unverified`. |
@@ -73,6 +74,8 @@
 
 | File | Purpose |
 |---|---|
+| `src/features/prs/ci-log.fixtures.js` | recorded-shape `gh run view --log-failed` logs, one per supported failure family (issue #359). Shared by ci-log.test.js and the PTY gh stub. Text is representative of each tool's real output; secrets are fake. |
+| `src/features/prs/ci-log.js` | pure parsing of a failed CI job log into a bounded, redacted excerpt (issue #359, "Why is CI red?", step 1). No I/O, no React. Input is `gh run view --log-failed` text: `job<TAB>step<TAB>timestamp text` lines (or bare lines). The log is untrusted: every line is stripped of ANSI and control characters, secret-redacted and length-capped before it leaves this module, and the whole input is bounded so a huge log cannot balloon memory (#311). Nothing here guesses: if no known failure shape matches, the excerpt says so (kind 'unparsed') instead of inventing a cause. |
 | `src/features/prs/comments.jsx` | PR comments/threads view Supports: reply, edit, delete per comment |
 | `src/features/prs/ConflictView.jsx` | GitHub PR merge-conflict resolution Resolves conflicts for a GitHub PR by: 1. Checking out the PR branch locally 2. Merging the base branch to expose conflict markers 3. Opening each conflicting file in the configured editor 4. Staging resolved files 5. Committing + immediately pushing back to GitHub (updates the PR) Phases: CHECKING   — probing local git state SETUP      — branch not checked out or no merge in progress yet CONFLICTS  — mid-merge, files listed with resolution status COMMITTING — committing + pushing in one step DONE       — pushed, PR updated |
 | `src/features/prs/detail.jsx` | PR detail controller, navigation and dialogs Scrollable view: j/k to scroll, gg/G top/bottom, / to search body |
@@ -222,7 +225,7 @@
 | `src/features/tabs/filter-to-gh.js` | translate TOML pane filters to executor args. |
 | `src/features/tabs/pane.jsx` | one TOML-declared dashboard pane. |
 | `src/features/tabs/registry.js` | TOML custom tab registry. |
-| `src/features/tabs/view.jsx` | TOML-declared multi-pane dashboard. |
+| `src/features/tabs/view.jsx` | TOML-declared multi-pane dashboard. Owns the keyboard: a section (pane) and a row cursor per section, Enter / `o` on the selected row, `r` to refresh. The selection is remembered per tab so returning from a detail view lands on the same row (#279). |
 | `src/highlight.js` | lazily-built highlight.js instance (#302). `import hljs from 'highlight.js'` registers all ~190 languages (~70 ms at startup). Instead this module builds a `highlight.js/lib/core` instance with only the languages the diff view maps file extensions to (see getLang in features/prs/diff.jsx), plus `diff` and `ini` for markdown code fences. It loads synchronously on the first highlight call (render code cannot await), so CLI commands and the first frame never pay for it. Trade-off: fenced code blocks in markdown with a language outside this set (e.g. ```lua) now render unhighlighted, and untagged blocks are auto-detected among these languages only. |
 | `src/input-validation.js` | shared runtime validators for untrusted agent/model-supplied input (MCP adapter, AI assistant). Dependency-free so the daemon can import it without pulling in UI code. |
 | `src/perf.js` | opt-in local NDJSON performance instrumentation. |
@@ -244,7 +247,7 @@ Test file counts by directory:
 
 | Directory | Test files |
 |---|---|
-| `src/` | 26 |
+| `src/` | 28 |
 | `src/ai/` | 3 |
 | `src/ai/providers/` | 4 |
 | `src/cli/` | 8 |
@@ -252,11 +255,13 @@ Test file counts by directory:
 | `src/components/` | 3 |
 | `src/config/` | 8 |
 | `src/daemon/` | 7 |
-| `src/executor/` | 4 |
+| `src/executor/` | 5 |
+| `src/features/branches/` | 1 |
 | `src/features/issues/` | 1 |
 | `src/features/logs/` | 1 |
+| `src/features/notifications/` | 1 |
 | `src/features/onboarding/` | 1 |
-| `src/features/prs/` | 9 |
+| `src/features/prs/` | 10 |
 | `src/features/prs/detail/` | 1 |
 | `src/features/prs/diff/` | 1 |
 | `src/features/tabs/` | 2 |
@@ -265,5 +270,5 @@ Test file counts by directory:
 | `src/ui/` | 2 |
 | `src/watch-only/` | 1 |
 
-**Total non-test source files:** 169
-**Total test files:** 89
+**Total non-test source files:** 172
+**Total test files:** 95

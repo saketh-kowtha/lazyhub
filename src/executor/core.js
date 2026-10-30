@@ -86,6 +86,8 @@ export function getGhCallHistory() {
 	 *                                   timeout: 0 for flows that wait on the user.
 	 * @param {boolean}  [opts.combine]  return stdout and stderr interleaved as raw text
 	 *                                   (`gh auth status` reports on stderr)
+	 * @param {number}   [opts.maxBuffer] cap on captured stdout/stderr bytes (execa default 100 MB);
+	 *                                   exceeding it throws a GhError mentioning maxBuffer
 	 * @param {boolean}  [opts.skipDaemon] bypass the local daemon even when available
 	 * @param {number}   [opts.ttl]      daemon cache TTL override in ms
 	 * @returns {Promise<any>}           parsed JSON or raw string (null if empty)
@@ -196,7 +198,7 @@ function releaseGhSlot() {
  * login) bypass the queue so they can never starve behind background reads.
  *
  * @param {string[]} args
- * @param {{timeout?: number, json?: boolean, stdin?: string, interactive?: boolean, combine?: boolean}} [opts]
+ * @param {{timeout?: number, json?: boolean, stdin?: string, interactive?: boolean, combine?: boolean, maxBuffer?: number}} [opts]
  */
 async function spawnGh(args, opts = {}) {
   if (opts.interactive) return execGh(args, opts)
@@ -210,9 +212,9 @@ async function spawnGh(args, opts = {}) {
 
 /**
  * @param {string[]} args
- * @param {{timeout?: number, json?: boolean, stdin?: string, interactive?: boolean, combine?: boolean}} [opts]
+ * @param {{timeout?: number, json?: boolean, stdin?: string, interactive?: boolean, combine?: boolean, maxBuffer?: number}} [opts]
  */
-async function execGh(args, { timeout = GH_TIMEOUT, json, stdin, interactive, combine } = {}) {
+async function execGh(args, { timeout = GH_TIMEOUT, json, stdin, interactive, combine, maxBuffer } = {}) {
   const started = Date.now()
   // GH_HOST / GH_TOKEN are inherited by the child process from process.env
   // (we pass no curated env here — see ARCHITECT_DECISIONS invariant 4, which
@@ -227,6 +229,7 @@ async function execGh(args, { timeout = GH_TIMEOUT, json, stdin, interactive, co
       timeout,
       stdio: interactive ? 'inherit' : 'pipe',
       all: Boolean(combine),
+      ...(maxBuffer ? { maxBuffer } : {}),
     })
     if (stdin !== undefined && proc.stdin) {
       proc.stdin.write(stdin)

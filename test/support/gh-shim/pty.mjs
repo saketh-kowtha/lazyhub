@@ -4,6 +4,7 @@
 // LAZYHUB_GH_STUB_STDERR + LAZYHUB_GH_STUB_EXIT (search fails with stderr),
 // LAZYHUB_GH_STUB_EMPTY (search returns no results).
 import { appendFileSync, writeFileSync } from 'node:fs'
+import { VITEST_LOG } from '../../../src/features/prs/ci-log.fixtures.js'
 
 const PR = {
   number: 186,
@@ -77,6 +78,8 @@ export default function handle(args, out) {
   if (a0 === 'issue' && a1 === 'list') out([ISSUE])
   if (a0 === 'issue' && a1 === 'view') out(ISSUE)
   if (a0 === 'run' && a1 === 'list') out([RUN])
+  // Failing-check fixture (#359): the failed-step log of job 9001.
+  if (a0 === 'run' && a1 === 'view' && args.includes('--log-failed')) out(VITEST_LOG + '\n')
   if (a0 === 'api' && a1 === 'notifications') out([])
   if (a0 === 'api' && /^repos\/[^/]+\/[^/]+\/issues\/\d+$/.test(a1 || '')) out('true\n')
   if (a0 === 'api' && /\/branches/.test(a1 || '')) out([{ name: 'main', protected: true, commit: { sha: 'abc123' } }, { name: 'feature/pty', protected: false, commit: { sha: 'def456' } }])
