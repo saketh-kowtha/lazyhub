@@ -129,6 +129,24 @@ describe('App shell user flows', () => {
     expect(view.lastFrame()).toContain('Keyboard Reference')
   })
 
+  it('help overlay rows have unique React keys even when two actions share a key (B-88)', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const view = renderWithProviders(
+        <>
+          <App repo="owner/repo" />
+          <InputDriver events={[{ input: '?' }]} />
+        </>
+      )
+      await flush(20)
+      expect(view.lastFrame()).toContain('Keyboard Reference')
+      const dupKeyWarnings = errSpy.mock.calls.filter(c => String(c[0]).includes('two children with the same key'))
+      expect(dupKeyWarnings).toEqual([])
+    } finally {
+      errSpy.mockRestore()
+    }
+  })
+
   it('Esc on a top-level list does not quit; q does', async () => {
     exitSpy.mockClear()
     renderWithProviders(
