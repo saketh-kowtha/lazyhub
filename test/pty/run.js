@@ -102,7 +102,13 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
         if (result.stdout.toString()) return result.stdout.toString()
         return `[tmux capture-pane status=${result.status} stderr=${result.stderr}; ls: ${spawnSync('tmux', ['ls']).stderr}${spawnSync('tmux', ['ls']).stdout}]`
       }
-      await waitForScreen(capture, /Pull Requests|Focus|PTY harness fixture PR/, 'tmux startup')
+      try {
+        await waitForScreen(capture, /Pull Requests|Focus|PTY harness fixture PR/, 'tmux startup')
+      } catch (error) {
+        const info = [['list-panes', '-a', '-F', '#{pane_pid} dead=#{pane_dead} cmd=#{pane_current_command} alt=#{alternate_on} #{pane_width}x#{pane_height}'], ['capture-pane', '-apq', '-t', session]]
+          .map(args => `$ tmux ${args[0]}\n${spawnSync('tmux', args).stdout}`).join('\n')
+        throw new Error(`${error.message}\n--- tmux diagnostics ---\n${info}\n${spawnSync('tmux', ['-V']).stdout}`)
+      }
       spawnSync('tmux', ['send-keys', '-t', session, 'g'])
       await new Promise(resolve => setTimeout(resolve, 50))
       spawnSync('tmux', ['send-keys', '-t', session, 'p'])
