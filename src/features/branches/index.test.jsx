@@ -41,3 +41,26 @@ it('moves the current-branch marker after a checkout', async () => {
   await waitForExpectation(() => expect(view.lastFrame()).toMatch(/► dev/))
   expect(view.lastFrame()).not.toMatch(/► main/)
 })
+
+it('shows the failure and a retry hint instead of "No branches found" when the fetch fails', async () => {
+  const err = Object.assign(new Error('gh: HTTP 401: Bad credentials'), { stderr: 'HTTP 401: Bad credentials' })
+  useGh.mockImplementation(() => ({ data: null, loading: false, error: err, refetch: vi.fn() }))
+  const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
+  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/retry/i))
+  expect(view.lastFrame()).not.toContain('No branches found')
+})
+
+it('keeps a valid selection when a refetch returns fewer branches', async () => {
+  useGh.mockImplementation(fn => {
+    const [data, setData] = React.useState(fn === listBranches ? [{ name: 'main' }, { name: 'dev' }] : [])
+    return { data, loading: false, refetch: () => setData(fn === listBranches ? [{ name: 'main' }] : []) }
+  })
+  const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
+  await waitForInputReady(view)
+  view.stdin.write('G')
+  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/▶ dev/))
+  await waitForInputReady(view)
+  view.stdin.write('r')
+  await waitForExpectation(() => expect(view.lastFrame()).not.toContain('dev'))
+  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/▶ (► )?main/))
+})
