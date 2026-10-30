@@ -34,16 +34,36 @@ export async function removeReviewers(repo, number, reviewers) {
 // ─── Branch functions ─────────────────────────────────────────────────────────
 
 /**
- * List branches in a repo.
+ * Encode a git ref name for a REST path: "/" stays a path separator and every
+ * other character is encoded per segment (`feat/a b` -> `feat/a%20b`).
+ * @param {string} name
+ */
+export function encodeRefPath(name) {
+  return String(name).split('/').map(encodeURIComponent).join('/')
+}
+
+const BRANCH_PAGE_SIZE = 100
+/** Pages fetched per listing, so a repo with thousands of branches stays bounded (1000 branches). */
+export const BRANCH_MAX_PAGES = 10
+
+/**
+ * List branches in a repo, following pages until a short page or BRANCH_MAX_PAGES.
  * @param repo
  */
 export async function listBranches(repo) {
   const r = getRepo(repo)
-  const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches?per_page=100`,
-    '--jq', '[.[] | {name: .name, protected: .protected, commit: {sha: .commit.sha}}]',
-  ]
-  return runGh(args)
+  const all = []
+  for (let page = 1; page <= BRANCH_MAX_PAGES; page++) {
+    const args = [
+      'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches?per_page=${BRANCH_PAGE_SIZE}&page=${page}`,
+      '--jq', '[.[] | {name: .name, protected: .protected, commit: {sha: .commit.sha}}]',
+    ]
+    const rows = await runGh(args)
+    if (!Array.isArray(rows)) return page === 1 ? rows : all
+    all.push(...rows)
+    if (rows.length < BRANCH_PAGE_SIZE) break
+  }
+  return all
 }
 
 /**
@@ -64,7 +84,7 @@ export async function checkoutBranch(repo, number) {
 export async function deleteBranch(repo, branchName) {
   const r = getRepo(repo)
   const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/git/refs/heads/${encodeURIComponent(branchName)}`,
+    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/git/refs/heads/${encodeRefPath(branchName)}`,
     '--method', 'DELETE',
   ]
   return runGh(args)
@@ -162,7 +182,7 @@ export async function getRemoteBranch(repo, branch) {
   if (!branch) return null
   try {
     const r = getRepo(repo)
-    return await runGh(['api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches/${encodeURIComponent(branch)}`])
+    return await runGh(['api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches/${encodeRefPath(branch)}`])
   } catch {
     return null
   }
@@ -179,7 +199,7 @@ export async function compareBranches(repo, base, head) {
   if (!base || !head) return null
   try {
     const r = getRepo(repo)
-    return await runGh(['api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`])
+    return await runGh(['api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/compare/${encodeRefPath(base)}...${encodeRefPath(head)}`])
   } catch {
     return null
   }

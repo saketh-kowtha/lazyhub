@@ -455,6 +455,25 @@ describe('listBranches()', () => {
   })
 })
 
+describe('branch names with slashes and paging', () => {
+  it('deleteBranch keeps "/" as a path separator and encodes each segment', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+    await deleteBranch('owner/repo', 'feat/a b/x')
+    const [, args] = execa.mock.calls[0]
+    expect(args).toContain('repos/owner/repo/git/refs/heads/feat/a%20b/x')
+  })
+
+  it('listBranches pages past the first 100 branches', async () => {
+    const page = n => Array.from({ length: n }, (_, i) => ({ name: `b${i}` }))
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(page(100)), stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(page(30)), stderr: '' })
+    const rows = await listBranches('owner/repo')
+    expect(rows).toHaveLength(130)
+    expect(execa.mock.calls[1][1].some(a => a.includes('page=2'))).toBe(true)
+  })
+})
+
 describe('checkoutBranch()', () => {
   it('calls gh pr checkout', async () => {
     execa.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })

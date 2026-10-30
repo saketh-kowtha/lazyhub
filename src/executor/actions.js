@@ -1,4 +1,5 @@
 import { getRepo, runGh } from './core.js'
+import { encodeRefPath } from './branches.js'
 
 /**
  * List workflow runs.
@@ -141,7 +142,7 @@ export async function getBranchProtection(repo, branch) {
   if (!branch) return null
   const r = getRepo(repo)
   const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches/${encodeURIComponent(branch)}/protection`,
+    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches/${encodeRefPath(branch)}/protection`,
     '--jq', '{requiredReviews: (.required_pull_request_reviews.required_approving_review_count // 0), requireCodeOwnerReviews: (.required_pull_request_reviews.require_code_owner_reviews // false), requireStatusChecks: (.required_status_checks != null), requiredChecks: ([(.required_status_checks.contexts // []), (.required_status_checks.checks // [] | map(.context))] | add // [])}',
   ]
   try {
