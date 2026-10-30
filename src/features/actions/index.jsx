@@ -70,6 +70,15 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
     if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
   }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A refetch can shrink the list (cancelled run, read notification); keep the cursor on a real row.
+  useEffect(() => {
+    if (items.length > 0 && cursor > items.length - 1) {
+      const last = items.length - 1
+      setCursor(last)
+      setScrollOffset(Math.max(0, last - visibleHeight + 1))
+    }
+  }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     notifyDialog(!!dialog)
     if (onPaneState) onPaneState({ dialogHint: dialog || null })
