@@ -3,8 +3,9 @@
 // Default dataset: one PR, a 3-file diff. `scale: true` serves SCALE_PRS pull
 // requests through cursor-paginated GraphQL search and a SCALE_FILES-file diff,
 // so large-organization behavior can be measured without network access.
-import { chmodSync, mkdirSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { chmodSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'fs'
+import { createRequire } from 'module'
+import { dirname, join } from 'path'
 
 export const SCALE_PRS = 1200
 export const SCALE_FILES = 1000
@@ -66,4 +67,46 @@ out([])
 `, 'utf8')
   chmodSync(ghPath, 0o755)
   return binDir
+}
+
+/**
+ * node-pty 1.1.0 ships its macOS prebuilt `spawn-helper` without the execute
+ * bit (npm preserves the tarball mode), so every `pty.spawn` fails with
+ * `posix_spawnp failed`. Restore the bit before the first spawn. No-op elsewhere.
+ */
+export function ensureSpawnHelperExecutable() {
+  try {
+    const prebuilds = join(dirname(createRequire(import.meta.url).resolve('node-pty/package.json')), 'prebuilds')
+    if (!existsSync(prebuilds)) return
+    for (const dir of readdirSync(prebuilds)) {
+      const helper = join(prebuilds, dir, 'spawn-helper')
+      if (existsSync(helper)) chmodSync(helper, 0o755)
+    }
+  } catch {
+    // Reported by the spawn probe below if it actually matters.
+  }
+}
+
+/** Probe node-pty with a trivial child. Returns null when it works, else the error message. */
+export function nodePtyProblem(pty, cwd) {
+  ensureSpawnHelperExecutable()
+  try {
+    const term = pty.spawn('/bin/sh', ['-c', 'exit 0'], {
+      name: 'xterm-256color', cols: 80, rows: 24, cwd, env: { TERM: 'xterm-256color', PATH: process.env.PATH },
+    })
+    term.kill()
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+}
+
+/** A PTY test cannot run. Fatal under CI (a skipped test must never look green); a local skip otherwise. */
+export function skipOrFail(message) {
+  if (process.env.CI) {
+    process.stderr.write(`FAIL (CI): ${message}\n`)
+    process.exit(1)
+  }
+  process.stdout.write(`skipped: ${message}\n`)
+  process.exit(0)
 }

@@ -11,10 +11,12 @@ import { appendFileSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, delimiter } from 'path'
 import pty from 'node-pty'
-import { installGhStub } from './fixtures.js'
+import { installGhStub, nodePtyProblem, skipOrFail } from './fixtures.js'
 
 const ROOT = new URL('../..', import.meta.url).pathname
 const BIN = join(ROOT, 'dist', 'lazyhub.js')
+const ptyProblem = nodePtyProblem(pty, ROOT)
+if (ptyProblem) skipOrFail(`node-pty cannot spawn: ${ptyProblem}`)
 const COLS = 80
 const ROWS = 24
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))

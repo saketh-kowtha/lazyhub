@@ -14,7 +14,7 @@ This is the target end-state for `.github/workflows/`. Audit current state again
 3. **No bot-written commits/PRs.** No release-please, no auto-version-bump-PR, no auto-merge. Humans tag releases.
 4. **No GitHub Actions Marketplace actions** beyond Anthropic-trusted set: `actions/checkout`, `actions/setup-node`, `actions/upload-artifact`, `actions/download-artifact`, `actions/github-script`. Anything else is a supply-chain risk + future maintenance burden. Pin to commit SHA, not version tag. *(Amended by [Decision 9](ARCHITECT_DECISIONS.md) / #138: `davelosert/vitest-coverage-report-action@v2` is the one sanctioned exception, used only to post the PR coverage comment.)*
 5. **One workflow file per concern.** Don't nest unrelated jobs in one file.
-6. **No matrix builds** unless a multi-platform binary is being shipped. Node 22 on ubuntu-latest is the build target. Period.
+6. **No matrix builds.** The PTY E2E runs as two explicit jobs (ubuntu-latest and macos-latest, because node-pty's spawn path differs per OS), not a matrix: a matrix job skipped by an `if` reports under its unexpanded name and would leave the required checks unreported. Node 22 on ubuntu-latest is the build target; the one extra Node job is `Test (Node 20)`, the `engines` floor.
 7. **Fail fast.** No `continue-on-error: true` unless explicitly justified in a comment.
 
 ---
@@ -46,6 +46,8 @@ jobs:
 ```
 
 **No** flaky-test retries.
+
+> **Current `ci.yml` (2026-10):** `Check` runs lint, typecheck, `test:coverage` (the single full-suite run; it enforces the floors, so there is no separate `npm test` step), build, the coverage artifact and the PR coverage comment. `Test (Node 20)` runs `npm test` on the engines floor. `PTY E2E (ubuntu-latest | macos-latest)` runs the real node-pty flows; under `CI` a PTY test that cannot run (node-pty cannot spawn, tmux missing on Linux) exits non-zero rather than skipping. `TUI memory budget (512 MB)` runs the normal and `LAZYHUB_SCALE=1` journeys in one job, each under `-m 512m`. **Markdown-only PRs:** the first job, `Detect changes`, diffs the whole PR (`base...head`, `fetch-depth: 0`, plain git/bash) and sets `code=false` only when every changed file matches `*.md` (any directory). Every other job has `needs: changes` and `if: needs.changes.outputs.code == 'true'`; a skipped job counts as passing for required checks, so docs-only PRs merge without running the suite. Pushes to `main` and any diff failure always set `code=true`. Do not replace this with `on.pull_request.paths-ignore`: that stops the required checks from reporting at all and the PR stays BLOCKED. The workflow has a `concurrency` group that cancels superseded PR runs (never `main` pushes). Required checks on `main`: `Check`, `Dependency audit`, `PTY E2E (ubuntu-latest)`, `PTY E2E (macos-latest)`, `TUI memory budget (512 MB)`.
 
 > **Amended by [Decision 9](ARCHITECT_DECISIONS.md) / #138 (2026-06-08):** the original "no coverage upload, no GitHub-posting reporters" rule is superseded for coverage only. `ci.yml`'s `check` job now also runs `npm run test:coverage`, uploads the `coverage/` artifact, and — on PRs — posts a diff-aware Vitest coverage comment (comparing against base-branch coverage). Hard thresholds live in `vite.config.js` (statements 48, branches 58, functions 45, lines 48). This is a deliberate, scoped exception; do not generalize it to other reporters or external services.
 
@@ -170,7 +172,7 @@ Then: explicit list of files deleted, files added, files modified.
 - Migrating to GitLab CI / Circle / Buildkite. Stay on GitHub Actions.
 - Self-hosted runners. ubuntu-latest is fine.
 - Caching beyond `actions/setup-node`'s built-in npm cache.
-- Multi-version Node testing. Node 22 only.
+- Multi-version Node testing beyond the `Test (Node 20)` job (engines floor: unit suite only) and the Node 20 Alpine smoke.
 - Notarized/signed binaries. We ship via npm + homebrew; npm doesn't sign, brew handles its own checksum.
 
 ---

@@ -3,7 +3,7 @@
 // LAZYHUB_GH_LATENCY_MS (slow search/list), LAZYHUB_GH_FAIL_ONCE_FILE (first search fails),
 // LAZYHUB_GH_STUB_STDERR + LAZYHUB_GH_STUB_EXIT (search fails with stderr),
 // LAZYHUB_GH_STUB_EMPTY (search returns no results).
-import { appendFileSync, existsSync, writeFileSync } from 'node:fs'
+import { appendFileSync, writeFileSync } from 'node:fs'
 
 const PR = {
   number: 186,
@@ -49,10 +49,16 @@ export default function handle(args, out) {
   if (process.env.LAZYHUB_GH_LOG) appendFileSync(process.env.LAZYHUB_GH_LOG, `${JSON.stringify(args)}\n`)
   const latency = Number(process.env.LAZYHUB_GH_LATENCY_MS || 0)
   if (latency > 0 && isSearch) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, latency)
-  if (process.env.LAZYHUB_GH_FAIL_ONCE_FILE && a0 === 'api' && a1 === 'graphql' && !existsSync(process.env.LAZYHUB_GH_FAIL_ONCE_FILE)) {
-    writeFileSync(process.env.LAZYHUB_GH_FAIL_ONCE_FILE, 'failed')
-    process.stderr.write('stub gh failure: rate limit\n')
-    process.exit(1)
+  if (process.env.LAZYHUB_GH_FAIL_ONCE_FILE && a0 === 'api' && a1 === 'graphql') {
+    // 'wx' is atomic: of several concurrent graphql calls exactly one creates the
+    // marker and fails; the rest see EEXIST and are served. A check-then-write
+    // let two calls fail together, which the single-retry flow does not expect.
+    let first = true
+    try { writeFileSync(process.env.LAZYHUB_GH_FAIL_ONCE_FILE, 'failed', { flag: 'wx' }) } catch { first = false }
+    if (first) {
+      process.stderr.write('stub gh failure: rate limit\n')
+      process.exit(1)
+    }
   }
   if (process.env.LAZYHUB_GH_STUB_STDERR && isSearch) {
     process.stderr.write(process.env.LAZYHUB_GH_STUB_STDERR)
