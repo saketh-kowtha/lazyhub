@@ -68,7 +68,9 @@ describe('NewPRDialog form flow', () => {
       return { status: 0 }
     })
     const view = renderWithProviders(<NewPRDialog repo="owner/repo" onClose={vi.fn()} />)
-    await flush()
+    // Key handlers register in a passive effect and close over the committed render;
+    // the default base appearing means the mount effects have committed.
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('main'))
     await sendInput('', { tab: true })
     await sendInput('', { tab: true })
     await sendInput('', { tab: true })
@@ -80,10 +82,13 @@ describe('NewPRDialog form flow', () => {
   it('keeps field navigation, branch suggestion, and trimmed creation payload', async () => {
     const onClose = vi.fn()
     const onCreated = vi.fn()
-    renderWithProviders(<NewPRDialog repo="owner/repo" onClose={onClose} onCreated={onCreated} />)
-    await flush()
+    const view = renderWithProviders(<NewPRDialog repo="owner/repo" onClose={onClose} onCreated={onCreated} />)
+    // The default base and current-branch hint arrive from async mount effects;
+    // key handlers close over the committed render, so wait until both are on screen.
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('main'))
     await sendInput('  Review dialog  ')
     await sendInput('', { tab: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('[y]'))
     await sendInput('y')
     await sendInput('', { tab: true })
     await sendInput('', { tab: true, shift: true })
