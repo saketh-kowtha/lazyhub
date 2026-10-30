@@ -304,3 +304,33 @@ Use `src/theme/`, `src/ui/`, the current screen components and committed mockups
 ## 14. Out of scope for this design reference
 
 This document does not set product stage, release status, or a roadmap for AI, editor, approval or community features. Use [ROADMAP.md](ROADMAP.md) for those decisions. Theme changes remain governed by the TOML schema and the token contracts in §§3 and 12.
+
+---
+
+## 15. Responsive layout
+
+Mockups: [`docs/mockups/responsive-layout.md`](mockups/responsive-layout.md). Issue #401.
+
+**One source of truth.** `useTerminalSize()` (`src/hooks/useTerminalSize.js`) subscribes to the stdout `resize` event, trailing-debounces it (40 ms) and re-renders the app with `{columns, rows}`; on a real change it clears the screen so no cell from the previous geometry survives. `computeLayout()` / `useLayout()` (`src/hooks/useLayout.js`) turn that size into the layout. Components must not cache `stdout.columns`.
+
+**Breakpoints** (columns unless stated):
+
+| Name | Condition | Sidebar | Preview | Header / footer |
+|---|---|---|---|---|
+| too small | cols < 40 or rows < 10 | none | none | one "Terminal too small (needs 40x10)" message |
+| narrow | < 80 | tab strip row | none | status bar drops age and filter |
+| medium | 80-109 | shown | collapsed | footer drops trailing keys to fit |
+| wide | 110-179 | shown | allowed | full |
+| ultrawide | >= 180 | shown | allowed | full + AI side panel |
+
+Additional rules: the sidebar also collapses when rows < 16; the footer is hidden (compact) when rows < 20; the PR hover preview needs rows >= 23 and cols >= 70.
+
+**`[layout]` config is a preference, not a command.** `sidebar_width` is honoured but clamped so the main column keeps 50 columns; `preview_width` is clamped likewise; `sidebar = false` and `preview_panel = false` always turn the element off. A breakpoint may hide or shrink an element the config asks for when there is no room; config can never force an element into a terminal that cannot hold it.
+
+**Truncation rules.** Nothing wraps and nothing is cut silently:
+- Footer hints render on exactly one row. When they do not fit, the **last** keys in the list (lowest priority) are dropped first; `? help` stays; a single remaining hint is ellipsized.
+- The status bar is one row. Zones drop in this order: refresh age, filter, repo and item count; the degraded banner ellipsizes its message but always keeps the retry hint.
+- Titles, pane headers, sidebar labels and help rows use `…` truncation (`wrap="truncate"` or `truncateEllipsis`), never mid-word wrapping.
+- Overlays (help, palette, which-key) clamp to the space the layout gives them and clip rows at the bottom rather than overflow.
+
+**Stale frames.** Ink repaints synchronously on resize with the previous React size; `useTerminalSize` turns terminal auto-wrap (DECAWM) off for that window so the stale frame is clipped rather than wrapped, clears the screen when the debounced size lands, then turns auto-wrap back on.

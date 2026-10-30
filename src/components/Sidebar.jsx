@@ -60,7 +60,7 @@ export function Sidebar({ currentPane, onSelect, height, visiblePanes, paneLabel
       {/* Brand */}
       <Box paddingX={1} flexDirection="column">
         <Text color={t.ui.selected} bold wrap="truncate">⌂ lazyhub</Text>
-        {repoDisplay && <Text color={t.ui.muted} wrap="truncate">{repoDisplay.slice(0, INNER)}</Text>}
+        {repoDisplay && <Text color={t.ui.muted} wrap="truncate">{truncateEllipsis(repoDisplay, INNER)}</Text>}
       </Box>
 
       {divider}

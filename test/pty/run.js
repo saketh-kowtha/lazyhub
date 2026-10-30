@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join, delimiter } from 'path'
 import pty from 'node-pty'
-import { nodePtyProblem, skipOrFail } from './fixtures.js'
+import { nodePtyProblem, skipOrFail, TerminalScreen } from './fixtures.js'
 import { installShim } from '../support/gh-shim/shim.mjs'
 import { GH_STDERR } from '../../src/executor/gh-stderr-fixtures.js'
 
@@ -41,16 +41,17 @@ function waitForScreen(getText, pattern, label, timeoutMs = 8000) {
   })
 }
 
-function spawnTerminal(env, args = []) {
+function spawnTerminal(env, args = [], { cols = 80, rows = 24 } = {}) {
   const term = pty.spawn(process.execPath, [BIN, ...args], {
     name: 'xterm-256color',
-    cols: 80,
-    rows: 24,
+    cols,
+    rows,
     cwd: ROOT,
     env,
   })
   return {
     write: data => term.write(data),
+    resize: (cols, rows) => term.resize(cols, rows),
     kill: () => term.kill(),
     onData: cb => term.onData(cb),
     onExit: cb => term.onExit(cb),
@@ -93,7 +94,7 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
 
   try {
     if (useTmux) {
-      const session = `lazyhub-pty-${Date.now()}`
+      const session = `lazyhub-pty-${Date.now()}-${process.pid}`
       // The tmux server inherits this process's env, and Ink renders only the final frame when CI is set.
       const command = `(unset CI GITHUB_ACTIONS; cd ${JSON.stringify(ROOT)} && PATH=${JSON.stringify(env.PATH)} HOME=${JSON.stringify(env.HOME)} USER=${JSON.stringify(env.USER)} GHUI_REPO=${env.GHUI_REPO} TERM=xterm-256color COLORTERM=truecolor NO_COLOR=1 LAZYHUB_NO_DAEMON=1 node ${JSON.stringify(BIN)} 2>${JSON.stringify(join(temp, 'tmux-stderr.log'))}); echo "lazyhub exited: $?"; sleep 60`
       const started = spawnSync('tmux', ['new-session', '-d', '-x', '80', '-y', '24', '-s', session, command])
@@ -233,8 +234,8 @@ async function runDegradedFlow() {
     term.onData(data => { output += data })
     await waitForScreen(() => output, /stub gh failure|rate limit|press r to retry/, 'degraded banner')
     await sendUntil(async () => term.write('r'), () => output, /PTY harness fixture PR/, 'degraded recovery')
-    // The 80-column status line truncates the hint ("press r to ..."), so match its stable prefix.
-    assert.match(stripAnsi(output), /press r to/)
+    // The banner ellipsizes its message, never the retry hint.
+    assert.match(stripAnsi(output), /press r to retry/)
     term.write('q')
     await waitForExit(term)
   } finally {
@@ -320,6 +321,122 @@ async function runSwrCacheFlow() {
   }
 }
 
+// Responsive layout: 120x40 -> 60x18 -> too small -> 120x40 on a real PTY, replayed through a
+// terminal model. After each resize the frame must fit the new size (nothing wrapped, nothing
+// from the previous geometry left behind) and the breakpoint must have changed.
+async function waitUntil(check, label, timeoutMs = 8000) {
+  const started = Date.now()
+  for (;;) {
+    const verdict = check()
+    if (verdict === true) return
+    if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for ${label}\n--- screen ---\n${verdict}`)
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+}
+
+async function runResizeFlow() {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-resize-'))
+  const stubBin = installGhStub(temp)
+  const screen = new TerminalScreen(120, 40)
+  let term
+  try {
+    term = spawnTerminal(childEnv(stubBin, temp), [], { cols: 120, rows: 40 })
+    // Frames the app wrote for the old size may still be in flight when the PTY is resized; a real
+    // terminal shows those at the old geometry. The app's first answer to SIGWINCH (it switches
+    // auto-wrap off) marks the point where the new geometry applies.
+    let pendingSize = null
+    term.onData(data => {
+      if (pendingSize && data.includes('\x1b[?7l')) {
+        const [head, ...rest] = data.split('\x1b[?7l')
+        screen.feed(head)
+        screen.resize(pendingSize.cols, pendingSize.rows)
+        pendingSize = null
+        screen.feed('\x1b[?7l' + rest.join('\x1b[?7l'))
+        return
+      }
+      screen.feed(data)
+    })
+    const showing = (re, want = true) => () => (re.test(screen.text()) === want ? true : screen.text())
+    await waitUntil(showing(/Focus|Pull Requests/), 'startup at 120x40')
+    await settle()
+    await sendUntil(() => writeChord(term, 'gp'), () => screen.text(), /PTY harness fixture PR/, 'PR list at 120x40')
+    await waitUntil(showing(/⌂ lazyhub/), 'sidebar at 120x40')
+    assert.ok(screen.text().split('\n').some(l => /^─{120}$/.test(l.trim())), 'footer rule spans 120 columns')
+
+    const resizeTo = (cols, rows) => {
+      const wrapsBefore = screen.wraps
+      pendingSize = { cols, rows }
+      term.resize(cols, rows)
+      return () => assert.equal(screen.wraps, wrapsBefore, `a line wider than ${cols} columns was written after resizing to ${cols}x${rows}`)
+    }
+
+    // shrink: the sidebar collapses to the tab strip and nothing wider than 60 columns is drawn
+    const check60 = resizeTo(60, 18)
+    await waitUntil(showing(/⌂ lazyhub/, false), 'sidebar collapsed at 60x18')
+    await waitUntil(showing(/#186/), 'PR list at 60x18')
+    check60()
+    assert.ok(screen.text().split('\n').every(l => [...l].length <= 60), 'every row fits 60 columns')
+
+    // too small: one clear message instead of a broken frame
+    const check30 = resizeTo(30, 8)
+    await waitUntil(showing(/Terminal too small/), 'too-small message at 30x8')
+    assert.match(screen.text(), /needs 40x10/)
+    assert.doesNotMatch(screen.text(), /#186/, 'no list content behind the too-small message')
+    check30()
+
+    // grow back: the full layout returns, repainted at the new width
+    const check120 = resizeTo(120, 40)
+    await waitUntil(showing(/⌂ lazyhub/), 'sidebar restored at 120x40')
+    await waitUntil(showing(/Terminal too small/, false), 'too-small message cleared')
+    await waitUntil(() => (screen.text().split('\n').some(l => /^─{120}$/.test(l.trim())) ? true : screen.text()), 'footer rule repainted at 120 columns')
+    check120()
+
+    term.write('q')
+    await waitForExit(term)
+  } finally {
+    try { term?.kill() } catch {}
+    rmSync(temp, { recursive: true, force: true })
+  }
+}
+
+// The same flow inside a real terminal emulator (tmux), which crops and reflows like a user's terminal.
+async function runTmuxResizeFlow() {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-tmuxresize-'))
+  const stubBin = installGhStub(temp)
+  const env = childEnv(stubBin, temp)
+  const session = `lazyhub-resize-${Date.now()}-${process.pid}`
+  const tmux = (...args) => spawnSync('tmux', args).stdout.toString()
+  const command = `(unset CI GITHUB_ACTIONS; cd ${JSON.stringify(ROOT)} && PATH=${JSON.stringify(env.PATH)} HOME=${JSON.stringify(env.HOME)} USER=${JSON.stringify(env.USER)} GHUI_REPO=${env.GHUI_REPO} TERM=xterm-256color COLORTERM=truecolor NO_COLOR=1 LAZYHUB_NO_DAEMON=1 node ${JSON.stringify(BIN)} 2>${JSON.stringify(join(temp, 'tmux-stderr.log'))}); sleep 60`
+  try {
+    const started = spawnSync('tmux', ['new-session', '-d', '-x', '120', '-y', '40', '-s', session, command])
+    assert.equal(started.status, 0, started.stderr?.toString())
+    const capture = () => tmux('capture-pane', '-p', '-t', session)
+    const frameFits = (cols, rows) => {
+      const lines = capture().replace(/\n$/, '').split('\n')
+      return lines.length <= rows && lines.every(l => [...l].length <= cols) ? true : capture()
+    }
+    await waitForScreen(capture, /Focus|Pull Requests/, 'tmux startup at 120x40')
+    await waitForScreen(capture, /⌂ lazyhub/, 'tmux sidebar at 120x40')
+    for (const [cols, rows, want, absent] of [[60, 18, /Pull Requests|Focus/, /⌂ lazyhub/], [81, 24, /⌂ lazyhub/, /Terminal too small/], [50, 15, /Pull Requests|Focus/, /⌂ lazyhub/], [120, 40, /⌂ lazyhub/, /Terminal too small/]]) {
+      tmux('resize-window', '-t', session, '-x', String(cols), '-y', String(rows))
+      await waitForScreen(capture, want, `tmux ${cols}x${rows}`)
+      await waitUntil(() => (absent.test(capture()) ? capture() : true), `tmux ${cols}x${rows}: stale content gone`)
+      await waitUntil(() => frameFits(cols, rows), `tmux ${cols}x${rows}: frame fits`)
+    }
+    // rapid repeated resizes settle on the final size
+    for (const [cols, rows] of [[100, 30], [55, 16], [90, 26], [70, 20], [120, 40]]) {
+      tmux('resize-window', '-t', session, '-x', String(cols), '-y', String(rows))
+      await new Promise(resolve => setTimeout(resolve, 20))
+    }
+    await waitUntil(() => (/⌂ lazyhub/.test(capture()) ? true : capture()), 'tmux settled at 120x40 after a resize burst')
+    await waitUntil(() => frameFits(120, 40), 'tmux frame fits after a resize burst')
+    spawnSync('tmux', ['send-keys', '-t', session, 'q'])
+  } finally {
+    spawnSync('tmux', ['kill-session', '-t', session])
+    rmSync(temp, { recursive: true, force: true })
+  }
+}
+
 const ptyProblem = nodePtyProblem(pty, ROOT)
 if (ptyProblem) skipOrFail(`node-pty cannot spawn in this shell: ${ptyProblem}`)
 
@@ -339,9 +456,11 @@ await runDayOneErrorFlow({
 })
 await runPerfFlow()
 await runSwrCacheFlow()
+await runResizeFlow()
 
 if (spawnSync('tmux', ['-V']).status === 0) {
   await runLazyhubFlow({ useTmux: true })
+  await runTmuxResizeFlow()
 } else if (process.env.CI) {
   // CI installs tmux on Linux; macOS runners do not and the tmux flow is Linux-only coverage.
   if (process.platform === 'linux') skipOrFail('tmux is not installed but the CI job installs it')
