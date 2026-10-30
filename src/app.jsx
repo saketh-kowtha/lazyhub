@@ -177,15 +177,27 @@ export function App({ repo }) {
   const detailPanelWidth = 0
 
   // ─── AI navigate callback ─────────────────────────────────────────────────
-  const handleAINavigate = useCallback(({ pane: tp, itemNumber, filter } = {}) => {
+  const handleAINavigate = useCallback(({ pane: tp, view: tv, itemNumber, filter } = {}) => {
     setShowAI(false)
     const validPane = PANES.includes(tp) ? tp : null
     if (validPane) {
       setPane(validPane)
-      setView('list')
-      setSelectedItem(null)
+      setActionsBranch(null)
       savedListPosition.current = {}
       pendingNavigationRef.current = { itemNumber, filter }
+      // "Go to PR/issue #N" and "open diff" carry a view + item number (B-86).
+      const num = Number.isInteger(itemNumber) && itemNumber > 0 ? itemNumber : null
+      const canOpen = num != null && (
+        (validPane === 'prs' && (tv === 'detail' || tv === 'diff')) ||
+        (validPane === 'issues' && tv === 'detail')
+      )
+      if (canOpen) {
+        setSelectedItem({ number: num })
+        setView(tv)
+      } else {
+        setSelectedItem(null)
+        setView('list')
+      }
     }
   }, [PANES]) // eslint-disable-line react-hooks/exhaustive-deps
 
