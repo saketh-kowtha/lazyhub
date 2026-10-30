@@ -427,3 +427,5 @@ A test suite that is actively useful has these properties:
 - **The property tests run in <30s.** If they're slow, they get skipped. `fast-check` defaults to 100 runs per property — tune `numRuns` down if needed, but don't skip the tests.
 
 - **The AI-generated tests are reviewed and owned.** Generated tests that are vague or trivially covered elsewhere get deleted. The ones that stay are specific, named after the exact edge case they cover, and documented with a comment explaining why a human wouldn't have written it.
+
+<!-- throwaway -->
