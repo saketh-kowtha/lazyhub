@@ -183,3 +183,12 @@ describe('[defaults].repo (#290)', () => {
     expect(loadConfig({ configPath }).defaults.repo_host).toBe('')
   })
 })
+
+describe('upsert into a section whose last line has no trailing newline', () => {
+  it.each(['[app]\nmouse = true', '[app]'])('keeps the file valid TOML (%j)', text => {
+    writeToml(text)
+    writeConfig({ app: { default_pane: 'prs' } }, { configPath })
+    expect(parse(readFileSync(configPath, 'utf8')).app.default_pane).toBe('prs')
+    expect(loadConfig({ configPath }).app.default_pane).toBe('prs')
+  })
+})

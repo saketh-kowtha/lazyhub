@@ -160,6 +160,8 @@ function upsertScalar(text, section, key, value) {
     }
   }
 
+  // A final line without a trailing newline would otherwise be glued to the new key.
+  if (sectionEnd > 0 && !lines[sectionEnd - 1].endsWith('\n')) lines[sectionEnd - 1] += '\n'
   lines.splice(sectionEnd, 0, `${assignment}\n`)
   return lines.join('')
 }

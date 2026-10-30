@@ -457,3 +457,7 @@ To prevent merge conflicts and "branch drift":
 - Symptom: `TUI memory budget (512 MB)` and `... at scale` failed with `Failed to load native module: pty.node, checked: build/Release, build/Debug, prebuilds/linux-x64` before the journey ran.
 - Root cause: the jobs installed on the `ubuntu-latest` runner (ubuntu-26.04), where node-pty compiles `pty.node` from source (1.1.0 ships no linux prebuilds), then bind-mounted that tree into `node:22-bookworm`; the host-built binary needs a newer glibc/libstdc++ than bookworm provides, so `dlopen` fails.
 - Fix: a `npm rebuild node-pty` step runs inside `node:22-bookworm` (uncapped, as node-gyp needs more than 512 MB) before each capped journey run. No dependency or lockfile change.
+**B-88 — Saving a setting corrupted `lazyhub.toml` when the last section line had no trailing newline**
+- Symptom: with a hand-edited `[app]` section ending in `mouse = true` (no final newline), changing a setting that adds a new key (e.g. default pane) wrote `mouse = truedefault_pane = "prs"`, producing invalid TOML; the next launch discarded the whole user config.
+- Root cause: `upsertScalar` in `src/config/writer.js` spliced the new assignment after the section's last line without checking that line ended with `\n`.
+- Fix: terminate the preceding line before inserting. Regression test: `src/config/writer.test.js` ("upsert into a section whose last line has no trailing newline").
