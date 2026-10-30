@@ -457,3 +457,7 @@ To prevent merge conflicts and "branch drift":
 - Symptom: `TUI memory budget (512 MB)` and `... at scale` failed with `Failed to load native module: pty.node, checked: build/Release, build/Debug, prebuilds/linux-x64` before the journey ran.
 - Root cause: the jobs installed on the `ubuntu-latest` runner (ubuntu-26.04), where node-pty compiles `pty.node` from source (1.1.0 ships no linux prebuilds), then bind-mounted that tree into `node:22-bookworm`; the host-built binary needs a newer glibc/libstdc++ than bookworm provides, so `dlopen` fails.
 - Fix: a `npm rebuild node-pty` step runs inside `node:22-bookworm` (uncapped, as node-gyp needs more than 512 MB) before each capped journey run. No dependency or lockfile change.
+**B-80 — Multi-state PR filters (e.g. Open+Merged) only listed open PRs (#368)**
+- Symptom: with more than one state filter active in the PR pane, closed/merged PRs never appeared.
+- Root cause: `list.jsx` asks `listPRs` for `state: 'all'` on multi-state sets, but `prSearchQuery` treated unknown states as `open`.
+- Fix: `state: 'all'` now adds no state qualifier to the search query; the client-side filter narrows it. Regression test in `src/executor.test.js`.

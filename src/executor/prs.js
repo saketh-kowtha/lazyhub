@@ -12,9 +12,12 @@ function compact(value) {
 }
 
 function prSearchQuery(repo, filter) {
-  const state = PR_SEARCH_STATES.has(filter.state) ? filter.state : 'open'
+  // 'all' (multi-state list filters) must not add a state qualifier; unknown/missing defaults to open.
+  const state = filter.state === 'all' ? 'all' : PR_SEARCH_STATES.has(filter.state) ? filter.state : 'open'
   const parts = [`repo:${repo}`, 'is:pr']
-  if (state === 'merged') {
+  if (state === 'all') {
+    // no state qualifier: open, closed and merged PRs
+  } else if (state === 'merged') {
     parts.push('is:merged')
   } else {
     parts.push(`state:${state}`)
