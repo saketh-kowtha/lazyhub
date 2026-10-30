@@ -128,3 +128,23 @@ describe('shared issue editor contracts', () => {
     await waitForExpectation(() => expect(addIssueComment).toHaveBeenCalledWith('owner/repo', 11, 'lAr'))
   })
 })
+
+describe('issue list cursor after the list shrinks', () => {
+  it('keeps a valid selection when a refetch returns fewer issues', async () => {
+    const second = { ...issue, number: 12, title: 'Second issue' }
+    useGh.mockImplementation(fn => {
+      const [data, setData] = React.useState(fn === listIssues ? [issue, second] : null)
+      return { data, loading: false, error: null, refetch: () => setData(fn === listIssues ? [issue] : null) }
+    })
+    const onSelectIssue = vi.fn()
+    const view = renderWithProviders(<IssueList repo="owner/repo" onSelectIssue={onSelectIssue} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Second issue'))
+    await flush(20)
+    await sendInput('G')
+    await sendInput('r')
+    await waitForExpectation(() => expect(view.lastFrame()).not.toContain('Second issue'))
+    await flush(20)
+    await sendInput('', { return: true })
+    expect(onSelectIssue).toHaveBeenCalledWith(expect.objectContaining({ number: 11 }))
+  })
+})
