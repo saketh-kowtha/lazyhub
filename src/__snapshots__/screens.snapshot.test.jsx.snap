@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 actions 1`] = `
-" ⎇ ⎇ │ ⚑ ⚑ │ ⌥ ⌥ │ ▎ ↯ Actions │ ✦ ✦
+" ⎇ │ ⚑ │ ⌥ │ ▎ ↯ Actions │ ✦
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ↯  Actions                                                                                       │
 │──────────────────────────────────────────────────────────────────────────────────────────────────│
@@ -20,15 +20,15 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
+│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ↯  Actions  ·  owner/repo                                                               ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ Tab pane  ┊  Enter / l logs │ Ctrl+R re-run │ X cancel                          │? help
-   ┊  r refresh │ , settings"
+ j/k nav  ┊  Enter / l logs │ Ctrl+R re-run │ X cancel  ┊  Tab pane  ┊  r refresh          │ ? help"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 branches 1`] = `
-" ⎇ ⎇ │ ⚑ ⚑ │ ▎ ⌥ Branches │ ↯ ↯ │ ✦ ✦
+" ⎇ │ ⚑ │ ▎ ⌥ Branches │ ↯ │ ✦
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ⌥  Branches                                                                                      │
 │──────────────────────────────────────────────────────────────────────────────────────────────────│
@@ -47,11 +47,11 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
+│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ⌥  Branches  ·  owner/repo                                                              ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ Tab pane  ┊  Enter checkout │ n new │ Ctrl+X delete │ p push                     │? help
-   ┊  r refresh │ , settings"
+ j/k nav  ┊  Enter checkout │ n new │ Ctrl+X delete │ p push  ┊  Tab pane  ┊  r refresh    │ ? help"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 command palette 1`] = `
@@ -109,30 +109,30 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 help overlay 1`] = `
-"      ╭──────────────────────────────────────────────────────────────────────────────────────╮
-      │                                                                                      │
-      │  ⌨  Keyboard Reference — ⎇  Pull Requests list                  [Esc/Enter/?] close  │
-      │  ⎇  Pull Requests list───────────────────    Global (any view)                       │
-      │                                              ──────────────────────────────────────  │
-      │  ggk                 Jump to the top down    Ctrl+A              AI assistant        │
-      │  r                 Refresh the active m      1-9                 jump to pane        │
-      │  /                 lSearch the active        r                   refresh             │
-      │  mnter              lMerge selected PR       o                   browser             │
-      │  a              TogglApprove selected PR     ?                   helpch              │
-      │  x              sRequest changes on          ,                   settings            │
-      │  A               seleEdit PR assignees       g h                 home                │
-      │  b                Checkout PR branch wers    g i                 issues              │
-      │  o                lCoOpen PR in browser      g b                 branches            │
-      │  f                 cCycle PR filter state    g n                 inboxns             │
-      │  M             Toggle merged PRs when        Ctrl+D              debug state         │
-      │  @             auto-mFilter PRs by author    q / Esc             back                │
-      │  n                   Create a new PR                                                 │
-      │                                                                                      │
-      │  ──────────────────────────────────────────────────────────────────────────────────  │
-      │                                                                                      │
-      │  Config: ~/.config/lazyhub/lazyhub.toml   Docs: https://saketh-kowtha.github.io/lgh  │
-      ╰──────────────────────────────────────────────────────────────────────────────────────╯
-─? / Esc / Enter close help─────────────────────────────────────────────────────────────────────────"
+"           ╭────────────────────────────────────────────────────────────────────────────╮
+           │                                                                            │
+           │  ⌨  Keyboard Reference                                [Esc/Enter/?] close  │
+           │                                                                            │
+           │  ⎇  Pull Requests list                  Global (any view)                  │
+           │  ───────────────────────────────────    ─────────────────────────────────  │
+           │                                                                            │
+           │  j/k                 Move the curso…    Ctrl+A              AI assistant   │
+           │  gg                  Jump to the top    Tab                 pane           │
+           │  G                   Jump to the bo…    1-9                 jump to pane   │
+           │  r                   Refresh the ac…    r                   refresh        │
+           │  /                   Search the act…    o                   browser        │
+           │  Enter               Open PR detail     /                   search         │
+           │  d                   Open PR diff       ?                   help           │
+           │  m                   Merge selected…    ,                   settings       │
+           │  M                   Toggle auto-me…    g h                 home           │
+           │  ────────────────────────────────────────────────────────────────────────  │
+           │  x                   Request change…    g i                 issues         │
+           │  Config:~/.config/lazyhub/lazyhub.……Docs: https://saketh-kowtha.github.io  │
+           │  l                   Edit PR labels     g a                 actions        │
+           ╰────────────────────────────────────────────────────────────────────────────╯
+ ⎇  Pull Requests  ·  owner/repo                                               [OVERLAY] ⟳ just now
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ ? / Esc / Enter close help"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 issue detail 1`] = `
@@ -163,7 +163,7 @@ assignee @octocat
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 issue list 1`] = `
-" ⎇ ⎇ │ ▎ ⚑ Issues │ ⌥ ⌥ │ ↯ ↯ │ ✦ ✦
+" ⎇ │ ▎ ⚑ Issues │ ⌥ │ ↯ │ ✦
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ⚑  Issues                                                                                        │
 │──────────────────────────────────────────────────────────────────────────────────────────────────│
@@ -186,11 +186,11 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ⚑  Issues  ·  owner/repo                                                                ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ Tab pane  ┊  Enter open │ n new │ f filter  ┊  / search │ r refresh │ , settings│ ? help"
+ j/k nav  ┊  Enter open │ n new │ f filter  ┊  / search  ┊  Tab pane  ┊  r refresh         │ ? help"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 notifications 1`] = `
-" ⎇ ⎇ │ ⚑ ⚑ │ ⌥ ⌥ │ ↯ ↯ │ ▎ ✦ Notifications
+" ⎇ │ ⚑ │ ⌥ │ ↯ │ ▎ ✦ Notifications
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ✦  Notifications                                                                                 │
 │──────────────────────────────────────────────────────────────────────────────────────────────────│
@@ -213,7 +213,7 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ✦  Notifications  ·  owner/repo                                                         ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ Tab pane  ┊  Enter open │ u mark read │ U mark all  ┊  r refresh │ , settings   │ ? help"
+ j/k nav  ┊  Enter open │ u mark read │ U mark all  ┊  Tab pane  ┊  r refresh │ , settings │ ? help"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 pr detail 1`] = `
@@ -244,7 +244,7 @@ labels testing ux
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 pr list 1`] = `
-" ▎ ⎇ Pull Requests │ ⚑ ⚑ │ ⌥ ⌥ │ ↯ ↯ │ ✦ ✦
+" ▎ ⎇ Pull Requests │ ⚑ │ ⌥ │ ↯ │ ✦
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ⎇  Pull Requests                                                                                 │
 │──────────────────────────────────────────────────────────────────────────────────────────────────│
@@ -263,11 +263,11 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
+│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ⎇  Pull Requests  ·  owner/repo                                                         ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ Tab pane  ┊  Enter open │ d diff │ a approve │ m merge │ f filter                │? help
-   ┊  / search │ r refresh │ , settings"
+ j/k nav  ┊  Enter open │ d diff │ a approve │ m merge │ f filter  ┊  / search             │ ? help"
 `;
 
 exports[`major screen golden snapshots > covers wide PR list and diff frames > 120x30 diff view 1`] = `
@@ -329,9 +329,9 @@ exports[`major screen golden snapshots > covers wide PR list and diff frames > 1
 │                 │                                                                                │
 │                 │                                                                                │
 │ ──────────────  │                                                                                │
-│ ? help · S cfg… ╰────────────────────────────────────────────────────────────────────────────────╯
+│ ? help · S cfg… │                                                                                │
+╰─────────────────╰────────────────────────────────────────────────────────────────────────────────╯
  ⎇  Pull Requests  ·  owner/repo                                                         ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ Tab pane  ┊  Enter open │ d diff │ a approve │ m merge │ f filter                │? help
-   ┊  / search │ r refresh │ , settings"
+ j/k nav  ┊  Enter open │ d diff │ a approve │ m merge │ f filter  ┊  / search             │ ? help"
 `;

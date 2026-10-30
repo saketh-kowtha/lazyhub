@@ -55,7 +55,10 @@ export function PRListView({
   const effectivePopoverWidth = Math.min(POPOVER_WIDTH, termCols - 4)
   // Rows the popover floats over (list-relative y = 1 + row index).  Their titles
   // are blanked so no orphan fragments show to the popover's right.
-  const popoverVisible = !!selectedPR && !dialog && !popoverDismissed
+  // The preview collapses when the pane cannot hold it (responsive layout): it needs
+  // the list's chrome (header, status, footer) plus its own height, and 70+ columns.
+  const popoverFits = termRows >= POPOVER_HEIGHT + 8 && termCols >= 70
+  const popoverVisible = !!selectedPR && !dialog && !popoverDismissed && popoverFits
   const popoverTop = popoverVisible
     ? calcPopoverPosition({
         anchor: popoverAnchor,

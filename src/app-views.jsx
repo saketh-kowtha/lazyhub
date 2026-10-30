@@ -5,6 +5,7 @@ import { Box, Text } from 'ink'
 import { APP_CONFIG as _config, DIALOG_KEYS, PANES, PANE_ICONS, PANE_LABELS } from './app-keys.js'
 import { AppContext } from './context.js'
 import { Sidebar } from './components/Sidebar.jsx'
+import { TooSmall } from './components/TooSmall.jsx'
 import { TabStrip } from './components/TabStrip.jsx'
 import { Toaster } from './components/Toaster.jsx'
 import { StatusBar } from './components/StatusBar.jsx'
@@ -37,8 +38,10 @@ export function renderAppView(ctx) {
     goToDiff, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
-    showPalette, showSidebar, sidebarWidth, t, toasts, view,
+    showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
   } = ctx
+  // ─── Below the minimum size: one clear message instead of a broken frame ──
+  if (tooSmall) return <TooSmall cols={columns} rows={rows} minCols={minCols} minRows={minRows} />
   // ─── AI assistant overlay ─────────────────────────────────────────────────
   if (showAI) {
     return (
@@ -113,7 +116,8 @@ export function renderAppView(ctx) {
             )}
           <Box flexDirection="column" flexGrow={1} overflow="hidden"
               justifyContent="center" alignItems="center">
-            <HelpOverlay pane={view === 'detail' && selectedItem?._kind ? selectedItem._kind : pane} view={view} actionCtx={paneState.actionCtx} onClose={() => setShowHelp(false)} />
+            <HelpOverlay pane={view === 'detail' && selectedItem?._kind ? selectedItem._kind : pane} view={view} actionCtx={paneState.actionCtx} onClose={() => setShowHelp(false)}
+              availableWidth={columns - (showSidebar ? sidebarWidth : 0)} availableHeight={rows - (compactFooter ? 1 : 3)} />
           </Box>
           </Box>
           <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />

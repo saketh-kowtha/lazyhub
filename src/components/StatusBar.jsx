@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useTheme } from '../theme.js'
-import { sanitize } from '../utils.js'
+import { sanitize, displayWidth, truncateEllipsis } from '../utils.js'
 import { firstActionKey } from '../config/actions.js'
 
 const PANE_META = {
@@ -48,34 +48,48 @@ export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode
   }, [])
 
   const meta    = PANE_META[pane] || { icon: '✦', label: pane || '' }
-  const dot     = <Text color={t.ui.dim}>  ·  </Text>
   const chipClr = modeColor(mode, t)
   const narrow  = cols < 100
   const degraded = ghHealth?.degraded
-  const errorText = degraded
-    ? sanitize(ghHealth.failingCount > 1
-      ? `${ghHealth.failingCount} calls failing: ${ghHealth.error?.message || ghHealth.error || 'gh failed'}`
-      : `${ghHealth.error?.message || ghHealth.error || 'gh failed'} - press ${firstActionKey('list.refresh', 'r')} to retry`)
-    : null
+  const multi = degraded && ghHealth.failingCount > 1
+  const detail = degraded ? sanitize(String(ghHealth.error?.message || ghHealth.error || 'gh failed')) : ''
+  const retryHint = degraded && !multi ? ` - press ${firstActionKey('list.refresh', 'r')} to retry` : ''
+  const head = multi ? `${ghHealth.failingCount} calls failing: ` : ''
+
+  // One row, never wraps. Zones (left to right) drop in this order as space runs out:
+  // age, filter, repo/count, then the banner message is ellipsized (the retry hint is kept).
+  const modeW  = mode !== 'NORMAL' ? displayWidth(mode) + 1 : 0
+  const scopeW = scopeIndicator ? displayWidth(String(scopeIndicator)) + 3 : 0
+  const ageW   = !narrow ? displayWidth(`⟳ ${formatAge(mountTime)}`) + 1 : 0
+  const labelW = displayWidth(`${meta.icon}  ${meta.label}`)
+  const inner  = Math.max(0, cols - 2)
+  const bannerRoom = inner - labelW - 2 - modeW - scopeW - (degraded && !narrow ? ageW : 0)
+  const errorText = !degraded ? null
+    : bannerRoom >= displayWidth(retryHint) + 8 ? truncateEllipsis(head + detail, Math.max(1, bannerRoom - displayWidth(retryHint))) + retryHint
+      : `! ${firstActionKey('list.refresh', 'r')} retry`
+  const showAge = !narrow && !errorText
+  const showContext = !errorText || cols >= 140
 
   return (
-    <Box paddingX={1} justifyContent="space-between" backgroundColor={t.ui.headerBg}>
+    <Box paddingX={1} justifyContent="space-between" backgroundColor={t.ui.headerBg} height={1} overflow="hidden">
       {/* Left zone: pane · repo · count · filter */}
-      <Box gap={0}>
-        <Text color={t.ui.selected} bold>{meta.icon}  {meta.label}</Text>
-        {repo && <>{dot}<Text color={t.ui.muted}>{repo}</Text></>}
-        {count != null && <>{dot}<Text color={t.ui.dim}>{count} items</Text></>}
-        {filterState && !narrow && <>{dot}<Text color={t.ui.muted}>{filterState}</Text></>}
+      <Box gap={0} flexShrink={1} overflow="hidden">
+        <Text wrap="truncate-end">
+          <Text color={t.ui.selected} bold>{meta.icon}  {meta.label}</Text>
+          {showContext && repo && <><Text color={t.ui.dim}>  ·  </Text><Text color={t.ui.muted}>{repo}</Text></>}
+          {showContext && count != null && <><Text color={t.ui.dim}>  ·  </Text><Text color={t.ui.dim}>{count} items</Text></>}
+          {showContext && filterState && !narrow && <><Text color={t.ui.dim}>  ·  </Text><Text color={t.ui.muted}>{filterState}</Text></>}
+        </Text>
       </Box>
 
-      {/* Right zone: mode chip · refresh age · scope */}
-      <Box gap={1}>
-        {errorText && <Text color={t.ci?.fail || t.ui.selected} bold>{errorText}</Text>}
+      {/* Right zone: banner · mode chip · scope · refresh age */}
+      <Box gap={1} flexShrink={0}>
+        {errorText && <Text color={t.ci?.fail || t.ui.selected} bold wrap="truncate">{errorText}</Text>}
         {mode !== 'NORMAL' && (
           <Text color={chipClr} bold>{mode}</Text>
         )}
         {scopeIndicator && <Text color={t.ui.dim}>[{scopeIndicator}]</Text>}
-        {!narrow && <Text color={t.ui.dim}>⟳ {formatAge(mountTime)}</Text>}
+        {showAge && <Text color={t.ui.dim}>⟳ {formatAge(mountTime)}</Text>}
       </Box>
     </Box>
   )
