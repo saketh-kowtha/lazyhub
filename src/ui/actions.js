@@ -68,9 +68,10 @@ function effectiveKeys(config) {
  * Keymap scopes live for a (pane, view) pair, most general first.
  * @param {string} pane pane id
  * @param {string} view 'list' | 'detail' | 'diff' | 'comments'
+ * @param {object} [config] effective config; lets a TOML-declared dashboard tab resolve to 'tab-list'
  * @returns {string[]} keymap scopes live in that context
  */
-export function contextScopes(pane, view = 'list') {
+export function contextScopes(pane, view = 'list', config = undefined) {
   if (view === 'diff') return ['global', 'diff']
   if (view === 'comments') return ['global', 'pr-comments']
   if (view === 'detail') return ['global', pane === 'issues' ? 'issue-detail' : 'pr-detail']
@@ -78,7 +79,9 @@ export function contextScopes(pane, view = 'list') {
     prs: 'pr-list', issues: 'issue-list', branches: 'branch-list',
     actions: 'workflow-list', notifications: 'notification-list',
   }[pane]
-  return listScope ? ['global', listScope] : ['global']
+  if (listScope) return ['global', listScope]
+  const isTab = Array.isArray(config?.tabs) && config.tabs.some(tab => tab?.id === pane)
+  return isTab ? ['global', 'tab-list'] : ['global']
 }
 
 // Preconditions that hide an action from footer/help when it cannot run. `ctx`
@@ -105,6 +108,7 @@ const FOOTER_IDS = {
   'branch-list': ['cursor.down', 'branch.checkout', 'branch.new', 'branch.delete', 'branch.push'],
   'workflow-list': ['cursor.down', 'workflow.logs', 'workflow.rerun', 'workflow.cancel'],
   'notification-list': ['cursor.down', 'notification.open', 'notification.mark-read', 'notification.mark-all'],
+  'tab-list': ['cursor.down', 'tab.open-selected', 'tab.open-browser', 'tab.next-section'],
   'pr-detail': ['cursor.down', 'pr.diff', 'pr.checks', 'pr.approve', 'pr.merge', 'pr.comments', 'pr.open-browser', 'app.back'],
   'issue-detail': ['cursor.down', 'issue.reply', 'issue.labels', 'issue.assignees', 'issue.open-browser', 'app.back'],
   'diff': ['cursor.down', 'diff.next-file', 'diff.next-thread', 'diff.comment', 'diff.file-jump', 'diff.split', 'list.search', 'app.back'],
@@ -116,6 +120,7 @@ const FOOTER_GROUP = { nav: 1, meta: 3 }
 
 // Shared 'list' verbs a full-screen view does not implement (kept out of its help).
 const UNSUPPORTED = {
+  'tab-list': new Set(['list.search']),
   'pr-comments': new Set(['list.search']),
   'issue-detail': new Set(['list.search']),
 }
@@ -142,7 +147,7 @@ function describeAction(id, config) {
  * @returns {{key: string, label: string}[]} footer items
  */
 export function contextFooterHints(pane, view, ctx = {}, config = getActionConfig()) {
-  const scope = contextScopes(pane, view).at(-1)
+  const scope = contextScopes(pane, view, config).at(-1)
   const isList = view === 'list'
   const ids = [
     ...(FOOTER_IDS[scope] || ['cursor.down']),
@@ -176,7 +181,7 @@ export function contextFooterHints(pane, view, ctx = {}, config = getActionConfi
  * @returns {{key: string, label: string, group: string}[]} help rows
  */
 export function contextHelpRows(pane, view, ctx = {}, config = getActionConfig()) {
-  const scopes = contextScopes(pane, view).filter(s => s !== 'global')
+  const scopes = contextScopes(pane, view, config).filter(s => s !== 'global')
   const rows = []
   const seen = new Set()
   for (const [id, action] of Object.entries(config?.actions || {})) {
@@ -202,7 +207,7 @@ export function contextHelpRows(pane, view, ctx = {}, config = getActionConfig()
  * @returns {{key: string, label: string, actionId: string, global: boolean}[]} continuations
  */
 export function prefixContinuations(prefix, pane, view, config = getActionConfig()) {
-  const scopes = contextScopes(pane, view)
+  const scopes = contextScopes(pane, view, config)
   const out = []
   for (const [id, action] of Object.entries(config?.actions || {})) {
     if (!scopes.some(s => actionScopeMatches(action.scope, s))) continue
