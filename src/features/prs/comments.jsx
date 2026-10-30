@@ -3,7 +3,7 @@
  * Supports: reply, edit, delete per comment
  */
 
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
@@ -82,6 +82,15 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   }, [rawComments, filterMode])
 
   const visibleCount = flatComments.length
+
+  // A refetch (deleted comment) or the filter cycle can shrink the list; keep the cursor on a real row.
+  useEffect(() => {
+    if (cursor > Math.max(0, visibleCount - 1)) {
+      const last = Math.max(0, visibleCount - 1)
+      setCursor(last)
+      setScrollOffset(Math.max(0, last - visibleHeight + 1))
+    }
+  }, [visibleCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Status helper ──────────────────────────────────────────────────────────
   const flash = useCallback((msg) => {
@@ -163,7 +172,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
 
     if (id === 'cursor.down') {
       setCursor(c => {
-        const next = Math.min(visibleCount - 1, c + 1)
+        const next = Math.max(0, Math.min(visibleCount - 1, c + 1))
         if (next >= scrollOffset + visibleHeight) setScrollOffset(s => s + 1)
         return next
       })
@@ -179,7 +188,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
     }
     if (id === 'cursor.top') { setCursor(0); setScrollOffset(0); return }
     if (id === 'cursor.bottom') {
-      const last = visibleCount - 1
+      const last = Math.max(0, visibleCount - 1)
       setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
       return
     }

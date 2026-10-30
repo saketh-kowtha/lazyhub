@@ -68,6 +68,15 @@ export function LogPane({ onBack }) {
   const visibleHeight = Math.max(5, rows - 6)
   const maxScroll = Math.max(0, filteredLogs.length - visibleHeight)
 
+  // New logs, a level filter, or a search can shrink the list; keep the cursor on a real row.
+  useEffect(() => {
+    if (cursor > Math.max(0, filteredLogs.length - 1)) {
+      const last = Math.max(0, filteredLogs.length - 1)
+      setCursor(last)
+      setScrollOffset(Math.max(0, last - visibleHeight + 1))
+    }
+  }, [filteredLogs.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useKeymapInput((input, key) => {
     if (selectedLog) {
       if (input === 'y') { doCopy(selectedLog); return }
@@ -93,7 +102,7 @@ export function LogPane({ onBack }) {
 
     if (input === 'j' || key.downArrow) {
       setCursor(c => {
-        const next = Math.min(filteredLogs.length - 1, c + 1)
+        const next = Math.max(0, Math.min(filteredLogs.length - 1, c + 1))
         if (next >= scrollOffset + visibleHeight) setScrollOffset(next - visibleHeight + 1)
         return next
       })
