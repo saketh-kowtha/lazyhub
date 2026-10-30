@@ -109,28 +109,28 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 help overlay 1`] = `
-"           ╭────────────────────────────────────────────────────────────────────────────╮
-           │                                                                            │
-           │  ⌨  Keyboard Reference                                [Esc/Enter/?] close  │
-           │                                                                            │
-           │  ⎇  Pull Requests list                  Global (any view)                  │
-           │  ───────────────────────────────────    ─────────────────────────────────  │
-           │                                                                            │
-           │  j/k                 Move the curso…    Ctrl+A              AI assistant   │
-           │  gg                  Jump to the top    Tab                 pane           │
-           │  G                   Jump to the bo…    1-9                 jump to pane   │
-           │  r                   Refresh the ac…    r                   refresh        │
-           │  /                   Search the act…    o                   browser        │
-           │  Enter               Open PR detail     /                   search         │
-           │  d                   Open PR diff       ?                   help           │
-           │  m                   Merge selected…    ,                   settings       │
-           │  M                   Toggle auto-me…    g h                 home           │
-           │  ────────────────────────────────────────────────────────────────────────  │
-           │  x                   Request change…    g i                 issues         │
-           │  Config:~/.config/lazyhub/lazyhub.……Docs: https://saketh-kowtha.github.io  │
-           │  l                   Edit PR labels     g a                 actions        │
-           ╰────────────────────────────────────────────────────────────────────────────╯
- ⎇  Pull Requests  ·  owner/repo                                               [OVERLAY] ⟳ just now
+"                   ╭────────────────────────────────────────────────────────────╮
+                   │                                                            │
+                   │  ⌨  Keyboard Reference                        [Esc] close  │
+                   │                                                            │
+                   │  ⎇  Pull Requests list                                     │
+                   │  ────────────────────────────────────────                  │
+                   │                                                            │
+                   │  j/k                 Move the cursor down                  │
+                   │  gg                  Jump to the top                       │
+                   │  G                   Jump to the bottom                    │
+                   │  r                   Refresh the active                    │
+                   │                      list                                  │
+                   │  /                   Search the active                     │
+                   │                      list                                  │
+                   │  Enter               Open PR detail                        │
+                   │  d                   Open PR diff                          │
+                   │  m                   Merge selected PR                     │
+                   │  ────────────────────────────────────────────────────────  │
+                   │                      for selected PR                       │
+                   │  Config: ~/.config/lazyhub/lazyhub.tomlR                   │
+                   │  x                   Request changes on                    │
+                   ╰────────────────────────────────────────────────────────────╯
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  ? / Esc / Enter close help"
 `;

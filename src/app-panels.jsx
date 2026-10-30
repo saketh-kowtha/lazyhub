@@ -26,12 +26,12 @@ export function HelpOverlay({ pane, view, actionCtx, onClose, availableWidth, av
     ? `${PANE_ICONS[pane] || '○'}  ${PANE_LABELS[pane] || pane} list`
     : `${view.charAt(0).toUpperCase()}${view.slice(1)} view`
 
-  const narrow = cols < 90
   // The overlay lives inside the pane area (below the status bar and footer), so it
   // never claims more than the terminal has: width is clamped, and a short terminal
   // clips the lower rows instead of pushing the frame off-screen.
   const compactPad = cols < 60 || termRows < 24
   const roomW = availableWidth ?? cols
+  const narrow = roomW < 90
   const roomH = availableHeight ?? termRows
   const outerWidth = Math.max(20, Math.min(roomW - 2, narrow ? 62 : 90))
   const colWidth = Math.max(16, Math.min(40, outerWidth - (compactPad ? 4 : 6)))
@@ -62,7 +62,7 @@ export function HelpOverlay({ pane, view, actionCtx, onClose, availableWidth, av
 	                <Box width={keyWidth} flexShrink={0}>
 	                  <Text color={t.ui.selected} bold wrap="truncate">{k.key}</Text>
 	                </Box>
-	                <Text color={t.ui.muted} wrap="truncate">{k.label}</Text>
+	                <Text color={t.ui.muted}>{k.label}</Text>
 	              </Box>
 	            )) : <Text color={t.ui.dim}>No specific keys</Text>}
           </Box>
@@ -80,7 +80,7 @@ export function HelpOverlay({ pane, view, actionCtx, onClose, availableWidth, av
 	                  <Box width={keyWidth} flexShrink={0}>
 	                    <Text color={t.ui.selected} bold wrap="truncate">{k.key}</Text>
 	                  </Box>
-	                  <Text color={t.ui.muted} wrap="truncate">{k.label}</Text>
+	                  <Text color={t.ui.muted}>{k.label}</Text>
 	                </Box>
 	              ))}
             </Box>
