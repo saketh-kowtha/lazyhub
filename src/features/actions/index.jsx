@@ -37,10 +37,10 @@ const ActionRow = memo(({ run, isSelected, t }) => {
       <Text> </Text>
       <Box flexGrow={1}>
         <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate">
-          {run.workflowName}
+          {sanitize(run.workflowName)}
         </Text>
       </Box>
-      <Text color={t.ui.muted}> {run.headBranch}</Text>
+      <Text color={t.ui.muted}> {sanitize(run.headBranch)}</Text>
       <Text color={t.ui.dim}> {format(run.createdAt)}</Text>
     </Box>
   )
@@ -208,7 +208,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
     return (
       <Box flexDirection="column" flexGrow={1}>
         <ConfirmDialog
-          message={`Cancel run: ${run.workflowName} on ${run.headBranch}?`}
+          message={`Cancel run: ${sanitize(run.workflowName)} on ${sanitize(run.headBranch)}?`}
           destructive={true}
           onConfirm={async () => {
             setDialog(null)
@@ -230,7 +230,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
     <Box flexDirection="column" flexGrow={1}>
       <Box paddingX={1} gap={1}>
         {branchFilter
-          ? <><Text color={t.ui.dim}>branch:</Text><Text color={t.ci.pending} bold>{branchFilter}</Text><Text color={t.ui.dim}>{`  [${firstActionKey('workflow.clear-filter', 'F')}] clear filter`}</Text></>
+          ? <><Text color={t.ui.dim}>branch:</Text><Text color={t.ci.pending} bold>{sanitize(branchFilter)}</Text><Text color={t.ui.dim}>{`  [${firstActionKey('workflow.clear-filter', 'F')}] clear filter`}</Text></>
           : <Text color={t.ui.dim}>all branches</Text>
         }
         {statusMsg && (
@@ -258,7 +258,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
         })}
         {!loading && items.length === 0 && (
           <Box paddingX={2} paddingY={1}>
-            <Text color={t.ui.muted}>No workflow runs found{branchFilter ? ` for branch "${branchFilter}"` : ''}. [{firstActionKey('list.refresh', 'r')}] refresh{branchFilter ? `  [${firstActionKey('workflow.clear-filter', 'F')}] clear filter` : ''}</Text>
+            <Text color={t.ui.muted}>No workflow runs found{branchFilter ? ` for branch "${sanitize(branchFilter)}"` : ''}. [{firstActionKey('list.refresh', 'r')}] refresh{branchFilter ? `  [${firstActionKey('workflow.clear-filter', 'F')}] clear filter` : ''}</Text>
           </Box>
         )}
       </Box>
