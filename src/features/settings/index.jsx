@@ -170,6 +170,22 @@ export function SettingsPane({ onBack }) {
     )
   }
 
+  if (dialog === 'pageSize') {
+    return (
+      <FieldEditor
+        label="Page Size"
+        hint="PRs fetched per page (1-100)"
+        value={String(config.pr?.pageSize || 50)}
+        onSave={(v) => {
+          const n = Number(v)
+          if (/^\d+$/.test(v) && n >= 1 && n <= 100) updateConfig({ pr: { ...(config.pr || {}), pageSize: n } })
+          setDialog(null)
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
   if (dialog === 'aiProvider') {
     return (
       <AIProviderEditor
