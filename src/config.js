@@ -172,6 +172,19 @@ export function saveState(patch) {
   writeTomlState(patch)
 }
 
+/**
+ * An API key resolved from the environment (and absent from the file) is not a
+ * setting the user made, so it is never written back to lazyhub.toml.
+ * @param {string|undefined} value key in the patch
+ * @param {string|undefined} fileValue key already in the file
+ * @param {string|undefined} envValue key from the environment
+ * @returns {string|undefined} the key to persist, if any
+ */
+function persistableKey(value, fileValue, envValue) {
+  if (!value) return value
+  return !fileValue && value === envValue ? undefined : value
+}
+
 function patchToToml(patch) {
   const out = {}
   if ('theme' in patch) out.theme = typeof patch.theme === 'string' ? { name: patch.theme } : patch.theme
@@ -180,11 +193,12 @@ function patchToToml(patch) {
   if ('panes' in patch) out.app = { ...(out.app || {}), active_panes: patch.panes }
   if (patch.pr?.pageSize) out.features = { ...(out.features || {}), prs: { page_size: patch.pr.pageSize } }
   if (patch.ai) {
+    const fileAi = loadTomlConfig().ai || {}
     out.ai = {
       provider:          patch.ai.provider,
       model:             patch.ai.model,
-      anthropic_api_key: patch.ai.anthropicApiKey,
-      openai_api_key:    patch.ai.openaiApiKey,
+      anthropic_api_key: persistableKey(patch.ai.anthropicApiKey, fileAi.anthropic_api_key, process.env.ANTHROPIC_API_KEY),
+      openai_api_key:    persistableKey(patch.ai.openaiApiKey, fileAi.openai_api_key, process.env.OPENAI_API_KEY),
       openai_base_url:   patch.ai.openaiBaseUrl,
       openai_compatible: patch.ai.openai_compatible || patch.ai.openaiCompatible,
     }
