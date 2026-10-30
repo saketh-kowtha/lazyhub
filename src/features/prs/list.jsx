@@ -126,6 +126,15 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
   }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A refetch can shrink the list (merged/closed PR); keep the cursor on a real row.
+  useEffect(() => {
+    if (items.length > 0 && cursor > items.length - 1) {
+      const last = items.length - 1
+      setCursor(last)
+      setScrollOffset(Math.max(0, last - effectiveHeight + 1))
+    }
+  }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Notify App when dialog opens/closes so global keys are suppressed + footer updates
   useEffect(() => {
     notifyDialog(!!dialog)

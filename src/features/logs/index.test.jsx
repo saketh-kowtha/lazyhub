@@ -47,3 +47,23 @@ it('renders Debug Logs and supports level filtering, search, and log details (#3
   view.stdin.write('q')
   await waitForExpectation(() => expect(onBack).toHaveBeenCalledOnce())
 })
+
+it('keeps a valid selection when a search shrinks the list below the cursor', async () => {
+  const view = renderWithProviders(<LogPane onBack={vi.fn()} />)
+  const shows = async (text) => {
+    await waitForExpectation(() => expect(view.lastFrame()).toContain(text))
+    await waitForInputReady(view)
+  }
+  await shows('2 entries')
+  view.stdin.write('j')
+  await waitForInputReady(view)
+  view.stdin.write('/')
+  await shows('╭')
+  view.stdin.write('Loaded')
+  await shows('Search: Loaded')
+  view.stdin.write('\r')
+  await waitForExpectation(() => expect(view.lastFrame()).not.toContain('╭'))
+  await waitForInputReady(view)
+  view.stdin.write('\r')
+  await shows('Log Details')
+})
