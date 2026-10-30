@@ -175,7 +175,7 @@ These are the rules. If any test run violates one, it's a bug.
 **Navigation invariants:**
 - From any view, pressing `q` or `Esc` enough times always reaches the list view or exits cleanly. Never gets stuck.
 - Tab always moves to the next pane. Shift+Tab always moves to the previous. After N tabs you return to where you started (circular).
-- `g` chords (`g p`, `g i`, `g h`, `g b`, `g a`, `g n`) always jump to the correct pane without crashing; digits are reserved for PR-detail sections (#201).
+- `g` chords (`g p`, `g i`, `g h`, `g b`, `g a`, `g n`) always jump to the correct pane without crashing; digits `1`-`9` jump to the Nth active pane from list and detail views, and do nothing under a dialog, search or help overlay.
 - `?` always toggles the help overlay regardless of current view.
 
 **Data invariants:**

@@ -201,7 +201,7 @@ export function App({ repo }) {
     }
   }, [PANES]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // go.* actions (g p, g i, ...) jump to a pane; digits are reserved for PR-detail sections (#201).
+  // go.* actions (g p, g i, ...) and the digit keys (app.jump-pane) jump to a pane.
   const goToPane = useCallback((target) => {
     const resolved = target === 'home' ? (PANES.includes('focus') ? 'focus' : PANES[0]) : target
     if (!PANES.includes(resolved) || resolved === pane) return
@@ -264,6 +264,14 @@ export function App({ repo }) {
       setPrefixPopup({ prefix: input, items })
       clearTimeout(prefixTimerRef.current)
       prefixTimerRef.current = setTimeout(() => { disarmPrefix(); setPrefixPopup(null) }, 1500)
+      return
+    }
+
+    // 1-9: jump straight to the Nth active pane. Dialogs, inputs and overlays
+    // were filtered out above; the diff/comments/conflict views keep their own keys.
+    if (!showHelp && (view === 'list' || view === 'detail') && matchesAction('app.jump-pane', input, key, _config.toml)) {
+      const target = PANES[Number(input) - 1]
+      if (target) goToPane(target)
       return
     }
 

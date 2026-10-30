@@ -147,6 +147,14 @@ description = "Cycle panes forward"
 scope = "global"
 group = "nav"
 
+[actions."app.jump-pane"]
+keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
+hint = "1-9"
+label = "jump to pane"
+description = "Jump to the Nth active pane (list and detail views)"
+scope = "global"
+group = "nav"
+
 [actions."app.prev-pane"]
 keys = ["Shift+Tab"]
 hint = "Shift+Tab"

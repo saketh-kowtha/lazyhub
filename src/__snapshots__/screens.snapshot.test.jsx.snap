@@ -114,19 +114,19 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
       │  ⌨  Keyboard Reference — ⎇  Pull Requests list                  [Esc/Enter/?] close  │
       │  ⎇  Pull Requests list───────────────────    Global (any view)                       │
       │                                              ──────────────────────────────────────  │
-      │  ggk                 Jump to the top down                                            │
-      │  r                 Refresh the active m      Ctrl+A              AI assistant        │
-      │  /                 lSearch the active        Tab                 pane                │
+      │  ggk                 Jump to the top down    Ctrl+A              AI assistant        │
+      │  r                 Refresh the active m      1-9                 jump to pane        │
+      │  /                 lSearch the active        r                   refresh             │
       │  mnter              lMerge selected PR       o                   browser             │
-      │  a              TogglApprove selected PR     /                   search              │
-      │  x              sRequest changes on          ?                   help                │
-      │  A               seleEdit PR assignees       g h                 homeings            │
-      │  b                Checkout PR branch wers    g p                 PRs                 │
-      │  o                lCoOpen PR in browser      g i                 issues              │
-      │  f                 cCycle PR filter state    g b                 branches            │
-      │  M             Toggle merged PRs when        g n                 inboxns             │
-      │  @             auto-mFilter PRs by author    Ctrl+D              debug state         │
-      │  n                   Create a new PR         q / Esc             back                │
+      │  a              TogglApprove selected PR     ?                   helpch              │
+      │  x              sRequest changes on          ,                   settings            │
+      │  A               seleEdit PR assignees       g h                 home                │
+      │  b                Checkout PR branch wers    g i                 issues              │
+      │  o                lCoOpen PR in browser      g b                 branches            │
+      │  f                 cCycle PR filter state    g n                 inboxns             │
+      │  M             Toggle merged PRs when        Ctrl+D              debug state         │
+      │  @             auto-mFilter PRs by author    q / Esc             back                │
+      │  n                   Create a new PR                                                 │
       │                                                                                      │
       │  ──────────────────────────────────────────────────────────────────────────────────  │
       │                                                                                      │

@@ -27,6 +27,7 @@ for (const [id, def] of Object.entries(_config.customTabs || {})) {
 export const GLOBAL_KEYS = actionHints([
   'app.ai-assistant',
   'app.next-pane',
+  'app.jump-pane',
   'list.refresh',
   'pr.open-browser',
   'list.search',

@@ -165,8 +165,9 @@ describe('prefix keys', () => {
     expect(prefixContinuations('g', 'prs', 'diff', config).map(c => c.key)).toContain('l')
   })
 
-  it('leaves digits free for PR-detail sections (no global digit binding)', () => {
-    for (const action of Object.values(config.actions)) {
+  it('binds digits only to the pane-jump action', () => {
+    for (const [id, action] of Object.entries(config.actions)) {
+      if (id === 'app.jump-pane') continue
       for (const key of action.keys) expect(key).not.toMatch(/^[0-9]$/)
     }
   })

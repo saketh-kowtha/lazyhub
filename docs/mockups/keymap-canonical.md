@@ -6,8 +6,8 @@ budgets), with #201 (`1`-`4` sections) and #177 (queue is read-only). Protocol B
 **Status (2026-10-23): accepted with the maintainer decisions of 2026-10-22, and
 partly implemented.** Decisions applied below: global pane jumps are a GitHub-style
 `g` prefix (`g h` home, `g p` PRs, `g i` issues, `g b` branches, `g a` actions,
-`g n` inbox); digits `1`-`4` are reserved for PR-detail sections (#201) and no longer
-bound globally; the queue stays read-only, so the "approve" budget is measured
+`g n` inbox); digits `1`-`9` also jump to the Nth active pane (restored, `app.jump-pane`;
+if #201 sections land they need a different key); the queue stays read-only, so the "approve" budget is measured
 queue -> PR detail (`Enter`, `a`, confirm = 3). Sections marked **(implemented)** are
 live in the registry (`defaultConfig.toml` `[actions.*]`, read through
 `src/ui/actions.js`); the rest is the remaining plan.
@@ -80,7 +80,7 @@ keep their existing confirmation dialogs.
 | Open (in app) | `Enter` | none | |
 | Open in browser | `o` | none; diff `o` opens `/files` today, becomes "this view's page" | one verb, target follows context |
 | Back | `Esc`, `q` | none | `q` quits only at root (already true) |
-| Sections / groups | `1`-`4` (PR detail), `1`-`5` (queue groups) | **(implemented)** digits no longer jump panes; the sections themselves land with #201 | pane jumps are `g` chords |
+| Sections / groups | `1`-`4` (PR detail), `1`-`5` (queue groups) | digits jump panes (`app.jump-pane`); the #201 sections need another key | pane jumps are `g` chords or digits |
 | Prev / next item | `[` `]` | queue group, diff file | same verb: step one unit |
 | Prev / next thread | `{` `}` | **(implemented)** was `N` / `n` in diff. `n` / `N` stay as next / previous search match in the diff only (no "new" verb exists there) | frees `n` for "new" in lists |
 | Go to (prefix) | `g` then `h` Home, `p` PRs, `i` issues, `b` branches, `a` actions, `n` inbox, `l` line (diff only) | **(implemented)** `g h` replaces `g f`; `g m` (manage) is not built; `:` stays the palette only | which-key popup lists the continuations valid in the current view |
