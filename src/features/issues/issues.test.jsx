@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IssueList } from './list.jsx'
 import { IssueDetail } from './detail.jsx'
@@ -17,6 +17,12 @@ vi.mock('../../executor.js', () => ({
   closeIssue: vi.fn(), createIssue: vi.fn(), addLabels: vi.fn(), removeLabels: vi.fn(),
   addIssueAssignees: vi.fn(), removeIssueAssignees: vi.fn(), addIssueComment: vi.fn(),
 }))
+
+async function renderIssue(ui, options) {
+  let view
+  await act(async () => { view = renderWithProviders(ui, options) })
+  return view
+}
 
 const issue = {
   body: '# body&amp;safe\n\n- next&amp;safe',
@@ -40,14 +46,14 @@ afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 describe('issue API text sanitization', () => {
   it('sanitizes label names in list rows', async () => {
-    const view = renderWithProviders(<IssueList repo="owner/repo" onSelectIssue={() => {}} />)
+    const view = await renderIssue(<IssueList repo="owner/repo" onSelectIssue={() => {}} />)
     await waitForExpectation(() => expect(view.lastFrame()).toContain('[bug&safe]'))
     expect(view.lastFrame()).not.toContain('&amp;')
   })
 
   it('sanitizes detail metadata and comment authors', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const view = renderWithProviders(<IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />)
+    const view = await renderIssue(<IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />)
     await waitForExpectation(() => expect(view.lastFrame()).toContain('reviewer&safe'))
     for (const text of ['author&safe', '@assignee&safe', 'release&safe', 'bug&safe', 'BODY&SAFE', 'next&safe']) {
       expect(view.lastFrame()).toContain(text)
@@ -60,7 +66,7 @@ describe('issue API text sanitization', () => {
     ['labels', 'l', 'bug&safe'],
     ['assignees', 'A', 'assignee&safe'],
   ])('sanitizes %s dialog display text', async (_dialog, key, expected) => {
-    const view = renderWithProviders(<IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />)
+    const view = await renderIssue(<IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />)
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
     await flush(20)
     await sendInput(key)
@@ -71,6 +77,13 @@ describe('issue API text sanitization', () => {
 })
 
 describe('shared issue editor contracts', () => {
+  it('opens assignees on the first key without a timer delay', async () => {
+    const view = await renderIssue(<IssueList repo="owner/repo" onSelectIssue={() => {}} />)
+    await sendInput('A')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Filter:'))
+    expect(view.lastFrame()).toContain('assignee&safe')
+  })
+
   it.each([
     ['list', 'labels', 'l', addLabels, removeLabels, 'bug&amp;safe'],
     ['detail', 'labels', 'l', addLabels, removeLabels, 'bug&amp;safe'],
@@ -78,7 +91,7 @@ describe('shared issue editor contracts', () => {
     ['detail', 'assignees', 'A', addIssueAssignees, removeIssueAssignees, 'assignee&amp;safe'],
   ])('diffs %s %s with raw API identifiers and closes the dialog', async (pane, kind, key, add, remove, current) => {
     const notifyDialog = vi.fn()
-    const view = renderWithProviders(pane === 'list'
+    const view = await renderIssue(pane === 'list'
       ? <IssueList repo="owner/repo" onSelectIssue={() => {}} />
       : <IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />,
     { appContext: { notifyDialog } })
@@ -103,7 +116,7 @@ describe('shared issue editor contracts', () => {
 
   it('keeps reply typing out of action handlers and submits through the issue executor', async () => {
     addIssueComment.mockResolvedValue(undefined)
-    const view = renderWithProviders(<IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />)
+    const view = await renderIssue(<IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />)
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
     await flush(20)
     await sendInput('c')

@@ -467,3 +467,12 @@ To prevent merge conflicts and "branch drift":
 - Symptom: adding a setting after `mouse = true` without a final newline produced `mouse = truedefault_pane = "prs"`, making the user config invalid on the next launch. A final comment could silently swallow the new setting.
 - Root cause: `upsertScalar` inserted a new assignment without terminating the preceding section line.
 - Fix: ensure the preceding line ends in a newline before inserting a missing key. Regression tests in `src/config/writer.test.js` cover a final assignment, bare section header, comment, and existing newline, including reload and repeat-save checks.
+**B-90 — Multiple PR state filters only fetched open PRs (#368)**
+- Symptom: Open+Merged showed only open PRs; Closed+Merged showed no PRs.
+- Root cause: the pane requested `state: 'all'`, but `prSearchQuery()` treated it as unknown and defaulted to `state:open`, excluding other states before client-side filtering.
+- Fix: recognize `all` and omit the search state qualifier while retaining other filters and the open default for missing/unknown states. Regression coverage: `src/executor.test.js`. Sibling sweep: Issues passes states directly to `gh`; Branches requests open PRs intentionally; Actions and Notifications have no equivalent state conversion.
+
+**B-91 — Issue editor tests intermittently lost the first key**
+- Symptom: the assignee editor test stayed on the issue list instead of opening the dialog.
+- Root cause: `sendInput()` took its handler snapshot before flushing pending mount effects; a visible frame or timer delay did not guarantee the input handler was registered.
+- Fix: mount the issue test views inside awaited `act()` so effects finish before input. A regression test sends `A` immediately after mounting without a timer delay. Sibling pane flows use their existing input driver; the shared input helper is unchanged.
