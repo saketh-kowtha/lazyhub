@@ -11,6 +11,7 @@ import { getIssue, addIssueComment } from '../../executor.js'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
+import { sanitize } from '../../utils.js'
 import { IssueDetailSkeleton } from '../../components/Skeleton.jsx'
 import { IssueLabelDialog, IssueAssigneeDialog } from './dialogs.jsx'
 import { buildIssueContentRows } from './detail-content.jsx'
@@ -29,6 +30,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
   const [replyMode, setReplyMode] = useState(false)
   const [replyText, setReplyText] = useState('')
   const [statusMsg, setStatusMsg] = useState(null)
+  const [statusIsError, setStatusIsError] = useState(false)
   const [dialog, setDialog] = useState(null)
   // Typing a reply must never trigger actions.
   useKeyScope('input', replyMode)
@@ -48,6 +50,12 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
   const visibleHeight = Math.max(3, termRows - 10)
   const maxScroll = Math.max(0, contentRows.length - visibleHeight)
   const visibleRows = contentRows.slice(scrollY, scrollY + visibleHeight)
+
+  const reportDialogError = (what, err) => {
+    setStatusIsError(true)
+    setStatusMsg(`✗ Updating ${what} failed: ${sanitize(err.message)}`)
+    setTimeout(() => { setStatusMsg(null); setStatusIsError(false) }, 5000)
+  }
 
   const doReply = useCallback(() => {
     const text = replyText
@@ -93,11 +101,11 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
   // ── Dialogs ────────────────────────────────────────────────────────────────
 
   if (dialog === 'labels') {
-    return <IssueLabelDialog repo={repo} issue={issue} loadingPadding={1} onClose={() => { setDialog(null); refetch() }} />
+    return <IssueLabelDialog repo={repo} issue={issue} loadingPadding={1} onError={err => reportDialogError('labels', err)} onClose={() => { setDialog(null); refetch() }} />
   }
 
   if (dialog === 'assignees') {
-    return <IssueAssigneeDialog repo={repo} issue={issue} loadingPadding={1} onClose={() => { setDialog(null); refetch() }} />
+    return <IssueAssigneeDialog repo={repo} issue={issue} loadingPadding={1} onError={err => reportDialogError('assignees', err)} onClose={() => { setDialog(null); refetch() }} />
   }
 
   // ── Detail view ────────────────────────────────────────────────────────────
@@ -116,6 +124,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
       setReplyText={setReplyText}
       doReply={doReply}
       statusMsg={statusMsg}
+      statusIsError={statusIsError}
     />
   )
 }

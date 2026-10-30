@@ -78,11 +78,23 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
   }
 
   if (dialog === 'labels' && selectedIssue) {
-    return <IssueLabelDialog repo={repo} issue={selectedIssue} onClose={() => { onClose(); refetch() }} />
+    return (
+      <IssueLabelDialog
+        repo={repo} issue={selectedIssue}
+        onError={(err) => showStatus(`✗ Updating labels failed: ${sanitize(err.message)}`, true)}
+        onClose={() => { onClose(); refetch() }}
+      />
+    )
   }
 
   if (dialog === 'assignees' && selectedIssue) {
-    return <IssueAssigneeDialog repo={repo} issue={selectedIssue} onClose={() => { onClose(); refetch() }} />
+    return (
+      <IssueAssigneeDialog
+        repo={repo} issue={selectedIssue}
+        onError={(err) => showStatus(`✗ Updating assignees failed: ${sanitize(err.message)}`, true)}
+        onClose={() => { onClose(); refetch() }}
+      />
+    )
   }
 
   return null
