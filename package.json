@@ -76,6 +76,6 @@
     "vitest": "^3.2.6"
   },
   "overrides": {
-    "esbuild": "^0.28.1"
+    "esbuild": "$esbuild"
   }
 }
