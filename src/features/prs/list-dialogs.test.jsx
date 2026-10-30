@@ -90,4 +90,22 @@ describe('PR list dialogs', () => {
       expect(add.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0])
     })
   }
+
+  it('reports a failed label update through onError instead of swallowing it', async () => {
+    const data = [{ name: 'a' }, { name: 'b' }]
+    useGh.mockReturnValue({ loading: false, data })
+    addLabels.mockRejectedValue(new Error('403 forbidden'))
+    const onClose = vi.fn()
+    const onError = vi.fn()
+    const view = renderWithProviders(<LabelDialog repo="o/r" pr={{ number: 3, labels: [{ name: 'a' }] }} onClose={onClose} onError={onError} />)
+    await waitForInputReady(view)
+    view.stdin.write('\u001b[B')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('2/2'))
+    await waitForInputReady(view)
+    view.stdin.write(' ')
+    await waitForInputReady(view)
+    view.stdin.write('\r')
+    await waitForExpectation(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: '403 forbidden' }))
+  })
 })

@@ -152,7 +152,13 @@ export function renderPRListDialog({
 
   const SelectionDialog = SELECTION_DIALOGS[dialog]
   if (SelectionDialog && selectedPR) {
-    return <SelectionDialog repo={repo} pr={selectedPR} onClose={() => { closeDialog(); refetch() }} />
+    return (
+      <SelectionDialog
+        repo={repo} pr={selectedPR}
+        onError={(err) => showStatus(`✗ Updating ${dialog} failed: ${sanitize(err.message)}`, true)}
+        onClose={() => { closeDialog(); refetch() }}
+      />
+    )
   }
 
   if ((dialog === 'approve-body' || dialog === 'reqchanges-body') && selectedPR) {
