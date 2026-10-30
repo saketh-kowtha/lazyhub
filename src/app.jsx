@@ -130,7 +130,6 @@ export function App({ repo }) {
 
   const dialogActiveRef    = useRef(false)
   const savedListPosition  = useRef({})
-  const pendingNavigationRef = useRef(null)
   const paneStateMapRef    = useRef(new Map())
   const notifyDialog = useCallback((active) => { dialogActiveRef.current = active }, [])
   const openHelp     = useCallback(() => setShowHelp(true), [])
@@ -177,17 +176,25 @@ export function App({ repo }) {
   const detailPanelWidth = 0
 
   // ─── AI navigate callback ─────────────────────────────────────────────────
-  const handleAINavigate = useCallback(({ pane: tp, itemNumber, filter } = {}) => {
+  const handleAINavigate = useCallback(({ pane: tp, view: targetView, itemNumber } = {}) => {
     setShowAI(false)
     const validPane = PANES.includes(tp) ? tp : null
     if (validPane) {
       setPane(validPane)
-      setView('list')
-      setSelectedItem(null)
+      const itemPane = validPane === 'prs' || validPane === 'issues'
+      const hasItem = itemPane && Number.isSafeInteger(itemNumber) && itemNumber > 0
+      const nextView = hasItem && targetView !== 'list'
+        ? (validPane === 'prs' && targetView === 'diff' ? 'diff' : 'detail')
+        : 'list'
+      setView(nextView)
+      setSelectedItem(nextView === 'list' ? null : {
+        number: itemNumber,
+        ...(nextView === 'diff' ? { _fromList: view === 'list' } : {}),
+      })
+      setActionsBranch(null)
       savedListPosition.current = {}
-      pendingNavigationRef.current = { itemNumber, filter }
     }
-  }, [PANES]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view])
 
   // go.* actions (g p, g i, ...) jump to a pane; digits are reserved for PR-detail sections (#201).
   const goToPane = useCallback((target) => {

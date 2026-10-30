@@ -476,3 +476,8 @@ To prevent merge conflicts and "branch drift":
 - Symptom: the assignee editor test stayed on the issue list instead of opening the dialog.
 - Root cause: `sendInput()` took its handler snapshot before flushing pending mount effects; a visible frame or timer delay did not guarantee the input handler was registered.
 - Fix: mount the issue test views inside awaited `act()` so effects finish before input. A regression test sends `A` immediately after mounting without a timer delay. Sibling pane flows use their existing input driver; the shared input helper is unchanged.
+
+**B-92 — Palette and AI item navigation opened only the list (#373)**
+- Symptom: `#42`, `pr 42`, `issue 17`, named PR detail/diff actions, and AI navigation offers landed on a list; Actions navigation retained an old branch filter.
+- Root cause: `handleAINavigate` discarded the requested view and stored the item number in an unread ref. The PR list also never exposed its focused row to the palette.
+- Fix: resolve valid PR/issue numbers directly to detail (or PR diff), retain list navigation for pane-only requests, clear the Actions branch filter, and pass the focused PR through the existing pane-state callback. Regression flows: `src/app.e2e.test.jsx` and `src/features/prs/list-controller.test.jsx`; pane-only navigation is covered across PRs, Issues, Branches, Actions, and Notifications.

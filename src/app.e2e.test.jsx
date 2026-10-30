@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { Text, useInput } from 'ink'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { sendInput } from './test/input-bus.js'
@@ -8,6 +8,7 @@ import { App } from './app.jsx'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
 const exitSpy = vi.hoisted(() => vi.fn())
+const aiNavigation = vi.hoisted(() => ({ target: {} }))
 
 vi.mock('ink', async () => {
   const React = await import('react')
@@ -57,21 +58,26 @@ vi.mock('./components/Toaster.jsx', () => ({ Toaster: () => null }))
 vi.mock('./components/StatusBar.jsx', () => ({ StatusBar: ({ pane, mode }) => <Text>{`STATUS ${pane} ${mode}`}</Text> }))
 vi.mock('./components/FooterKeys.jsx', () => ({ FooterKeys: () => null }))
 vi.mock('./components/ErrorBoundary.jsx', () => ({ ErrorBoundary: ({ children }) => children }))
-vi.mock('./components/AIAssistant.jsx', () => ({ AIAssistant: () => <Text>AI</Text> }))
-vi.mock('./components/CommandPalette.jsx', () => ({ CommandPalette: () => <Text>PALETTE</Text> }))
+vi.mock('./components/AIAssistant.jsx', () => ({
+  AIAssistant: ({ onNavigate }) => {
+    useInput((input, key) => { if (key.return) onNavigate(aiNavigation.target) })
+    return <Text>AI</Text>
+  },
+}))
 vi.mock('./components/CustomPane.jsx', () => ({ CustomPane: () => <Text>CUSTOM</Text> }))
 vi.mock('./features/tabs/view.jsx', () => ({ TabView: () => <Text>TAB VIEW</Text> }))
 vi.mock('./features/issues/list.jsx', () => ({ IssueList: () => <Text>ISSUES LIST</Text> }))
 vi.mock('./features/issues/detail.jsx', () => ({ IssueDetail: ({ issueNumber }) => <Text>{`ISSUE DETAIL ${issueNumber}`}</Text> }))
 vi.mock('./features/branches/index.jsx', () => ({ BranchList: () => <Text>BRANCHES LIST</Text> }))
-vi.mock('./features/actions/index.jsx', () => ({ ActionList: () => <Text>ACTIONS LIST</Text> }))
+vi.mock('./features/actions/index.jsx', () => ({ ActionList: ({ initialBranch }) => <Text>{`ACTIONS LIST ${initialBranch || 'ALL'}`}</Text> }))
 vi.mock('./features/settings/index.jsx', () => ({ SettingsPane: () => <Text>SETTINGS PANE</Text> }))
 vi.mock('./features/logs/index.jsx', () => ({ LogPane: () => <Text>LOGS</Text> }))
 vi.mock('./features/notifications/index.jsx', () => ({ NotificationList: () => <Text>NOTIFICATIONS LIST</Text> }))
 vi.mock('./features/prs/comments.jsx', () => ({ PRComments: ({ prNumber }) => <Text>{`COMMENTS ${prNumber}`}</Text> }))
 vi.mock('./features/prs/ConflictView.jsx', () => ({ ConflictView: ({ pr }) => <Text>{`CONFLICT ${pr.number}`}</Text> }))
 vi.mock('./features/prs/list.jsx', () => ({
-  PRList: ({ onSelectPR, onOpenDiff }) => {
+  PRList: ({ onSelectPR, onOpenDiff, onPaneState }) => {
+    useEffect(() => { onPaneState({ selectedPR: { number: 7 } }) }, [onPaneState])
     useInput((input) => {
       if (input === 'o') onSelectPR({ number: 7, title: 'Open detail' })
       if (input === 'd') onOpenDiff({ number: 9, title: 'Open diff' })
@@ -80,7 +86,10 @@ vi.mock('./features/prs/list.jsx', () => ({
   },
 }))
 vi.mock('./features/prs/detail.jsx', () => ({
-  PRDetail: ({ prNumber }) => <Text>{`PR DETAIL ${prNumber}`}</Text>,
+  PRDetail: ({ prNumber, onOpenActions }) => {
+    useInput(input => { if (input === 'a') onOpenActions('feature-branch') })
+    return <Text>{`PR DETAIL ${prNumber}`}</Text>
+  },
 }))
 vi.mock('./features/prs/diff.jsx', () => ({
   PRDiff: ({ prNumber }) => <Text>{`PR DIFF ${prNumber}`}</Text>,
@@ -91,6 +100,56 @@ describe('App shell user flows', () => {
   afterEach(() => {
     cleanup()
     disarmPrefix()
+  })
+
+  it.each([
+    ['#42', 'PR DETAIL 42'],
+    ['pr 42', 'PR DETAIL 42'],
+    ['issue 17', 'ISSUE DETAIL 17'],
+  ])('palette %s opens the requested item', async (query, expected) => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+    await sendInput(':')
+    await sendInput(query)
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain(expected))
+    await sendInput('', { escape: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain(query.startsWith('issue') ? 'ISSUES LIST' : 'PRS LIST'))
+  })
+
+  it.each(['Open PR Detail', 'Open PR Diff'])('palette %s opens the selected PR', async label => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+    await sendInput(':')
+    await sendInput(label)
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain(label.endsWith('Diff') ? 'PR DIFF 7' : 'PR DETAIL 7'))
+  })
+
+  it.each([
+    [{ pane: 'prs', itemNumber: 42 }, 'PR DETAIL 42'],
+    [{ pane: 'prs', view: 'diff', itemNumber: 42 }, 'PR DIFF 42'],
+    [{ pane: 'issues', itemNumber: 17 }, 'ISSUE DETAIL 17'],
+    ...['prs', 'issues', 'branches', 'actions', 'notifications'].map(pane => [{ pane }, `${pane.toUpperCase()} LIST`]),
+  ])('AI navigation %j reaches its destination', async (target, expected) => {
+    aiNavigation.target = target
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+    await sendInput('a', { ctrl: true })
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain(expected))
+  })
+
+  it('palette navigation clears the previous Actions branch filter', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+    await sendInput('o')
+    await sendInput('a')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('ACTIONS LIST feature-branch'))
+    await sendInput(':')
+    await sendInput('Go to Actions')
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('ACTIONS LIST ALL'))
   })
 
   it('opens PR detail from the list', async () => {

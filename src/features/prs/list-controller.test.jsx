@@ -26,3 +26,22 @@ it('sanitizes the checkout branch in confirmation and success text while preserv
   await waitForExpectation(() => expect(checkoutBranch).toHaveBeenCalledWith('o/r', 1))
   await waitForExpectation(() => expect(view.lastFrame()).toContain('✓ Checked out safe&branch'))
 })
+
+it('reports the focused PR for palette actions and clears it for an empty list', async () => {
+  const prs = [
+    { number: 7, title: 'First', state: 'OPEN' },
+    { number: 9, title: 'Second', state: 'OPEN' },
+  ]
+  let items = prs
+  const onPaneState = vi.fn()
+  useGh.mockImplementation(fn => ({ data: fn === listPRs ? items : {}, loading: false, refetch: vi.fn() }))
+  const element = <PRList repo="o/r" listHeight={10} innerWidth={80} onPaneState={onPaneState} />
+  const view = renderWithProviders(element)
+  await waitForExpectation(() => expect(onPaneState).toHaveBeenCalledWith({ selectedPR: prs[0] }))
+  await waitForInputReady(view)
+  view.stdin.write('j')
+  await waitForExpectation(() => expect(onPaneState).toHaveBeenCalledWith({ selectedPR: prs[1] }))
+  items = []
+  view.rerender(element)
+  await waitForExpectation(() => expect(onPaneState).toHaveBeenCalledWith({ selectedPR: null }))
+})

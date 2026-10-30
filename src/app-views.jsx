@@ -79,7 +79,7 @@ export function renderAppView(ctx) {
           <Box flexDirection="row" flexGrow={1} overflow="hidden" justifyContent="center" alignItems="flex-start" paddingY={2}>
             <Box width={Math.min(columns - 4, 80)}>
               <CommandPalette
-                context={{ pane, view, selectedItem, repo, themeName: _config.theme }}
+                context={{ pane, view, selectedItem: pane === 'prs' && view === 'list' ? paneState.selectedPR : selectedItem, repo, themeName: _config.theme }}
                 onClose={() => { setShowPalette(false); setAppMode('NORMAL') }}
                 onNavigate={(opts) => {
                   setShowPalette(false); setAppMode('NORMAL')

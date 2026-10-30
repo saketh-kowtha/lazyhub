@@ -282,6 +282,9 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   // ── Dialogs ───────────────────────────────────────────────────────────────
 
   const selectedPR = items[cursor]
+  useEffect(() => {
+    onPaneState?.({ selectedPR: selectedPR || null })
+  }, [selectedPR, onPaneState])
 
   const dialogView = renderPRListDialog({
     dialog, selectedPR, items, repo, repoInfo, authorFilter, effectiveHeight,
