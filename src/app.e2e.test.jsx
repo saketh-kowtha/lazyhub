@@ -129,7 +129,7 @@ describe('App shell user flows', () => {
     expect(view.lastFrame()).toContain('Keyboard Reference')
   })
 
-  it('help overlay rows have unique React keys even when two actions share a key (B-87)', async () => {
+  it('help overlay rows have unique React keys even when two actions share a key (B-88)', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
       const view = renderWithProviders(
