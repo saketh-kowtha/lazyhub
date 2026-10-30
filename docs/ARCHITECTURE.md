@@ -458,7 +458,7 @@ To prevent merge conflicts and "branch drift":
 - Root cause: the jobs installed on the `ubuntu-latest` runner (ubuntu-26.04), where node-pty compiles `pty.node` from source (1.1.0 ships no linux prebuilds), then bind-mounted that tree into `node:22-bookworm`; the host-built binary needs a newer glibc/libstdc++ than bookworm provides, so `dlopen` fails.
 - Fix: a `npm rebuild node-pty` step runs inside `node:22-bookworm` (uncapped, as node-gyp needs more than 512 MB) before each capped journey run. No dependency or lockfile change.
 
-**B-80 — Multi-state PR filters (e.g. Open+Merged) only listed open PRs (#368)**
-- Symptom: with more than one state filter active in the PR pane, closed/merged PRs never appeared.
-- Root cause: `list.jsx` asks `listPRs` for `state: 'all'` on multi-state sets, but `prSearchQuery` treated unknown states as `open`.
-- Fix: `state: 'all'` now adds no state qualifier to the search query; the client-side filter narrows it. Regression test in `src/executor.test.js`.
+**B-88 — Help overlay rendered duplicate React keys (#381)**
+- Symptom: `?` in the PR list logged React's "two children with the same key, `M`" warning; duplicate keys can make rows duplicate or vanish on re-render.
+- Root cause: `HelpOverlay` (`src/app-panels.jsx`) keyed rows by the key token alone, but `pr.auto-merge` and `pr.filter-merged` are both bound to `M` in the pr-list scope.
+- Fix: rows are keyed by index plus key token (context and global columns). Test: `src/app.e2e.test.jsx` "help overlay rows have unique React keys".
