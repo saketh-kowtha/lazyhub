@@ -472,3 +472,8 @@ To prevent merge conflicts and "branch drift":
 - Symptom: the assignee editor test stayed on the issue list instead of opening the dialog.
 - Root cause: `sendInput()` took its handler snapshot before flushing pending mount effects; a visible frame or timer delay did not guarantee the input handler was registered.
 - Fix: mount the issue test views inside awaited `act()` so effects finish before input. A regression test sends `A` immediately after mounting without a timer delay. Sibling pane flows use their existing input driver; the shared input helper is unchanged.
+
+**B-91 — Debug Logs crashed with `useStdout is not defined` (#372)**
+- Symptom: opening Debug Logs showed an error screen instead of the log list.
+- Root cause: `LogPane` referenced `useStdout`, `Box`, and `Text` without importing them from Ink; existing tests mocked the pane.
+- Fix: import the missing Ink symbols. `src/features/logs/index.test.jsx` renders the real pane and exercises level filtering, search, details, and back navigation. The test reproduced the ReferenceError before the fix. Sibling sweep: PRs, Issues, Branches, Actions, and Notifications already import the Ink symbols they use.
