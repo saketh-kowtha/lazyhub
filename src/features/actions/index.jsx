@@ -7,12 +7,13 @@ import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
-import { listRuns, getRunLogs, rerunRun, cancelRun } from '../../executor.js'
+import { classifyGhFailure, listRuns, getRunLogs, rerunRun, cancelRun } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
+import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { Spinner } from '../../components/Spinner.jsx'
 import { ActionListSkeleton } from '../../components/Skeleton.jsx'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
@@ -256,7 +257,13 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
             />
           )
         })}
-        {!loading && items.length === 0 && (
+        {error && (
+          <Box paddingX={2} paddingY={1} flexDirection="column">
+            <FailureNotice failure={classifyGhFailure(error)} />
+            <Text color={t.ui.dim}>[{firstActionKey('list.refresh', 'r')}] retry</Text>
+          </Box>
+        )}
+        {!loading && !error && items.length === 0 && (
           <Box paddingX={2} paddingY={1}>
             <Text color={t.ui.muted}>No workflow runs found{branchFilter ? ` for branch "${branchFilter}"` : ''}. [{firstActionKey('list.refresh', 'r')}] refresh{branchFilter ? `  [${firstActionKey('workflow.clear-filter', 'F')}] clear filter` : ''}</Text>
           </Box>
