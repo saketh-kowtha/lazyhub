@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useMemo, useEffect, useContext } from 'react'
+import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { format } from 'timeago.js'
 import { getLogs, logger, TextInput, copyToClipboard } from '../../utils.js'
