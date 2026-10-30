@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
 
+# One run per PR / ref: a newer push cancels the stale PR run, but pushes to main
+# always run to completion.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   check:
     name: Check
@@ -35,9 +41,8 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test
-        run: npm test
-
+      # The coverage run executes the whole suite and enforces the floors in
+      # vite.config.js, so a separate plain `npm test` would only repeat it.
       - name: Test with coverage
         run: npm run test:coverage
 
@@ -85,6 +90,27 @@ jobs:
           json-summary-path: coverage/coverage-summary.json
           json-final-path: coverage/coverage-final.json
           file-coverage-mode: changes-affected
+
+  # The engines floor (package.json: node >=20): the unit suite on the oldest
+  # supported Node. Node 22 is covered by the coverage run in `check`.
+  test-node20:
+    name: Test (Node 20)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies (locked)
+        run: npm ci --no-audit --no-fund
+
+      - name: Test
+        run: npm test
 
   audit:
     name: Dependency audit
@@ -141,7 +167,10 @@ jobs:
 
   # TUI memory budget (#311): the Focus -> PRs -> detail -> diff journey inside a
   # hard 512 MB container. Fails if the container OOMs or lazyhub's peak RSS
-  # exceeds LAZYHUB_RSS_BUDGET_MB (default lives in test/pty/memory.js).
+  # exceeds LAZYHUB_RSS_BUDGET_MB (default lives in test/pty/memory.js). The second
+  # run (LAZYHUB_SCALE=1) uses a 1,200-PR / 1,000-file-diff fixture: the PR list
+  # must page past the first 100 rows and stay inside the same RSS budget. Both
+  # journeys share one install, build and node-pty rebuild.
   memory-budget:
     name: TUI memory budget (512 MB)
     runs-on: ubuntu-latest
@@ -177,38 +206,6 @@ jobs:
           docker run --rm -m 512m --memory-swap 512m \
             -v "$PWD:/app" -w /app node:22-bookworm \
             node test/pty/memory.js
-
-  # Same journey against a 1,200-PR / 1,000-file-diff fixture (#311 scale): the PR
-  # list must page past the first 100 rows and stay inside the same RSS budget.
-  memory-budget-scale:
-    name: TUI memory budget at scale (512 MB)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies (lockfile-free)
-        run: |
-          rm -f package-lock.json
-          npm install --no-audit --no-fund
-
-      - name: Build
-        run: npm run build
-
-      - name: Rebuild node-pty for the container libc
-        # The runner (ubuntu-26.04) compiles pty.node against a newer glibc than
-        # node:22-bookworm has, so the host-built binary cannot load in the
-        # container (#358). Rebuild it inside the same image, without the
-        # memory cap (node-gyp needs more than 512 MB).
-        run: |
-          docker run --rm -v "$PWD:/app" -w /app node:22-bookworm \
-            npm rebuild node-pty
 
       - name: Scale journey under a 512 MB limit
         run: |

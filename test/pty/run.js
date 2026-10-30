@@ -2,8 +2,9 @@ import assert from 'assert/strict'
 import { spawnSync } from 'child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
-import { join, delimiter } from 'path'
+import { dirname, join, delimiter } from 'path'
 import pty from 'node-pty'
+import { nodePtyProblem, skipOrFail } from './fixtures.js'
 import { installShim } from '../support/gh-shim/shim.mjs'
 import { GH_STDERR } from '../../src/executor/gh-stderr-fixtures.js'
 
@@ -11,7 +12,8 @@ const ROOT = new URL('../..', import.meta.url).pathname
 const BIN = join(ROOT, 'dist', 'lazyhub.js')
 
 function installGhStub(dir) {
-  return installShim(join(dir, 'bin'), 'pty')
+  // installShim returns the gh file; PATH needs its directory.
+  return dirname(installShim(join(dir, 'bin'), 'pty'))
 }
 
 function stripAnsi(text) {
@@ -55,21 +57,9 @@ function spawnTerminal(env, args = []) {
   }
 }
 
-function canSpawnNodePty() {
-  try {
-    const term = pty.spawn('/bin/sh', ['-lc', 'exit 0'], {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 24,
-      cwd: ROOT,
-      env: { TERM: 'xterm-256color', PATH: process.env.PATH },
-    })
-    term.kill()
-    return true
-  } catch {
-    return false
-  }
-}
+// The first frame paints before Ink has put stdin in raw mode and attached its
+// key handler; keys sent in that window are dropped (slow CI runners hit it).
+const settle = () => new Promise(resolve => setTimeout(resolve, 400))
 
 function childEnv(stubBin, homeDir) {
   return {
@@ -122,15 +112,16 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
     term.onData(data => { output += data })
 
     await waitForScreen(() => output, /Focus|Pull Requests|PTY harness fixture PR/, 'startup')
+    await settle()
     output = ''
-    await writeChord(term, 'gp') // g p: go to Pull Requests (digits are reserved for PR-detail sections)
-    await waitForScreen(() => output, /Pull Requests|PTY harness fixture PR/, 'g p pull requests')
-    output = ''
+    // g p: go to Pull Requests (digits are reserved for PR-detail sections)
+    await sendUntil(() => writeChord(term, 'gp'), () => output, /Pull Requests|PTY harness fixture PR/, 'g p pull requests')
+    // One fixture row: j/k move nothing, and Ink repaints only changed cells, so
+    // there is no screen text to wait on. Send them and let the keys settle.
     term.write('j')
-    await waitForScreen(() => output, /PTY harness fixture PR/, 'j navigation')
-    output = ''
+    await new Promise(resolve => setTimeout(resolve, 100))
     term.write('k')
-    await waitForScreen(() => output, /PTY harness fixture PR/, 'k navigation')
+    await new Promise(resolve => setTimeout(resolve, 100))
     output = ''
     term.write('\r')
     await waitForScreen(() => output, /Fixture body/, 'Enter detail')
@@ -151,6 +142,18 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
     try { term?.kill() } catch {}
     rmSync(temp, { recursive: true, force: true })
   }
+}
+
+// Keys sent while a slow runner is still wiring up Ink's stdin handler are dropped,
+// and a dropped key leaves no output to wait on. Re-send an idempotent key until
+// the screen reacts instead of guessing a startup delay.
+async function sendUntil(send, getText, pattern, label, { tries = 4, eachMs = 2500 } = {}) {
+  let last
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    await send()
+    try { return await waitForScreen(getText, pattern, label, eachMs) } catch (error) { last = error }
+  }
+  throw last
 }
 
 // Two-key chords must arrive as separate key events (Ink would read "gp" as one string).
@@ -218,9 +221,9 @@ async function runDegradedFlow() {
     term = spawnTerminal({ ...childEnv(stubBin, temp), LAZYHUB_GH_FAIL_ONCE_FILE: failFile })
     term.onData(data => { output += data })
     await waitForScreen(() => output, /stub gh failure|rate limit|press r to retry/, 'degraded banner')
-    term.write('r')
-    await waitForScreen(() => output, /PTY harness fixture PR/, 'degraded recovery')
-    assert.match(stripAnsi(output), /press r to retry/)
+    await sendUntil(async () => term.write('r'), () => output, /PTY harness fixture PR/, 'degraded recovery')
+    // The 80-column status line truncates the hint ("press r to ..."), so match its stable prefix.
+    assert.match(stripAnsi(output), /press r to/)
     term.write('q')
     await waitForExit(term)
   } finally {
@@ -238,8 +241,8 @@ async function runDayOneErrorFlow({ name, env, expected }) {
     term = spawnTerminal({ ...childEnv(stubBin, temp), ...env })
     term.onData(data => { output += data })
     await waitForScreen(() => output, /Focus|Pull Requests/, `${name} startup`)
-    await writeChord(term, 'gp')
-    await waitForScreen(() => output, expected, `${name} message`)
+    await settle()
+    await sendUntil(() => writeChord(term, 'gp'), () => output, expected, `${name} message`)
     term.write('q')
     await waitForExit(term)
   } finally {
@@ -258,7 +261,13 @@ async function runPerfFlow() {
     term = spawnTerminal({ ...childEnv(stubBin, temp), LAZYHUB_PERF: '1', LAZYHUB_PERF_PATH: perfPath })
     term.onData(data => { output += data })
     await waitForScreen(() => output, /Focus|Pull Requests|PTY harness fixture PR/, 'perf startup')
-    for (let i = 0; i < 10; i += 1) term.write(i % 2 ? 'j' : 'k')
+    await settle()
+    // keypress-render is recorded when App re-renders after a key, so use keys
+    // that change App state (pane switches); j/k on a one-row list change nothing.
+    for (let i = 0; i < 5; i += 1) {
+      await writeChord(term, 'gp')
+      await writeChord(term, 'gi')
+    }
     await new Promise(resolve => setTimeout(resolve, 200))
     term.write('q')
     await waitForExit(term)
@@ -286,9 +295,11 @@ async function runSwrCacheFlow() {
     first.write('q')
     await waitForExit(first)
 
-    second = spawnTerminal({ ...childEnv(stubBin, temp), LAZYHUB_CACHE_DIR: cacheDir, LAZYHUB_GH_LATENCY_MS: '1500' })
+    second = spawnTerminal({ ...childEnv(stubBin, temp), LAZYHUB_CACHE_DIR: cacheDir, LAZYHUB_GH_LATENCY_MS: '5000' })
     second.onData(data => { secondOutput += data })
-    await waitForScreen(() => secondOutput, /PTY harness fixture PR/, 'stale cache first frame', 700)
+    // The cached frame must beat the (slow) fresh fetch: 5s of gh latency vs a 3s window.
+    // Cold start itself is ~1s on a busy runner, so the window cannot be tighter.
+    await waitForScreen(() => secondOutput, /PTY harness fixture PR/, 'stale cache first frame', 3000)
     second.write('q')
     await waitForExit(second)
   } finally {
@@ -298,15 +309,8 @@ async function runSwrCacheFlow() {
   }
 }
 
-if (!canSpawnNodePty()) {
-  process.stdout.write('node-pty cannot spawn in this shell; skipped PTY E2E flow\n')
-  process.exit(0)
-}
-
-if (process.env.CI && process.platform === 'linux') {
-  process.stdout.write('node-pty starts on this Linux runner but emits unstable screen data; skipped PTY E2E flow\n')
-  process.exit(0)
-}
+const ptyProblem = nodePtyProblem(pty, ROOT)
+if (ptyProblem) skipOrFail(`node-pty cannot spawn in this shell: ${ptyProblem}`)
 
 await runLazyhubFlow()
 await runReferenceFlow()
@@ -327,6 +331,10 @@ await runSwrCacheFlow()
 
 if (spawnSync('tmux', ['-V']).status === 0) {
   await runLazyhubFlow({ useTmux: true })
+} else if (process.env.CI) {
+  // CI installs tmux on Linux; macOS runners do not and the tmux flow is Linux-only coverage.
+  if (process.platform === 'linux') skipOrFail('tmux is not installed but the CI job installs it')
+  process.stdout.write('tmux not installed on this runner; skipped tmux PTY smoke flow\n')
 } else {
   process.stdout.write('tmux not installed; skipped tmux PTY smoke flow\n')
 }

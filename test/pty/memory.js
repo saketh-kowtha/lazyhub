@@ -16,10 +16,12 @@ import { execFileSync } from 'child_process'
 import { tmpdir } from 'os'
 import { join, delimiter } from 'path'
 import pty from 'node-pty'
-import { installGhStub } from './fixtures.js'
+import { installGhStub, nodePtyProblem, skipOrFail } from './fixtures.js'
 
 const ROOT = new URL('../..', import.meta.url).pathname
 const BIN = join(ROOT, 'dist', 'lazyhub.js')
+const ptyProblem = nodePtyProblem(pty, ROOT)
+if (ptyProblem) skipOrFail(`node-pty cannot spawn: ${ptyProblem}`)
 const BUDGET_MB = Number(process.env.LAZYHUB_RSS_BUDGET_MB || 150)
 // LAZYHUB_SCALE=1: 1,200 PRs and a 1,000-file diff (see fixtures.js); the journey scrolls the list to the end.
 const SCALE = process.env.LAZYHUB_SCALE === '1'
