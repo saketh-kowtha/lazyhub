@@ -43,12 +43,16 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
     return disk ? { data: disk.payload, stale: true } : null
   }
   const [seed] = useState(readSeed)
-  const [data, setData] = useState(seed ? seed.data : null)
-  const [loading, setLoading] = useState(!seed)
-  const [error, setError] = useState(null)
-  const [isStale, setIsStale] = useState(Boolean(seed?.stale))
+  const [dataState, setData] = useState(seed ? seed.data : null)
+  const [loadingState, setLoading] = useState(!seed)
+  const [errorState, setError] = useState(null)
+  const [isStaleState, setIsStale] = useState(Boolean(seed?.stale))
   // Re-seed when the key changes so a reused component never shows the previous key's data.
   const [seededKey, setSeededKey] = useState(cacheKey)
+  // The seed is derived from cacheKey during render (#548): React discards this pass and
+  // re-renders at once, but the values returned below already belong to the new key, so
+  // no render, committed or not, ever pairs the new key with the previous key's data.
+  let data = dataState, loading = loadingState, error = errorState, isStale = isStaleState
   if (seededKey !== cacheKey) {
     const next = readSeed()
     setSeededKey(cacheKey)
@@ -56,6 +60,10 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
     setLoading(!next)
     setIsStale(Boolean(next?.stale))
     setError(null)
+    data = next ? next.data : null
+    loading = !next
+    isStale = Boolean(next?.stale)
+    error = null
   }
   const mountedRef = useRef(true)
   // Request generation: only the latest request may touch state (#434).

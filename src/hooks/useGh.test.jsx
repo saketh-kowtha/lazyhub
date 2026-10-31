@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { render, cleanup } from 'ink-testing-library'
 import { useGh } from './useGh.js'
 import { cacheKey as mkDiskKey, writeCache } from '../cache.js'
-import { flush } from '../test/test-helpers.jsx'
+import { flush, waitForExpectation } from '../test/test-helpers.jsx'
 
 function defer() {
   let resolve
@@ -154,21 +154,29 @@ describe('useGh seeding (#454)', () => {
   it('re-seeds when the key changes so the previous key data is never shown', async () => {
     const d = defer()
     async function reseedFetch(id) { return id === 'a' ? 'DATA-A' : d.promise }
-    const frames = []
+    // Recorded in the render body (not an effect): this is every frame the hook
+    // returned, in order, so a one-render stale seed cannot hide (#548).
+    const renders = []
     function View({ id }) {
       const { data, loading } = useGh(reseedFetch, [id])
       const line = `${id}:data=${data ?? 'none'} loading=${loading}`
-      React.useEffect(() => { frames.push(line) })
+      renders.push(line)
       return <Text>{line}</Text>
     }
     const view = render(<View id="a" />)
-    await flush(20)
-    expect(view.lastFrame()).toContain('a:data=DATA-A')
-    frames.length = 0
+    // Wait for A to fully settle (data AND loading=false) instead of a fixed sleep:
+    // under coverage the trailing loading=false render used to land after the reset
+    // below and be mistaken for the first frame of key B.
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('a:data=DATA-A loading=false'))
+    renders.length = 0
     view.rerender(<View id="b" />)
-    await flush(20)
-    expect(frames.filter(f => f.startsWith('b:')).every(f => !f.includes('DATA-A'))).toBe(true)
-    expect(frames[0]).toBe('b:data=none loading=true')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('b:data=none loading=true'))
+    const bRenders = renders.filter(f => f.startsWith('b:'))
+    expect(bRenders.length).toBeGreaterThan(0)
+    expect(bRenders[0]).toBe('b:data=none loading=true')
+    expect(bRenders.every(f => !f.includes('DATA-A'))).toBe(true)
+    // The key changed in one step: no render pairs key b with key a's data.
+    expect(renders.some(f => f.startsWith('b:') && f.includes('DATA-A'))).toBe(false)
     cleanup()
   })
 })
