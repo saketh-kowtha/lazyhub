@@ -115,7 +115,7 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
     mountedRef.current = true
     fetchData(false)
     return () => {
-      reqRef.current++
+      reqRef.current++ // eslint-disable-line react-hooks/exhaustive-deps
       mountedRef.current = false
     }
   }, [cacheKey]) // eslint-disable-line react-hooks/exhaustive-deps
