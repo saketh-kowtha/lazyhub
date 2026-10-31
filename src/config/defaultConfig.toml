@@ -34,7 +34,6 @@ name = "lazyhub-dark"    # lazyhub-dark | lazyhub-light | lazyhub-high-contrast 
 
 # ── Defaults ─────────────────────────────────────────────────────────────
 [defaults]
-pr_scope    = "mine"          # mine | reviewing | all
 ai_provider = "claude-code"   # claude-code | codex | gemini-cli | anthropic-api | openai-compatible
 repo        = ""              # owner/name saved by first-run onboarding; used only when no repo is detected from the current directory
 repo_host   = ""              # host that repo belongs to; the saved repo is ignored under a different GH_HOST
@@ -95,7 +94,6 @@ compact_footer = false
 [diff]
 default_view     = "unified"
 syntax_highlight = true
-max_lines        = 2000
 
 [editor]
 command        = "auto"
@@ -107,11 +105,9 @@ allow_writes = false   # true lets editor integrations reply to/resolve review t
 
 # ── UI ───────────────────────────────────────────────────────────────────
 [ui]
-density       = "compact"   # compact | comfortable
-show_hints    = true
+show_hints    = true        # false hides the footer key hints (same layout as [layout].compact_footer)
 no_color      = false       # also honored when $NO_COLOR is set and non-empty
 icons         = "auto"      # auto | unicode | ascii (auto: ASCII on TERM=linux/dumb, non-UTF-8 locales, legacy Windows consoles)
-high_contrast = false
 
 # ── Keymaps ──────────────────────────────────────────────────────────────
 [keymaps.global]

@@ -10,6 +10,7 @@ import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/
 
 const exitSpy = vi.hoisted(() => vi.fn())
 const paletteProps = vi.hoisted(() => ({ current: null }))
+const switcherProps = vi.hoisted(() => ({ current: null }))
 
 vi.mock('ink', async () => {
   const React = await import('react')
@@ -62,6 +63,9 @@ vi.mock('./components/ErrorBoundary.jsx', () => ({ ErrorBoundary: ({ children })
 vi.mock('./components/AIAssistant.jsx', () => ({ AIAssistant: () => <Text>AI</Text> }))
 vi.mock('./components/CommandPalette.jsx', () => ({
   CommandPalette: (props) => { paletteProps.current = props; return <Text>PALETTE</Text> },
+}))
+vi.mock('./features/onboarding/Onboarding.jsx', () => ({
+  RepoSwitcher: (props) => { switcherProps.current = props; return <Text>REPO PICKER</Text> },
 }))
 vi.mock('./components/CustomPane.jsx', () => ({ CustomPane: () => <Text>CUSTOM</Text> }))
 vi.mock('./features/tabs/view.jsx', () => ({ TabView: () => <Text>TAB VIEW</Text> }))
@@ -314,6 +318,28 @@ describe('App shell user flows', () => {
     await waitForExpectation(() => expect(view.lastFrame()).toContain('PALETTE'))
     paletteProps.current.onNavigate({ pane: 'prs', view: 'diff', itemNumber: 42 })
     await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DIFF 42'))
+  })
+
+  it('palette "Switch repository" opens the picker; choosing a repo hands it to the app, cancel changes nothing (#466)', async () => {
+    const onSwitchRepo = vi.fn()
+    const view = renderWithProviders(<App repo="owner/repo" onSwitchRepo={onSwitchRepo} />)
+    await flush(20)
+    await sendInput(':')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PALETTE'))
+    paletteProps.current.context.onSwitchRepo()
+    paletteProps.current.onClose()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('REPO PICKER'))
+    switcherProps.current.onDone({ status: 'cancelled' })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PRS LIST'))
+    expect(onSwitchRepo).not.toHaveBeenCalled()
+
+    await sendInput(':')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PALETTE'))
+    paletteProps.current.context.onSwitchRepo()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('REPO PICKER'))
+    switcherProps.current.onDone({ status: 'completed', repo: 'owner/repo' }) // the current repo: no remount
+    switcherProps.current.onDone({ status: 'completed', repo: 'acme/other' })
+    await waitForExpectation(() => expect(onSwitchRepo).toHaveBeenCalledExactlyOnceWith('acme/other'))
   })
 
   it('opens settings from the shell', async () => {

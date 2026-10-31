@@ -54,7 +54,7 @@ const PANE_FOR_GO_ACTION = {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
-export function App({ repo }) {
+export function App({ repo, onSwitchRepo }) {
   const { t, setTheme } = useTheme()
   const { exit } = useApp()
   const ghHealth = useGhHealth()
@@ -114,6 +114,7 @@ export function App({ repo }) {
   const [toasts, setToasts]             = useState([])
   const [recentStatus, setRecentStatus] = useState([])
   const [showPalette, setShowPalette]   = useState(false)
+  const [showRepoPicker, setShowRepoPicker] = useState(false) // palette: Switch repository (#466)
   const [leaderActive, setLeaderActive] = useState(false)
   const leaderTimerRef = useRef(null)
   // Which-key popup for an armed prefix key such as `g` (#312)
@@ -439,6 +440,7 @@ export function App({ repo }) {
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
     showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
+    showRepoPicker, setShowRepoPicker, onSwitchRepo,
   })
 
   return (
@@ -453,6 +455,22 @@ export function App({ repo }) {
       )}
     </>
   )
+}
+
+/**
+ * Owns the repository. Switching sets GHUI_REPO (read by every gh call) and remounts the
+ * whole App via `key`, so no pane, cache key or selection from the old repo survives (#466).
+ *
+ * @param {{initialRepo: string}} props
+ * @returns {React.ReactElement}
+ */
+function AppRoot({ initialRepo }) {
+  const [repo, setRepo] = useState(initialRepo)
+  const switchRepo = useCallback((next) => {
+    process.env.GHUI_REPO = next
+    setRepo(next)
+  }, [])
+  return <App key={repo} repo={repo} onSwitchRepo={switchRepo} />
 }
 
 export function renderApp() {
@@ -470,7 +488,7 @@ export function renderApp() {
       <ConfigProvider>
         <ThemeProvider initialTheme={initialTheme}>
           <KeyScopeProvider>
-            <App repo={repo} />
+            <AppRoot initialRepo={repo} />
           </KeyScopeProvider>
         </ThemeProvider>
       </ConfigProvider>,

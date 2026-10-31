@@ -82,6 +82,29 @@ afterEach(() => {
   execa.mockReset()
 })
 
+describe('embedded repository switcher (#466)', () => {
+  it('picks a repo for the running app: no first-run copy, onDone fired, the app is not exited', async () => {
+    stubGh()
+    const view = start({ embedded: true })
+    await waitForExpectation(() => expect(frame(view)).toContain('octocat/hello'))
+    expect(frame(view)).toContain('switch repository')
+    expect(frame(view)).not.toContain('first run')
+    expect(frame(view)).not.toContain('nothing is written')
+    await pick(view)
+    await waitForExpectation(() => expect(view.onDone).toHaveBeenCalledWith({ status: 'completed', repo: 'octocat/hello' }))
+    expectOnlyReads()
+  })
+
+  it('q cancels without choosing', async () => {
+    stubGh()
+    const view = start({ embedded: true })
+    await waitForExpectation(() => expect(frame(view)).toContain('octocat/hello'))
+    await waitForInputReady(view)
+    view.stdin.write('q')
+    await waitForExpectation(() => expect(view.onDone).toHaveBeenCalledWith({ status: 'cancelled' }))
+  })
+})
+
 describe('first-run onboarding', () => {
   it('happy path: existing gh login -> one Enter completes first run (straight to Focus), no report, no writes', async () => {
     stubGh()

@@ -432,10 +432,11 @@ export async function resolveItemKind(repo, number) {
  * @param renderApp
  * @param {object} [root0]
  * @param {string} [root0.repo] repository chosen in the first-run flow
+ * @param {string} [root0.repoOverride] repository named by `--repo` (this launch only, never saved)
  * @param {{repo: string|null, number: number, kind: 'pr'|'issue'|null, host: string|null}|null} [root0.open]
  *   validated PR/issue reference from the command line (see parseItemReference)
  */
-export async function bootstrap(renderApp, { repo: chosenRepo, open = null } = /** @type {{repo?: string, open?: any}} */ ({})) {
+export async function bootstrap(renderApp, { repo: chosenRepo, repoOverride, open = null } = /** @type {{repo?: string, repoOverride?: string, open?: any}} */ ({})) {
   // Write default config on first run
   writeDefaultConfig()
   // Reached with a chosenRepo only when first-run onboarding completed (cancel exits earlier).
@@ -499,7 +500,8 @@ export async function bootstrap(renderApp, { repo: chosenRepo, open = null } = /
   // Precedence: repo picked this launch in onboarding > repo detected from the
   // current directory > repo saved by onboarding ([defaults].repo) > interactive picker.
   // A reference names its repo; a bare #N / N needs the current directory's repo.
-  let repo = open ? (open.repo || await detectRepo()) : (chosenRepo || await detectRepo() || loadSavedRepo())
+  // `--repo` (repoOverride) names the repository for this launch only: it wins over everything and is never saved.
+  let repo = open ? (open.repo || repoOverride || await detectRepo()) : (repoOverride || chosenRepo || await detectRepo() || loadSavedRepo())
   if (open && !repo) {
     console.error(`\n  ✗ #${open.number} needs a repository: run inside a clone, or use owner/repo#${open.number}.\n`)
     process.exit(2)
