@@ -10,7 +10,10 @@ import { recordGhFailure, recordGhSuccess } from './useGhHealth.js'
 
 // In-memory cache: key → { data, timestamp }, LRU-capped so a long session
 // (many repos/pages) cannot grow without bound.
-const cache = createLruCache(200)
+let cache = createLruCache(200)
+
+/** Drop the in-memory cache (tests). */
+export function resetGhMemoryCache() { cache = createLruCache(200) }
 
 const DEFAULT_TTL = 30_000 // 30 seconds
 
@@ -115,6 +118,7 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
   useEffect(() => {
     mountedRef.current = true
     if (enabled) fetchData(false)
+    else setLoading(false) // a disabled hook is not loading; also un-sticks a true->false flip
     return () => {
       reqRef.current++ // eslint-disable-line react-hooks/exhaustive-deps
       mountedRef.current = false

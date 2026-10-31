@@ -54,3 +54,26 @@ describe('useGh async races (#434)', () => {
     cleanup()
   })
 })
+
+describe('useGh enabled option (#451)', () => {
+  it('defers the fetch until enabled, and a true->false flip does not strand loading', async () => {
+    const d = defer()
+    let calls = 0
+    async function gatedFetch() { calls++; return d.promise }
+    function View({ on }) {
+      const { data, loading } = useGh(gatedFetch, ['g'], { enabled: on })
+      return <Text>{`data=${data ?? 'none'} loading=${loading}`}</Text>
+    }
+    const view = render(<View on={false} />)
+    await flush(10)
+    expect(calls).toBe(0)
+    view.rerender(<View on={true} />)
+    await flush(10)
+    expect(calls).toBe(1)
+    expect(view.lastFrame()).toContain('loading=true')
+    view.rerender(<View on={false} />)
+    await flush(10)
+    expect(view.lastFrame()).toContain('loading=false')
+    cleanup()
+  })
+})
