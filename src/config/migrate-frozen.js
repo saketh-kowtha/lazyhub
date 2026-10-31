@@ -9,8 +9,8 @@
  * `stripFrozenDefaults` is pure and idempotent: it removes any [actions.<id>] field or
  * [keymaps.<scope>] binding that equals a value lazyhub ever shipped as a default, and
  * every binding that points at an action id which no longer exists. Anything the user
- * actually changed is kept untouched. Unknown ids that were never shipped are dropped
- * from the effective config and reported so the UI can say so once.
+ * actually changed is kept untouched. Bindings to ids that exist nowhere (not in the
+ * defaults, a past release, or the user's own [actions.*]) are dropped and reported once.
  */
 
 import { LEGACY_ACTION_VALUES, LEGACY_KEYMAP_BINDINGS } from './legacy-defaults.js'
@@ -35,14 +35,16 @@ function isShippedValue(id, field, value, current) {
  * @param {Object} defaults the current bundled defaults (needs `.actions`)
  * @returns {{ config: Object, dropped: number, unknown: string[] }}
  *   config: user config without frozen defaults; dropped: number of entries removed;
- *   unknown: sorted, de-duplicated action ids that exist neither now nor in any
- *   past release (worth telling the user about)
+ *   unknown: sorted, de-duplicated action ids bound in [keymaps.*] that exist nowhere:
+ *   not in the defaults, any past release, or the user's own [actions.*]
  */
 export function stripFrozenDefaults(userRaw, defaults) {
   if (!isPlainObject(userRaw)) return { config: userRaw, dropped: 0, unknown: [] }
   const knownActions = isPlainObject(defaults?.actions) ? defaults.actions : {}
   const config = { ...userRaw }
   const unknown = new Set()
+  // Actions the user defined in their own [actions.*] are known, even though no default exists.
+  const userActionIds = new Set(isPlainObject(userRaw.actions) ? Object.keys(userRaw.actions) : [])
   let dropped = 0
 
   if (isPlainObject(userRaw.actions)) {
@@ -50,8 +52,8 @@ export function stripFrozenDefaults(userRaw, defaults) {
     for (const [id, entry] of Object.entries(userRaw.actions)) {
       if (!isPlainObject(entry)) { actions[id] = entry; continue }
       if (!knownActions[id]) {
+        // A removed default is dropped; anything else is the user's own action: kept, not reported.
         if (LEGACY_ACTION_VALUES[id]) { dropped += 1; continue }
-        unknown.add(id)
         actions[id] = entry
         continue
       }
@@ -74,7 +76,7 @@ export function stripFrozenDefaults(userRaw, defaults) {
       for (const [key, actionId] of Object.entries(bindings)) {
         if (typeof actionId !== 'string' || PLATFORM_OR_UNBIND.has(key)) { kept[key] = actionId; continue }
         if ((LEGACY_KEYMAP_BINDINGS[scope]?.[key] || []).includes(actionId)) { dropped += 1; continue }
-        if (!knownActions[actionId]) {
+        if (!knownActions[actionId] && !userActionIds.has(actionId)) {
           unknown.add(actionId)
           dropped += 1
           continue
