@@ -6,7 +6,7 @@ import React, { useState, useCallback, useEffect, useContext, useRef, memo } fro
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
-import { classifyGhFailure, listBranches, deleteBranch, listPRs } from '../../executor.js'
+import { classifyGhFailure, listBranches, deleteBranch, listPRs, findLocalCheckout } from '../../executor.js'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
@@ -47,14 +47,24 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
   const { data: branches, loading, error, refetch, isStale } = useGh(listBranches, [repo])
   const { data: prs } = useGh(listPRs, [repo, { state: 'open', limit: 100 }], { ttl: 120_000 })
   const [currentBranch, setCurrentBranch] = useState(null)
+  // Local git only ever runs in a checkout of the repo being viewed (#471).
+  // undefined = still resolving, null = no local checkout of `repo`.
+  const [localDir, setLocalDir] = useState(undefined)
+  useEffect(() => {
+    let live = true
+    setLocalDir(undefined)
+    findLocalCheckout(repo).then(dir => { if (live) setLocalDir(dir) })
+    return () => { live = false }
+  }, [repo])
 
   const refreshCurrentBranch = useCallback(() => {
+    if (!localDir) { setCurrentBranch(null); return }
     import('execa').then(({ execa }) => {
-      execa('git', ['branch', '--show-current'], { cwd: process.cwd() })
+      execa('git', ['branch', '--show-current'], { cwd: localDir })
         .then(result => setCurrentBranch(result.stdout.trim()))
         .catch(() => {})
     })
-  }, [])
+  }, [localDir])
 
   useEffect(() => { refreshCurrentBranch() }, [refreshCurrentBranch])
   const [cursor, setCursor] = useState(0)
@@ -104,6 +114,15 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
 
   const selectedBranch = items[cursor]
 
+  // Local actions need a checkout of `repo`; otherwise say why they are off.
+  const requireLocal = () => {
+    if (localDir) return true
+    showStatus(localDir === undefined
+      ? 'Checking for a local checkout…'
+      : `No local checkout of ${sanitize(repo)} here; run lazyhub inside a clone to use local git actions`, localDir === null)
+    return false
+  }
+
   const hasOpenPR = selectedBranch && (prs || []).some(
     pr => pr.headRefName === selectedBranch.name && pr.state === 'OPEN'
   )
@@ -119,7 +138,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
     if (matchesAction('cursor.up', input, key))  { moveCursor(-1); return }
     if (matchesAction('list.refresh', input, key)) { refetch(); return }
     if (matchesAction('list.search', input, key)) { setDialog('fuzzy'); return }
-    if (matchesAction('branch.new', input, key)) { setNewBranchName(''); setDialog('new-branch'); return }
+    if (matchesAction('branch.new', input, key)) { if (requireLocal()) { setNewBranchName(''); setDialog('new-branch') } return }
 
     // gg → top
     const topSequenceKey = firstActionKey('cursor.top', 'gg')[0]
@@ -148,7 +167,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
     if (loading || items.length === 0) return
 
     if (matchesAction('branch.checkout', input, key)) {
-      if (selectedBranch) {
+      if (selectedBranch && requireLocal()) {
         if (selectedBranch.name === currentBranch) {
           showStatus(`Already on "${sanitize(selectedBranch.name)}"`)
           return
@@ -165,8 +184,9 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
 
     if (matchesAction('branch.push', input, key)) {
       // Push current branch
+      if (!requireLocal()) return
       import('execa').then(({ execa }) => {
-        execa('git', ['push', 'origin', 'HEAD'], { cwd: process.cwd() })
+        execa('git', ['push', 'origin', 'HEAD'], { cwd: localDir })
           .then(() => showStatus('Pushed'))
           .catch(err => showStatus(`Push failed: ${err.message}`, true))
       })
@@ -203,7 +223,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
             setDialog(null)
             try {
               const { execa } = await import('execa')
-              await execa('git', ['checkout', selectedBranch.name], { cwd: process.cwd() })
+              await execa('git', ['checkout', selectedBranch.name], { cwd: localDir })
               showStatus(`✓ Checked out ${sanitize(selectedBranch.name)}`)
               refreshCurrentBranch()
             } catch (err) {
@@ -264,7 +284,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
               setDialog(null)
               try {
                 const { execa } = await import('execa')
-                await execa('git', ['checkout', '-b', name], { cwd: process.cwd() })
+                await execa('git', ['checkout', '-b', name], { cwd: localDir })
                 showStatus(`✓ Created and checked out ${name}`)
                 refreshCurrentBranch()
                 refetch()

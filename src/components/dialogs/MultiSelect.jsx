@@ -16,11 +16,15 @@ export function MultiSelect({ items = [], onSubmit, onCancel, title = '' }) {
   const { t } = useTheme()
   const { stdout } = useStdout()
   const [query, setQuery] = useState('')
-  const [selected, setSelected] = useState(() => {
+  // Only the user's own toggles are state; everything else is derived from
+  // `items`, so a list that refreshes after mount (stale cache, then fresh)
+  // re-syncs its preselected rows instead of freezing the first render (#458).
+  const [toggled, setToggled] = useState(() => new Map())
+  const selected = useMemo(() => {
     const s = new Set()
-    items.forEach(item => { if (item.selected) s.add(item.id) })
+    items.forEach(item => { if (toggled.has(item.id) ? toggled.get(item.id) : item.selected) s.add(item.id) })
     return s
-  })
+  }, [items, toggled])
 
   const filtered = useMemo(() => {
     if (!query) return items
@@ -38,12 +42,8 @@ export function MultiSelect({ items = [], onSubmit, onCancel, title = '' }) {
   const toggleCurrent = () => {
     const item = filtered[cursor]
     if (!item) return
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(item.id)) next.delete(item.id)
-      else next.add(item.id)
-      return next
-    })
+    const now = selected.has(item.id)
+    setToggled(prev => new Map(prev).set(item.id, !now))
   }
 
   useInput((input, key) => {
