@@ -76,7 +76,7 @@ local function fetch_via_gh(branch)
   if not branch then return end
   vim.fn.jobstart(
     { 'gh', 'pr', 'list', '--head', branch,
-      '--json', 'number,state,statusCheckRollup,reviewThreads',
+      '--json', 'number,state,statusCheckRollup',
       '--limit', '1' },
     {
       stdout_buffered = true,
@@ -112,21 +112,10 @@ local function fetch_via_gh(branch)
           end
         end
 
-        -- Count unresolved review threads
-        local unresolved = nil
-        if type(pr.reviewThreads) == 'table' then
-          local n = 0
-          for _, t in ipairs(pr.reviewThreads) do
-            if t.isResolved == false then n = n + 1 end
-          end
-          if n > 0 then unresolved = n end
-        end
-
         update_cache({
           prNumber          = pr.number,
           prState           = pr.state,
           ciStatus          = ci_status,
-          unresolvedThreads = unresolved,
         })
       end,
     }

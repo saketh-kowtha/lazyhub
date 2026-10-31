@@ -1,5 +1,6 @@
 import { execa } from 'execa'
 import { getRepo, runGh } from './core.js'
+import { logger } from '../utils-core.js'
 
 /**
  * Request reviewers for a PR.
@@ -106,7 +107,7 @@ export async function deleteBranch(repo, branchName) {
  *
  * @param {string} branch  - head ref name (e.g. 'feat/my-feature')
  * @param {string} [repo]  - optional repo override; falls back to GHUI_REPO
- * @returns {Promise<{prNumber:number|null, prState?:string, ciStatus?:string|null, unresolvedThreads?:number}>}
+ * @returns {Promise<{prNumber:number|null, prState?:string, ciStatus?:string|null}>}
  */
 export async function getPRStateForBranch(branch, repo) {
   if (!branch) return { prNumber: null }
@@ -114,7 +115,7 @@ export async function getPRStateForBranch(branch, repo) {
   const args = [
     'pr', 'list',
     '--head', branch,
-    '--json', 'number,state,statusCheckRollup,reviewThreads',
+    '--json', 'number,state,statusCheckRollup',
     '--limit', '1',
   ]
 
@@ -125,8 +126,9 @@ export async function getPRStateForBranch(branch, repo) {
   let results
   try {
     results = await runGh(args)
-  } catch {
+  } catch (err) {
     // If the call fails (e.g. no remote, rate-limit), degrade gracefully.
+    logger.error(`getPRStateForBranch: gh pr list failed for ${branch}: ${err.message}`)
     return { prNumber: null }
   }
 
@@ -156,21 +158,11 @@ export async function getPRStateForBranch(branch, repo) {
     else if (s) ciStatus = 'pending'
   }
 
-  // Count unresolved review threads
-  let unresolvedThreads
-  if (Array.isArray(pr.reviewThreads)) {
-    const count = pr.reviewThreads.filter(t => t.isResolved === false).length
-    if (count > 0) unresolvedThreads = count
-  }
-
-  const response = {
+  return {
     prNumber: pr.number,
     prState:  pr.state,
     ciStatus,
   }
-  if (unresolvedThreads !== undefined) response.unresolvedThreads = unresolvedThreads
-
-  return response
 }
 
 /**
