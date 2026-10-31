@@ -75,7 +75,7 @@ export function TabView({ tab, repo, onOpenItem }) {
       case 'tab.prev-section': moveSection(-1); return
       case 'list.refresh': paneData.current.forEach(d => d?.refetch?.()); return
       case 'tab.open-selected':
-        if (items[cursor] && onOpenItem) onOpenItem(items[cursor], data.kind)
+        if (items[cursor] && onOpenItem) onOpenItem(items[cursor], data.kind, data.repo)
         return
       case 'tab.open-browser':
         if (items[cursor]) openInBrowser(items[cursor].url)

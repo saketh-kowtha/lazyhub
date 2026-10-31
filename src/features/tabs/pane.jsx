@@ -47,11 +47,12 @@ export function TabPane({ pane, repo, active = false, cursor = 0, onData }) {
   const limit = pane.limit || 25
   const translated = useMemo(() => filterToGh(pane.filter || {}, { limit }), [pane.filter, limit])
   const loader = pane.kind === 'issues' ? listIssues : listPRs
-  const { data, loading, error, refetch } = useGh(loader, [pane.filter?.repo || repo, translated.filter])
+  const paneRepo = pane.filter?.repo || repo
+  const { data, loading, error, refetch } = useGh(loader, [paneRepo, translated.filter])
 
   // Only a settled, error-free list can be selected or opened.
   const items = !loading && !error && Array.isArray(data) ? data : []
-  useEffect(() => { if (onData) onData({ items, refetch, kind: pane.kind }) })
+  useEffect(() => { if (onData) onData({ items, refetch, kind: pane.kind, repo: paneRepo }) })
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={active ? t.ui.borderActive : t.ui.border} paddingX={1} minWidth={30} flexGrow={1}>
