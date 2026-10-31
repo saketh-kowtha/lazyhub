@@ -16,12 +16,14 @@ export class GhError extends Error {
    * @param {string} root0.stderr   - sanitized stderr from the gh process
    * @param {number} root0.exitCode - process exit code (1 when unknown)
    * @param {string[]} root0.args   - sanitized argv passed to gh
+   * @param {string} [root0.code]   - spawn error code (e.g. 'ENOENT'), when the process could not start
    */
-  constructor({ message, stderr, exitCode, args }) {
+  constructor({ message, stderr, exitCode, args, code }) {
     super(message)
     this.name = 'GhError'
     this.stderr = stderr
     this.exitCode = exitCode
     this.args = args
+    this.code = code
   }
 }
