@@ -159,6 +159,17 @@ describe('dashboard repository identity (#493)', () => {
     expect(useGh).not.toHaveBeenCalledWith(executor.getPR, ['owner/repo', 102])
   })
 
+  it('keeps the comments action after inspecting the diff and returning to detail (#492)', async () => {
+    await openDetail()
+    await press([key('d')])
+    await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.getPRDiff, ['other/project', 102]))
+    await press([key('', { escape: true })])
+    await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.getPR, ['other/project', 102]))
+    useGh.mockClear()
+    await press([key('v')])
+    await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.listPRTimelinePage, ['other/project', 102]))
+  })
+
   it('opens Actions for the item repository, not the launch repository', async () => {
     await openDetail()
     await press([key('C')])
