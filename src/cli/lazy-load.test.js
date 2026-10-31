@@ -4,8 +4,8 @@
  * recorded specifiers contain no ink/react/highlight.js. Since #282 bundles those
  * packages, a loaded dist chunk is also checked for their bundled sources.
  */
-import { describe, it, expect, beforeAll } from 'vitest'
-import { execFileSync, spawnSync } from 'child_process'
+import { describe, it, expect } from 'vitest'
+import { spawnSync } from 'child_process'
 import { mkdtempSync, readFileSync, readdirSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join } from 'path'
@@ -45,10 +45,6 @@ function loadedSpecifiers(args) {
 }
 
 describe('code-split bundle', () => {
-  beforeAll(() => {
-    execFileSync(process.execPath, ['build.js'], { cwd: ROOT, stdio: 'ignore' })
-  }, 60_000)
-
   it('recorder detects the TUI stack when it is actually imported (control)', () => {
     const home = mkdtempSync(join(tmpdir(), 'lazyhub-lazy-'))
     const out = join(home, 'imports.txt')

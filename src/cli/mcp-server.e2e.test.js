@@ -1,7 +1,7 @@
 // `lazyhub --mcp` through the BUILT entrypoint (#518): headless preflight, stdout
 // reserved for JSON-RPC, never an interactive login. Temp HOME + fake gh only.
-import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { chmodSync, existsSync, mkdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -21,16 +21,15 @@ function fakeGh(name, body) {
   return dir
 }
 
-function runMcp(pathDir, input = '') {
-  const env = { PATH: pathDir, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), XDG_CACHE_HOME: join(home, '.cache') }
+function runMcp(pathDir, input = '', extraEnv = {}) {
+  const env = { ...extraEnv, PATH: pathDir, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), XDG_CACHE_HOME: join(home, '.cache') }
   return spawnSync(process.execPath, [entry, '--mcp'], { env, cwd, input, encoding: 'utf8', timeout: 20_000 })
 }
 
 beforeAll(() => {
   mkdirSync(home)
   mkdirSync(cwd)
-  execFileSync(process.execPath, ['build.js'], { cwd: root, stdio: 'ignore' })
-}, 60_000)
+})
 afterAll(() => rmSync(work, { recursive: true, force: true }))
 
 describe('lazyhub --mcp headless preflight (#518)', () => {
@@ -55,6 +54,18 @@ echo "not logged in" >&2; exit 1`)
     expect(r.status).not.toBe(0)
     expect(r.stderr.trim().split('\n')).toHaveLength(1)
     expect(r.stderr).toMatch(/gh/)
+  })
+
+  it('GHES headless: GH_HOST is honoured for the auth check (gh auth token --hostname)', () => {
+    const log = join(work, 'ghes-calls.log')
+    const bin = fakeGh('ghes', `
+echo "$@" >> '${log}'
+[ "$1" = "--version" ] && { echo "gh version 2.0.0"; exit 0; }
+[ "$1 $2" = "auth token" ] && { echo fake; exit 0; }
+echo "[]"`)
+    const r = runMcp(bin, '', { GH_HOST: 'ghe.example.com' })
+    expect(r.status).toBe(0)
+    expect(readFileSync(log, 'utf8')).toContain('auth token --hostname ghe.example.com')
   })
 
   it('authenticated: serves JSON-RPC only on stdout', () => {
