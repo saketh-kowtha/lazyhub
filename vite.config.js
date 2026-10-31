@@ -18,7 +18,7 @@ export default defineConfig({
   plugins: [jsxInJsPlugin, react()],
   test: {
     environment: 'node',
-    globalSetup: ['src/test/global-guard.js'],
+    globalSetup: ['src/test/global-guard.js', 'src/test/global-build.js'],
     setupFiles: ['src/test/setup-hermetic.js'],
     include: ['src/**/*.{test,spec}.{jsx,js}'],
     coverage: {
