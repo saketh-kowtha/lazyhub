@@ -25,16 +25,29 @@ const _diffCfg = _cfg.diff
 const _editorCfg = _cfg.editor
 
 /**
+ * True when gh refused the diff because it is too large (HTTP 406 and friends).
+ * @param {Error|null|undefined} err
+ */
+function isDiffTooLarge(err) {
+  if (!err) return false
+  const text = `${err.message || ''} ${err.stderr || ''}`
+  return /\b406\b|too[ _]large|too big|diff exceeded|exceeds the maximum/i.test(text)
+}
+
+/**
  * Count +/- lines and files from raw unified diff text (single pass).
+ * Only lines inside a hunk count: `+++`/`---` are file headers only before the first `@@`.
  * @param {string} [text]
  */
 function countDiffStats(text) {
   const stats = { additions: 0, deletions: 0, changedFiles: 0 }
   if (!text) return stats
+  let inHunk = false
   for (const line of text.split('\n')) {
-    if (line.startsWith('diff --git ')) stats.changedFiles++
-    else if (line.startsWith('+') && !line.startsWith('+++')) stats.additions++
-    else if (line.startsWith('-') && !line.startsWith('---')) stats.deletions++
+    if (line.startsWith('diff --git ')) { stats.changedFiles++; inHunk = false }
+    else if (line.startsWith('@@')) inHunk = true
+    else if (inHunk && line.startsWith('+')) stats.additions++
+    else if (inHunk && line.startsWith('-')) stats.deletions++
   }
   return stats
 }
@@ -53,8 +66,14 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
 
   // The diff is fetched first and alone so it never queues behind secondary
   // calls on the gh concurrency cap (#451); everything else loads after it lands.
-  const { data: diffText, loading, error, refetch } = useGh(getPRDiff, [repo, prNumber])
-  const diffReady = typeof diffText === 'string'
+  const { data: diffText, loading, error, refetch, isStale: diffStale } = useGh(getPRDiff, [repo, prNumber])
+  // Fetched this visit (not merely cached): secondary calls must not race the revalidation.
+  const hasDiff = typeof diffText === 'string'
+  const diffReady = hasDiff && (!diffStale || Boolean(error))
+  // Stale data on screen + failed revalidation: keep the diff, surface a banner instead of an error screen.
+  const diffRefreshError = hasDiff ? error : null
+  const diffError = hasDiff ? null : error
+  const diffTooLarge = isDiffTooLarge(diffError)
   // Large-diff gate is decided from the diff text itself: no separate stats call,
   // and the warning is decided in the same frame the diff arrives.
   const diffStats = useMemo(() => countDiffStats(diffText), [diffText])
@@ -211,6 +230,13 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
 
   useKeymapInput((input, key) => {
     const id = resolveAction(input, key)
+
+    // gh refused the diff as too large: only browser/back make sense
+    if (diffTooLarge) {
+      if (id === 'pr.open-browser') { openFilesInBrowser(); return }
+      if (id === 'app.back') { onBack(); return }
+      return
+    }
 
     // Large diff warning intercept
     if (isLargeDiff && !diffWarningAck) {
@@ -621,8 +647,8 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   }
 
   return {
-    stdout, visibleHeight, diffStats, isLargeDiff, diffWarningAck,
-    prMeta, repoInfo, loading: loading && !diffReady, error, cursor, scrollOffset, dialog, setDialog,
+    stdout, visibleHeight, diffStats, isLargeDiff, diffTooLarge, diffWarningAck,
+    prMeta, repoInfo, loading: loading && !hasDiff, error: diffError, diffRefreshError, cursor, scrollOffset, dialog, setDialog,
     adminMergeMsg, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
     footerKeys, showTree, treeCursor, findQuery, setFindQuery, findActive,
     findMatches, gotoActive, gotoInput, setGotoInput, fileJumpActive, setFileJumpActive,
