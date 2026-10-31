@@ -42,6 +42,18 @@ try {
   const bin = join(installed, 'dist', 'lazyhub.js')
   const version = run('node', [bin, '--version'], { timeout: 30_000 }).trim()
   check(/^\d+\.\d+\.\d+/.test(version), `--version reports ${version}`)
+  // CLI entry contract (#514): these must answer and exit without starting the TUI.
+  // stdin is not a TTY and the timeout is short, so a TUI start shows up as a
+  // null status (hang), an Ink raw-mode crash, or alt-screen escape codes.
+  const pkgVersion = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8')).version
+  const cli = (args) => spawnSync('node', [bin, ...args], { encoding: 'utf8', env, input: '', timeout: 15_000 })
+  const noTui = (r) => r.status !== null && !/\x1b\[\?1049h|Raw mode is not supported/.test(`${r.stdout}${r.stderr}`)
+  const v = cli(['--version'])
+  check(v.status === 0 && v.stdout.trim() === pkgVersion && noTui(v), `--version prints package.json version ${pkgVersion} and exits 0`)
+  const h = cli(['--help'])
+  check(h.status === 0 && h.stdout.includes('Usage:') && noTui(h), '--help exits 0 and prints "Usage:"')
+  const bad = cli(['--definitely-not-a-flag'])
+  check(bad.status === 2 && bad.stderr.includes('Usage:') && noTui(bad), 'unknown flag exits 2 with usage and does not start the TUI')
   // doctor exits non-zero when the temp HOME has no config; only its output matters here.
   const doctor = spawnSync('node', [bin, 'doctor', '--config'], { encoding: 'utf8', env, timeout: 30_000 })
   check(doctor.stdout.includes('Schema validation passed'), 'doctor --config runs (bundled ESM + lazy chunks load)')

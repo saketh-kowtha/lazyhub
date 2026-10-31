@@ -58,6 +58,11 @@ jobs:
       - name: Verify lockfile unchanged after build
         run: node scripts/record-toolchain.mjs --verify-clean
 
+      # Packed-install CLI smoke (#514): --version/--help/unknown flag must work
+      # from the exact tarball before anything is published.
+      - name: Packed install smoke
+        run: node scripts/packed-install-smoke.mjs
+
       - name: Publish to npm
         run: npm publish --access public --tag next --provenance
 
