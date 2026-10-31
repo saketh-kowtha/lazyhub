@@ -18,7 +18,7 @@ import { CommentThread } from '../../../components/CommentThread.jsx'
 import { DiffSkeleton } from '../../../components/Skeleton.jsx'
 import { FailureNotice } from '../../../components/FailureNotice.jsx'
 import { classifyGhFailure } from '../../../executor.js'
-import { syntaxHighlight } from './highlight.js'
+import { syntaxHighlight, expandTabs } from './highlight.js'
 import { openEditorSync } from './editor.js'
 
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
@@ -60,7 +60,7 @@ const DiffLine = React.memo(({ row, isSelected, lang, isMatch, t }) => {
   if (row.type === 'hunk') {
     return (
       <Text wrap="truncate">
-        {cur + applyThemeStyle(`${gutterOld}│${gutterNew}   ${row.text}`, t.diff.hunkFg, t.diff.hunkBg)}
+        {cur + applyThemeStyle(`${gutterOld}│${gutterNew}   ${expandTabs(row.text)}`, t.diff.hunkFg, t.diff.hunkBg)}
       </Text>
     )
   }
@@ -491,7 +491,7 @@ export function DiffView({ prNumber, state }) {
             paddingX={1} marginX={1} marginBottom={0}>
             <Box gap={1}>
               <Text color={t.ui.dim}>❯ Line {row?.newLine ?? row?.oldLine}</Text>
-              <Text color={t.diff.ctxFg} wrap="truncate">{(row?.text || '').slice(0, 60)}</Text>
+              <Text color={t.diff.ctxFg} wrap="truncate">{expandTabs(row?.text || '').slice(0, 60)}</Text>
             </Box>
             <Box gap={3}>
               {COMMENT_TYPES.map(type => {
