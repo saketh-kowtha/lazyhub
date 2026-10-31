@@ -17,6 +17,7 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
   listPRComments,
+  listPRTimelinePage,
   resolveThread,
 } from './executor.js'
 import { IssueList } from './features/issues/list.jsx'
@@ -24,6 +25,7 @@ import { BranchList } from './features/branches/index.jsx'
 import { ActionList } from './features/actions/index.jsx'
 import { NotificationList } from './features/notifications/index.jsx'
 import { PRComments } from './features/prs/comments.jsx'
+import { timelinePage } from './test/timeline.js'
 import {
   renderWithProviders,
   flush,
@@ -71,6 +73,7 @@ vi.mock('./executor.js', () => ({
   markNotificationRead: vi.fn(),
   markAllNotificationsRead: vi.fn(),
   listPRComments: vi.fn(),
+  listPRTimelinePage: vi.fn(),
   resolveThread: vi.fn(),
   replyToComment: vi.fn(),
   editPRComment: vi.fn(),
@@ -146,8 +149,8 @@ describe('Pane E2E user flows', () => {
         ])
       }
 
-      if (fn === listPRComments) {
-        return ghResult([
+      if (fn === listPRComments || fn === listPRTimelinePage) {
+        const reviewComments = ([
           {
             id: 'c1',
             body: 'Please rename this',
@@ -170,6 +173,7 @@ describe('Pane E2E user flows', () => {
             threadResolved: false,
           },
         ])
+        return ghResult(fn === listPRTimelinePage ? timelinePage(reviewComments) : reviewComments)
       }
 
       return ghResult(null)

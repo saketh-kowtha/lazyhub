@@ -65,66 +65,167 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
   ], { stdin: payload })
 }
 
+const COMMENT_FIELDS = `
+  databaseId
+  body
+  path
+  line
+  originalLine
+  author { login }
+  createdAt
+  replyTo { databaseId }
+  pullRequestReview { databaseId }
+`
+const THREAD_FIELDS = `
+  id
+  isResolved
+  comments(first: 50) {
+    totalCount
+    pageInfo { hasNextPage endCursor }
+    nodes { ${COMMENT_FIELDS} }
+  }
+`
+// Hard stop for runaway loops (a malformed pageInfo that never ends). 200 pages is 10k+ items.
+const MAX_PAGES = 200
+
+function mapReviewComment(c, thread) {
+  return {
+    id: c.databaseId,
+    body: c.body,
+    path: c.path,
+    line: c.line,
+    originalLine: c.originalLine,
+    side: 'RIGHT',
+    user: { login: c.author?.login },
+    createdAt: c.createdAt,
+    inReplyToId: c.replyTo?.databaseId || null,
+    pullRequestReviewId: c.pullRequestReview?.databaseId || null,
+    threadId: thread.id,
+    threadResolved: thread.isResolved,
+  }
+}
+
 /**
- * List review comments on a PR.
+ * Fetch the replies of a thread beyond its first 50, by cursor (#507). Returns every comment
+ * node of the thread, first page included.
+ * @param thread
+ */
+async function completeThreadComments(thread) {
+  const nodes = [...(thread.comments?.nodes || [])]
+  let info = thread.comments?.pageInfo
+  const query = `
+    query($id: ID!, $after: String) {
+      node(id: $id) { ... on PullRequestReviewThread { comments(first: 50, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes { ${COMMENT_FIELDS} }
+      } } }
+    }
+  `
+  for (let i = 0; info?.hasNextPage && info.endCursor && i < MAX_PAGES; i++) {
+    const res = await runGh(['api', 'graphql', '-f', `id=${thread.id}`, '-f', `after=${info.endCursor}`, '-f', `query=${query}`])
+    const page = res?.data?.node?.comments
+    nodes.push(...(page?.nodes || []))
+    info = page?.pageInfo
+  }
+  return nodes
+}
+
+/**
+ * One cursor page of review threads and/or PR conversation (issue) comments (#507).
+ * Replies beyond a thread's first 50 are fetched by cursor so a thread is never cut short.
+ * `threads: false` / `conversation: false` skip that half (load-more of one side only).
  * @param repo
  * @param number
+ * @param root0
+ * @param root0.threadsAfter  cursor for the next page of threads
+ * @param root0.conversationAfter  cursor for the next page of conversation comments
+ * @param root0.threads  include review threads (default true)
+ * @param root0.conversation  include conversation comments (default true)
+ * @param root0.pageSize
  */
-export async function listPRComments(repo, number) {
+export async function listPRTimelinePage(repo, number, {
+  threadsAfter = null, conversationAfter = null, threads = true, conversation = true, pageSize = 50,
+} = {}) {
   const r = getRepo(repo)
   const [owner, name] = r.split('/')
   assertRepoParts(r, owner, name)
   const query = `
-    query($owner: String!, $name: String!, $number: Int!) {
+    query($owner: String!, $name: String!, $number: Int!, $size: Int!, $tAfter: String, $cAfter: String, $withThreads: Boolean!, $withConversation: Boolean!) {
       repository(owner: $owner, name: $name) {
         pullRequest(number: $number) {
-          reviewThreads(first: 100) {
-            nodes {
-              id
-              isResolved
-              comments(first: 50) {
-                nodes {
-                  databaseId
-                  body
-                  path
-                  line
-                  originalLine
-                  author { login }
-                  createdAt
-                  replyTo { databaseId }
-                  pullRequestReview { databaseId }
-                }
-              }
-            }
+          reviewThreads(first: $size, after: $tAfter) @include(if: $withThreads) {
+            totalCount
+            pageInfo { hasNextPage endCursor }
+            nodes { ${THREAD_FIELDS} }
+          }
+          comments(first: $size, after: $cAfter) @include(if: $withConversation) {
+            totalCount
+            pageInfo { hasNextPage endCursor }
+            nodes { databaseId body author { login } createdAt }
           }
         }
       }
     }
   `
-  const result = await runGh([
+  const args = [
     'api', 'graphql',
     '-f', `owner=${owner}`,
     '-f', `name=${name}`,
-    '-F', `number=${number}`,
-    '-f', `query=${query}`,
-  ])
-  const threads = result?.data?.repository?.pullRequest?.reviewThreads?.nodes || []
-  return threads.flatMap(thread =>
-    thread.comments.nodes.map(c => ({
-      id: c.databaseId,
-      body: c.body,
-      path: c.path,
-      line: c.line,
-      originalLine: c.originalLine,
-      side: 'RIGHT',
-      user: { login: c.author?.login },
-      createdAt: c.createdAt,
-      inReplyToId: c.replyTo?.databaseId || null,
-      pullRequestReviewId: c.pullRequestReview?.databaseId || null,
-      threadId: thread.id,
-      threadResolved: thread.isResolved,
-    }))
-  )
+    '-F', `number=${Number(number)}`,
+    '-F', `size=${Number(pageSize)}`,
+    '-F', `withThreads=${threads ? 'true' : 'false'}`,
+    '-F', `withConversation=${conversation ? 'true' : 'false'}`,
+  ]
+  if (threadsAfter) args.push('-f', `tAfter=${threadsAfter}`)
+  if (conversationAfter) args.push('-f', `cAfter=${conversationAfter}`)
+  args.push('-f', `query=${query}`)
+  const result = await runGh(args)
+  const pr = result?.data?.repository?.pullRequest
+  const tConn = pr?.reviewThreads
+  const cConn = pr?.comments
+  const reviewComments = []
+  for (const thread of tConn?.nodes || []) {
+    const nodes = await completeThreadComments(thread)
+    for (const c of nodes) reviewComments.push(mapReviewComment(c, thread))
+  }
+  const conversationComments = (cConn?.nodes || []).map(c => ({
+    id: c.databaseId,
+    body: c.body,
+    path: '',
+    line: null,
+    originalLine: null,
+    side: null,
+    user: { login: c.author?.login },
+    createdAt: c.createdAt,
+    inReplyToId: null,
+    pullRequestReviewId: null,
+    threadId: null,
+    threadResolved: false,
+    kind: 'conversation',
+  }))
+  const pageOf = (conn) => ({
+    total: conn?.totalCount ?? (conn?.nodes?.length || 0),
+    hasNextPage: !!conn?.pageInfo?.hasNextPage,
+    endCursor: conn?.pageInfo?.endCursor || null,
+  })
+  return { comments: reviewComments, conversation: conversationComments, threads: pageOf(tConn), conversationPage: pageOf(cConn) }
+}
+
+/**
+ * List every review comment on a PR (all threads, all replies, paged by cursor).
+ * @param repo
+ * @param number
+ */
+export async function listPRComments(repo, number) {
+  const out = []
+  let after = null
+  for (let i = 0; i < MAX_PAGES; i++) {
+    const page = await listPRTimelinePage(repo, number, { threadsAfter: after, conversation: false, pageSize: 100 })
+    out.push(...page.comments)
+    if (!page.threads.hasNextPage || !page.threads.endCursor) break
+    after = page.threads.endCursor
+  }
+  return out
 }
 
 /**
@@ -189,45 +290,16 @@ export async function resolveThread(threadId) {
  * @param prNumber
  */
 export async function getPRReviewComments(repo, prNumber) {
-  const r = getRepo(repo)
-  const [owner, name] = r.split('/')
-  assertRepoParts(r, owner, name)
-  const query = `
-    query($owner: String!, $name: String!, $number: Int!) {
-      repository(owner: $owner, name: $name) {
-        pullRequest(number: $number) {
-          reviewThreads(first: 100) {
-            nodes {
-              id
-              isResolved
-              comments(first: 50) {
-                nodes { databaseId body path line originalLine author { login } }
-              }
-            }
-          }
-        }
-      }
-    }
-  `
-  const result = await runGh([
-    'api', 'graphql',
-    '-f', `owner=${owner}`,
-    '-f', `name=${name}`,
-    '-F', `number=${Number(prNumber)}`,
-    '-f', `query=${query}`,
-  ])
-  const threads = result?.data?.repository?.pullRequest?.reviewThreads?.nodes || []
-  return threads.flatMap(thread =>
-    thread.comments.nodes.map(c => ({
-      id: c.databaseId,
-      threadId: thread.id,
-      path: c.path,
-      line: c.line ?? c.originalLine ?? null,
-      body: c.body,
-      user: c.author?.login || null,
-      resolved: thread.isResolved,
-    }))
-  )
+  const all = await listPRComments(repo, prNumber)
+  return all.map(c => ({
+    id: c.id,
+    threadId: c.threadId,
+    path: c.path,
+    line: c.line ?? c.originalLine ?? null,
+    body: c.body,
+    user: c.user?.login || null,
+    resolved: c.threadResolved,
+  }))
 }
 
 /**

@@ -15,16 +15,20 @@ import { contextFooterHints } from '../../ui/actions.js'
 import { useGh } from '../../hooks/useGh.js'
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import {
-  listPRComments, resolveThread,
+  listPRTimelinePage, resolveThread, addPRComment,
   replyToComment, editPRComment, deletePRComment,
 } from '../../executor.js'
+import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { useKeyScope } from '../../keyscope.js'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { useTheme } from '../../theme.js'
 import { TextInput, sanitize, shortAge } from '../../utils.js'
 
 
-const FILTER_MODES = ['all', 'open', 'resolved']
+const FILTER_MODES = ['all', 'open', 'resolved', 'conversation']
+// Start loading the next page when the cursor is within this many rows of the end of the loaded list.
+const LOAD_MORE_MARGIN = 5
+const NO_MORE = { base: null, comments: [], conversation: [], threads: null, conv: null }
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
 
 export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
@@ -33,11 +37,18 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   const { stdout } = useStdout()
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 8)
 
-  const { data: rawComments, loading, error, refetch } = useGh(listPRComments, [repo, prNumber])
-  const [cursor, setCursor]         = useState(0)
+  // First page of review threads + conversation comments; later pages load on demand (#507).
+  const { data: firstPage, loading, error, refetch: refetchFirst } = useGh(listPRTimelinePage, [repo, prNumber])
+  const [more, setMore] = useState(NO_MORE)
+  const [moreFailed, setMoreFailed] = useState(false)
+  const loadingMore = useRef(false)
+  const pages = more.base === firstPage ? more : NO_MORE
+  const threadsPage = pages.threads ?? firstPage?.threads ?? null
+  const convPage = pages.conv ?? firstPage?.conversationPage ?? null
+  const hasMore = !!(threadsPage?.hasNextPage || convPage?.hasNextPage)
+  const refetch = useCallback(() => { setMoreFailed(false); refetchFirst() }, [refetchFirst])
   const [filterMode, setFilterMode] = useState('all')
   const [statusMsg, setStatusMsg]   = useState(null)
-  const [scrollOffset, setScrollOffset] = useState(0)
 
   // action: null | { type: 'reply'|'edit'|'delete', comment }
   const [action, setAction]     = useState(null)
@@ -51,7 +62,9 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   // ── Build flat list: each comment is individually navigable ────────────────
 
   const flatComments = useMemo(() => {
-    if (!rawComments) return []
+    if (!firstPage) return []
+    const rawComments = [...(firstPage.conversation || []), ...(pages.conversation || []),
+      ...(firstPage.comments || []), ...(pages.comments || [])]
     // Group by thread (root = no inReplyToId)
     const roots = rawComments.filter(c => Object.hasOwn(c, 'inReplyToId') ? !c.inReplyToId : true)
     const replies = rawComments.filter(c => Object.hasOwn(c, 'inReplyToId') && c.inReplyToId)
@@ -68,6 +81,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       pullRequestReviewId: c.pullRequestReviewId ?? null,
       threadId: typeof c.threadId === 'string' ? c.threadId : null,
       threadResolved: !!c.threadResolved,
+      _conversation: c.kind === 'conversation',
       ...extra,
     })
     const all = []
@@ -77,21 +91,17 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
         all.push(pickComment(reply, { _isRoot: false, _rootId: root.id }))
       }
     }
-    if (filterMode === 'resolved')  return all.filter(c => c.threadResolved)
-    if (filterMode === 'open')      return all.filter(c => !c.threadResolved)
+    if (filterMode === 'conversation') return all.filter(c => c._conversation)
+    if (filterMode === 'resolved')  return all.filter(c => !c._conversation && c.threadResolved)
+    if (filterMode === 'open')      return all.filter(c => !c._conversation && !c.threadResolved)
     return all
-  }, [rawComments, filterMode])
+  }, [firstPage, pages, filterMode])
 
   const visibleCount = flatComments.length
+  // The list clamps the cursor itself when a refetch or the filter shrinks it.
+  const { cursor, scrollOffset, visibleItems, moveCursor, jumpTop, jumpBottom } =
+    useVirtualList({ items: flatComments, height: visibleHeight })
 
-  // A refetch (deleted comment) or the filter cycle can shrink the list; keep the cursor on a real row.
-  useEffect(() => {
-    if (cursor > Math.max(0, visibleCount - 1)) {
-      const last = Math.max(0, visibleCount - 1)
-      setCursor(last)
-      setScrollOffset(Math.max(0, last - visibleHeight + 1))
-    }
-  }, [visibleCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Status helper ──────────────────────────────────────────────────────────
   // One timer: a newer message is never cleared by an older message's timeout. A sticky
@@ -105,6 +115,41 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   }, [])
   useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current) }, [])
   const { run: runWrite } = usePendingWrite(useCallback((msg) => flash(msg, { sticky: true }), [flash]))
+
+  // Load the next page (threads and/or conversation) once the cursor nears the end of what is loaded.
+  const loadMore = useCallback(async () => {
+    if (loadingMore.current || !firstPage) return
+    const tNext = threadsPage?.hasNextPage ? threadsPage.endCursor : null
+    const cNext = convPage?.hasNextPage ? convPage.endCursor : null
+    if (!tNext && !cNext) return
+    loadingMore.current = true
+    const base = firstPage
+    try {
+      const page = await listPRTimelinePage(repo, prNumber, {
+        threads: !!tNext, conversation: !!cNext, threadsAfter: tNext, conversationAfter: cNext,
+      })
+      setMore(prev => {
+        const cur = prev.base === base ? prev : { ...NO_MORE, base }
+        return {
+          base,
+          comments: [...cur.comments, ...page.comments],
+          conversation: [...cur.conversation, ...page.conversation],
+          threads: tNext ? page.threads : cur.threads,
+          conv: cNext ? page.conversationPage : cur.conv,
+        }
+      })
+    } catch (err) {
+      setMoreFailed(true)
+      flash(`Failed to load more: ${err.message}`)
+    } finally {
+      loadingMore.current = false
+    }
+  }, [firstPage, threadsPage, convPage, repo, prNumber, flash])
+  useEffect(() => {
+    if (!hasMore || moreFailed) return
+    // Filtered views may show too few rows to ever reach the margin, so also load when the list is short.
+    if (cursor >= visibleCount - LOAD_MORE_MARGIN || visibleCount < visibleHeight) loadMore()
+  }, [cursor, visibleCount, hasMore, moreFailed, visibleHeight, loadMore])
 
   // ── Open $EDITOR for multiline edit ───────────────────────────────────────
   const openEditor = useCallback((initial) => {
@@ -136,6 +181,12 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
 
     if (type === 'reply') {
       if (!body) { done(); return }
+      if (comment._conversation) {
+        runWrite('Sending comment', () => addPRComment(repo, prNumber, body)
+          .then(() => { flash('Comment sent'); done(); refetch() })
+          .catch(err => flash(`Failed: ${err.message}`)))
+        return
+      }
       const rootId = comment._isRoot ? comment.id : comment._rootId
       if (!rootId) { flash('Cannot determine thread root'); done(); return }
       runWrite('Sending reply', () => replyToComment(repo, prNumber, rootId, body)
@@ -178,30 +229,18 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
     if (id === 'app.back') { onBack(); return }
     if (id === 'list.refresh') { refetch(); return }
 
-    if (id === 'cursor.down') {
-      setCursor(c => {
-        const next = Math.max(0, Math.min(visibleCount - 1, c + 1))
-        if (next >= scrollOffset + visibleHeight) setScrollOffset(s => s + 1)
-        return next
-      })
-      return
-    }
-    if (id === 'cursor.up') {
-      setCursor(c => {
-        const next = Math.max(0, c - 1)
-        if (next < scrollOffset) setScrollOffset(s => Math.max(0, s - 1))
-        return next
-      })
-      return
-    }
-    if (id === 'cursor.top') { setCursor(0); setScrollOffset(0); return }
-    if (id === 'cursor.bottom') {
-      const last = Math.max(0, visibleCount - 1)
-      setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
-      return
-    }
+    if (id === 'cursor.down') { moveCursor(cursor + 1); return }
+    if (id === 'cursor.up') { moveCursor(cursor - 1); return }
+    if (id === 'cursor.top') { jumpTop(); return }
+    if (id === 'cursor.bottom') { jumpBottom(); return }
 
     const comment = flatComments[cursor]
+
+    const conversationOnly = comment?._conversation
+    if (conversationOnly && ['comment.edit', 'comment.delete', 'comment.resolve', 'comment.jump'].includes(id)) {
+      flash('Conversation comments can only be replied to here')
+      return
+    }
 
     if (id === 'comment.reply' && comment) {
       setAction({ type: 'reply', comment })
@@ -240,7 +279,9 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading comments…</Text></Box>
   if (error)   return <Box paddingX={1}><Text color={t.ci.fail}>⚠ Failed to load — {firstActionKey('list.refresh', 'r')} to retry</Text></Box>
 
-  const visibleItems = flatComments.slice(scrollOffset, scrollOffset + visibleHeight)
+  const loadedConversation = (firstPage?.conversation?.length || 0) + (pages.conversation?.length || 0)
+  const loadedThreads = new Set([...(firstPage?.comments || []), ...(pages.comments || [])].map(c => c.threadId)).size
+  const countLabel = `conversation ${loadedConversation} of ${convPage?.total ?? loadedConversation} · threads ${loadedThreads} of ${threadsPage?.total ?? loadedThreads}`
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -249,7 +290,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
         <Text color={t.ui.selected} bold>PR #{prNumber} Comments</Text>
         <Box gap={2}>
           {statusMsg && <Text color={t.ci.pass}>{statusMsg}</Text>}
-          <Text color={t.ui.dim}>filter: {filterMode}  {flatComments.length} comments</Text>
+          <Text color={t.ui.dim}>filter: {filterMode}  {countLabel}{hasMore ? (moreFailed ? '  (load failed, r to retry)' : '  (loading more…)') : ''}</Text>
         </Box>
       </Box>
 
@@ -296,7 +337,12 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
               borderStyle={isSelected ? 'round' : undefined}
               borderColor={isSelected ? t.ui.selected : undefined}>
               {/* Thread header — show once per root comment */}
-              {comment._isRoot && (
+              {comment._isRoot && comment._conversation && (
+                <Box paddingX={1} gap={2}>
+                  <Text color={t.ui.selected} bold>conversation</Text>
+                </Box>
+              )}
+              {comment._isRoot && !comment._conversation && (
                 <Box paddingX={1} gap={2}>
                   <Text color={t.ui.selected} bold>{sanitize(comment.path)}</Text>
                   <Text color={t.ui.dim}>line {comment.line}</Text>

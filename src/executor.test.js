@@ -45,6 +45,7 @@ import {
   addPRComment,
   addPRLineComment,
   listPRComments,
+  listPRTimelinePage,
   resolveThread,
   createPR,
   getGist,
@@ -648,6 +649,51 @@ describe('listPRComments()', () => {
     expect(args).toContain('graphql')
     expect(args.some(a => a.includes('reviewThreads'))).toBe(true)
     expect(args.some(a => a === 'owner=owner' || a === 'name=repo' || a === 'number=5')).toBe(true)
+  })
+})
+
+describe('PR timeline paging (#507)', () => {
+  const ok = (data) => ({ exitCode: 0, stdout: JSON.stringify(data), stderr: '' })
+  const node = (id, extra = {}) => ({ databaseId: id, body: `b${id}`, path: 'a.js', line: 1, author: { login: 'u' }, createdAt: '2026-01-01T00:00:00Z', ...extra })
+  const wrap = (pr) => ({ data: { repository: { pullRequest: pr } } })
+
+  it('listPRTimelinePage returns conversation comments and page info', async () => {
+    execa.mockResolvedValueOnce(ok(wrap({
+      reviewThreads: { totalCount: 0, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+      comments: { totalCount: 350, pageInfo: { hasNextPage: true, endCursor: 'C50' }, nodes: [node(1), node(2)] },
+    })))
+    const page = await listPRTimelinePage('owner/repo', 5)
+    const [, args] = execa.mock.calls[0]
+    expect(args.some(a => a.includes('comments(first: $size, after: $cAfter)'))).toBe(true)
+    expect(page.conversation.map(c => c.id)).toEqual([1, 2])
+    expect(page.conversation[0].kind).toBe('conversation')
+    expect(page.conversationPage).toEqual({ total: 350, hasNextPage: true, endCursor: 'C50' })
+  })
+
+  it('passes the cursor for the next page', async () => {
+    execa.mockResolvedValueOnce(ok(wrap({ comments: { totalCount: 3, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [node(3)] } })))
+    await listPRTimelinePage('owner/repo', 5, { conversationAfter: 'C50', threads: false })
+    const [, args] = execa.mock.calls[0]
+    expect(args).toContain('cAfter=C50')
+    expect(args).toContain('withThreads=false')
+  })
+
+  it('listPRComments follows thread cursors instead of stopping at 100 threads', async () => {
+    const thread = (id) => ({ id: `T${id}`, isResolved: false, comments: { totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [node(id)] } })
+    execa.mockResolvedValueOnce(ok(wrap({ reviewThreads: { totalCount: 2, pageInfo: { hasNextPage: true, endCursor: 'T1' }, nodes: [thread(1)] } })))
+    execa.mockResolvedValueOnce(ok(wrap({ reviewThreads: { totalCount: 2, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [thread(2)] } })))
+    const all = await listPRComments('owner/repo', 5)
+    expect(all.map(c => c.id)).toEqual([1, 2])
+    expect(execa.mock.calls[1][1]).toContain('tAfter=T1')
+  })
+
+  it('fetches replies past the first 50 of a thread by cursor', async () => {
+    const first = { id: 'T1', isResolved: false, comments: { totalCount: 3, pageInfo: { hasNextPage: true, endCursor: 'R50' }, nodes: [node(1), node(2, { replyTo: { databaseId: 1 } })] } }
+    execa.mockResolvedValueOnce(ok(wrap({ reviewThreads: { totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [first] } })))
+    execa.mockResolvedValueOnce(ok({ data: { node: { comments: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [node(3, { replyTo: { databaseId: 1 } })] } } } }))
+    const all = await listPRComments('owner/repo', 5)
+    expect(all.map(c => c.id)).toEqual([1, 2, 3])
+    expect(execa.mock.calls[1][1]).toContain('after=R50')
   })
 })
 
