@@ -8,6 +8,8 @@ import { loadConfig, takeUnknownActionIds, DEFAULT_CONFIG_TOML_PATH } from './lo
 import { createKeymap } from './keymap.js'
 import { writeDefaultConfig } from '../config.js'
 import { logger } from '../utils.js'
+import { execFileSync } from 'child_process'
+import { LEGACY_ACTION_VALUES, LEGACY_KEYMAP_BINDINGS } from './legacy-defaults.js'
 
 // A user file as written by a release before #340: the full defaults, frozen, plus the
 // stale keymap ids that older releases shipped (app.quit, help.show, settings.open, pr.refresh).
@@ -85,6 +87,15 @@ describe('frozen default copies (#475)', () => {
     expect(takeUnknownActionIds()).toEqual([])
   })
 
+  it('a user-defined action and its binding are kept and not reported as unknown', () => {
+    writeFileSync(configPath, '[actions."my.thing"]\nkeys = ["Ctrl+X"]\nscope = "global"\n\n[keymaps.global]\n"Ctrl+Y" = "my.thing"\n')
+    const config = loadConfig({ configPath, platform: 'linux' })
+    expect(config.keymaps.global['Ctrl+Y']).toBe('my.thing')
+    expect(config.actions['my.thing'].keys).toEqual(['Ctrl+X'])
+    expect(resolve('global', 'Y', { ...config, keymaps: { global: { Y: 'my.thing' } } })).toBe('my.thing')
+    expect(takeUnknownActionIds()).toEqual([])
+  })
+
   it('first run writes a sparse file instead of copying the defaults', () => {
     writeDefaultConfig(configPath)
     const text = readFileSync(configPath, 'utf8')
@@ -121,5 +132,44 @@ describe('stripFrozenDefaults', () => {
 
   it('passes non-objects through', () => {
     expect(stripFrozenDefaults(undefined, defaults)).toEqual({ config: undefined, dropped: 0, unknown: [] })
+  })
+})
+
+describe('legacy-defaults.js covers every shipped revision of defaultConfig.toml', () => {
+  const run = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'ignore'] })
+  let shas = []
+  try { shas = run('log', '--full-history', '--format=%H', '--', 'src/config/defaultConfig.toml').trim().split('\n').filter(Boolean) } catch { /* no history available */ }
+  // A shallow clone cannot see old revisions; the working-tree check below still runs.
+  const hasHistory = shas.length >= 8
+
+  const covered = (list, value) => (list || []).some(v => JSON.stringify(v) === JSON.stringify(value))
+  const missing = (rev) => {
+    const out = []
+    for (const [id, action] of Object.entries(rev.actions || {})) {
+      for (const [field, value] of Object.entries(action)) {
+        if (!covered(LEGACY_ACTION_VALUES[id]?.[field], value)) out.push(`actions.${id}.${field}=${JSON.stringify(value)}`)
+      }
+    }
+    for (const [scope, bindings] of Object.entries(rev.keymaps || {})) {
+      for (const [key, value] of Object.entries(bindings)) {
+        if (typeof value === 'string' && !covered(LEGACY_KEYMAP_BINDINGS[scope]?.[key], value)) out.push(`keymaps.${scope}.${key}=${value}`)
+      }
+    }
+    return out
+  }
+
+  it('covers the working-tree defaults (regenerate with scripts/gen-legacy-defaults.mjs)', () => {
+    expect(missing(parse(readFileSync(DEFAULT_CONFIG_TOML_PATH, 'utf8')))).toEqual([])
+  })
+
+  it.skipIf(!hasHistory)('covers every action field and keymap binding of every historical revision', () => {
+    for (const sha of shas) {
+      expect(missing(parse(run('show', `${sha}:src/config/defaultConfig.toml`))), sha).toEqual([])
+    }
+  })
+
+  it('keeps exact strings (no inserted spaces)', () => {
+    expect(LEGACY_ACTION_VALUES['pr.labels'].scope).toContain('pr-list,pr-detail')
+    expect(LEGACY_ACTION_VALUES['app.settings'].hint).toContainEqual(',')
   })
 })
