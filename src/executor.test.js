@@ -39,7 +39,6 @@ import {
   getCheckRunAnnotations,
   getPRChecks,
   getBranchProtection,
-  listReleases,
   listNotifications,
   markNotificationRead,
   getPRDiff,
@@ -48,7 +47,6 @@ import {
   listPRComments,
   resolveThread,
   createPR,
-  listGists,
   getGist,
   deleteGist,
   getPRReviewComments,
@@ -573,18 +571,6 @@ describe('getCheckRunAnnotations()', () => {
   })
 })
 
-// ─── Release functions ────────────────────────────────────────────────────────
-
-describe('listReleases()', () => {
-  it('calls gh release list', async () => {
-    mockSuccess([{ name: 'v1.0.0' }])
-    await listReleases('owner/repo')
-    const [, args] = execa.mock.calls[0]
-    expect(args).toContain('release')
-    expect(args).toContain('list')
-  })
-})
-
 // ─── Notification functions ───────────────────────────────────────────────────
 
 describe('listNotifications()', () => {
@@ -780,15 +766,6 @@ describe('GhError fields', () => {
 })
 
 // ─── Gist functions ───────────────────────────────────────────────────────────
-
-describe('listGists', () => {
-  it('calls gh gist list', async () => {
-    mockSuccess([{ id: 'abc123', description: 'test gist' }])
-    const result = await listGists()
-    expect(execa).toHaveBeenCalledWith('gh', expect.arrayContaining(['gist', 'list']), expect.anything())
-    expect(result[0].id).toBe('abc123')
-  })
-})
 
 describe('getGist', () => {
   it('calls gh gist view --raw', async () => {

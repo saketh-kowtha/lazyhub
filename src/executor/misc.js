@@ -2,13 +2,6 @@ import { execa } from 'execa'
 import { runGh } from './core.js'
 
 /**
- * List the authenticated user's gists.
- */
-export async function listGists() {
-  return runGh(['gist', 'list', '--json', 'id,description,public,updatedAt,files', '--limit', '30'])
-}
-
-/**
  * View raw content of a gist.
  * @param id
  */

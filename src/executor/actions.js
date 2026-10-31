@@ -60,22 +60,6 @@ export async function cancelRun(repo, runId) {
   return runGh(args)
 }
 
-// ─── Release functions ────────────────────────────────────────────────────────
-
-/**
- * List releases.
- * @param repo
- */
-export async function listReleases(repo) {
-  const args = [
-    'release', 'list',
-    '--repo', getRepo(repo),
-    '--json', 'name,tagName,isPrerelease,isDraft,publishedAt,url',
-    '--limit', '20',
-  ]
-  return runGh(args)
-}
-
 // ─── Notification functions ───────────────────────────────────────────────────
 
 /**
