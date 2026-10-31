@@ -15,7 +15,7 @@ import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { useKeyScope } from '../../keyscope.js'
 import { matchesAction } from '../../config/actions.js'
 
-export function OptionPicker({ options = [], onSubmit, onCancel, title, promptText, initialIndex = 0, promptKey }) {
+export function OptionPicker({ options = [], onSubmit, onCancel, title, promptText, initialIndex = 0, promptKey = '' }) {
   useKeyScope('dialog')
   const { t } = useTheme()
   const { stdout } = useStdout()
