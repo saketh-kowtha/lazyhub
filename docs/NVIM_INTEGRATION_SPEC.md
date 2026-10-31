@@ -92,12 +92,12 @@ require('lazyhub.statusline').heirline()   -- returns component table for heirli
 
 Displays for current branch:
 ```
- PR #123  ✓ CI  💬 2
+ PR #123  ✓ CI
 ```
 
 - `` icon = no PR; ` PR #123` = PR linked
 - `✓/✗/●` for CI: passing / failing / running
-- `💬 N` = unresolved review threads (omitted if 0)
+- `💬 N` = unresolved review threads (omitted if 0). Not currently shown: lazyhub cannot fetch thread counts through `gh pr list` (see #438)
 - Pollable every 30s OR pushed via IPC `pr-state-changed` event (added below)
 
 Data source: IPC `state` request with `{ branch }` param. Lazyhub answers `{ prNumber, ciStatus }`. `unresolvedThreads` is not currently provided (gh pr list has no reviewThreads field; see #438). If IPC down, fall back to `gh pr status --json ...` debounced to 60s.
