@@ -46,6 +46,13 @@ describe('frozen default copies (#475)', () => {
     expect(resolve('pr-detail', 'd', config)).toBe('pr.diff')
   })
 
+  it('a frozen pr.auto-merge keys = ["M"] no longer captures M: M is only the merged filter (#448)', () => {
+    writeFileSync(configPath, FROZEN)
+    const config = loadConfig({ configPath, platform: 'linux' })
+    expect(config.actions['pr.auto-merge'].keys).toEqual([])
+    expect(resolve('pr-list', 'M', config)).toBe('pr.filter-merged')
+  })
+
   it('stale keymap ids from old releases fall back to the current defaults silently', () => {
     writeFileSync(configPath, FROZEN)
     const config = loadConfig({ configPath, platform: 'linux' })

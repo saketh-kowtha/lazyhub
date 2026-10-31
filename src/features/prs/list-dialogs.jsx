@@ -4,7 +4,7 @@
 import React, { useState, useRef } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useGh } from '../../hooks/useGh.js'
-import { classifyGhFailure, listLabels, listCollaborators, addLabels, removeLabels, addPRAssignees, removePRAssignees, requestReviewers, removeReviewers } from '../../executor.js'
+import { classifyGhFailure, listLabels, listCollaborators, editPRMembers } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { TextInput, sanitize } from '../../utils.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -32,14 +32,19 @@ function PickerStatus({ title, children, onCancel, onRetry = undefined }) {
   )
 }
 
-function PRSelectionDialog({ repo, pr, current, getOptions, field, loadingText, title = '', add, remove, onClose, onError, runWrite = (_label, fn) => fn() }) {
+function PRSelectionDialog({ repo, pr, current: currentNow, names = {}, getOptions, field, loadingText, title = '', kind, onClose, onError, runWrite = (_label, fn) => fn() }) {
   const { scheme } = useTheme()
   const t = schemeToT(scheme)
+  // The diff base is what the PR had when the dialog opened; a refetch behind it must not move it.
+  const [current] = useState(currentNow)
   const [saving, setSaving] = useState(false)
   const submitted = useRef(false)
+  // Esc while saving closes the dialog at once; the late completion must not close whatever opened next.
+  const dismissed = useRef(false)
+  const dismiss = () => { dismissed.current = true; onClose() }
   const { data: options, loading, error, refetch } = useGh(getOptions, [repo])
   const hasOptions = Array.isArray(options) && options.length > 0
-  if (saving) return <PickerStatus title={title} onCancel={onClose}><Text color={t.ui.muted}>Updating #{pr.number}…</Text></PickerStatus>
+  if (saving) return <PickerStatus title={title} onCancel={dismiss}><Text color={t.ui.muted}>Updating #{pr.number}…</Text></PickerStatus>
   if (loading && !hasOptions) {
     return <PickerStatus title={title} onCancel={onClose}><Text color={t.ui.muted}>{loadingText}</Text></PickerStatus>
   }
@@ -59,7 +64,7 @@ function PRSelectionDialog({ repo, pr, current, getOptions, field, loadingText, 
   // checked, so the diff below only removes what the user unchecked (#423).
   const listed = new Set(items.map(item => item.id))
   for (const id of current) {
-    if (!listed.has(id)) items.push({ id, name: sanitize(id), selected: true })
+    if (!listed.has(id)) items.push({ id, name: sanitize(names[id] || id), selected: true })
   }
 
   return (
@@ -77,29 +82,25 @@ function PRSelectionDialog({ repo, pr, current, getOptions, field, loadingText, 
         try {
           await runWrite(`Updating #${pr.number}`, async () => {
             ran = true
-            if (toAdd.length) await add(repo, pr.number, toAdd)
-            if (toRemove.length) await remove(repo, pr.number, toRemove)
+            await editPRMembers(repo, pr.number, kind, { add: toAdd, remove: toRemove })
           })
           if (!ran && onError) onError(new Error('another update is still in progress'))
         } catch (err) {
           if (onError) onError(err)
         }
-        onClose()
+        if (!dismissed.current) onClose()
       }}
       onCancel={onClose}
     />
   )
 }
 
-const addPRLabels = (repo, number, labels) => addLabels(repo, number, labels, 'pr')
-const removePRLabels = (repo, number, labels) => removeLabels(repo, number, labels, 'pr')
-
 export function LabelDialog({ repo, pr, onClose, onError, runWrite }) {
   return <PRSelectionDialog
     repo={repo} pr={pr} onClose={onClose} onError={onError} runWrite={runWrite}
     current={pr.labels?.map(label => label.name) || []}
     getOptions={listLabels} field="name" loadingText="Loading labels…"
-    add={addPRLabels} remove={removePRLabels}
+    kind="label"
   />
 }
 
@@ -108,7 +109,7 @@ export function AssigneeDialog({ repo, pr, onClose, onError, runWrite }) {
     repo={repo} pr={pr} onClose={onClose} onError={onError} runWrite={runWrite}
     current={pr.assignees?.map(assignee => assignee.login) || []}
     getOptions={listCollaborators} field="login" loadingText="Loading collaborators…"
-    add={addPRAssignees} remove={removePRAssignees}
+    kind="assignee"
   />
 }
 
@@ -138,12 +139,17 @@ export function AuthorSearchDialog({ current, onSubmit, onCancel }) {
   )
 }
 
+// A reviewer's id is the login, or "org/slug" for a team (the list query folds it into login).
+const reviewerId = (reviewer) => reviewer.login || reviewer.slug || reviewer.name
+
 export function ReviewerDialog({ repo, pr, onClose, onError, runWrite }) {
-  const current = [...new Set((pr.reviewRequests || []).map(reviewer => reviewer.login || reviewer.name).filter(Boolean))]
+  const requests = (pr.reviewRequests || []).filter(reviewer => reviewerId(reviewer))
+  const current = [...new Set(requests.map(reviewerId))]
+  const names = Object.fromEntries(requests.map(reviewer => [reviewerId(reviewer), reviewer.name || reviewerId(reviewer)]))
   return <PRSelectionDialog
     repo={repo} pr={pr} onClose={onClose} onError={onError} runWrite={runWrite}
-    current={current} title="Request Reviewers"
+    current={current} names={names} title="Request Reviewers"
     getOptions={listCollaborators} field="login" loadingText="Loading collaborators…"
-    add={requestReviewers} remove={removeReviewers}
+    kind="reviewer"
   />
 }

@@ -34,7 +34,7 @@ import { loadConfig } from '../../config.js'
 import { firstActionKey } from '../../config/actions.js'
 
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
-import { autoMergeOption } from './list-row.jsx'
+import { autoMergeOption, canToggleAutoMergeFromList } from './list-row.jsx'
 import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
@@ -300,7 +300,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
 
   if (dialog === 'merge') {
     // Show admin options when confirmed admin, or while repoInfo is still loading
-    const baseOpts = pr.state === 'OPEN' && !pr.isDraft ? [...MERGE_OPTIONS_BASE, autoMergeOption(pr)] : MERGE_OPTIONS_BASE
+    const baseOpts = canToggleAutoMergeFromList(pr) ? [...MERGE_OPTIONS_BASE, autoMergeOption(pr)] : MERGE_OPTIONS_BASE
     const mergeOpts = !repoInfo || repoInfo.viewerPermission === 'ADMIN'
       ? [...baseOpts, ...MERGE_OPTIONS_ADMIN]
       : baseOpts
@@ -315,8 +315,8 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
           if (strategy === 'auto-merge') { setDialog('auto-merge'); return }
           setDialog(null)
           runWrite(`Merging #${pr.number}`, () => mergePR(repo, pr.number, strategy, msg, { allowAdmin: strategy.startsWith('admin-') })
-            .then(() => { showStatus(`✓ Merged PR #${pr.number}`); refetch() })
-            .catch(err => showStatus(`✗ Merge failed: ${err.message}`, true)))
+            // Two-argument then: a refetch problem after a successful merge must not read as "Merge failed".
+            .then(() => { showStatus(`✓ Merged PR #${pr.number}`); refetch() }, err => showStatus(`✗ Merge failed: ${sanitize(err.message)}`, true)))
         }}
         onCancel={() => setDialog(null)}
       />
@@ -351,7 +351,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
             : enableAutoMerge(repo, prNumber, repoInfo?.squashMergeAllowed ? 'squash' : 'merge')
           runWrite(`${disabling ? 'Disabling' : 'Enabling'} auto-merge on #${pr.number}`, () => request()
             .then(() => { showStatus(disabling ? '✓ Auto-merge disabled' : '⟳ Auto-merge enabled'); refetch() })
-            .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true)))
+            .catch(err => { showStatus(`✗ Auto-merge failed: ${sanitize(err.message)}`, true); refetch() }))
         }}
         onCancel={() => setDialog(null)}
       />

@@ -35,8 +35,9 @@ function normalizeReviewRequests(reviewRequests) {
     .map(node => node?.requestedReviewer)
     .filter(Boolean)
     .map(reviewer => ({
-      login: reviewer.login || reviewer.name || '',
-      name: reviewer.name || reviewer.login || '',
+      // A team's id is "org/slug" (what `gh pr edit --remove-reviewer` accepts), never its display name.
+      login: reviewer.login || (reviewer.slug ? (reviewer.organization?.login ? `${reviewer.organization.login}/${reviewer.slug}` : reviewer.slug) : reviewer.name) || '',
+      name: reviewer.name || reviewer.login || reviewer.slug || '',
     }))
 }
 
@@ -123,7 +124,7 @@ export async function listPRs(repo, filter = {}) {
                 requestedReviewer {
                   __typename
                   ... on User { login name }
-                  ... on Team { name }
+                  ... on Team { name slug organization { login } }
                 }
               }
             }
@@ -310,16 +311,39 @@ export async function enableAutoMerge(repo, number, mergeMethod = 'merge') {
 }
 
 /**
+ * Add and remove labels, assignees or reviewers in ONE edit call, so a
+ * partial failure cannot leave only half of the user's change applied.
+ * Reviewer teams are passed as "org/slug".
+ * @param {string} repo
+ * @param {number} number
+ * @param {'label'|'assignee'|'reviewer'} kind
+ * @param {{add?: string[], remove?: string[]}} change
+ */
+export async function editPRMembers(repo, number, kind, { add = [], remove = [] }) {
+  if (!add.length && !remove.length) return undefined
+  const args = ['pr', 'edit', String(number), '--repo', getRepo(repo)]
+  if (add.length) args.push(`--add-${kind}`, add.join(','))
+  if (remove.length) args.push(`--remove-${kind}`, remove.join(','))
+  return runGh(args)
+}
+
+/**
  * Disable auto-merge on a PR, then read it back: the REST PR update endpoint
  * silently ignores an auto_merge field, so success is only reported once
- * GitHub shows no autoMergeRequest.
+ * GitHub shows no autoMergeRequest. Errors say which step failed: the disable
+ * call itself, or only the read-back (the change may or may not have applied).
  * @param repo
  * @param number
  */
 export async function disableAutoMerge(repo, number) {
   const r = getRepo(repo)
   await runGh(['pr', 'merge', String(number), '--repo', r, '--disable-auto'])
-  const after = await runGh(['pr', 'view', String(number), '--repo', r, '--json', 'autoMergeRequest'])
+  let after
+  try {
+    after = await runGh(['pr', 'view', String(number), '--repo', r, '--json', 'autoMergeRequest'])
+  } catch (err) {
+    throw new Error(`Could not verify auto-merge is off on PR #${number}: ${err.message}`)
+  }
   if (after?.autoMergeRequest) throw new Error(`Auto-merge is still enabled on PR #${number}`)
   return after
 }

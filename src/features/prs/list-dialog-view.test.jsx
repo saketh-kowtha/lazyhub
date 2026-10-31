@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { mergePR, reviewPR } from '../../executor.js'
+import { mergePR, reviewPR, disableAutoMerge } from '../../executor.js'
 import { renderPRListDialog } from './list-dialog-view.jsx'
 
-vi.mock('../../executor.js', async (original) => ({ ...await original(), mergePR: vi.fn(), reviewPR: vi.fn() }))
+vi.mock('../../executor.js', async (original) => ({ ...await original(), mergePR: vi.fn(), reviewPR: vi.fn(), disableAutoMerge: vi.fn() }))
 beforeEach(() => vi.clearAllMocks())
 
 const props = (dialog, extra = {}) => ({
@@ -41,6 +41,18 @@ describe('PR list dialog contract', () => {
       expect(state.refetch).not.toHaveBeenCalled()
     })
   }
+
+  it('reports a failed auto-merge disable with a sanitized message and refetches', async () => {
+    disableAutoMerge.mockRejectedValue(new Error('still \u001b[31menabled'))
+    const state = props('auto-merge', { selectedPR: { number: 7, title: 'PR', autoMergeRequest: { enabledAt: 'x' } } })
+    renderPRListDialog(state).props.onConfirm()
+    await vi.waitFor(() => expect(state.showStatus).toHaveBeenCalled())
+    const [msg, isError] = state.showStatus.mock.calls[0]
+    expect(isError).toBe(true)
+    expect(msg).toContain('Auto-merge failed')
+    expect(msg).not.toContain('\u001b')
+    expect(state.refetch).toHaveBeenCalledOnce()
+  })
 
   it('keeps the list visible when a selected-PR dialog loses its selection', () => {
     expect(renderPRListDialog(props('merge', { selectedPR: undefined }))).toBeNull()

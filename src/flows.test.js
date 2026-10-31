@@ -363,6 +363,20 @@ describe('PR auto-merge flows', () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify({ autoMergeRequest: { enabledAt: 'x' } }), stderr: '' })
     await expect(disableAutoMerge('owner/repo', 3)).rejects.toThrow(/still enabled/i)
   })
+
+  it('surfaces a gh rejection of --disable-auto and does not read back', async () => {
+    fail('GraphQL: Auto merge is not allowed for this repository')
+    await expect(disableAutoMerge('owner/repo', 3)).rejects.toThrow(/not allowed/i)
+    expect(execa).toHaveBeenCalledTimes(1)
+    expect(args()).toContain('--disable-auto')
+  })
+
+  it('says it could not verify when only the read-back fails', async () => {
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'network down' })
+    await expect(disableAutoMerge('owner/repo', 3)).rejects.toThrow(/could not verify/i)
+  })
 })
 
 // ─── PR COMMENT FLOWS ────────────────────────────────────────────────────────

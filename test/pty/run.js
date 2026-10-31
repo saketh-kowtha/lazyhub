@@ -361,7 +361,8 @@ async function runResizeFlow() {
     await settle()
     await sendUntil(() => writeChord(term, 'gp'), () => screen.text(), /PTY harness fixture PR/, 'PR list at 120x40')
     await waitUntil(showing(/⌂ lazyhub/), 'sidebar at 120x40')
-    assert.ok(screen.text().split('\n').some(l => /^─{120}$/.test(l.trim())), 'footer rule spans 120 columns')
+    // The footer paints in the same frame burst as the sidebar but a PTY may split that burst across chunks, so wait for it.
+    await waitUntil(() => (screen.text().split('\n').some(l => /^─{120}$/.test(l.trim())) ? true : screen.text()), 'footer rule spans 120 columns')
 
     const resizeTo = (cols, rows) => {
       const wrapsBefore = screen.wraps

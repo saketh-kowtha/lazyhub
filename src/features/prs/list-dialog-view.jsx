@@ -129,7 +129,7 @@ export function renderPRListDialog({
             : enableAutoMerge(repo, selectedPR.number, repoInfo?.squashMergeAllowed ? 'squash' : 'merge')
           return runWrite(`${disabling ? 'Disabling' : 'Enabling'} auto-merge on #${selectedPR.number}`, () => request()
             .then(() => { showStatus(disabling ? '✓ Auto-merge disabled' : '⟳ Auto-merge enabled'); refetch() })
-            .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true)))
+            .catch(err => { showStatus(`✗ Auto-merge failed: ${sanitize(err.message)}`, true); refetch() }))
         }}
         onCancel={closeDialog}
       />

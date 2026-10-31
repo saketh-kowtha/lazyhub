@@ -3,7 +3,7 @@
  * Supports: reply, edit, delete per comment
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
@@ -94,11 +94,17 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   }, [visibleCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Status helper ──────────────────────────────────────────────────────────
-  const flash = useCallback((msg) => {
+  // One timer: a newer message is never cleared by an older message's timeout. A sticky
+  // message (a write in flight) stays until the next message replaces it.
+  const flashTimer = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null))
+  const flash = useCallback((msg, { sticky = false } = {}) => {
+    if (flashTimer.current) clearTimeout(flashTimer.current)
+    flashTimer.current = null
     setStatusMsg(msg)
-    setTimeout(() => setStatusMsg(null), 3000)
+    if (!sticky) flashTimer.current = setTimeout(() => setStatusMsg(null), 3000)
   }, [])
-  const { run: runWrite } = usePendingWrite(flash)
+  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current) }, [])
+  const { run: runWrite } = usePendingWrite(useCallback((msg) => flash(msg, { sticky: true }), [flash]))
 
   // ── Open $EDITOR for multiline edit ───────────────────────────────────────
   const openEditor = useCallback((initial) => {

@@ -33,6 +33,18 @@ describe('usePendingWrite', () => {
     expect(second).toHaveBeenCalledOnce()
   })
 
+  it('says which write is still running when it ignores a run', async () => {
+    const api = {}
+    const announce = vi.fn()
+    renderWithProviders(<Probe api={api} announce={announce} />)
+    let release
+    const p1 = api.current.run('Merging #1', () => new Promise(r => { release = r }))
+    expect(await api.current.run('Approving #2', async () => 'x')).toBeUndefined()
+    expect(announce).toHaveBeenLastCalledWith('⟳ Merging #1 still in progress')
+    release()
+    await p1
+  })
+
   it('releases the guard and rethrows when the write fails', async () => {
     const api = {}
     renderWithProviders(<Probe api={api} />)
