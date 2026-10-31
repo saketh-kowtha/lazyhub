@@ -200,7 +200,7 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
 export function DiffView({ prNumber, state }) {
   const { t } = useTheme()
   const {
-    stdout, visibleHeight, diffStats, isLargeDiff, diffWarningAck,
+    stdout, visibleHeight, diffStats, isLargeDiff, diffTooLarge, diffWarningAck,
     prMeta, repoInfo, loading, error, cursor, scrollOffset, dialog, setDialog,
     adminMergeMsg, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
     footerKeys, showTree, treeCursor, findQuery, setFindQuery, findActive,
@@ -210,6 +210,19 @@ export function DiffView({ prNumber, state }) {
     treeRows, commentsByLine, jumpTo, handleAiJumpTo, handleAiPost,
     submitMerge, selectAdminMethod, confirmAdminMerge, submitApproval, submitChanges
   } = state
+
+  if (diffTooLarge) {
+    return (
+      <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
+        <Text color={t.ci.pending} bold>⚠ Large diff: GitHub would not return it here</Text>
+        <Text color={t.ui.muted}>The diff is too large to load in the terminal.</Text>
+        <Box marginTop={1} gap={3}>
+          <Text color={t.ui.muted}>[{firstActionKey('pr.open-browser', 'o')}] Open in browser</Text>
+          <Text color={t.ui.dim}>[Esc] Back</Text>
+        </Box>
+      </Box>
+    )
+  }
 
   if (isLargeDiff && !diffWarningAck) {
     return (
