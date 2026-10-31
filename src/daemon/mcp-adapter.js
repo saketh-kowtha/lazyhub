@@ -179,6 +179,10 @@ function respondError(id, code, message) {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } }) + '\n')
 }
 
+/**
+ * Handle one JSON-RPC request and write its response to stdout.
+ * @param {{id?: any, method?: string, params?: any}} msg
+ */
 async function handleRequest(msg) {
   const { id, method, params } = msg
   if (method === 'initialize') {
