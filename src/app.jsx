@@ -191,7 +191,7 @@ export function App({ repo }) {
     const validPane = PANES.includes(tp) ? tp : null
     if (validPane) {
       setPane(validPane)
-      setActionsBranch(null)
+      setActionsTarget({ repo: null, branch: null })
       savedListPosition.current = {}
       pendingNavigationRef.current = { itemNumber, filter }
       // "Go to PR/issue #N" and "open diff" carry a view + item number (B-86).
@@ -216,7 +216,7 @@ export function App({ repo }) {
     if (!PANES.includes(resolved) || resolved === pane) return
     setPane(resolved)
     setSelectedItem(null); setView('list')
-    setActionsBranch(null)
+    setActionsTarget({ repo: null, branch: null })
   }, [pane]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Global key handler ───────────────────────────────────────────────────
@@ -320,7 +320,7 @@ export function App({ repo }) {
         : (idx + 1) % PANES.length
       ])
       setSelectedItem(null); setView('list')
-      setActionsBranch(null)
+      setActionsTarget({ repo: null, branch: null })
       return
     }
 

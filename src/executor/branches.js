@@ -221,36 +221,90 @@ export async function getUnpushedCommits(branch) {
 }
 
 /**
- * True when a remote URL points at the given owner/repo slug (any host,
- * ssh or https, optional .git suffix). Case-insensitive like GitHub.
+ * Host and "owner/name" of a git remote URL (ssh, scp-style or https; optional
+ * user@, port, trailing slash and .git). Lowercased, like GitHub.
  * @param {string} url
- * @param {string} repo  "owner/name" (a leading host segment is ignored)
+ * @returns {{ host: string, slug: string } | null}
  */
-export function remoteMatchesRepo(url, repo) {
-  const want = String(repo || '').split('/').filter(Boolean).slice(-2).join('/').toLowerCase()
-  if (!want || !url) return false
-  const path = String(url).trim().replace(/^[a-z+]+:\/\//i, '').replace(/^[^@/]+@/, '').replace(/^[^/:]+[:/]/, '')
-  const got = path.replace(/\/+$/, '').replace(/\.git$/i, '').split('/').slice(-2).join('/').toLowerCase()
-  return got === want
+function parseRemoteUrl(url) {
+  const raw = String(url || '').trim()
+  if (!raw) return null
+  let rest = raw.replace(/^[a-z+]+:\/\//i, '').replace(/^[^@/]+@/, '')
+  const sep = rest.search(/[:/]/)
+  if (sep < 0) return null
+  const host = rest.slice(0, sep).toLowerCase()
+  rest = rest.slice(sep + 1).replace(/^\d+\//, '') // ssh://host:2222/owner/repo
+  const slug = rest.replace(/\/+$/, '').replace(/\.git$/i, '').split('/').slice(-2).join('/').toLowerCase()
+  return slug.includes('/') ? { host, slug } : null
 }
 
 /**
- * Directory of the local checkout of `repo`, or null when there is none.
- * Only the launch directory is considered (lazyhub keeps no clone registry):
- * it counts when one of its remotes is `repo`. Never throws.
+ * True when a remote URL points at the given repo on the right host. The host is
+ * the repo's own when it has one ("ghe.corp/owner/name"), otherwise GH_HOST, otherwise
+ * github.com, so a github.com clone never counts as the checkout of a GHES repo.
+ * @param {string} url
+ * @param {string} repo  "owner/name" or "host/owner/name"
+ */
+export function remoteMatchesRepo(url, repo) {
+  const parts = String(repo || '').split('/').filter(Boolean)
+  if (parts.length < 2) return false
+  const want = parts.slice(-2).join('/').toLowerCase()
+  const wantHost = (parts.length > 2 ? parts[parts.length - 3] : (process.env.GH_HOST || 'github.com')).toLowerCase()
+  const got = parseRemoteUrl(url)
+  return !!got && got.slug === want && got.host === wantHost
+}
+
+// (cwd, host, repo) -> lookup. Remotes rarely change mid-session, and the Branches pane
+// asks on every mount; clearLocalCheckoutCache() is for tests and an explicit refresh.
+const checkoutCache = new Map()
+export function clearLocalCheckoutCache() { checkoutCache.clear() }
+
+/**
+ * The local checkout of `repo` and the remote name that points at it, or null.
+ * Only the launch directory is considered (lazyhub keeps no clone registry): it
+ * counts when one of its remotes is `repo`. `origin` wins when several match.
+ * Never throws.
  * @param {string} repo
- * @returns {Promise<string|null>}
+ * @returns {Promise<{ dir: string, remote: string } | null>}
  */
 export async function findLocalCheckout(repo) {
   const cwd = process.cwd()
+  const key = `${cwd}\0${process.env.GH_HOST || ''}\0${repo}`
+  if (!checkoutCache.has(key)) checkoutCache.set(key, lookupLocalCheckout(cwd, repo))
+  return checkoutCache.get(key)
+}
+
+async function lookupLocalCheckout(cwd, repo) {
   try {
     const result = await execa('git', ['remote', '-v'], { cwd, reject: false })
     if (result.exitCode) return null
-    const urls = String(result.stdout || '').split('\n').map(l => l.split(/\s+/)[1]).filter(Boolean)
-    return urls.some(u => remoteMatchesRepo(u, repo)) ? cwd : null
+    const remotes = String(result.stdout || '').split('\n')
+      .map(line => line.split(/\s+/))
+      .filter(([name, url]) => name && remoteMatchesRepo(url, repo))
+      .map(([name]) => name)
+    if (!remotes.length) return null
+    return { dir: cwd, remote: remotes.includes('origin') ? 'origin' : remotes[0] }
   } catch {
     return null
   }
+}
+
+/**
+ * Check out `branch` from the remote that points at the viewed repo. For `origin`
+ * this is a plain checkout; for another remote (a fork clone viewing upstream) the
+ * branch is fetched from that remote and tracked, so git never guesses the fork's
+ * branch of the same name.
+ * @param {{ dir: string, remote: string }} local
+ * @param {string} branch
+ */
+export async function checkoutRemoteBranch(local, branch) {
+  const run = (args) => execa('git', args, { cwd: local.dir })
+  if (local.remote === 'origin') return run(['checkout', branch])
+  await run(['fetch', local.remote, branch])
+  const exists = await execa('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { cwd: local.dir, reject: false })
+  return exists.exitCode === 0
+    ? run(['checkout', branch])
+    : run(['checkout', '-b', branch, '--track', `${local.remote}/${branch}`])
 }
 
 /**
