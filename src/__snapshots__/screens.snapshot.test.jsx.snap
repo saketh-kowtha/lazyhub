@@ -116,6 +116,7 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
                    │  ⎇  Pull Requests list                                     │
                    │  ────────────────────────────────────────                  │
                    │                                                            │
+                   │  1-9                 jump to pane                          │
                    │  j/k                 Move the cursor down                  │
                    │  gg                  Jump to the top                       │
                    │  G                   Jump to the bottom                    │
@@ -125,11 +126,10 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
                    │                      list                                  │
                    │  Enter               Open PR detail                        │
                    │  d                   Open PR diff                          │
-                   │  m                   Merge selected PR                     │
                    │  ────────────────────────────────────────────────────────  │
-                   │  x                   Request changes on                    │
+                   │  a                   Approve selected PR                   │
                    │  Config: ~/.config/lazyhub/lazyhub.toml                    │
-                   │  X                   Close selected PR                     │
+                   │                      selected PR                           │
                    ╰────────────────────────────────────────────────────────────╯
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  ? / Esc / Enter close help"
