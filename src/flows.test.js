@@ -347,12 +347,21 @@ describe('PR auto-merge flows', () => {
     expect(a).toContain('--squash')
   })
 
-  it('disables auto-merge via API PATCH', async () => {
-    ok()
+  it('disables auto-merge with gh pr merge --disable-auto and verifies it is off', async () => {
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify({ autoMergeRequest: null }), stderr: '' })
     await disableAutoMerge('owner/repo', 3)
-    expect(args()).toContain('api')
-    expect(args()).toContain('PATCH')
-    expect(args().join(' ')).toContain('pulls/3')
+    expect(args()).toEqual(expect.arrayContaining(['pr', 'merge', '3', '--disable-auto']))
+    expect(args()).not.toContain('PATCH')
+    expect(execa.mock.calls[1][1]).toEqual(expect.arrayContaining(['pr', 'view', '3', '--json', 'autoMergeRequest']))
+  })
+
+  it('does not report success when auto-merge is still enabled afterwards', async () => {
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify({ autoMergeRequest: { enabledAt: 'x' } }), stderr: '' })
+    await expect(disableAutoMerge('owner/repo', 3)).rejects.toThrow(/still enabled/i)
   })
 })
 

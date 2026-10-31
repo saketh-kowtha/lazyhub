@@ -310,18 +310,18 @@ export async function enableAutoMerge(repo, number, mergeMethod = 'merge') {
 }
 
 /**
- * Disable auto-merge on a PR.
+ * Disable auto-merge on a PR, then read it back: the REST PR update endpoint
+ * silently ignores an auto_merge field, so success is only reported once
+ * GitHub shows no autoMergeRequest.
  * @param repo
  * @param number
  */
 export async function disableAutoMerge(repo, number) {
   const r = getRepo(repo)
-  const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/${encodeURIComponent(number)}`,
-    '--method', 'PATCH',
-    '-f', 'auto_merge=',
-  ]
-  return runGh(args)
+  await runGh(['pr', 'merge', String(number), '--repo', r, '--disable-auto'])
+  const after = await runGh(['pr', 'view', String(number), '--repo', r, '--json', 'autoMergeRequest'])
+  if (after?.autoMergeRequest) throw new Error(`Auto-merge is still enabled on PR #${number}`)
+  return after
 }
 
 /**
