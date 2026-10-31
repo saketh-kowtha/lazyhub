@@ -2,9 +2,10 @@
  * Onboarding.jsx — zero-configuration watch-only first run (#70, mockup variant A:
  * docs/mockups/onboarding-first-run-a-stepper.md).
  *
- * Two steps (repository, report) in one bordered panel. Read-only end to end:
- * it uses the user's existing gh login, never logs in, installs, creates or
- * writes anything. Quitting at any point leaves nothing behind.
+ * One step: pick a repository, then straight to Focus (#517). The governance
+ * report is not part of first run; `lazyhub watch-only` shows it on demand.
+ * Read-only end to end: it uses the user's existing gh login, never logs in,
+ * installs, creates or writes anything. Quitting leaves nothing behind.
  */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react'
@@ -13,9 +14,8 @@ import { ThemeProvider, useTheme, readRawThemeCfg } from '../../theme.js'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { Spinner } from '../../components/Spinner.jsx'
 import { sanitize } from '../../utils.js'
-import { ATTRIBUTION_NOTE, describeAttribution, explainReason } from '../../watch-only/report.js'
 import { selectGhHost } from '../../bootstrap.js'
-import { classifyFailure, isOwnerName, listWindowSize, lookupRepo, loadOnboardingReport, loadSession, repoKey, windowStart } from './flow.js'
+import { classifyFailure, isOwnerName, listWindowSize, lookupRepo, loadSession, repoKey, windowStart } from './flow.js'
 import { classifyGhFailure } from '../../executor.js'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 
@@ -30,11 +30,6 @@ const LOOKUP_ERROR_COPY = {
   error: 'could not be checked; check your network and `gh auth status`.',
 }
 
-const SLICE2_NOTE = [
-  'Enforcement (coming, not available yet; #245): optional approval-only setup, a separate step.',
-  'Expect solo/pilot limits: you approve your own agents\' merges, on repos you administer.',
-]
-
 /**
  * One truncated text row.
  *
@@ -46,66 +41,16 @@ function Line({ children, color, bold = false }) {
   return <Text color={color ?? t.ui.muted} bold={bold} wrap="truncate-end">{children}</Text>
 }
 
-/**
- * A row that wraps instead of truncating; used where it is the only place a limitation is explained.
- *
- * @param {{children?: any, color?: string}} props
- * @returns {React.ReactElement}
- */
-function Para({ children, color }) {
-  const { t } = useTheme()
-  return <Text color={color ?? t.ui.muted} wrap="wrap">{children}</Text>
-}
-
-function coverageColor(t, coverage) {
-  return coverage === 'advisory' ? t.ci.pending : t.ci.fail
-}
-
-function Report({ data }) {
-  const { t } = useTheme()
-  const { coverage, activity } = data
-  const gaps = [...new Set(coverage.observation.gap_codes)]
-  const reasons = [...new Set(coverage.operations.flatMap(op => op.downgrade_reasons))]
-  const explained = reasons.map(r => [r, explainReason(r)]).filter(([, e]) => e)
-  const a = activity?.by_attribution
-  return (
-    <Box flexDirection="column">
-      <Line>
-        {activity
-          ? `Observed ${activity.pull_requests} PR(s) in ${activity.pages} page(s). Nothing was enforced, installed or written.`
-          : 'Activity could not be read. Nothing was enforced, installed or written.'}
-      </Line>
-      <Line>{`identity: ${coverage.identity.status}${coverage.identity.reason ? ` (${sanitize(coverage.identity.reason)})` : ''} · rulesets: ${coverage.rulesets.status}${coverage.rulesets.count === null ? '' : ` (${coverage.rulesets.count})`}`}</Line>
-      <Line bold>{`Coverage (${coverage.coverage_states.join(' | ')})`}</Line>
-      {coverage.operations.map(op => (
-        <Box key={op.operation}><Text wrap="truncate-end">
-          <Text color={t.ui.muted}>{`  ${op.operation.padEnd(28)} `}</Text>
-          <Text color={coverageColor(t, op.coverage)}>{op.coverage}</Text>
-          <Text color={t.ui.dim}>{op.downgrade_reasons.length ? ` [downgraded: ${op.downgrade_reasons.map(sanitize).join(', ')}]` : ''}</Text>
-        </Text></Box>
-      ))}
-      {gaps.length > 0 && <Para color={t.ci.pending}>{`Gaps: ${gaps.join(', ')}`}</Para>}
-      {explained.map(([r, e]) => <Box key={r}><Para color={t.ci.pending}>{`  ${sanitize(r)}: ${e[0]}. Next: ${e[1]}.`}</Para></Box>)}
-      <Line>Enforcement: none. Coverage reflects what was observed, not who acted.</Line>
-      {a && <Para>{`Attribution (who GitHub says acted): ${describeAttribution(a)}`}</Para>}
-      {a && <Para color={t.ui.dim}>{`  ${ATTRIBUTION_NOTE}`}</Para>}
-      {SLICE2_NOTE.map(line => <Box key={line}><Line color={t.ui.dim}>{line}</Line></Box>)}
-    </Box>
-  )
-}
-
-export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn = loadOnboardingReport, lookupRepoFn = lookupRepo }) {
+export function Onboarding({ onDone, loadSessionFn = loadSession, lookupRepoFn = lookupRepo }) {
   const { t } = useTheme()
   const { exit } = useApp()
   const { stdout } = useStdout()
-  const [phase, setPhase] = useState('session') // session | repos | report | error
+  const [phase, setPhase] = useState('session') // session | repos | error
   const [session, setSession] = useState(null)
   const [selected, setSelected] = useState(null) // stable repoKey, not an index
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [lookup, setLookup] = useState(null) // {name, status: 'checking'|'error', failure?}
-  const [repo, setRepo] = useState(null)
-  const [data, setData] = useState(null)
   const [failure, setFailure] = useState(null)
   const [attempt, setAttempt] = useState(0)
   const request = useRef(0)
@@ -125,16 +70,8 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
       .catch(err => { if (request.current === id) { setFailure(classifyGhFailure(err)); setPhase('error') } })
   }, [attempt, loadSessionFn])
 
-  const observe = name => {
-    const id = ++request.current
-    setRepo(name)
-    setLookup(null)
-    setData(null)
-    setPhase('report')
-    loadReportFn(name)
-      .then(d => { if (request.current === id) setData(d) })
-      .catch(err => { if (request.current === id) { setFailure(classifyGhFailure(err)); setPhase('error') } })
-  }
+  // Choosing a repository completes first run; the app opens on Focus.
+  const proceed = name => finish({ status: 'completed', repo: name })
 
   const repos = session?.repos ?? []
   const text = query.trim().toLowerCase()
@@ -157,14 +94,14 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
     const id = ++request.current
     setLookup({ name, status: 'checking' })
     lookupRepoFn(name)
-      .then(canonical => { if (request.current === id) observe(canonical) })
+      .then(canonical => { if (request.current === id) proceed(canonical) })
       .catch(err => { if (request.current === id) setLookup({ name, status: 'error', failure: classifyFailure(err) }) })
   }
   const choose = () => {
     const row = rows[index]
     if (!row || lookup?.status === 'checking') return
     if (row.lookup) checkLookup(row.name)
-    else observe(row.name)
+    else proceed(row.name)
   }
   const move = delta => {
     if (rows.length === 0) return
@@ -186,26 +123,21 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
     }
     if (input === 'q') return finish({ status: 'cancelled' })
     if (phase === 'error' && input === 'r') {
-      if (repo) observe(repo)
-      else setAttempt(n => n + 1)
+      setAttempt(n => n + 1)
     } else if (phase === 'repos') {
       if (input === '/') setSearching(true)
       else if (key.downArrow) move(1)
       else if (key.upArrow) move(-1)
       else if (/^[jk]+$/.test(input)) for (const ch of input) move(ch === 'j' ? 1 : -1)
       else if (key.return) choose()
-    } else if (phase === 'report') {
-      if (key.escape || input === 'b') { request.current += 1; setPhase('repos') }
-      else if (key.return && data) finish({ status: 'completed', repo })
     }
   })
 
   const keys = {
     session: [{ key: 'q', label: 'quit (nothing is written)' }],
     repos: searching
-      ? [{ key: 'Up/Down', label: 'move' }, { key: 'Enter', label: 'observe' }, { key: 'Esc', label: lookup?.status === 'checking' ? 'cancel lookup' : 'clear search' }]
-      : [{ key: '/', label: 'search' }, { key: 'j/k', label: 'move' }, { key: 'Enter', label: 'observe' }, { key: 'q', label: 'quit (nothing is written)' }],
-    report: [{ key: 'Enter', label: 'open lazyhub' }, { key: 'Esc/b', label: 'change repo' }, { key: 'q', label: 'quit (nothing is written)' }],
+      ? [{ key: 'Up/Down', label: 'move' }, { key: 'Enter', label: 'open' }, { key: 'Esc', label: lookup?.status === 'checking' ? 'cancel lookup' : 'clear search' }]
+      : [{ key: '/', label: 'search' }, { key: 'j/k', label: 'move' }, { key: 'Enter', label: 'open' }, { key: 'q', label: 'quit (nothing is written)' }],
     error: [{ key: 'r', label: 'retry' }, { key: 'q', label: 'quit (nothing is written)' }],
   }[phase]
 
@@ -214,17 +146,13 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
   const start = windowStart(rows.length, index, size)
   const windowed = rows.slice(start, start + size).map((row, n) => ({ row, i: start + n }))
 
-  const active = phase === 'report' ? 2 : 1
-  const step = n => <Text color={n === active ? t.ui.selected : t.ui.dim} bold={n === active}>{n === 1 ? '1 Repository' : '2 Report'}</Text>
-
   return (
     <Box flexDirection="column" width={Math.min(stdout?.columns || 80, 100)}>
       <Box flexDirection="column" borderStyle="round" borderColor={t.ui.border} paddingX={1}>
         <Box justifyContent="space-between">
-          <Text bold color={t.ui.selected} wrap="truncate-end">{`lazyhub · first run${session?.login ? ` · ${sanitize(session.login)}` : ''}${phase === 'report' && repo ? ` · ${sanitize(repo)}` : ''}`}</Text>
+          <Text bold color={t.ui.selected} wrap="truncate-end">{`lazyhub · first run${session?.login ? ` · ${sanitize(session.login)}` : ''}`}</Text>
           <Text color={t.ui.muted}>watch-only · read-only</Text>
         </Box>
-        <Text>{step(1)}<Text color={t.ui.dim}> › </Text>{step(2)}</Text>
         {phase === 'session' && <Spinner label="Checking your gh login..." />}
         {phase === 'error' && (
           <Box flexDirection="column">
@@ -237,7 +165,7 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
             <Line>lazyhub will only READ through your existing gh login. It installs nothing,</Line>
             <Line>creates no checks, changes no rulesets and writes nothing to GitHub.</Line>
             {session.listError && <Line color={t.ci.pending}>{`Repository list unavailable (${session.listError}); showing the current directory's repository only.`}</Line>}
-            <Line bold>Pick a repository to observe:</Line>
+            <Line bold>Pick a repository to open:</Line>
             {windowed.map(({ row, i }) => (
               <Box key={row.key}>
                 <Text color={i === index ? t.ui.selected : t.ui.muted} bold={i === index} wrap="truncate-end">
@@ -249,6 +177,7 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
             ))}
             {!text && repos.length === 0 && <Line color={t.ui.dim}>No repositories found for this account.</Line>}
             {text && rows.length === 0 && <Line color={t.ui.dim}>{`No loaded repository matches "${sanitize(query.trim())}". Try owner/name to look one up.`}</Line>}
+            <Line color={t.ui.dim}>Tip: run `lazyhub watch-only` any time for the review-coverage report.</Line>
             {searching
               ? <Line>{`Search: ${sanitize(query)}_`}</Line>
               : <Line color={t.ui.dim}>/ search · type owner/name to look up any repository</Line>}
@@ -257,7 +186,6 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, loadReportFn =
             {lookup?.status === 'error' && <Line color={t.ci.fail}>{lookup.failure === 'permission' || lookup.failure === 'error' ? `${sanitize(lookup.name)} ${LOOKUP_ERROR_COPY[lookup.failure]}` : LOOKUP_ERROR_COPY[lookup.failure]}</Line>}
           </Box>
         )}
-        {phase === 'report' && (data ? <Report data={data} /> : <Spinner label={`Reading ${sanitize(repo)} (read-only)...`} />)}
       </Box>
       <FooterKeys keys={keys} />
     </Box>
