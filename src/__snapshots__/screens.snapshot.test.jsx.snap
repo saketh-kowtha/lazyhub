@@ -127,9 +127,9 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
                    │  d                   Open PR diff                          │
                    │  m                   Merge selected PR                     │
                    │  ────────────────────────────────────────────────────────  │
-                   │                      for selected PR                       │
-                   │  Config: ~/.config/lazyhub/lazyhub.tomlR                   │
                    │  x                   Request changes on                    │
+                   │  Config: ~/.config/lazyhub/lazyhub.toml                    │
+                   │  X                   Close selected PR                     │
                    ╰────────────────────────────────────────────────────────────╯
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  ? / Esc / Enter close help"

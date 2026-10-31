@@ -10,7 +10,7 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { sanitize } from '../../utils.js'
 import { NewPRDialog } from './NewPRDialog.jsx'
-import { MERGE_OPTIONS } from './list-row.jsx'
+import { MERGE_OPTIONS, autoMergeOption, canToggleAutoMergeFromList } from './list-row.jsx'
 import { LabelDialog, AssigneeDialog, AuthorSearchDialog, ReviewerDialog } from './list-dialogs.jsx'
 
 const SELECTION_DIALOGS = { labels: LabelDialog, assignees: AssigneeDialog, reviewers: ReviewerDialog }
@@ -59,11 +59,12 @@ export function renderPRListDialog({
     return (
       <OptionPicker
         title={`Merge PR #${selectedPR.number}: ${sanitize(selectedPR.title)}`}
-        options={MERGE_OPTIONS}
+        options={canToggleAutoMergeFromList(selectedPR) ? [...MERGE_OPTIONS, autoMergeOption(selectedPR)] : MERGE_OPTIONS}
         promptText="Commit message (optional, Enter to skip)"
         onSubmit={(val) => {
           const strategy = typeof val === 'object' ? val.value : val
           const msg      = typeof val === 'object' ? val.text  : undefined
+          if (strategy === 'auto-merge') { setDialog('auto-merge'); return }
           setMergeOptions({ strategy, msg })
           setDialog('merge-confirm')
         }}
