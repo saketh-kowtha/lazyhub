@@ -50,14 +50,17 @@ export function useTheme() {
  * Provide reactive theme to the entire app.
  * @param {object} root0
  * @param {import('react').ReactNode} root0.children
- * @param {string} [root0.initialTheme]
+ * @param {string | {name: string, overrides?: object}} [root0.initialTheme] A built-in or file theme name, or the `[theme]` table `{name, overrides}`.
  */
 export function ThemeProvider({ children, initialTheme }) {
-  const [themeName, setThemeName] = useState(initialTheme || 'github-dark')
+  const [themeCfg, setThemeName] = useState(initialTheme || 'github-dark')
 
   const t = useMemo(() => {
-    return resolveTheme(themeName)
-  }, [themeName])
+    return resolveTheme(themeCfg)
+  }, [themeCfg])
+
+  // Context exposes the theme name as a string; the full cfg (incl. overrides) stays internal.
+  const themeName = (typeof themeCfg === 'object' && themeCfg !== null ? themeCfg.name : themeCfg) || 'github-dark'
 
   const setTheme = useCallback((name) => {
     setThemeName(name)
