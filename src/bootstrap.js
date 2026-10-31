@@ -525,3 +525,42 @@ export async function bootstrap(renderApp, { repo: chosenRepo, open = null } = /
     renderApp()
   }
 }
+
+// ─── Headless preflight for `lazyhub --mcp` (#518) ───────────────────────────
+
+/**
+ * Check gh and auth for a headless caller (MCP stdio) without prompting,
+ * printing or spawning a login. stdout stays reserved for JSON-RPC; the caller
+ * writes `message` to stderr. Sets GH_HOST / GHUI_REPO when they can be
+ * resolved; an unresolved repo is not an error (tools return MCP_INVALID_REPO).
+ *
+ * @returns {Promise<{ok: boolean, message?: string}>}
+ */
+export async function headlessPreflight() {
+  if (!(await detectGh())) {
+    return { ok: false, message: 'lazyhub --mcp: gh (GitHub CLI) is not installed; install it from https://cli.github.com, run `gh auth login`, then restart' }
+  }
+  if (!process.env.GH_HOST) {
+    const sel = await selectGhHost()
+    if (sel.error) {
+      const needed = sel.mismatch?.needed
+      return { ok: false, message: `lazyhub --mcp: repository host ${needed ?? '(unknown)'} is not a gh login; run \`gh auth login${needed ? ` --hostname ${needed}` : ''}\`, then restart` }
+    }
+    if (sel.host) process.env.GH_HOST = sel.host
+  }
+  let loggedIn = await checkAuth()
+  if (!loggedIn && !process.env.GH_HOST) {
+    const authedHost = await detectAuthenticatedHost()
+    if (authedHost) {
+      process.env.GH_HOST = authedHost
+      loggedIn = await checkAuth()
+    }
+  }
+  if (!loggedIn) {
+    const host = process.env.GH_HOST
+    return { ok: false, message: `lazyhub --mcp: not authenticated with ${host || 'github.com'}; run \`gh auth login${host ? ` --hostname ${host}` : ''}\`, then restart` }
+  }
+  const repo = (await detectRepo()) || loadSavedRepo()
+  if (repo) process.env.GHUI_REPO = repo
+  return { ok: true }
+}
