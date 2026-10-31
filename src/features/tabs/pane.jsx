@@ -50,9 +50,10 @@ export function TabPane({ pane, repo, active = false, cursor = 0, onData, repeat
   const paneRepo = pane.filter?.repo || repo
   const { data, loading, error, refetch } = useGh(loader, [paneRepo, translated.filter])
 
+  const failure = error ? classifyGhFailure(error, { cached: data != null }) : null
   // Only a settled, error-free list can be selected or opened.
   const items = !loading && !error && Array.isArray(data) ? data : []
-  useEffect(() => { if (onData) onData({ items, refetch, kind: pane.kind, repo: paneRepo, failed: Boolean(error) }) })
+  useEffect(() => { if (onData) onData({ items, refetch, kind: pane.kind, repo: paneRepo, failed: failure ? failure.kind : null }) })
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={active ? t.ui.borderActive : t.ui.border} paddingX={1} minWidth={30} flexGrow={1}>
@@ -69,7 +70,7 @@ export function TabPane({ pane, repo, active = false, cursor = 0, onData, repeat
       {error && (
         // One notice per screen (#469): panes that fail the same way after the first
         // show only the cause; `cached` is true only when this pane really has data.
-        <FailureNotice failure={classifyGhFailure(error, { cached: data != null })} compact={repeatOf !== null} />
+        <FailureNotice failure={failure} compact={repeatOf !== null} />
       )}
       {!loading && !error && <DashboardRows items={items} cursor={Math.max(0, Math.min(cursor, items.length - 1))} active={active} />}
     </Box>

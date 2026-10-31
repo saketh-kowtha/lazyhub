@@ -7,13 +7,13 @@ import { Box } from 'ink'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GhError } from '../../executor/gh-error.js'
 import { GH_STDERR } from '../../executor/gh-stderr-fixtures.js'
-import { cleanup, flush, renderWithProviders } from '../../test/test-helpers.jsx'
+import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
-const loader = vi.hoisted(() => ({ fn: null }))
+const loader = vi.hoisted(() => ({ fn: null, issues: null }))
 
 vi.mock('../../executor.js', async () => {
   const actual = await vi.importActual('../../executor.js')
-  return { ...actual, listPRs: (...a) => loader.fn(...a), listIssues: (...a) => loader.fn(...a) }
+  return { ...actual, listPRs: (...a) => loader.fn(...a), listIssues: (...a) => (loader.issues || loader.fn)(...a) }
 })
 vi.mock('../../cache.js', async () => {
   const actual = await vi.importActual('../../cache.js')
@@ -41,7 +41,7 @@ async function mountAt(columns, rows) {
 }
 
 describe('Focus error notices (#469)', () => {
-  beforeEach(() => { resetGhMemoryCache(); loader.fn = async () => { throw offline() } })
+  beforeEach(() => { resetGhMemoryCache(); loader.fn = async () => { throw offline() }; loader.issues = null })
   afterEach(cleanup)
 
   for (const [cols, rows] of [[80, 24], [120, 40]]) {
@@ -57,6 +57,29 @@ describe('Focus error notices (#469)', () => {
       expect(frame.split('\n').length).toBeLessThanOrEqual(rows)
     })
   }
+
+  it('a pane with a different failure keeps its own full notice and fix command', async () => {
+    const f = GH_STDERR.not_signed_in
+    loader.issues = async () => { throw new GhError({ message: f.message || f.stderr.split('\n')[0], stderr: f.stderr, exitCode: f.exitCode, args: f.args }) }
+    const frame = await mountAt(120, 40)
+    expect(frame).toContain('Nothing is cached yet')
+    expect(frame).toContain('You are not signed in to GitHub.')
+    expect(frame).toContain('gh auth login')
+  })
+
+  it('says "last loaded data" when a refetch fails but the pane has cached data', async () => {
+    const { TabPane } = await import('./pane.jsx')
+    let api
+    loader.fn = async () => [{ number: 1, title: 'cached one', updatedAt: new Date().toISOString() }]
+    const view = renderWithProviders(<Box width={100}><TabPane pane={{ kind: 'prs', title: 'P', filter: {} }} repo="o/r" onData={d => { api = d }} /></Box>)
+    await waitForExpectation(() => expect(stripAnsi(view.lastFrame())).toContain('cached one'))
+    loader.fn = async () => { throw offline() }
+    api.refetch()
+    await waitForExpectation(() => expect(stripAnsi(view.lastFrame())).toContain('Cannot reach'))
+    const frame = stripAnsi(view.lastFrame())
+    expect(frame).toContain('Showing the last loaded data')
+    expect(frame).not.toContain('Nothing is cached yet')
+  })
 
   it('claims the cache only when something is cached', () => {
     expect(classifyGhFailure(offline(), { cached: true }).notes.join(' ')).toContain('last loaded')

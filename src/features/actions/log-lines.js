@@ -5,10 +5,25 @@
  * HH:MM:SS. TABs and control characters are cleaned later by LogViewer.
  */
 
+import { sanitize } from '../../utils.js'
+
 // eslint-disable-next-line no-control-regex
 const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]/g
-const GH_PREFIX_RE = /^[^\t]*\t[^\t]*\t/
+// Only a real `job<TAB>step<TAB><timestamp>` prefix; other tabbed lines stay intact.
+const GH_PREFIX_RE = /^[^\t]*\t[^\t]*\t(?=\d{4}-\d{2}-\d{2}T)/
 const TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2}:\d{2})\.\d+Z\s?/
+
+/**
+ * Viewer title: workflow, branch and outcome, skipping empty parts. The names come
+ * from GitHub, so they go through sanitize().
+ * @param {{workflowName?: string, headBranch?: string, conclusion?: string, status?: string}} run
+ */
+export function logTitle(run) {
+  return [run.workflowName || 'Run', run.headBranch, run.conclusion || run.status || 'unknown']
+    .map(p => sanitize(p || '').trim())
+    .filter(Boolean)
+    .join(' · ')
+}
 
 /**
  * @param {unknown} rawLogs

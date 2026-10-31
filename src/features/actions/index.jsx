@@ -10,7 +10,7 @@ import { useGh } from '../../hooks/useGh.js'
 import { classifyGhFailure, listRuns, getRunLogs, rerunRun, cancelRun } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
-import { toLogLines } from './log-lines.js'
+import { toLogLines, logTitle } from './log-lines.js'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
@@ -61,7 +61,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null) // null | 'logs' | 'cancel'
   const [logLines, setLogLines] = useState([])
-  const [logTitle, setLogTitle] = useState('Log Viewer')
+  const [logTitleText, setLogTitle] = useState('Log Viewer')
   const [logLoading, setLogLoading] = useState(false)
   const [statusMsg, setStatusMsg] = useState(null)
   const lastKeyRef   = useRef(null)
@@ -107,7 +107,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
   const openLogs = useCallback(async () => {
     const run = items[cursor]
     if (!run) return
-    setLogTitle(`${run.workflowName || 'Run'} · ${run.headBranch || ''} · ${run.conclusion || run.status || 'unknown'}`)
+    setLogTitle(logTitle(run))
     setLogLoading(true)
     setDialog('logs')
     try {
@@ -180,7 +180,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
     }
     return (
       <LogViewer
-        title={logTitle}
+        title={logTitleText}
         lines={logLines}
         onClose={() => setDialog(null)}
       />

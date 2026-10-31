@@ -29,6 +29,20 @@ describe('LogViewer with real gh log lines (#463)', () => {
     expect(view.lastFrame()).toContain('done')
     expect(view.lastFrame()).toContain('red')
   })
+  it('keeps only the text after the last CR of a progress line', () => {
+    const view = renderWithProviders(<LogViewer lines={['progress 10%\r50%']} onClose={() => {}} />)
+    expect(view.lastFrame()).toContain('50%')
+    expect(view.lastFrame()).not.toContain('10%')
+  })
+  it('treats log text as raw, not HTML: entities are not decoded', () => {
+    const view = renderWithProviders(<LogViewer lines={['x &#38; y &amp; a &lt; b']} onClose={() => {}} />)
+    expect(view.lastFrame()).toContain('x &#38; y &amp; a &lt; b')
+  })
+  it('drops zero-width, bidi and C1 control characters', () => {
+    const line = ['a', 0x200b, 'b', 0x202e, 'c', 0x2066, 'd', 0xfeff, 'e', 0x9b].map(x => (typeof x === 'number' ? String.fromCharCode(x) : x)).join('')
+    const view = renderWithProviders(<LogViewer lines={[line]} onClose={() => {}} />)
+    expect(view.lastFrame()).toContain('abcde')
+  })
   it('never draws a line wider than the terminal', () => {
     const view = renderWithProviders(<LogViewer lines={lines} onClose={() => {}} />)
     const widest = Math.max(...view.lastFrame().split('\n').map(l => [...l].length))

@@ -46,9 +46,11 @@ export function TabView({ tab, repo, onOpenItem }) {
   const report = useCallback((idx, data) => {
     paneData.current[idx] = data
     // Which panes are failing, so only the first one prints the full notice (#469).
-    setFailed(prev => (Boolean(prev[idx]) === Boolean(data.failed) ? prev : Object.assign([...prev], { [idx]: Boolean(data.failed) })))
+    setFailed(prev => ((prev[idx] || null) === (data.failed || null) ? prev : Object.assign([...prev], { [idx]: data.failed || null })))
   }, [])
-  const firstFailed = failed.findIndex(Boolean)
+  // A pane repeats the notice only when an earlier pane already shows the same kind of failure,
+  // so a different cause (and its fix command) is never hidden.
+  const repeatOf = (idx) => { const j = failed.findIndex((k, i) => i < idx && k && k === failed[idx]); return j >= 0 ? j : null }
   const resolve = useActionResolver('tab-list')
 
   const section = Math.min(selection.section, Math.max(0, panes.length - 1))
@@ -105,7 +107,7 @@ export function TabView({ tab, repo, onOpenItem }) {
               active={idx === section}
               cursor={cursorOf(idx)}
               onData={(data) => report(idx, data)}
-              repeatOf={firstFailed >= 0 && idx > firstFailed ? firstFailed : null}
+              repeatOf={repeatOf(idx)}
             />
           </Box>
         ))}
