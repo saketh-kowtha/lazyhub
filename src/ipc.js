@@ -28,7 +28,7 @@
  *   navigate  { view, prNumber, issueNumber }  → navigate the TUI
  *   open-file { file, line }       → open file in editor from IDE side
  *   pr-for-branch { branch, repo? }
- *                                  → { prNumber, prState?, ciStatus?, unresolvedThreads? }
+ *                                  → { prNumber, prState?, ciStatus? }
  *                                     or { prNumber: null } if no PR for the branch
  *   review-comments { prNumber }   → { comments: [{ id, threadId, path, line, body, user, resolved }] }
  *   reply-thread { threadId, body } → { ok: true, commentId }
@@ -44,7 +44,7 @@
  *   cursor-changed    { view, prNumber, file, line }
  *   view-changed      { view }
  *   pr-merged         { prNumber }
- *   pr-state-changed  { branch, prNumber, ciStatus, unresolvedThreads }
+ *   pr-state-changed  { branch, prNumber, ciStatus }
  *     — broadcast helper provided; triggers (CI refresh, merge) ship in later phases.
  *       Call emitIPC('pr-state-changed', payload) from any refresh path.
  *   review-comment-added   { prNumber, comment }

@@ -52,6 +52,7 @@ import {
   getPRReviewComments,
   addPRReviewThreadReply,
   resolvePRReviewThread,
+  getPRStateForBranch,
 } from './executor.js'
 
 // Helper: make execa return a successful JSON response
@@ -1022,5 +1023,24 @@ describe('error message redaction', () => {
       expect(err.message).toContain('[REDACTED]')
       expect(err.message).not.toContain('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
     }
+  })
+})
+
+// Field sets captured from `gh pr list --json zzz` on gh 2.89.0.
+const GH_PR_LIST_FIELDS = new Set(['additions', 'assignees', 'author', 'autoMergeRequest', 'baseRefName', 'baseRefOid', 'body', 'changedFiles', 'closed', 'closedAt', 'closingIssuesReferences', 'comments', 'commits', 'createdAt', 'deletions', 'files', 'fullDatabaseId', 'headRefName', 'headRefOid', 'headRepository', 'headRepositoryOwner', 'id', 'isCrossRepository', 'isDraft', 'labels', 'latestReviews', 'maintainerCanModify', 'mergeCommit', 'mergeStateStatus', 'mergeable', 'mergedAt', 'mergedBy', 'milestone', 'number', 'potentialMergeCommit', 'projectCards', 'projectItems', 'reactionGroups', 'reviewDecision', 'reviewRequests', 'reviews', 'state', 'statusCheckRollup', 'title', 'updatedAt', 'url'])
+
+describe('getPRStateForBranch (#438)', () => {
+  it('getPRStateForBranch only requests fields `gh pr list --json` accepts', async () => {
+    mockSuccess([])
+    await getPRStateForBranch('feat/x', 'a/b')
+    const [, args] = execa.mock.calls[0]
+    const json = args[args.indexOf('--json') + 1] || ''
+    const bad = json.split(',').filter(Boolean).filter(f => !GH_PR_LIST_FIELDS.has(f))
+    expect(bad).toEqual([]) // reviewThreads is rejected by gh: "Unknown JSON field"
+  })
+
+  it('resolves { prNumber: null } when runGh rejects', async () => {
+    mockFailure('no remote')
+    await expect(getPRStateForBranch('feat/x', 'a/b')).resolves.toEqual({ prNumber: null })
   })
 })
