@@ -200,7 +200,7 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
 export function DiffView({ prNumber, state }) {
   const { t } = useTheme()
   const {
-    stdout, visibleHeight, diffStats, isLargeDiff, diffTooLarge, diffWarningAck,
+    stdout, visibleHeight, diffStats, isLargeDiff, diffTooLarge, diffRefreshError, diffWarningAck,
     prMeta, repoInfo, loading, error, cursor, scrollOffset, dialog, setDialog,
     adminMergeMsg, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
     footerKeys, showTree, treeCursor, findQuery, setFindQuery, findActive,
@@ -322,6 +322,7 @@ export function DiffView({ prNumber, state }) {
     <Box flexDirection="column" flexGrow={1}>
       <Box paddingX={1} justifyContent="space-between">
         <Text color={t.ui.selected} bold>PR #{prNumber} Diff</Text>
+        {diffRefreshError && <Text color={t.ci.pending}>⚠ showing cached diff, refresh failed [{firstActionKey('list.refresh', 'r')}] retry</Text>}
         {commentStatus && <Text color={t.ci.pass}>{commentStatus}</Text>}
         {splitView && <Text color={t.ui.muted}>[split]</Text>}
         <Text color={t.ui.dim}>{cursor + 1} / {rows.length}</Text>

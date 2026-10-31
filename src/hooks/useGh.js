@@ -33,16 +33,30 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
   const diskCacheKey = makeDiskCacheKey([repo, fetchFn.name, deps])
   // Stale-while-revalidate (#454): seed from the memory/disk cache synchronously so a
   // revisit renders cached data on the first frame instead of a loading frame.
-  const [seed] = useState(() => {
+  // The disk read is remembered so fetchData does not read the same file again.
+  const diskMemoRef = useRef(null)
+  const readSeed = () => {
     const mem = cache.get(cacheKey)
     if (mem) return { data: mem.data, stale: Date.now() - mem.timestamp >= ttl }
     const disk = readCache(diskCacheKey)
+    diskMemoRef.current = { key: diskCacheKey, value: disk }
     return disk ? { data: disk.payload, stale: true } : null
-  })
+  }
+  const [seed] = useState(readSeed)
   const [data, setData] = useState(seed ? seed.data : null)
   const [loading, setLoading] = useState(!seed)
   const [error, setError] = useState(null)
   const [isStale, setIsStale] = useState(Boolean(seed?.stale))
+  // Re-seed when the key changes so a reused component never shows the previous key's data.
+  const [seededKey, setSeededKey] = useState(cacheKey)
+  if (seededKey !== cacheKey) {
+    const next = readSeed()
+    setSeededKey(cacheKey)
+    setData(next ? next.data : null)
+    setLoading(!next)
+    setIsStale(Boolean(next?.stale))
+    setError(null)
+  }
   const mountedRef = useRef(true)
   // Request generation: only the latest request may touch state (#434).
   const reqRef = useRef(0)
@@ -55,9 +69,15 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
 
     const now = Date.now()
     const cached = cache.get(cacheKey)
-    const diskCached = readCache(diskCacheKey)
+    const fresh = !bypassCache && cached && now - cached.timestamp < ttl
+    let diskCached = null
+    if (!fresh) {
+      const memo = diskMemoRef.current
+      diskMemoRef.current = null
+      diskCached = memo && memo.key === diskCacheKey ? memo.value : readCache(diskCacheKey)
+    }
 
-    if (!bypassCache && cached && now - cached.timestamp < ttl) {
+    if (fresh) {
       setData(cached.data)
       setLoading(false)
       setError(null)

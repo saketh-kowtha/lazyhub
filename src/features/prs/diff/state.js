@@ -68,8 +68,12 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   // calls on the gh concurrency cap (#451); everything else loads after it lands.
   const { data: diffText, loading, error, refetch, isStale: diffStale } = useGh(getPRDiff, [repo, prNumber])
   // Fetched this visit (not merely cached): secondary calls must not race the revalidation.
-  const diffReady = typeof diffText === 'string' && !diffStale
-  const diffTooLarge = isDiffTooLarge(error)
+  const hasDiff = typeof diffText === 'string'
+  const diffReady = hasDiff && (!diffStale || Boolean(error))
+  // Stale data on screen + failed revalidation: keep the diff, surface a banner instead of an error screen.
+  const diffRefreshError = hasDiff ? error : null
+  const diffError = hasDiff ? null : error
+  const diffTooLarge = isDiffTooLarge(diffError)
   // Large-diff gate is decided from the diff text itself: no separate stats call,
   // and the warning is decided in the same frame the diff arrives.
   const diffStats = useMemo(() => countDiffStats(diffText), [diffText])
@@ -644,7 +648,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
 
   return {
     stdout, visibleHeight, diffStats, isLargeDiff, diffTooLarge, diffWarningAck,
-    prMeta, repoInfo, loading: loading && !diffReady, error, cursor, scrollOffset, dialog, setDialog,
+    prMeta, repoInfo, loading: loading && !hasDiff, error: diffError, diffRefreshError, cursor, scrollOffset, dialog, setDialog,
     adminMergeMsg, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
     footerKeys, showTree, treeCursor, findQuery, setFindQuery, findActive,
     findMatches, gotoActive, gotoInput, setGotoInput, fileJumpActive, setFileJumpActive,

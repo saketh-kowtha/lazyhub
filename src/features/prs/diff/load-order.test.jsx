@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { rmSync } from 'node:fs'
 import { cleanup, renderWithProviders, waitForExpectation } from '../../../test/test-helpers.jsx'
+import { cacheKey as mkDiskKey, writeCache } from '../../../cache.js'
 import { sendInput } from '../../../test/input-bus.js'
 import { firstActionKey } from '../../../config/actions.js'
 
@@ -140,5 +141,28 @@ describe('diff loading frame (#454)', () => {
     const second = renderWithProviders(<Session n={455} />, { appContext: { notifyDialog: () => {} } })
     expect(second.lastFrame()).toContain('newValue')
     expect(second.lastFrame()).not.toContain('░')
+  })
+})
+
+describe('diff with a cached copy on disk (#451/#454)', () => {
+  const seedDiskDiff = (n) => writeCache(mkDiskKey(['load/order', 'getPRDiff', ['load/order', n]]), DIFF, { repo: 'load/order', op: 'getPRDiff' })
+
+  it('does not start secondary calls until the revalidation of a cached diff lands', async () => {
+    seedDiskDiff(470)
+    const view = renderWithProviders(<Session n={470} />, { appContext: { notifyDialog: () => {} } })
+    expect(view.lastFrame()).toContain('newValue')
+    await waitForExpectation(() => expect(h.calls).toContain('getPRDiff'))
+    expect(h.calls).toEqual(['getPRDiff'])
+    h.pending.getPRDiff.resolve(DIFF)
+    await waitForExpectation(() => expect(h.calls).toEqual(expect.arrayContaining(['getPR', 'getRepoInfo', 'listPRComments'])))
+  })
+
+  it('keeps the cached diff and shows a banner when the revalidation fails', async () => {
+    seedDiskDiff(471)
+    const view = renderWithProviders(<Session n={471} />, { appContext: { notifyDialog: () => {} } })
+    await waitForExpectation(() => expect(h.calls).toContain('getPRDiff'))
+    h.pending.getPRDiff.reject(new Error('network down'))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('refresh failed'))
+    expect(view.lastFrame()).toContain('newValue')
   })
 })
