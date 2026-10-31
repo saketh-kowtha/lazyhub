@@ -21,9 +21,10 @@ const DEFAULT_TTL = 30_000 // 30 seconds
  * @param {Array}    deps    - dependency array, used as cache key
  * @param {Object}   [options] - { ttl: number (ms) }
  * @param {number}   [options.ttl]
+ * @param {boolean}  [options.enabled=true] - false defers the fetch until it flips true
  * @returns {{ data, loading, error, refetch, mutate, isStale }}
  */
-export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
+export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } = {}) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -113,12 +114,12 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
 
   useEffect(() => {
     mountedRef.current = true
-    fetchData(false)
+    if (enabled) fetchData(false)
     return () => {
       reqRef.current++ // eslint-disable-line react-hooks/exhaustive-deps
       mountedRef.current = false
     }
-  }, [cacheKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cacheKey, enabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return { data, loading, error, refetch, mutate, isStale }
 }

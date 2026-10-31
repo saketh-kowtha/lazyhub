@@ -7,7 +7,7 @@ import { useState, useMemo, useContext, useEffect } from 'react'
 import { useStdout } from 'ink'
 import { useActionResolver, useKeymapInput } from '../../../config/keymap.js'
 import { useGh } from '../../../hooks/useGh.js'
-import { getPRDiff, listPRComments, addPRLineComment, getPRDiffStats, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo, reviewPR } from '../../../executor.js'
+import { getPRDiff, listPRComments, addPRLineComment, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo, reviewPR } from '../../../executor.js'
 import { contextFooterHints } from '../../../ui/actions.js'
 import { getAICodeReview, AIError } from '../../../ai/index.js'
 import { loadConfig } from '../../../config.js'
@@ -24,6 +24,21 @@ const _cfg = loadConfig()
 const _diffCfg = _cfg.diff
 const _editorCfg = _cfg.editor
 
+/**
+ * Count +/- lines and files from raw unified diff text (single pass).
+ * @param {string} [text]
+ */
+function countDiffStats(text) {
+  const stats = { additions: 0, deletions: 0, changedFiles: 0 }
+  if (!text) return stats
+  for (const line of text.split('\n')) {
+    if (line.startsWith('diff --git ')) stats.changedFiles++
+    else if (line.startsWith('+') && !line.startsWith('+++')) stats.additions++
+    else if (line.startsWith('-') && !line.startsWith('---')) stats.deletions++
+  }
+  return stats
+}
+
 /** Own the diff session, keyboard routing, and mutation lifecycle.
  * @param {object} props
  * @param {number} props.prNumber
@@ -36,15 +51,20 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   const { stdout } = useStdout()
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 6)
 
-  const { data: diffStats } = useGh(getPRDiffStats, [repo, prNumber])
-  const isLargeDiff = ((diffStats?.additions || 0) + (diffStats?.deletions || 0)) > 5000
+  // The diff is fetched first and alone so it never queues behind secondary
+  // calls on the gh concurrency cap (#451); everything else loads after it lands.
+  const { data: diffText, loading, error, refetch } = useGh(getPRDiff, [repo, prNumber])
+  const diffReady = typeof diffText === 'string'
+  // Large-diff gate is decided from the diff text itself: no separate stats call,
+  // and the warning is decided in the same frame the diff arrives.
+  const diffStats = useMemo(() => countDiffStats(diffText), [diffText])
+  const isLargeDiff = (diffStats.additions + diffStats.deletions) > 5000
   const [diffWarningAck, setDiffWarningAck] = useState(false)
 
-  const { data: prMeta } = useGh(getPRMeta, [repo, prNumber], { ttl: 300_000 })
-  const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000 })
+  const { data: prMeta } = useGh(getPRMeta, [repo, prNumber], { ttl: 300_000, enabled: diffReady })
+  const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000, enabled: diffReady })
   const headRefOid = /^[0-9a-f]{40}$/.test(prMeta?.headRefOid) ? prMeta.headRefOid : null
-  const { data: diffText, loading, error, refetch } = useGh(getPRDiff, [repo, prNumber])
-  const { data: comments, refetch: refetchComments, mutate: mutateComments } = useGh(listPRComments, [repo, prNumber])
+  const { data: comments, refetch: refetchComments, mutate: mutateComments } = useGh(listPRComments, [repo, prNumber], { enabled: diffReady })
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
@@ -102,7 +122,8 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
     setCompose(null)
   }, [])
 
-  const files = useMemo(() => parseDiff(diffText || ''), [diffText])
+  const skipParse = isLargeDiff && !diffWarningAck
+  const files = useMemo(() => (skipParse ? [] : parseDiff(diffText || '')), [diffText, skipParse])
   const rows  = useMemo(() => flattenFiles(files), [files])
 
   // filename → language, computed once per diff fetch
