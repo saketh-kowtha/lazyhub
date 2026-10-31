@@ -33,6 +33,7 @@ import { openInEditor, editorLabel } from '../../editor.js'
 import { loadConfig } from '../../config.js'
 import { firstActionKey } from '../../config/actions.js'
 
+import { autoMergeOption } from './list-row.jsx'
 import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
@@ -124,7 +125,6 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   const visibleHeight = Math.max(3, termRows - 8)
   const maxScroll     = Math.max(0, filteredRows.length - visibleHeight)
   const visibleRows   = filteredRows.slice(scrollY, scrollY + visibleHeight)
-  const autoMergeHint = pr?.state === 'OPEN' && !pr?.isDraft ? '  [M] auto-merge' : ''
 
   const openCheckInBrowser = (check) => {
     if (!check?.url) return
@@ -298,9 +298,10 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
 
   if (dialog === 'merge') {
     // Show admin options when confirmed admin, or while repoInfo is still loading
+    const baseOpts = pr.state === 'OPEN' && !pr.isDraft ? [...MERGE_OPTIONS_BASE, autoMergeOption(pr)] : MERGE_OPTIONS_BASE
     const mergeOpts = !repoInfo || repoInfo.viewerPermission === 'ADMIN'
-      ? [...MERGE_OPTIONS_BASE, ...MERGE_OPTIONS_ADMIN]
-      : MERGE_OPTIONS_BASE
+      ? [...baseOpts, ...MERGE_OPTIONS_ADMIN]
+      : baseOpts
     return (
       <OptionPicker
         title={`Merge PR #${pr.number}: ${sanitize(pr.title)}`}
@@ -309,6 +310,7 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
         onSubmit={(val) => {
           const strategy = typeof val === 'object' ? val.value : val
           const msg = typeof val === 'object' ? val.text : undefined
+          if (strategy === 'auto-merge') { setDialog('auto-merge'); return }
           setDialog(null)
           mergePR(repo, pr.number, strategy, msg, { allowAdmin: strategy.startsWith('admin-') })
             .then(() => refetch())
@@ -522,10 +524,10 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
           : checkCursor !== null
             ? <Text color={t.ui.selected}>[j/k] nav checks  [Enter/o] open  [l] annotations  [R] rerun  [Esc] exit checks</Text>
             : maxScroll > 0
-              ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  [j/k] scroll  [gg/G] top/bottom{autoMergeHint}</Text>
+              ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  [j/k] scroll  [gg/G] top/bottom</Text>
               : pr?.mergeable === 'CONFLICTING'
                 ? <Text color={t.pr.conflict || t.ci.pending}>[C] resolve conflicts  [c] checks  [d] diff  [m] merge  [l] labels  [A] assignees  [R] reviewers</Text>
-                : <Text color={t.ui.dim}>[d] diff  [E] editor  [m] merge  [M] auto-merge  [c] checks  [l] labels  [A] assignees  [R] reviewers</Text>
+                : <Text color={t.ui.dim}>[d] diff  [E] editor  [m] merge/auto-merge  [c] checks  [l] labels  [A] assignees  [R] reviewers</Text>
         }
         <Text color={t.ui.dim}>[/] search  [?] help  [Esc] back</Text>
       </Box>

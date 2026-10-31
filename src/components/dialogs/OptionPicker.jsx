@@ -38,7 +38,7 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
       if (matchesAction('dialog.confirm', input, key)) {
         const val = options[cursor]?.value
         if (val == null) return
-        if (promptText) { setPickedValue(val); setStep('text') }
+        if (promptText && !options[cursor]?.skipPrompt) { setPickedValue(val); setStep('text') }
         else            { onSubmit(val) }
         return
       }

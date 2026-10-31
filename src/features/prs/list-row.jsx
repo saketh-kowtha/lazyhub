@@ -206,6 +206,17 @@ export function canToggleAutoMergeFromList(pr) {
   return pr?.state === 'OPEN' && !pr?.isDraft
 }
 
+/** Merge-picker entry that opens the auto-merge confirm; no commit-message prompt. */
+export function autoMergeOption(pr) {
+  const disabling = !!pr?.autoMergeRequest
+  return {
+    value: 'auto-merge',
+    label: disabling ? 'Disable auto-merge' : 'Enable auto-merge',
+    description: disabling ? 'Stop merging automatically when checks pass' : 'Merge automatically when required checks pass',
+    skipPrompt: true,
+  }
+}
+
 // ─── PR detail popover content ────────────────────────────────────────────────
 
 /** Default popover width in columns; clamped to terminal width at runtime. */

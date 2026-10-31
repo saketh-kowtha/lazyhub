@@ -247,8 +247,8 @@ const WRITE_KEYS = [
   { name: 'checkout (b)', steps: [key('b')], cancel: key('n'), write: () => executor.checkoutBranch },
   { name: 'close PR in the list (X)', steps: [key('X')], cancel: key('n'), write: () => executor.closePR },
   { name: 'close PR in detail (X)', steps: [ENTER, key('X')], cancel: key('n'), write: () => executor.closePR },
-  { name: 'auto-merge in the list (M)', steps: [key('M')], cancel: key('n'), write: () => executor.enableAutoMerge, confirmText: 'Enable auto-merge' },
-  { name: 'auto-merge in detail (M)', steps: [ENTER, key('M')], cancel: key('n'), write: () => executor.enableAutoMerge, confirmText: 'Enable auto-merge' },
+  { name: 'auto-merge in the list (m picker)', steps: [key('m'), key('j'), key('j'), key('j'), ENTER], cancel: key('n'), write: () => executor.enableAutoMerge, confirmText: 'Enable auto-merge' },
+  { name: 'auto-merge in detail (m picker)', steps: [ENTER, key('m'), key('j'), key('j'), key('j'), ENTER], cancel: key('n'), write: () => executor.enableAutoMerge, confirmText: 'Enable auto-merge' },
   { name: 're-run a check (Ctrl+R)', steps: [ENTER, key('c'), CTRL_R], cancel: key('n'), write: () => executor.rerunCheckRun, confirmText: 'Re-run check' },
   { name: 're-run a workflow (Ctrl+R)', steps: [key('g'), key('a'), CTRL_R], cancel: key('n'), write: () => executor.rerunRun, confirmText: 'Re-run failed jobs' },
 ]
@@ -287,11 +287,21 @@ describe('write keys confirm first and cancel does nothing', () => {
     })
   }
 
+  it('M in the PR list is the merged filter and never opens auto-merge', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Retry in webhook sender'))
+    await flush(30)
+    await press([key('M')])
+    await flush(30)
+    expect(view.lastFrame()).not.toContain('auto-merge on PR')
+    expect(executor.enableAutoMerge).not.toHaveBeenCalled()
+  })
+
   it('auto-merge writes only after yes', async () => {
     const view = renderWithProviders(<App repo="owner/repo" />)
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Retry in webhook sender'))
     await flush(30)
-    await press([key('M'), key('y')])
+    await press([key('m'), key('j'), key('j'), key('j'), ENTER, key('y')])
     await waitForExpectation(() => expect(executor.enableAutoMerge).toHaveBeenCalledTimes(1))
   })
 })
