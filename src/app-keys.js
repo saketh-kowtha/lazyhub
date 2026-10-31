@@ -27,7 +27,6 @@ for (const [id, def] of Object.entries(_config.customTabs || {})) {
 export const GLOBAL_KEYS = actionHints([
   'app.ai-assistant',
   'app.next-pane',
-  'app.jump-pane',
   'list.refresh',
   'pr.open-browser',
   'list.search',
@@ -54,3 +53,7 @@ export const DIALOG_KEYS = {
   comment: actionHints(['dialog.next-field', 'dialog.editor', 'dialog.submit', 'dialog.cancel'], _config.toml),
 }
 
+
+// Digits jump panes from list views only (#450), so the help overlay lists them with
+// the list view's keys rather than under "Global (any view)".
+export const LIST_VIEW_KEYS = actionHints(['app.jump-pane'], _config.toml)

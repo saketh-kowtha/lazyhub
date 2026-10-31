@@ -276,9 +276,10 @@ export function App({ repo }) {
       return
     }
 
-    // 1-9: jump straight to the Nth active pane. Dialogs, inputs and overlays
-    // were filtered out above; the diff/comments/conflict views keep their own keys.
-    if (!showHelp && (view === 'list' || view === 'detail') && matchesAction('app.jump-pane', input, key, _config.toml)) {
+    // 1-9: jump straight to the Nth active pane, from list views only (#450). Detail,
+    // diff, comments and settings keep their own keys, and a digit after the <Space>
+    // leader never jumps. Dialogs, inputs and overlays were filtered out above.
+    if (!showHelp && !leaderActive && view === 'list' && matchesAction('app.jump-pane', input, key, _config.toml)) {
       const target = PANES[Number(input) - 1]
       if (target) goToPane(target)
       return
