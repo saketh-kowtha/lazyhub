@@ -5,15 +5,29 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { logger } from '../utils.js'
-import { cacheKey as makeDiskCacheKey, createLruCache, readCache, writeCache } from '../cache.js'
+import { cacheKey as makeDiskCacheKey, approxBytes, createLruCache, peekCache, readCacheAsync, warmCache, writeCache } from '../cache.js'
 import { recordGhFailure, recordGhSuccess } from './useGhHealth.js'
 
-// In-memory cache: key → { data, timestamp }, LRU-capped so a long session
-// (many repos/pages) cannot grow without bound.
-let cache = createLruCache(200)
+// In-memory cache: key → { data, timestamp }, LRU-capped by entry count AND by
+// approximate bytes (#457) so a few huge payloads (diffs, logs) cannot grow a long
+// session without bound.
+const MEMORY_MAX_ENTRIES = 200
+export const GH_MEMORY_MAX_BYTES = 48 * 1024 * 1024
+const newMemoryCache = () => createLruCache(MEMORY_MAX_ENTRIES, {
+  maxBytes: GH_MEMORY_MAX_BYTES,
+  sizeOf: entry => approxBytes(entry.data),
+})
+let cache = newMemoryCache()
+
+// Fill the disk-cache mirror once, in the background, so first-frame seeding never
+// reads a file on the render path (#455).
+warmCache()
 
 /** Drop the in-memory cache (tests). */
-export function resetGhMemoryCache() { cache = createLruCache(200) }
+export function resetGhMemoryCache() { cache = newMemoryCache() }
+
+/** Entry count and approximate bytes held by the in-memory gh cache (tests, debug). */
+export function ghMemoryCacheStats() { return { size: cache.size, bytes: cache.bytes } }
 
 const DEFAULT_TTL = 30_000 // 30 seconds
 
@@ -33,22 +47,25 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
   const diskCacheKey = makeDiskCacheKey([repo, fetchFn.name, deps])
   // Stale-while-revalidate (#454): seed from the memory/disk cache synchronously so a
   // revisit renders cached data on the first frame instead of a loading frame.
-  // The disk read is remembered so fetchData does not read the same file again.
-  const diskMemoRef = useRef(null)
+  // Only memory is consulted here (the in-memory gh cache, then the disk-cache
+  // mirror loaded at startup): a synchronous file read per mount would stall input.
   const readSeed = () => {
     const mem = cache.get(cacheKey)
     if (mem) return { data: mem.data, stale: Date.now() - mem.timestamp >= ttl }
-    const disk = readCache(diskCacheKey)
-    diskMemoRef.current = { key: diskCacheKey, value: disk }
+    const disk = peekCache(diskCacheKey)
     return disk ? { data: disk.payload, stale: true } : null
   }
   const [seed] = useState(readSeed)
-  const [data, setData] = useState(seed ? seed.data : null)
-  const [loading, setLoading] = useState(!seed)
-  const [error, setError] = useState(null)
-  const [isStale, setIsStale] = useState(Boolean(seed?.stale))
+  const [dataState, setData] = useState(seed ? seed.data : null)
+  const [loadingState, setLoading] = useState(!seed)
+  const [errorState, setError] = useState(null)
+  const [isStaleState, setIsStale] = useState(Boolean(seed?.stale))
   // Re-seed when the key changes so a reused component never shows the previous key's data.
   const [seededKey, setSeededKey] = useState(cacheKey)
+  // The seed is derived from cacheKey during render (#548): React discards this pass and
+  // re-renders at once, but the values returned below already belong to the new key, so
+  // no render, committed or not, ever pairs the new key with the previous key's data.
+  let data = dataState, loading = loadingState, error = errorState, isStale = isStaleState
   if (seededKey !== cacheKey) {
     const next = readSeed()
     setSeededKey(cacheKey)
@@ -56,6 +73,10 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
     setLoading(!next)
     setIsStale(Boolean(next?.stale))
     setError(null)
+    data = next ? next.data : null
+    loading = !next
+    isStale = Boolean(next?.stale)
+    error = null
   }
   const mountedRef = useRef(true)
   // Request generation: only the latest request may touch state (#434).
@@ -70,12 +91,7 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
     const now = Date.now()
     const cached = cache.get(cacheKey)
     const fresh = !bypassCache && cached && now - cached.timestamp < ttl
-    let diskCached = null
-    if (!fresh) {
-      const memo = diskMemoRef.current
-      diskMemoRef.current = null
-      diskCached = memo && memo.key === diskCacheKey ? memo.value : readCache(diskCacheKey)
-    }
+    const diskCached = fresh ? null : peekCache(diskCacheKey)
 
     if (fresh) {
       setData(cached.data)
@@ -95,8 +111,24 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
     }
     setError(null)
 
+    // Cold start (no memory/mirror hit): read the file asynchronously, concurrently with
+    // the network call, and show it as stale data if it lands first.
+    let settled = false
+    let lateDisk = false
+    if (!bypassCache && !cached && !diskCached) {
+      readCacheAsync(diskCacheKey).then(disk => {
+        if (!disk || settled || !isCurrent()) return
+        lateDisk = true
+        setData(disk.payload)
+        setLoading(false)
+        setIsStale(true)
+      })
+    }
+
     try {
-      const result = await fetchFn(...deps)
+      const pendingResult = fetchFn(...deps)
+      const result = await pendingResult
+      settled = true
       if (!isCurrent()) return
       cache.set(cacheKey, { data: result, timestamp: Date.now() })
       writeCache(diskCacheKey, result, { repo, op: fetchFn.name || 'unnamed' })
@@ -106,10 +138,11 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
       recordGhSuccess(callSite)
       logger.info(`gh.${fetchFn.name || 'unnamed'} fetched data`, { cacheKey, component: 'useGh' })
     } catch (err) {
+      settled = true
       if (!isCurrent()) return
       setError(err)
-      if (!diskCached && !cached) setData(null)
-      setIsStale(Boolean(diskCached || cached))
+      if (!diskCached && !cached && !lateDisk) setData(null)
+      setIsStale(Boolean(diskCached || cached || lateDisk))
       recordGhFailure(callSite, err)
       logger.error(`useGh: ${fetchFn.name || 'unnamed'}(${cacheKey}) failed`, err)
     } finally {
