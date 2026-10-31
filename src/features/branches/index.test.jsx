@@ -21,6 +21,7 @@ beforeEach(() => {
     loading: false, refetch: vi.fn(),
   }))
   execa.mockImplementation(async (_cmd, args) => {
+    if (args[0] === 'remote') return { stdout: 'origin\thttps://github.com/o/r.git (fetch)' }
     if (args[0] === 'checkout') head = args[1]
     return { stdout: head }
   })
@@ -63,4 +64,30 @@ it('keeps a valid selection when a refetch returns fewer branches', async () => 
   view.stdin.write('r')
   await waitForExpectation(() => expect(view.lastFrame()).not.toContain('dev'))
   await waitForExpectation(() => expect(view.lastFrame()).toMatch(/▶ (► )?main/))
+})
+
+it('does not run local git when the launch directory is not a clone of the viewed repo (#471)', async () => {
+  execa.mockImplementation(async (_cmd, args) => {
+    if (args[0] === 'remote') return { stdout: 'origin\tgit@github.com:someone/else.git (fetch)' }
+    return { stdout: 'main' }
+  })
+  const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
+  await waitForInputReady(view)
+  await waitForExpectation(() => expect(execa).toHaveBeenCalledWith('git', ['remote', '-v'], expect.anything()))
+  await new Promise(r => setTimeout(r, 30))
+  await waitForInputReady(view)
+  view.stdin.write('\r')
+  await waitForExpectation(() => expect(view.lastFrame()).toContain('No local checkout of o/r'))
+  expect(view.lastFrame()).not.toContain('Checkout branch')
+  expect(execa.mock.calls.filter(([, args]) => args[0] !== 'remote')).toEqual([])
+})
+
+it('runs local commands only in the matching checkout (#471)', async () => {
+  const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
+  await waitForInputReady(view)
+  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/► main/))
+  for (const [cmd, , opts] of execa.mock.calls) {
+    expect(cmd).toBe('git')
+    expect(opts.cwd).toBe(process.cwd())
+  }
 })
