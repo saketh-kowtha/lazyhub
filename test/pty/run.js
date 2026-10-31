@@ -202,6 +202,31 @@ async function runReferenceFlow() {
   }
 }
 
+// #517: a true first run (no config, no preselected repo) must reach Focus within
+// 2 keys. The governance report is no longer a step in between.
+async function runFirstRunFlow() {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-first-'))
+  const stubBin = installGhStub(temp)
+  let output = ''
+  let term
+  try {
+    const { GHUI_REPO: _preselected, ...env } = childEnv(stubBin, temp)
+    term = spawnTerminal(env)
+    term.onData(data => { output += data })
+    await waitForScreen(() => output, /Pick a repository to open/, 'first-run repository list')
+    await settle()
+    output = ''
+    term.write('\r') // key 1: open the highlighted repository
+    const screen = await waitForScreen(() => output, /Focus|Pull Requests|PTY harness fixture PR/, 'Focus after one key')
+    assert.doesNotMatch(screen, /Coverage \(|ungoverned|Enforcement/, 'no governance report before Focus')
+    term.write('q')
+    await waitForExit(term)
+  } finally {
+    try { term?.kill() } catch {}
+    rmSync(temp, { recursive: true, force: true })
+  }
+}
+
 async function runCrashFlow() {
   const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-crash-'))
   const stubBin = installGhStub(temp)
@@ -442,6 +467,7 @@ if (ptyProblem) skipOrFail(`node-pty cannot spawn in this shell: ${ptyProblem}`)
 
 await runLazyhubFlow()
 await runReferenceFlow()
+await runFirstRunFlow()
 await runCrashFlow()
 await runDegradedFlow()
 await runDayOneErrorFlow({

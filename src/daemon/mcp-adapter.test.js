@@ -75,7 +75,9 @@ describe('daemon MCP adapter', () => {
     ['list_prs', { repo: 'owner/repo', state: 'bogus' }, 'MCP_INVALID_STATE'],
     ['list_issues', { repo: 'owner/repo', state: 'merged' }, 'MCP_INVALID_STATE'],
     ['list_prs', { repo: 'owner/repo', limit: 100000 }, 'MCP_INVALID_LIMIT'],
-    ['query', { query: 'x'.repeat(2001) }, 'MCP_INVALID_TEXT'],
+    ['get_pr', { number: 1 }, 'MCP_INVALID_REPO'],
+    ['list_prs', {}, 'MCP_INVALID_REPO'],
+    ['lazyhub_query', { query: 'x' }, 'MCP_UNKNOWN_TOOL'],
     ['get_issue', { repo: 'owner/repo', number: 1, resource_type: 'pr' }, 'MCP_RESOURCE_MISMATCH'],
     ['get_pr', { repo: 'owner/repo', number: 1, resource_type: 'issue' }, 'MCP_RESOURCE_MISMATCH'],
     ['no_such_tool', {}, 'MCP_UNKNOWN_TOOL'],
@@ -84,5 +86,70 @@ describe('daemon MCP adapter', () => {
   ])('fails closed on malformed call %s %j with %s', async (name, args, code) => {
     const { callTool } = await import('./mcp-adapter.js')
     await expect(callTool(name, args)).rejects.toMatchObject({ code })
+  })
+
+  it('does not advertise a placeholder lazyhub_query tool', async () => {
+    const { TOOLS } = await import('./mcp-adapter.js')
+    expect(TOOLS.map(tool => tool.name)).not.toContain('lazyhub_query')
+  })
+
+  it('names the missing number when a numbered tool lacks it', async () => {
+    const { callTool } = await import('./mcp-adapter.js')
+    await expect(callTool('get_pr', { repo: 'owner/repo' })).rejects.toThrow(/requires a number/)
+  })
+
+  it('advertises per-tool input schemas with required fields', async () => {
+    const { TOOLS } = await import('./mcp-adapter.js')
+    const by = Object.fromEntries(TOOLS.map(t => [t.name, t.inputSchema]))
+    for (const name of ['get_pr', 'get_pr_diff', 'get_checks', 'get_issue', 'lazyhub_pr_view', 'lazyhub_watch_ci']) {
+      expect(by[name].required).toEqual(['number'])
+    }
+    expect(by.list_prs.required).toBeUndefined()
+    expect(by.list_prs.properties.state.enum).toContain('merged')
+    expect(by.list_issues.properties.state.enum).not.toContain('merged')
+    expect(by.list_notifications.properties).toEqual({})
+  })
+
+  it('reports the package version in initialize and compact JSON in results', async () => {
+    const { readFileSync } = await import('node:fs')
+    const version = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version
+    const { handleRequest } = await import('./mcp-adapter.js')
+    const out = []
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(s => { out.push(String(s)); return true })
+    await handleRequest({ id: 1, method: 'initialize' })
+    await handleRequest({ id: 2, method: 'tools/call', params: { name: 'list_prs', arguments: { repo: 'owner/repo' } } })
+    write.mockRestore()
+    expect(JSON.parse(out[0]).result.serverInfo.version).toBe(version)
+    const text = JSON.parse(out[1]).result.content[0].text
+    expect(text).not.toContain('\n')
+    expect(JSON.parse(text)[0].number).toBe(1)
+  })
+
+  it('slims list_prs: no body; failing checks survive the cap; summary reports the full tally', async () => {
+    const { listPRs } = await import('../executor.js')
+    const checks = Array.from({ length: 25 }, (_, i) => ({ name: `c${i + 1}`, status: 'COMPLETED', conclusion: i + 1 === 14 ? 'FAILURE' : 'SUCCESS' }))
+    checks[3] = { name: 'c4', status: 'IN_PROGRESS', conclusion: null }
+    listPRs.mockResolvedValueOnce([{ number: 7, title: 't', body: 'x'.repeat(5000), statusCheckRollup: checks }])
+    const { callTool } = await import('./mcp-adapter.js')
+    const [pr] = await callTool('list_prs', { repo: 'owner/repo' })
+    expect(pr).not.toHaveProperty('body')
+    expect(pr.statusCheckRollup).toHaveLength(10)
+    expect(pr.statusCheckRollup[0].name).toBe('c14')
+    expect(pr.statusCheckRollup[1].name).toBe('c4')
+    expect(pr.checksSummary).toEqual({ failing: 1, pending: 1, passing: 23, total: 25 })
+  })
+
+  it('omits statusCheckRollup when the source row has none', async () => {
+    const { callTool } = await import('./mcp-adapter.js')
+    const [pr] = await callTool('list_prs', { repo: 'owner/repo' })
+    expect(pr).toEqual({ number: 1 })
+  })
+
+  it('keeps resource_type in the input schemas the validator accepts', async () => {
+    const { TOOLS } = await import('./mcp-adapter.js')
+    const by = Object.fromEntries(TOOLS.map(t => [t.name, t.inputSchema]))
+    expect(by.get_pr.properties.resource_type.enum).toEqual(['pr'])
+    expect(by.get_issue.properties.resource_type.enum).toEqual(['issue'])
+    expect(by.list_notifications.properties.resource_type).toBeUndefined()
   })
 })

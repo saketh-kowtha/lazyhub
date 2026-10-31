@@ -1,4 +1,5 @@
 import * as readline from 'readline'
+import { readFileSync } from 'node:fs'
 import {
   getIssue,
   getPR,
@@ -22,7 +23,6 @@ const TOOL_ALIASES = {
   lazyhub_issue_list: 'list_issues',
   lazyhub_issue_view: 'get_issue',
   lazyhub_issue_comment: 'post_comment',
-  lazyhub_query: 'query',
   lazyhub_watch_ci: 'get_checks',
 }
 
@@ -36,7 +36,20 @@ const MUTATING_TOOLS = new Set([
 
 const MCP_MUTATIONS_DISABLED = 'MCP mutating tools are disabled until governed authorization is available'
 
-const MAX_QUERY_LENGTH = 2000
+// list_prs is read by agents: no PR bodies, and at most this many checks per PR
+// (failing first; the full tally is always in checksSummary).
+const MAX_CHECKS_PER_PR = 10
+
+// package.json sits beside src/ in the checkout and beside dist/ when installed.
+function packageVersion() {
+  for (const rel of ['../../package.json', '../package.json']) {
+    try {
+      const pkg = JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8'))
+      if (pkg.name === 'lazyhub' && pkg.version) return pkg.version
+    } catch { /* try the next location */ }
+  }
+  return 'unknown'
+}
 const STATES = { list_prs: ['open', 'closed', 'merged', 'all'], list_issues: ['open', 'closed', 'all'] }
 // Resource each read tool operates on; a caller-declared resource_type must match.
 const RESOURCE_TYPES = { list_prs: 'pr', get_pr: 'pr', get_pr_diff: 'pr', get_checks: 'pr', list_issues: 'issue', get_issue: 'issue' }
@@ -65,7 +78,9 @@ function validateArgs(canonical, args) {
     throw fail('MCP_INVALID_REPO', 'repo must be in owner/name form')
   }
   if (NUMBERED_TOOLS.has(canonical) && !isPositiveId(args.number)) {
-    throw fail('MCP_INVALID_NUMBER', 'number must be a positive integer')
+    throw fail('MCP_INVALID_NUMBER', args.number === undefined
+      ? `${canonical} requires a number (the PR or issue number, a positive integer)`
+      : 'number must be a positive integer')
   }
   if (args.state !== undefined && !(STATES[canonical] || []).includes(args.state)) {
     throw fail('MCP_INVALID_STATE', `state is not valid for ${canonical}`)
@@ -73,9 +88,26 @@ function validateArgs(canonical, args) {
   if (args.limit !== undefined && !(Number.isInteger(args.limit) && args.limit >= 1 && args.limit <= 100)) {
     throw fail('MCP_INVALID_LIMIT', 'limit must be an integer between 1 and 100')
   }
-  if (args.query !== undefined && (typeof args.query !== 'string' || args.query.length > MAX_QUERY_LENGTH)) {
-    throw fail('MCP_INVALID_TEXT', `query must be a string of at most ${MAX_QUERY_LENGTH} characters`)
-  }
+}
+
+const PROP = {
+  repo: { type: 'string', description: 'owner/name; defaults to the repository lazyhub was started in' },
+  number: { type: 'integer', minimum: 1, description: 'PR or issue number' },
+  limit: { type: 'integer', minimum: 1, maximum: 100 },
+  prState: { type: 'string', enum: STATES.list_prs },
+  issueState: { type: 'string', enum: STATES.list_issues },
+}
+const schema = (properties, required = []) => ({ type: 'object', properties, ...(required.length ? { required } : {}) })
+const RT = (tool) => ({ type: 'string', enum: [RESOURCE_TYPES[tool]] })
+const SCHEMAS = {
+  list_prs: schema({ resource_type: RT('list_prs'), repo: PROP.repo, state: PROP.prState, limit: PROP.limit }),
+  get_pr: schema({ resource_type: RT('get_pr'), repo: PROP.repo, number: PROP.number }, ['number']),
+  get_pr_diff: schema({ resource_type: RT('get_pr_diff'), repo: PROP.repo, number: PROP.number }, ['number']),
+  get_checks: schema({ resource_type: RT('get_checks'), repo: PROP.repo, number: PROP.number }, ['number']),
+  list_issues: schema({ resource_type: RT('list_issues'), repo: PROP.repo, state: PROP.issueState, limit: PROP.limit }),
+  get_issue: schema({ resource_type: RT('get_issue'), repo: PROP.repo, number: PROP.number }, ['number']),
+  list_notifications: schema({}),
+  list_branches: schema({ repo: PROP.repo }),
 }
 
 const TOOLS = [
@@ -84,7 +116,6 @@ const TOOLS = [
   ['lazyhub_pr_diff', 'Get a pull request diff'],
   ['lazyhub_issue_list', 'List issues'],
   ['lazyhub_issue_view', 'View an issue'],
-  ['lazyhub_query', 'Query lazyhub context'],
   ['lazyhub_watch_ci', 'Get CI status for a PR'],
   ['list_prs', 'List pull requests'],
   ['get_pr', 'View a pull request'],
@@ -94,21 +125,38 @@ const TOOLS = [
   ['get_issue', 'View an issue'],
   ['list_notifications', 'List notifications'],
   ['list_branches', 'List branches'],
-].map(([name, description]) => ({
-  name,
-  description,
-  inputSchema: {
-    type: 'object',
-    properties: {
-      repo: { type: 'string' },
-      number: { type: 'number' },
-      state: { type: 'string', enum: ['open', 'closed', 'merged', 'all'] },
-      limit: { type: 'number' },
-      query: { type: 'string', maxLength: MAX_QUERY_LENGTH },
-      resource_type: { type: 'string', enum: ['pr', 'issue'] },
-    },
-  },
-}))
+].map(([name, description]) => ({ name, description, inputSchema: SCHEMAS[TOOL_ALIASES[name] || name] }))
+
+const FAILING = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE'])
+const PASSING = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED'])
+const checkRank = (c) => {
+  const v = String(c?.conclusion || '').toUpperCase()
+  if (FAILING.has(v)) return 0
+  if (PASSING.has(v)) return 2
+  return 1 // no conclusion yet: queued, in progress, pending
+}
+
+/**
+ * Slim a PR list row for agents: drop the body, keep at most MAX_CHECKS_PER_PR
+ * checks (failing first, then pending, then passing) and always report the
+ * full tally in checksSummary, so nothing is truncated silently.
+ * @param {any} pr
+ */
+function slimPR(pr) {
+  const { body: _body, statusCheckRollup, ...rest } = pr
+  if (!Array.isArray(statusCheckRollup)) return rest
+  const counts = [0, 0, 0]
+  for (const c of statusCheckRollup) counts[checkRank(c)] += 1
+  const ordered = statusCheckRollup
+    .map((c, i) => [c, i])
+    .sort((x, y) => checkRank(x[0]) - checkRank(y[0]) || x[1] - y[1])
+    .map(([c]) => c)
+  return {
+    ...rest,
+    statusCheckRollup: ordered.slice(0, MAX_CHECKS_PER_PR),
+    checksSummary: { failing: counts[0], pending: counts[1], passing: counts[2], total: statusCheckRollup.length },
+  }
+}
 
 const repo = () => process.env.GHUI_REPO || null
 
@@ -125,8 +173,11 @@ async function callTool(name, args = {}) {
   validateArgs(canonical, args)
 
   const r = args.repo || repo()
+  if (SCHEMAS[canonical] && canonical !== 'list_notifications' && !r) {
+    throw fail('MCP_INVALID_REPO', 'no repository resolved: pass repo as owner/name, or start lazyhub inside a clone')
+  }
   switch (canonical) {
-    case 'list_prs': return listPRs(r, { state: args.state || 'open', limit: args.limit || 30 })
+    case 'list_prs': return (await listPRs(r, { state: args.state || 'open', limit: args.limit || 30 })).map(slimPR)
     case 'get_pr': return getPR(r, args.number)
     case 'get_pr_diff': return getPRDiff(r, args.number)
     case 'get_checks': return getPRChecks(r, args.number)
@@ -134,7 +185,6 @@ async function callTool(name, args = {}) {
     case 'get_issue': return getIssue(r, args.number)
     case 'list_notifications': return listNotifications()
     case 'list_branches': return listBranches(r)
-    case 'query': return { answer: 'lazyhub_query is available; AI-backed answers are configured by provider in later phases.' }
     default: throw fail('MCP_UNKNOWN_TOOL', `Unknown tool: ${name}`)
   }
 }
@@ -147,10 +197,14 @@ function respondError(id, code, message) {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } }) + '\n')
 }
 
+/**
+ * Handle one JSON-RPC request and write its response to stdout.
+ * @param {{id?: any, method?: string, params?: any}} msg
+ */
 async function handleRequest(msg) {
   const { id, method, params } = msg
   if (method === 'initialize') {
-    respond(id, { protocolVersion: '2024-11-05', serverInfo: { name: 'lazyhub', version: '1.0.0' }, capabilities: { tools: {} } })
+    respond(id, { protocolVersion: '2024-11-05', serverInfo: { name: 'lazyhub', version: packageVersion() }, capabilities: { tools: {} } })
     return
   }
   if (method === 'tools/list') {
@@ -160,7 +214,7 @@ async function handleRequest(msg) {
   if (method === 'tools/call') {
     try {
       const result = await callTool(params?.name, params?.arguments || {})
-      respond(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
+      respond(id, { content: [{ type: 'text', text: JSON.stringify(result) }] })
     } catch (err) {
       respond(id, { content: [{ type: 'text', text: `Error${err.code ? ` [${err.code}]` : ''}: ${err.message}` }], isError: true })
     }
@@ -185,4 +239,4 @@ export async function runMCPServer() {
   }
 }
 
-export { MCP_MUTATIONS_DISABLED, TOOLS, callTool }
+export { MCP_MUTATIONS_DISABLED, TOOLS, callTool, handleRequest }
