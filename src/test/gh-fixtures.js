@@ -185,6 +185,7 @@ function thenable(result) {
 function route(cmd, args) {
   if (cmd === 'git') {
     if (args[0] === 'branch') return text('main')
+    if (args[0] === 'remote') return text('origin\thttps://github.com/owner/repo.git (fetch)')
     return text('')
   }
   if (cmd === 'open' || cmd === 'xdg-open' || cmd === 'pbcopy') return text('')

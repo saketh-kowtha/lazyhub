@@ -331,7 +331,7 @@ let allowForeign = false
  * when it mounts). It is read-only, goes to the mocked execa (answered by the fixtures, never the OS)
  * and is pinned here by its exact argv: any other git/open/pbcopy/editor command is a violation.
  */
-const READ_ONLY_MOCKED = ['git branch --show-current']
+const READ_ONLY_MOCKED = ['git branch --show-current', 'git remote -v']
 const markerContents = () => harness.fs.readFileSync(harness.marker, 'utf8')
 
 /**
