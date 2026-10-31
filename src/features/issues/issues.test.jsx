@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IssueList } from './list.jsx'
 import { IssueDetail } from './detail.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { getIssue, getIssueRow, closeIssue, listIssuesPage, listLabels, listCollaborators, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees, addIssueComment } from '../../executor.js'
+import { getIssue, getIssueRow, closeIssue, listIssuesPage, listLabels, listCollaborators, editIssueMembers, addIssueComment } from '../../executor.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -12,10 +12,10 @@ vi.mock('ink', async () => {
   return { ...await vi.importActual('ink'), useInput: (await import('../../test/input-bus.js')).mockUseInput(React) }
 })
 vi.mock('../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
-vi.mock('../../executor.js', () => ({
+vi.mock('../../executor.js', async () => ({
+  ...await vi.importActual('../../executor/classify.js'),
   getIssue: vi.fn(), getIssueRow: vi.fn(), listIssuesPage: vi.fn(), listLabels: vi.fn(), listCollaborators: vi.fn(),
-  closeIssue: vi.fn(), createIssue: vi.fn(), addLabels: vi.fn(), removeLabels: vi.fn(),
-  addIssueAssignees: vi.fn(), removeIssueAssignees: vi.fn(), addIssueComment: vi.fn(),
+  closeIssue: vi.fn(), createIssue: vi.fn(), editIssueMembers: vi.fn(), addIssueComment: vi.fn(),
 }))
 
 async function renderIssue(ui, options) {
@@ -86,11 +86,11 @@ describe('shared issue editor contracts', () => {
   })
 
   it.each([
-    ['list', 'labels', 'l', addLabels, removeLabels, 'bug&amp;safe'],
-    ['detail', 'labels', 'l', addLabels, removeLabels, 'bug&amp;safe'],
-    ['list', 'assignees', 'A', addIssueAssignees, removeIssueAssignees, 'assignee&amp;safe'],
-    ['detail', 'assignees', 'A', addIssueAssignees, removeIssueAssignees, 'assignee&amp;safe'],
-  ])('diffs %s %s with raw API identifiers and closes the dialog', async (pane, kind, key, add, remove, current) => {
+    ['list', 'labels', 'l', 'label', 'bug&amp;safe'],
+    ['detail', 'labels', 'l', 'label', 'bug&amp;safe'],
+    ['list', 'assignees', 'A', 'assignee', 'assignee&amp;safe'],
+    ['detail', 'assignees', 'A', 'assignee', 'assignee&amp;safe'],
+  ])('diffs %s %s with raw API identifiers in ONE edit call and closes the dialog', async (pane, _kind, key, kind, current) => {
     const notifyDialog = vi.fn()
     const view = await renderIssue(pane === 'list'
       ? <IssueList repo="owner/repo" onSelectIssue={() => {}} />
@@ -106,9 +106,7 @@ describe('shared issue editor contracts', () => {
     await sendInput(' ')
     await sendInput('', { return: true })
     await waitForExpectation(() => {
-      const suffix = kind === 'labels' ? ['issue'] : []
-      expect(add).toHaveBeenCalledWith('owner/repo', 11, ['new&amp;safe'], ...suffix)
-      expect(remove).toHaveBeenCalledWith('owner/repo', 11, [current], ...suffix)
+      expect(editIssueMembers).toHaveBeenCalledExactlyOnceWith('owner/repo', 11, kind, { add: ['new&amp;safe'], remove: [current] })
       expect(view.lastFrame()).toContain('Issue title')
       expect(notifyDialog).toHaveBeenLastCalledWith(false)
       expect(refetch).toHaveBeenCalled()
@@ -116,12 +114,12 @@ describe('shared issue editor contracts', () => {
   })
 
   it.each([
-    ['list', 'labels', 'l', addLabels],
-    ['detail', 'labels', 'l', addLabels],
-    ['list', 'assignees', 'A', addIssueAssignees],
-    ['detail', 'assignees', 'A', addIssueAssignees],
-  ])('shows an error when a %s %s update fails instead of closing silently', async (pane, kind, key, add) => {
-    add.mockRejectedValue(new Error('403 forbidden'))
+    ['list', 'labels', 'l'],
+    ['detail', 'labels', 'l'],
+    ['list', 'assignees', 'A'],
+    ['detail', 'assignees', 'A'],
+  ])('shows an error when a %s %s update fails instead of closing silently', async (pane, kind, key) => {
+    editIssueMembers.mockRejectedValue(new Error('403 forbidden'))
     const view = await renderIssue(pane === 'list'
       ? <IssueList repo="owner/repo" onSelectIssue={() => {}} />
       : <IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />)
@@ -133,6 +131,55 @@ describe('shared issue editor contracts', () => {
     await sendInput(' ')
     await sendInput('', { return: true })
     await waitForExpectation(() => expect(view.lastFrame()).toContain(`Updating ${kind} failed: 403 forbidden`))
+  })
+
+  it('keeps a label on the issue that the fetched list does not contain instead of stripping it (#513)', async () => {
+    useGh.mockImplementation(fn => ({
+      data: fn === listIssuesPage ? page([issue]) : fn === listLabels ? [{ name: 'new&amp;safe', color: '00ff00' }] : null,
+      loading: false, error: null, refetch,
+    }))
+    const view = await renderIssue(<IssueList repo="owner/repo" onSelectIssue={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
+    await flush(20)
+    await sendInput('l')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Filter:'))
+    expect(view.lastFrame()).toContain('bug&safe')
+    await sendInput(' ')
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(editIssueMembers).toHaveBeenCalledExactlyOnceWith('owner/repo', 11, 'label', { add: ['new&amp;safe'], remove: [] }))
+  })
+
+  it('lets Esc close a picker that is still loading (#513)', async () => {
+    useGh.mockImplementation(fn => ({
+      data: fn === listIssuesPage ? page([issue]) : null,
+      loading: fn === listLabels, error: null, refetch,
+    }))
+    const view = await renderIssue(<IssueList repo="owner/repo" onSelectIssue={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
+    await flush(20)
+    await sendInput('l')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Loading labels'))
+    await sendInput('', { escape: true })
+    await waitForExpectation(() => expect(view.lastFrame()).not.toContain('Loading labels'))
+    expect(view.lastFrame()).toContain('Issue title')
+  })
+
+  it('shows why options failed to load and retries with r (#513)', async () => {
+    const retry = vi.fn()
+    const err = Object.assign(new Error('gh: HTTP 401: Bad credentials'), { stderr: 'HTTP 401: Bad credentials' })
+    useGh.mockImplementation(fn => ({
+      data: fn === listIssuesPage ? page([issue]) : null,
+      loading: false, error: fn === listCollaborators ? err : null, refetch: fn === listCollaborators ? retry : refetch,
+    }))
+    const view = await renderIssue(<IssueList repo="owner/repo" onSelectIssue={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
+    await flush(20)
+    await sendInput('A')
+    await waitForExpectation(() => expect(view.lastFrame()).toMatch(/retry/i))
+    await sendInput('r')
+    expect(retry).toHaveBeenCalled()
+    await sendInput('', { escape: true })
+    await waitForExpectation(() => expect(view.lastFrame()).not.toMatch(/retry/i))
   })
 
   it('keeps reply typing out of action handlers and submits through the issue executor', async () => {

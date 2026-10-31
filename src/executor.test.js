@@ -27,6 +27,7 @@ import {
   addLabels,
   removeLabels,
   listCollaborators,
+  editIssueMembers,
   requestReviewers,
   listBranches,
   checkoutBranch,
@@ -448,6 +449,33 @@ describe('listCollaborators()', () => {
     const [, args] = execa.mock.calls[0]
     expect(args).toContain('api')
     expect(args.some(a => a.includes('collaborators'))).toBe(true)
+  })
+
+  it('follows pages past the first 100 collaborators (#513)', async () => {
+    const page = n => Array.from({ length: n }, (_, i) => ({ login: `u${i}` }))
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(page(100)), stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(page(40)), stderr: '' })
+    const rows = await listCollaborators('owner/repo')
+    expect(rows).toHaveLength(140)
+    expect(execa.mock.calls[0][1].some(a => a.includes('per_page=100'))).toBe(true)
+    expect(execa.mock.calls[1][1].some(a => a.includes('page=2'))).toBe(true)
+    expect(execa).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('editIssueMembers()', () => {
+  it('adds and removes in one gh issue edit call', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+    await editIssueMembers('owner/repo', 7, 'label', { add: ['a', 'b'], remove: ['c'] })
+    expect(execa).toHaveBeenCalledTimes(1)
+    const [, args] = execa.mock.calls[0]
+    expect(args).toEqual(expect.arrayContaining(['issue', 'edit', '7', '--add-label', 'a,b', '--remove-label', 'c']))
+  })
+
+  it('does nothing for an empty change', async () => {
+    await editIssueMembers('owner/repo', 7, 'assignee', { add: [], remove: [] })
+    expect(execa).not.toHaveBeenCalled()
   })
 })
 
