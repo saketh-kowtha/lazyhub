@@ -255,8 +255,10 @@ export function remoteMatchesRepo(url, repo) {
 }
 
 // (cwd, host, repo) -> lookup. Remotes rarely change mid-session, and the Branches pane
-// asks on every mount; clearLocalCheckoutCache() is for tests and an explicit refresh.
+// asks on every mount.
 const checkoutCache = new Map()
+
+/** Forget memoized checkout lookups (tests, or after the user changes remotes). */
 export function clearLocalCheckoutCache() { checkoutCache.clear() }
 
 /**

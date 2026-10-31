@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IssueList } from './list.jsx'
 import { IssueDetail } from './detail.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { getIssue, listIssuesPage, listLabels, listCollaborators, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees, addIssueComment } from '../../executor.js'
+import { getIssue, getIssueRow, closeIssue, listIssuesPage, listLabels, listCollaborators, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees, addIssueComment } from '../../executor.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -13,7 +13,7 @@ vi.mock('ink', async () => {
 })
 vi.mock('../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
 vi.mock('../../executor.js', () => ({
-  getIssue: vi.fn(), listIssuesPage: vi.fn(), listLabels: vi.fn(), listCollaborators: vi.fn(),
+  getIssue: vi.fn(), getIssueRow: vi.fn(), listIssuesPage: vi.fn(), listLabels: vi.fn(), listCollaborators: vi.fn(),
   closeIssue: vi.fn(), createIssue: vi.fn(), addLabels: vi.fn(), removeLabels: vi.fn(),
   addIssueAssignees: vi.fn(), removeIssueAssignees: vi.fn(), addIssueComment: vi.fn(),
 }))
@@ -217,6 +217,38 @@ describe('issue list load-more (#506)', () => {
     const view = mountWith(page([mk(1)], { hasNextPage: true, endCursor: 'c1', totalCount: 9 }))
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Could not load more issues; showing 1 of 9'))
     await flush(30)
+    expect(listIssuesPage).toHaveBeenCalledTimes(1)
+  })
+
+  it('r after a failed page retries that cursor and keeps the loaded pages', async () => {
+    listIssuesPage.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(page([mk(4)], { totalCount: 4 }))
+    const view = mountWith(page([mk(1), mk(2), mk(3)], { hasNextPage: true, endCursor: 'c1', totalCount: 4 }))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Could not load more issues'))
+    await flush(30)
+    await sendInput('r')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue number 4'))
+    expect(listIssuesPage).toHaveBeenLastCalledWith('owner/repo', expect.objectContaining({ after: 'c1' }))
+    expect(refetch).not.toHaveBeenCalled()
+    expect(view.lastFrame()).toContain('Issue number 1')
+  })
+
+  it('closing an issue patches that row instead of reloading from page 1', async () => {
+    listIssuesPage.mockResolvedValue(page([mk(4), mk(5)], { totalCount: 5 }))
+    closeIssue.mockResolvedValue(undefined)
+    getIssueRow.mockResolvedValue({ ...mk(5), state: 'CLOSED' })
+    const view = mountWith(page([mk(1), mk(2), mk(3)], { hasNextPage: true, endCursor: 'c1', totalCount: 5 }))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue number 5'))
+    await flush(30)
+    await sendInput('G')
+    await flush(20)
+    await sendInput('X')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Close issue #5'))
+    await flush(20)
+    await sendInput('y')
+    await waitForExpectation(() => expect(getIssueRow).toHaveBeenCalledWith('owner/repo', 5))
+    await waitForExpectation(() => expect(view.lastFrame()).not.toContain('Issue number 5'))
+    expect(view.lastFrame()).toContain('Issue number 4')
+    expect(refetch).not.toHaveBeenCalled()
     expect(listIssuesPage).toHaveBeenCalledTimes(1)
   })
 })

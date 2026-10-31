@@ -11,7 +11,9 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { IssueLabelDialog, IssueAssigneeDialog } from './dialogs.jsx'
 
-export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor, setScrollOffset, onClose, showStatus, refetch }) {
+export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor, setScrollOffset, onClose, showStatus, refetch, refreshIssue = undefined }) {
+  // Patch the one changed row when the list supports it; otherwise refetch (D16).
+  const changed = (number, opts) => (refreshIssue ? refreshIssue(number, opts) : refetch())
   if (dialog === 'fuzzy') {
     const fuzzyItems = items.map(issue => ({ ...issue, authorLogin: issue.author?.login || '' }))
     return (
@@ -41,7 +43,7 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
             try {
               await closeIssue(repo, selectedIssue.number)
               showStatus(`Closed #${selectedIssue.number}`)
-              refetch()
+              changed(selectedIssue.number)
             } catch (err) {
               showStatus(`Failed: ${err.message}`, true)
             }
@@ -64,9 +66,11 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
           onSubmit={async (values) => {
             onClose()
             try {
-              await createIssue(repo, /** @type {any} */ ({ title: values.title, body: values.body }))
+              const created = await createIssue(repo, /** @type {any} */ ({ title: values.title, body: values.body }))
               showStatus('Issue created')
-              refetch()
+              const number = Number(String(created || '').match(/\/issues\/(\d+)/)?.[1])
+              if (number) changed(number, { added: true })
+              else refetch()
             } catch (err) {
               showStatus(`Failed: ${err.message}`, true)
             }
@@ -82,7 +86,7 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
       <IssueLabelDialog
         repo={repo} issue={selectedIssue}
         onError={(err) => showStatus(`✗ Updating labels failed: ${sanitize(err.message)}`, true)}
-        onClose={() => { onClose(); refetch() }}
+        onClose={() => { onClose(); changed(selectedIssue.number) }}
       />
     )
   }
@@ -92,7 +96,7 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
       <IssueAssigneeDialog
         repo={repo} issue={selectedIssue}
         onError={(err) => showStatus(`✗ Updating assignees failed: ${sanitize(err.message)}`, true)}
-        onClose={() => { onClose(); refetch() }}
+        onClose={() => { onClose(); changed(selectedIssue.number) }}
       />
     )
   }
