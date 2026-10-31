@@ -1,30 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../bootstrap.js', () => ({ bootstrap: vi.fn() }))
+vi.mock('../bootstrap.js', () => ({ headlessPreflight: vi.fn() }))
 vi.mock('../mcp.js', () => ({ runMCPServer: vi.fn() }))
 
 const { runMcpServer } = await import('./mcp-server.js')
-const { bootstrap } = await import('../bootstrap.js')
+const { headlessPreflight } = await import('../bootstrap.js')
 const { runMCPServer } = await import('../mcp.js')
 
 describe('lazyhub mcp entry point', () => {
   beforeEach(() => {
-    bootstrap.mockReset()
+    headlessPreflight.mockReset()
     runMCPServer.mockReset()
   })
 
-  it('bootstraps gh health before serving stdio and exits 0 when the stream ends', async () => {
+  it('preflights gh headlessly before serving stdio and exits 0 when the stream ends', async () => {
     const order = []
-    bootstrap.mockImplementation(async () => { order.push('bootstrap') })
+    headlessPreflight.mockImplementation(async () => { order.push('preflight'); return { ok: true } })
     runMCPServer.mockImplementation(async () => { order.push('serve') })
     expect(await runMcpServer()).toBe(0)
-    expect(order).toEqual(['bootstrap', 'serve'])
-    expect(bootstrap).toHaveBeenCalledWith(null)
+    expect(order).toEqual(['preflight', 'serve'])
   })
 
-  it('never opens the agent-facing server when bootstrap fails', async () => {
-    bootstrap.mockRejectedValue(new Error('gh not authenticated'))
-    await expect(runMcpServer()).rejects.toThrow('gh not authenticated')
+  it('never opens the agent-facing server when preflight fails; one stderr line, exit 1', async () => {
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    headlessPreflight.mockResolvedValue({ ok: false, message: 'lazyhub --mcp: not authenticated' })
+    expect(await runMcpServer()).toBe(1)
     expect(runMCPServer).not.toHaveBeenCalled()
+    expect(write).toHaveBeenCalledWith('lazyhub --mcp: not authenticated\n')
+    write.mockRestore()
   })
 })
