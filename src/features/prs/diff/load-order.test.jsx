@@ -77,3 +77,25 @@ describe('diff open order (#451)', () => {
     expect(h.calls).not.toContain('getPRDiffStats')
   })
 })
+
+describe('diff loading frame (#454)', () => {
+  it('shows a skeleton with header on the first frame, not a bare spinner', async () => {
+    const view = renderWithProviders(<Session n={454} />, { appContext: { notifyDialog: () => {} } })
+    const frame = view.lastFrame()
+    expect(frame).toContain('PR #454 Diff')
+    expect(frame).toContain('░')
+    expect(frame).not.toContain('Loading diff')
+  })
+
+  it('renders a cached diff immediately with no loading frame', async () => {
+    const first = renderWithProviders(<Session n={455} />, { appContext: { notifyDialog: () => {} } })
+    await waitForExpectation(() => expect(h.calls).toContain('getPRDiff'))
+    h.pending.getPRDiff.resolve(DIFF)
+    await waitForExpectation(() => expect(first.lastFrame()).toContain('newValue'))
+    cleanup()
+
+    const second = renderWithProviders(<Session n={455} />, { appContext: { notifyDialog: () => {} } })
+    expect(second.lastFrame()).toContain('newValue')
+    expect(second.lastFrame()).not.toContain('░')
+  })
+})

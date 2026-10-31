@@ -54,3 +54,34 @@ describe('useGh async races (#434)', () => {
     cleanup()
   })
 })
+
+describe('useGh stale-while-revalidate (#454)', () => {
+  it('renders cached data on the very first frame with no loading frame', async () => {
+    const second = defer()
+    let call = 0
+    async function swrFetch() { call++; return call === 1 ? 'CACHED' : second.promise }
+
+    const frames = []
+    function View() {
+      const { data, loading, isStale } = useGh(swrFetch, ['x'], { ttl: 0 })
+      frames.push(`data=${data ?? 'none'} loading=${loading} stale=${isStale}`)
+      return <Text>{frames[frames.length - 1]}</Text>
+    }
+
+    const first = render(<View />)
+    await flush(20)
+    expect(first.lastFrame()).toContain('data=CACHED')
+    first.unmount()
+
+    frames.length = 0
+    const view = render(<View />)
+    expect(frames[0]).toBe('data=CACHED loading=false stale=true')
+    expect(view.lastFrame()).toContain('data=CACHED')
+    await flush(20)
+    expect(frames.some(f => f.includes('data=none') || f.includes('loading=true'))).toBe(false)
+    second.resolve('FRESH')
+    await flush(20)
+    expect(view.lastFrame()).toContain('data=FRESH loading=false stale=false')
+    cleanup()
+  })
+})

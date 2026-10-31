@@ -622,7 +622,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
 
   return {
     stdout, visibleHeight, diffStats, isLargeDiff, diffWarningAck,
-    prMeta, repoInfo, loading, error, cursor, scrollOffset, dialog, setDialog,
+    prMeta, repoInfo, loading: loading && !diffReady, error, cursor, scrollOffset, dialog, setDialog,
     adminMergeMsg, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
     footerKeys, showTree, treeCursor, findQuery, setFindQuery, findActive,
     findMatches, gotoActive, gotoInput, setGotoInput, fileJumpActive, setFileJumpActive,

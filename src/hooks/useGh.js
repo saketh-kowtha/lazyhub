@@ -25,17 +25,24 @@ const DEFAULT_TTL = 30_000 // 30 seconds
  * @returns {{ data, loading, error, refetch, mutate, isStale }}
  */
 export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } = {}) {
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [isStale, setIsStale] = useState(false)
-  const mountedRef = useRef(true)
-  // Request generation: only the latest request may touch state (#434).
-  const reqRef = useRef(0)
-
   const cacheKey = JSON.stringify([fetchFn.name, ...deps])
   const repo = typeof deps[0] === 'string' ? deps[0] : process.env.GHUI_REPO
   const diskCacheKey = makeDiskCacheKey([repo, fetchFn.name, deps])
+  // Stale-while-revalidate (#454): seed from the memory/disk cache synchronously so a
+  // revisit renders cached data on the first frame instead of a loading frame.
+  const [seed] = useState(() => {
+    const mem = cache.get(cacheKey)
+    if (mem) return { data: mem.data, stale: Date.now() - mem.timestamp >= ttl }
+    const disk = readCache(diskCacheKey)
+    return disk ? { data: disk.payload, stale: true } : null
+  })
+  const [data, setData] = useState(seed ? seed.data : null)
+  const [loading, setLoading] = useState(!seed)
+  const [error, setError] = useState(null)
+  const [isStale, setIsStale] = useState(Boolean(seed?.stale))
+  const mountedRef = useRef(true)
+  // Request generation: only the latest request may touch state (#434).
+  const reqRef = useRef(0)
   const callSite = `${fetchFn.name || 'unnamed'}:${diskCacheKey}`
 
   const fetchData = useCallback(async (bypassCache = false) => {
@@ -55,8 +62,8 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
       return
     }
 
-    if (!bypassCache && diskCached) {
-      setData(diskCached.payload)
+    if (!bypassCache && (cached || diskCached)) {
+      setData(cached ? cached.data : diskCached.payload)
       setLoading(false)
       setIsStale(true)
     } else {

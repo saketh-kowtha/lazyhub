@@ -15,7 +15,9 @@ import { AIReviewPane } from '../../../components/AIReviewPane.jsx'
 import { useTheme } from '../../../theme.js'
 import { TextInput, colorChalk, applyThemeStyle, sanitize } from '../../../utils.js'
 import { CommentThread } from '../../../components/CommentThread.jsx'
-import { Spinner } from '../../../components/Spinner.jsx'
+import { DiffSkeleton } from '../../../components/Skeleton.jsx'
+import { FailureNotice } from '../../../components/FailureNotice.jsx'
+import { classifyGhFailure } from '../../../executor.js'
 import { syntaxHighlight } from './highlight.js'
 import { openEditorSync } from './editor.js'
 
@@ -284,13 +286,15 @@ export function DiffView({ prNumber, state }) {
   }
 
   if (loading) return (
-    <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Box gap={1}><Spinner /><Text color={t.ui.muted}>Loading diff…</Text></Box>
+    <Box flexDirection="column" flexGrow={1}>
+      <DiffSkeleton prNumber={prNumber} />
+      <FooterKeys keys={footerKeys} />
     </Box>
   )
   if (error) return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Text color={t.ci.fail}>⚠ Failed to load diff — {firstActionKey('list.refresh', 'r')} to retry</Text>
+      <FailureNotice failure={classifyGhFailure(error)} />
+      <Text color={t.ui.dim}>[{firstActionKey('list.refresh', 'r')}] retry</Text>
     </Box>
   )
 
