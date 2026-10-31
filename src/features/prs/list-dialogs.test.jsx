@@ -108,4 +108,84 @@ describe('PR list dialogs', () => {
     await waitForExpectation(() => expect(onClose).toHaveBeenCalledOnce())
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: '403 forbidden' }))
   })
+
+  async function selectFirstAndSubmit(view, onClose) {
+    await waitForInputReady(view)
+    view.stdin.write(' ')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('▶ ◉ alice'))
+    await waitForInputReady(view)
+    view.stdin.write('\r')
+    await waitForExpectation(() => expect(onClose).toHaveBeenCalledOnce())
+  }
+
+  it('adding a reviewer does not remove a pending team review request that is not in the collaborator list', async () => {
+    useGh.mockReturnValue({ loading: false, data: [{ login: 'alice' }, { login: 'bob' }] })
+    const onClose = vi.fn()
+    const pr = { number: 7, reviewRequests: [{ login: 'core-team', name: 'core-team' }] }
+    const view = renderWithProviders(<ReviewerDialog repo="o/r" pr={pr} onClose={onClose} />)
+    expect(view.lastFrame()).toContain('core-team')
+    await selectFirstAndSubmit(view, onClose)
+    expect(requestReviewers).toHaveBeenCalledWith('o/r', 7, ['alice'])
+    expect(removeReviewers).not.toHaveBeenCalled()
+  })
+
+  it('removes an off-list team request only when the user deselects it', async () => {
+    useGh.mockReturnValue({ loading: false, data: [{ login: 'alice' }] })
+    const onClose = vi.fn()
+    const pr = { number: 7, reviewRequests: [{ login: 'core-team', name: 'core-team' }] }
+    const view = renderWithProviders(<ReviewerDialog repo="o/r" pr={pr} onClose={onClose} />)
+    await waitForInputReady(view)
+    view.stdin.write('\u001b[B')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('2/2'))
+    await waitForInputReady(view)
+    view.stdin.write(' ')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('▶ ○ core-team'))
+    await waitForInputReady(view)
+    view.stdin.write('\r')
+    await waitForExpectation(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(removeReviewers).toHaveBeenCalledWith('o/r', 7, ['core-team'])
+    expect(requestReviewers).not.toHaveBeenCalled()
+  })
+
+  it('adding an assignee does not unassign someone missing from the first collaborators page', async () => {
+    useGh.mockReturnValue({ loading: false, data: [{ login: 'alice' }, { login: 'bob' }] })
+    const onClose = vi.fn()
+    const view = renderWithProviders(<AssigneeDialog repo="o/r" pr={{ number: 8, assignees: [{ login: 'carol' }] }} onClose={onClose} />)
+    await selectFirstAndSubmit(view, onClose)
+    expect(addPRAssignees).toHaveBeenCalledWith('o/r', 8, ['alice'])
+    expect(removePRAssignees).not.toHaveBeenCalled()
+  })
+
+  it('adding a label does not strip a label missing from the fetched label list', async () => {
+    addLabels.mockResolvedValue(undefined)
+    useGh.mockReturnValue({ loading: false, data: [{ name: 'alice' }] })
+    const onClose = vi.fn()
+    const view = renderWithProviders(<LabelDialog repo="o/r" pr={{ number: 8, labels: [{ name: 'old-label' }] }} onClose={onClose} />)
+    await selectFirstAndSubmit(view, onClose)
+    expect(addLabels).toHaveBeenCalledWith('o/r', 8, ['alice'], 'pr')
+    expect(removeLabels).not.toHaveBeenCalled()
+  })
+
+  it('Esc closes the picker while the options are still loading', async () => {
+    useGh.mockReturnValue({ loading: true })
+    const onClose = vi.fn()
+    const view = renderWithProviders(<AssigneeDialog repo="o/r" pr={{ number: 1 }} onClose={onClose} />)
+    await waitForInputReady(view)
+    view.stdin.write('\u001b')
+    await waitForExpectation(() => expect(onClose).toHaveBeenCalledOnce())
+  })
+
+  it('shows why the picker is empty when the gh call fails, and r retries', async () => {
+    const refetch = vi.fn()
+    useGh.mockReturnValue({ loading: false, data: undefined, error: new Error('HTTP 403: Must have push access'), refetch })
+    const onClose = vi.fn()
+    const view = renderWithProviders(<AssigneeDialog repo="o/r" pr={{ number: 1 }} onClose={onClose} />)
+    expect(view.lastFrame()).toMatch(/cannot read|403|push access/i)
+    expect(view.lastFrame()).not.toContain('No items')
+    await waitForInputReady(view)
+    view.stdin.write('r')
+    await waitForExpectation(() => expect(refetch).toHaveBeenCalled())
+    view.stdin.write('\u001b')
+    await waitForExpectation(() => expect(onClose).toHaveBeenCalledOnce())
+  })
 })

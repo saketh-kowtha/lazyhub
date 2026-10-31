@@ -24,6 +24,7 @@ import { prefixContinuations, registeredPrefixes } from './ui/actions.js'
 import { WhichKey } from './ui/WhichKey.jsx'
 import { loadConfig, CONFIG_PATH } from './config.js'
 import { ConfigProvider } from './config/index.js'
+import { takeUnknownActionIds } from './config/loader.js'
 import { migrateStateJsonToToml } from './config/migrate.js'
 import { useLayout } from './hooks/useLayout.js'
 import { AppContext } from './context.js'
@@ -127,6 +128,14 @@ export function App({ repo }) {
       setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), ttl)
     }
   }, [])
+
+  // Unknown action ids in the user's keymaps used to land only in debug.log (#475).
+  useEffect(() => {
+    const ids = takeUnknownActionIds()
+    if (ids.length > 0) {
+      addToast({ message: `lazyhub.toml: unknown action id${ids.length > 1 ? 's' : ''} ignored: ${ids.join(', ')}`, variant: 'warning', durationMs: 8000 })
+    }
+  }, [addToast])
 
   const dialogActiveRef    = useRef(false)
   const savedListPosition  = useRef({})
