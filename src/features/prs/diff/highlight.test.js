@@ -11,6 +11,10 @@ describe('diff tab expansion (#426)', () => {
     expect(expandTabs('plain')).toBe('plain')
   })
 
+  it('counts wide characters by display width when finding the tab stop', () => {
+    expect(expandTabs('中\t', 4)).toBe('中  ')
+  })
+
   it('emits no raw TAB from syntaxHighlight, with or without a language', () => {
     expect(syntaxHighlight('\tconst x = 1', 'javascript', null, t)).not.toContain('\t')
     expect(syntaxHighlight('\tconst x = 1', null, null, t)).not.toContain('\t')
