@@ -100,7 +100,7 @@ Displays for current branch:
 - `💬 N` = unresolved review threads (omitted if 0)
 - Pollable every 30s OR pushed via IPC `pr-state-changed` event (added below)
 
-Data source: IPC `state` request with `{ branch }` param. Lazyhub answers `{ prNumber, ciStatus, unresolvedThreads }`. If IPC down, fall back to `gh pr status --json ...` debounced to 60s.
+Data source: IPC `state` request with `{ branch }` param. Lazyhub answers `{ prNumber, ciStatus }`. `unresolvedThreads` is not currently provided (gh pr list has no reviewThreads field; see #438). If IPC down, fall back to `gh pr status --json ...` debounced to 60s.
 
 **1.2 Smart `:LazyHubPR`**
 
@@ -239,8 +239,8 @@ The current `src/ipc.js` covers `ping`/`state`/`navigate`/`open-file`. To suppor
 
 | Request | Params | Response |
 |---|---|---|
-| `state` (extended) | `{ branch?: string }` | `{ state: { pane, view, prNumber, repo, ciStatus, unresolvedThreads, branch } }` |
-| `pr-for-branch` | `{ branch }` | `{ prNumber, prState, ciStatus, unresolvedThreads }` or `{ prNumber: null }` |
+| `state` (extended) | `{ branch?: string }` | `{ state: { pane, view, prNumber, repo, ciStatus, branch } }` (`unresolvedThreads` not currently provided, see #438) |
+| `pr-for-branch` | `{ branch }` | `{ prNumber, prState, ciStatus }` or `{ prNumber: null }` (`unresolvedThreads` not currently provided, see #438) |
 | `review-comments` | `{ prNumber }` | `{ comments: [{ id, threadId, path, line, body, user, resolved }] }` |
 | `reply-thread` | `{ threadId, body }` | `{ ok, commentId }` |
 | `resolve-thread` | `{ threadId }` | `{ ok }` |
@@ -253,7 +253,7 @@ These are thin wrappers around existing executor calls so lazyhub's in-memory ca
 
 | Event | Payload | Trigger |
 |---|---|---|
-| `pr-state-changed` | `{ branch, prNumber, ciStatus, unresolvedThreads }` | CI check refresh, PR open/merge/close |
+| `pr-state-changed` | `{ branch, prNumber, ciStatus }` (`unresolvedThreads` not currently provided, see #438) | CI check refresh, PR open/merge/close |
 | `review-comment-added` | `{ prNumber, comment }` | Local action or polled refresh |
 | `review-thread-resolved` | `{ prNumber, threadId }` | Local action or polled refresh |
 | `branch-changed` | `{ repo, branch }` | User switches branch inside lazyhub |
