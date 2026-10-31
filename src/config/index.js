@@ -13,7 +13,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'
 import { loadConfig, fetchRemoteConfig } from './loader.js'
-import { writeConfig } from './writer.js'
+import { writeConfig, reportConfigWriteFailure } from './writer.js'
 import { DEFAULT_CONFIG, validateConfig, mergeConfig } from './schema.js'
 
 export const ConfigContext = createContext({ ...DEFAULT_CONFIG, write: () => DEFAULT_CONFIG })
@@ -44,7 +44,11 @@ export function ConfigProvider({ children, initialConfig }) {
   }, [configUrl])
 
   const write = useCallback((patch) => {
-    writeConfig(patch)
+    try {
+      writeConfig(patch)
+    } catch (err) {
+      reportConfigWriteFailure(err)
+    }
     const next = loadConfig()
     setConfig(next)
     return next

@@ -36,6 +36,7 @@ const WRITABLE_FEATURES = {
 // Saving runs inside key handlers, so a failed save must never throw there. It is
 // logged and handed to whoever registered a notifier (the app shows a toast); until
 // one is registered, messages queue so a failure before the UI mounts is not lost.
+const MAX_PENDING_NOTICES = 5
 let writeNotifier = null
 const pendingWriteNotices = []
 
@@ -58,7 +59,11 @@ export function reportConfigWriteFailure(err, configPath = USER_CONFIG_PATH) {
   logger.error(`config: could not save ${configPath}`, err)
   const message = `Could not save settings: ${err.message}`
   if (writeNotifier) writeNotifier(message)
-  else pendingWriteNotices.push(message)
+  else if (!pendingWriteNotices.includes(message)) {
+    // Bounded: identical messages collapse, and only the newest few are kept.
+    pendingWriteNotices.push(message)
+    if (pendingWriteNotices.length > MAX_PENDING_NOTICES) pendingWriteNotices.shift()
+  }
 }
 
 function readToml(configPath) {

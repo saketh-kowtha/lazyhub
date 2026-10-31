@@ -232,6 +232,23 @@ describe('writing into a syntactically broken lazyhub.toml (#435)', () => {
     expect(seen).toHaveLength(2)
   })
 
+  it('bounds the queue before a notifier exists: duplicates collapse, newest 5 kept', () => {
+    writeToml(broken)
+    for (let i = 0; i < 20; i += 1) writeState({ a: 1 }, { configPath })
+    const seen = []
+    setConfigWriteNotifier(m => seen.push(m))
+    expect(seen).toHaveLength(1)
+    setConfigWriteNotifier(null)
+    for (let i = 0; i < 8; i += 1) {
+      const other = join(dir, `other-${i}.toml`)
+      writeFileSync(other, '[theme\n')
+      writeState({ a: 1 }, { configPath: other })
+    }
+    const queued = []
+    setConfigWriteNotifier(m => queued.push(m))
+    expect(queued).toHaveLength(5)
+  })
+
   it('writeConfig refuses to write and says why', () => {
     writeToml(broken)
     expect(() => writeConfig({ theme: { name: 'dark' } }, { configPath })).toThrow(/not valid TOML/)
