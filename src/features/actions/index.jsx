@@ -10,6 +10,7 @@ import { useGh } from '../../hooks/useGh.js'
 import { classifyGhFailure, listRuns, getRunLogs, rerunRun, cancelRun } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
+import { toLogLines } from './log-lines.js'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
@@ -60,6 +61,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null) // null | 'logs' | 'cancel'
   const [logLines, setLogLines] = useState([])
+  const [logTitle, setLogTitle] = useState('Log Viewer')
   const [logLoading, setLogLoading] = useState(false)
   const [statusMsg, setStatusMsg] = useState(null)
   const lastKeyRef   = useRef(null)
@@ -105,23 +107,12 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
   const openLogs = useCallback(async () => {
     const run = items[cursor]
     if (!run) return
+    setLogTitle(`${run.workflowName || 'Run'} · ${run.headBranch || ''} · ${run.conclusion || run.status || 'unknown'}`)
     setLogLoading(true)
     setDialog('logs')
     try {
       const rawLogs = await getRunLogs(repo, run.databaseId)
-      const rawLines = typeof rawLogs === 'string' ? rawLogs.split('\n') : []
-      const lines = rawLines
-        .filter(l => !l.trimStart().startsWith('##[endgroup]'))
-        .map(l => {
-          // Strip ANSI escape codes
-          let out = l.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
-          // Convert ##[group]<name> to section header
-          const groupMatch = out.match(/^##\[group\](.+)/)
-          if (groupMatch) return `=== ${groupMatch[1].trim()} ===`
-          // Trim ISO timestamp prefix to HH:MM:SS
-          out = out.replace(/^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2}:\d{2})\.\d+Z\s*/, '$1 ')
-          return out
-        })
+      const lines = toLogLines(rawLogs)
       setLogLines(lines)
     } catch (err) {
       setLogLines([`Error loading logs: ${err.message}`])
@@ -189,6 +180,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
     }
     return (
       <LogViewer
+        title={logTitle}
         lines={logLines}
         onClose={() => setDialog(null)}
       />

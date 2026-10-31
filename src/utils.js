@@ -12,6 +12,7 @@ import chalk from 'chalk'
 import { getHljs } from './highlight.js'
 import stringWidth from 'string-width'
 import { useTheme } from './theme.js'
+import { sanitize } from './utils-core.js'
 
 export { logger, getLogs, resolvePath, stripAnsi, decodeHtmlEntities, sanitize } from './utils-core.js'
 
@@ -394,6 +395,29 @@ export function displayWidth(str) {
 }
 
 /**
+ * Expand TAB characters to spaces at tab stops (no config key exists, default 4),
+ * so width math and the terminal agree. Display-width aware for wide characters.
+ * @param {string} text
+ * @param {number} [width]
+ */
+export function expandTabs(text, width = 4) {
+  if (typeof text !== 'string' || !text.includes('\t')) return text
+  let out = ''
+  let col = 0
+  for (const ch of text) {
+    if (ch === '\t') {
+      const n = width - (col % width)
+      out += ' '.repeat(n)
+      col += n
+    } else {
+      out += ch
+      col += stringWidth(ch)
+    }
+  }
+  return out
+}
+
+/**
  * Truncate a string to at most `maxWidth` display columns, accounting for
  * wide characters.  Does NOT add ellipsis — callers can append if needed.
  * @param {string} str
@@ -478,4 +502,18 @@ export function authorColor(login) {
   if (!login) return undefined
   const h = [...String(login)].reduce((a, c) => a + c.charCodeAt(0), 0)
   return _AUTHOR_COLOR_PALETTE[h % _AUTHOR_COLOR_PALETTE.length]
+}
+
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS_RE = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g
+
+/**
+ * Make one line of untrusted log text safe to draw (#463): ANSI and entities go
+ * through sanitize(), TABs expand to tab stops (so columns stay aligned and the
+ * frame cannot break), and any other control character is dropped.
+ * @param {string} line
+ * @returns {string}
+ */
+export function cleanLogLine(line) {
+  return sanitize(expandTabs(String(line ?? ''))).replace(CONTROL_CHARS_RE, '')
 }
