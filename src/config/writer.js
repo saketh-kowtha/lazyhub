@@ -18,6 +18,7 @@ import { dirname } from 'path'
 import { ensurePrivateDir, writePrivateFile } from '../secure-fs.js'
 import { parse, stringify } from 'smol-toml'
 import { USER_CONFIG_PATH } from './loader.js'
+import { logger } from '../utils-core.js'
 import { isPlainObject } from './schema.js'
 
 const SECTION_RE = /^\s*(\[\[?)([^\]]+)(\]\]?)\s*(?:#.*)?$/
@@ -29,6 +30,35 @@ const WRITABLE_FEATURES = {
   'features.prs': new Set(['default_filter', 'default_scope', 'page_size']),
   'features.issues': new Set(['default_filter', 'page_size']),
   'features.actions': new Set(['page_size']),
+}
+
+// ─── Write-failure notices (#435) ─────────────────────────────────────────────
+// Saving runs inside key handlers, so a failed save must never throw there. It is
+// logged and handed to whoever registered a notifier (the app shows a toast); until
+// one is registered, messages queue so a failure before the UI mounts is not lost.
+let writeNotifier = null
+const pendingWriteNotices = []
+
+/**
+ * Register the function that surfaces config-write failures to the user.
+ * Drains any failures queued before it was registered. Pass null to unregister.
+ * @param {((message: string) => void)|null} fn notifier
+ */
+export function setConfigWriteNotifier(fn) {
+  writeNotifier = fn
+  if (fn) for (const m of pendingWriteNotices.splice(0)) fn(m)
+}
+
+/**
+ * Log a failed config save and surface it once through the notifier.
+ * @param {Error} err what went wrong
+ * @param {string} configPath file that was not written
+ */
+export function reportConfigWriteFailure(err, configPath = USER_CONFIG_PATH) {
+  logger.error(`config: could not save ${configPath}`, err)
+  const message = `Could not save settings: ${err.message}`
+  if (writeNotifier) writeNotifier(message)
+  else pendingWriteNotices.push(message)
 }
 
 function readToml(configPath) {
@@ -209,7 +239,13 @@ export function writeState(patch, opts = {}) {
   const { configPath = USER_CONFIG_PATH } = opts
   const current = readState({ configPath })
   const next = { ...current, ...(ensureTomlSafe(patch) || {}) }
-  writeConfig({ state: next }, { configPath })
+  try {
+    writeConfig({ state: next }, { configPath })
+  } catch (err) {
+    // Callers run inside key handlers: never throw. The file is left untouched.
+    reportConfigWriteFailure(err, configPath)
+    return current
+  }
   return next
 }
 
@@ -223,6 +259,14 @@ export function writeState(patch, opts = {}) {
 export function writeConfig(patch, opts = {}) {
   const { configPath = USER_CONFIG_PATH } = opts
   let text = readToml(configPath)
+
+  // Never rewrite a file we cannot read back: state would be rebuilt from {} and every
+  // other key lost. The user fixes the syntax error; nothing is written meanwhile.
+  try {
+    parseUserConfig(text, configPath)
+  } catch (err) {
+    throw new Error(`${configPath} is not valid TOML (${err.message.split('\n')[0]}); fix it and try again. Nothing was written.`)
+  }
 
   if (isPlainObject(patch.state)) {
     text = removeSectionTree(text, 'state')
@@ -257,7 +301,9 @@ export function writeConfig(patch, opts = {}) {
     }
   }
 
+  // Validate the result before it reaches disk, so a bad edit cannot corrupt the file.
+  const parsed = parseUserConfig(text, configPath)
   ensurePrivateDir(dirname(configPath))
   writePrivateFile(configPath, text)
-  return parseUserConfig(text, configPath)
+  return parsed
 }

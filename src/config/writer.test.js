@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, statSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { parse } from 'smol-toml'
-import { readState, writeConfig, writeState } from './writer.js'
+import { readState, writeConfig, writeState, setConfigWriteNotifier } from './writer.js'
 import { loadConfig } from './loader.js'
 
 let dir
@@ -201,5 +201,46 @@ describe('[defaults].repo (#290)', () => {
     expect(loadConfig({ configPath }).defaults.repo_host).toBe('ghe.example.com')
     writeToml('[defaults]\nrepo_host = "bad host/"\n')
     expect(loadConfig({ configPath }).defaults.repo_host).toBe('')
+  })
+})
+
+describe('writing into a syntactically broken lazyhub.toml (#435)', () => {
+  const broken = '[app]\nmouse = true\n[theme\nname = "x"\n[state]\nprScope = "own"\nkeep = 1\n'
+  beforeEach(() => { setConfigWriteNotifier(() => {}); setConfigWriteNotifier(null) }) // drain queue
+  afterEach(() => setConfigWriteNotifier(null))
+
+  it('writeState does not throw (callers run it inside key handlers)', () => {
+    writeToml(broken)
+    expect(() => writeState({ prScope: 'all' }, { configPath })).not.toThrow()
+  })
+
+  it('leaves the broken file byte-for-byte untouched, keeping other state keys', () => {
+    writeToml(broken)
+    writeState({ prScope: 'all' }, { configPath })
+    expect(readFileSync(configPath, 'utf8')).toBe(broken)
+    expect(readFileSync(configPath, 'utf8')).toContain('keep = 1')
+  })
+
+  it('surfaces a notice instead, including one queued before the UI registered', () => {
+    writeToml(broken)
+    writeState({ prScope: 'all' }, { configPath })
+    const seen = []
+    setConfigWriteNotifier(m => seen.push(m))
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toMatch(/Could not save settings: .*not valid TOML/)
+    writeState({ prScope: 'own' }, { configPath })
+    expect(seen).toHaveLength(2)
+  })
+
+  it('writeConfig refuses to write and says why', () => {
+    writeToml(broken)
+    expect(() => writeConfig({ theme: { name: 'dark' } }, { configPath })).toThrow(/not valid TOML/)
+    expect(readFileSync(configPath, 'utf8')).toBe(broken)
+  })
+
+  it('preserves other [state] keys on a valid file', () => {
+    writeToml('[state]\nprScope = "own"\nkeep = 1\n')
+    writeState({ prScope: 'all' }, { configPath })
+    expect(readState({ configPath })).toEqual({ prScope: 'all', keep: 1 })
   })
 })

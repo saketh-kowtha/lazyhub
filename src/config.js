@@ -13,7 +13,7 @@ import { logger } from './utils-core.js'
 import { migrateLegacyPaneIcons } from './config/migrate.js'
 import { loadConfig as loadTomlConfig, USER_CONFIG_PATH } from './config/loader.js'
 import { DEFAULT_CONFIG } from './config/schema.js'
-import { readState as readTomlState, writeConfig as writeTomlConfig, writeState as writeTomlState } from './config/writer.js'
+import { readState as readTomlState, reportConfigWriteFailure, writeConfig as writeTomlConfig, writeState as writeTomlState } from './config/writer.js'
 
 export const BUILTIN_PANES = ['prs', 'issues', 'branches', 'actions', 'notifications']
 export const CONFIG_PATH = USER_CONFIG_PATH
@@ -211,7 +211,11 @@ function patchToToml(patch) {
  * @param {Object} patch legacy config-shaped patch
  */
 export function saveConfig(patch) {
-  writeTomlConfig(patchToToml(patch))
+  try {
+    writeTomlConfig(patchToToml(patch))
+  } catch (err) {
+    reportConfigWriteFailure(err)
+  }
 }
 
 /**
@@ -233,7 +237,11 @@ export function loadSavedRepo() {
  * @param {string} repo "owner/name"
  */
 export function saveDefaultRepo(repo) {
-  writeTomlConfig({ defaults: { repo, repo_host: process.env.GH_HOST || 'github.com' } })
+  try {
+    writeTomlConfig({ defaults: { repo, repo_host: process.env.GH_HOST || 'github.com' } })
+  } catch (err) {
+    reportConfigWriteFailure(err)
+  }
 }
 
 const SPARSE_CONFIG_HEADER = `# lazyhub configuration (TOML).
