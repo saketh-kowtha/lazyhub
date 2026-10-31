@@ -29,6 +29,8 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
   const [error, setError] = useState(null)
   const [isStale, setIsStale] = useState(false)
   const mountedRef = useRef(true)
+  // Request generation: only the latest request may touch state (#434).
+  const reqRef = useRef(0)
 
   const cacheKey = JSON.stringify([fetchFn.name, ...deps])
   const repo = typeof deps[0] === 'string' ? deps[0] : process.env.GHUI_REPO
@@ -37,6 +39,8 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
 
   const fetchData = useCallback(async (bypassCache = false) => {
     if (!mountedRef.current) return
+    const reqId = ++reqRef.current
+    const isCurrent = () => mountedRef.current && reqRef.current === reqId
 
     const now = Date.now()
     const cached = cache.get(cacheKey)
@@ -62,7 +66,7 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
 
     try {
       const result = await fetchFn(...deps)
-      if (!mountedRef.current) return
+      if (!isCurrent()) return
       cache.set(cacheKey, { data: result, timestamp: Date.now() })
       writeCache(diskCacheKey, result, { repo, op: fetchFn.name || 'unnamed' })
       setData(result)
@@ -71,14 +75,14 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
       recordGhSuccess(callSite)
       logger.info(`gh.${fetchFn.name || 'unnamed'} fetched data`, { cacheKey, component: 'useGh' })
     } catch (err) {
-      if (!mountedRef.current) return
+      if (!isCurrent()) return
       setError(err)
       if (!diskCached && !cached) setData(null)
       setIsStale(Boolean(diskCached || cached))
       recordGhFailure(callSite, err)
       logger.error(`useGh: ${fetchFn.name || 'unnamed'}(${cacheKey}) failed`, err)
     } finally {
-      if (mountedRef.current) {
+      if (isCurrent()) {
         setLoading(false)
       }
     }
@@ -111,6 +115,7 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
     mountedRef.current = true
     fetchData(false)
     return () => {
+      reqRef.current++ // eslint-disable-line react-hooks/exhaustive-deps
       mountedRef.current = false
     }
   }, [cacheKey]) // eslint-disable-line react-hooks/exhaustive-deps

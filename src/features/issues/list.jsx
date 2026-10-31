@@ -8,7 +8,7 @@ import React, { useState, useCallback, useEffect, useContext, useRef } from 'rea
 import { useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
-import { listIssues } from '../../executor.js'
+import { listIssuesPage } from '../../executor.js'
 import { sanitize } from '../../utils.js'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -21,6 +21,8 @@ import { IssueListView } from './list-view.jsx'
 const _appConfig = loadConfig()
 const _cfg = _appConfig.issues
 const _actions = _appConfig.toml
+// GitHub search never returns more than 1,000 results.
+const SEARCH_CAP = 1000
 
 export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, initialCursor = 0, initialScrollOffset = 0 }) {
   useKeyScope('pane')
@@ -32,7 +34,17 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
   const FK = _cfg.keys
   const [filterState, setFilterState] = useState(_cfg.defaultFilter)
   const [sortMode, setSortMode] = useState('default') // 'default' | 'oldest'
-  const { data: issues, loading, error, refetch, isStale } = useGh(listIssues, [repo, { state: filterState, limit: _cfg.pageSize }])
+  const { data: firstPage, loading, error, refetch: refetchFirst, isStale } = useGh(listIssuesPage, [repo, { state: filterState, limit: _cfg.pageSize }])
+
+  // Later pages are fetched by cursor and appended; earlier pages are never refetched (D16).
+  const pageKey = `${repo}|${filterState}`
+  const [more, setMore] = useState({ key: pageKey, items: [], endCursor: null, hasNextPage: null, totalCount: null, loading: false, error: null })
+  const extra = more.key === pageKey ? more : { items: [], endCursor: null, hasNextPage: null, totalCount: null, loading: false, error: null }
+  const inFlight = useRef(false)
+  const refetch = useCallback(() => {
+    setMore({ key: pageKey, items: [], endCursor: null, hasNextPage: null, totalCount: null, loading: false, error: null })
+    refetchFirst()
+  }, [pageKey, refetchFirst])
   const [cursor, setCursor] = useState(initialCursor)
   const [scrollOffset, setScrollOffset] = useState(initialScrollOffset)
   const [dialog, setDialog] = useState(null)
@@ -40,11 +52,41 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
 
-  const rawItems = issues || []
+  const hasNextPage = extra.hasNextPage ?? firstPage?.hasNextPage ?? false
+  const endCursor = extra.endCursor ?? firstPage?.endCursor ?? null
+  const totalCount = extra.totalCount ?? firstPage?.totalCount ?? null
+  const rawItems = React.useMemo(() => {
+    const seen = new Set()
+    return [...(firstPage?.items || []), ...extra.items].filter(i => !seen.has(i.number) && seen.add(i.number))
+  }, [firstPage, extra.items])
   const items = sortMode === 'oldest'
     ? [...rawItems].sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt))
     : rawItems
   const STATE_CYCLE = ['open', 'closed']
+
+  const loadMore = useCallback(async () => {
+    if (inFlight.current || !endCursor) return
+    inFlight.current = true
+    setMore(prev => ({ ...(prev.key === pageKey ? prev : { items: [] }), key: pageKey, loading: true, error: null }))
+    try {
+      const page = await listIssuesPage(repo, { state: filterState, limit: _cfg.pageSize, after: endCursor })
+      setMore(prev => ({
+        key: pageKey,
+        items: [...(prev.key === pageKey ? prev.items : []), ...page.items],
+        endCursor: page.endCursor, hasNextPage: page.hasNextPage, totalCount: page.totalCount,
+        loading: false, error: null,
+      }))
+    } catch (err) {
+      setMore(prev => ({ ...(prev.key === pageKey ? prev : { items: [] }), key: pageKey, loading: false, error: err }))
+    } finally {
+      inFlight.current = false
+    }
+  }, [repo, filterState, endCursor, pageKey])
+
+  // Fetch the next cursor page when the cursor nears the end of what is loaded.
+  useEffect(() => {
+    if (hasNextPage && !loading && !error && !extra.loading && !extra.error && cursor >= rawItems.length - 10) loadMore()
+  }, [cursor, rawItems.length, hasNextPage, loading, error, extra.loading, extra.error, loadMore])
 
   useEffect(() => {
     if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
@@ -219,6 +261,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
       visibleIssues={visibleIssues}
       scrollOffset={scrollOffset}
       cursor={cursor}
+      paging={{ hasMore: hasNextPage, total: totalCount, loadingMore: extra.loading, error: extra.error, cap: SEARCH_CAP }}
     />
   )
 }
