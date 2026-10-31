@@ -53,7 +53,7 @@ const MERGE_OPTIONS_ADMIN = [
   { value: 'admin-rebase', label: '--admin --rebase', description: 'Bypass branch protection + rebase' },
 ]
 
-export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
+export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
   useKeyScope('view')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
@@ -64,7 +64,8 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   const { data: pr, loading, error, refetch } = useGh(getPR, [repo, prNumber])
   const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000 })
   const { data: checks }   = useGh(getPRChecks, [repo, prNumber], { ttl: 30_000 })
-  const baseBranch = pr?.baseRefName || ''
+  // The list row already knows the base branch: ask for protection now instead of after getPR (#452).
+  const baseBranch = pr?.baseRefName || rowBaseRefName || ''
   const { data: protection } = useGh(getBranchProtection, [repo, baseBranch], { ttl: 300_000 })
 
   const [scrollY, setScrollY] = useState(0)
