@@ -10,15 +10,13 @@ import { Box, Text, useStdout } from 'ink'
 import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import {
-  getPR, listLabels, listCollaborators, addLabels, removeLabels,
+  getPR,
   getRepoInfo, getPRChecks, getBranchProtection,
   enableAutoMerge, disableAutoMerge, mergePR, closePR,
   markPRReady, convertPRToDraft, editPRBase,
-  requestReviewers, removeReviewers, reviewPR,
-  addPRAssignees, removePRAssignees,
+  reviewPR,
   rerunCheckRun, getCheckRunAnnotations,
 } from '../../executor.js'
-import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
@@ -35,6 +33,7 @@ import { openInEditor, editorLabel } from '../../editor.js'
 import { loadConfig } from '../../config.js'
 import { firstActionKey } from '../../config/actions.js'
 
+import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
 import { sortChecks } from './detail/Checks.jsx'
@@ -462,15 +461,15 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   }
 
   if (dialog === 'labels') {
-    return <PRLabelDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(msg) => { setDialog(null); showStatus(msg, true) }} />
+    return <LabelDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(err) => { setDialog(null); showStatus(`✗ Label update failed: ${sanitize(err.message)}`, true) }} />
   }
 
   if (dialog === 'assignees') {
-    return <PRAssigneeDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(msg) => { setDialog(null); showStatus(msg, true) }} />
+    return <AssigneeDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(err) => { setDialog(null); showStatus(`✗ Assignee update failed: ${sanitize(err.message)}`, true) }} />
   }
 
   if (dialog === 'reviewers') {
-    return <PRReviewerDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(msg) => { setDialog(null); showStatus(msg, true) }} />
+    return <ReviewerDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(err) => { setDialog(null); showStatus(`✗ Reviewer update failed: ${sanitize(err.message)}`, true) }} />
   }
 
   if (dialog === 'check-logs') {
@@ -531,101 +530,5 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
         <Text color={t.ui.dim}>[/] search  [?] help  [Esc] back</Text>
       </Box>
     </Box>
-  )
-}
-
-// ─── Sub-dialogs ──────────────────────────────────────────────────────────────
-
-function PRLabelDialog({ repo, pr, onClose, onError }) {
-  const { t } = useTheme()
-  const { data: allLabels, loading } = useGh(listLabels, [repo])
-  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading labels…</Text></Box>
-
-  const items = (allLabels || []).map(l => ({
-    id: l.name,
-    name: l.name,
-    color: l.color,
-    selected: pr.labels?.some(pl => pl.name === l.name) ?? false,
-  }))
-
-  return (
-    <MultiSelect
-      items={items}
-      onSubmit={async (selectedIds) => {
-        const current = pr.labels?.map(l => l.name) || []
-        const toAdd    = selectedIds.filter(id => !current.includes(id))
-        const toRemove = current.filter(id => !selectedIds.includes(id))
-        try {
-          if (toAdd.length)    await addLabels(repo, pr.number, toAdd, 'pr')
-          if (toRemove.length) await removeLabels(repo, pr.number, toRemove, 'pr')
-        } catch (err) { onError?.(`✗ Label update failed: ${err.message}`) }
-        onClose()
-      }}
-      onCancel={onClose}
-    />
-  )
-}
-
-function PRAssigneeDialog({ repo, pr, onClose, onError }) {
-  const { t } = useTheme()
-  const { data: collabs, loading } = useGh(listCollaborators, [repo])
-  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators…</Text></Box>
-
-  const items = (collabs || []).map(c => ({
-    id: c.login,
-    name: c.login,
-    selected: pr.assignees?.some(a => a.login === c.login) ?? false,
-  }))
-
-  return (
-    <MultiSelect
-      items={items}
-      onSubmit={async (selectedIds) => {
-        const current = pr.assignees?.map(a => a.login) || []
-        const toAdd    = selectedIds.filter(id => !current.includes(id))
-        const toRemove = current.filter(id => !selectedIds.includes(id))
-        try {
-          if (toAdd.length)    await addPRAssignees(repo, pr.number, toAdd)
-          if (toRemove.length) await removePRAssignees(repo, pr.number, toRemove)
-        } catch (err) { onError?.(`✗ Assignee update failed: ${err.message}`) }
-        onClose()
-      }}
-      onCancel={onClose}
-    />
-  )
-}
-
-function PRReviewerDialog({ repo, pr, onClose, onError }) {
-  const { t } = useTheme()
-  const { data: collabs, loading } = useGh(listCollaborators, [repo])
-  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading collaborators…</Text></Box>
-
-  // Current pending review requests (not yet reviewed)
-  const currentRequested = new Set(
-    (pr.reviewRequests || []).map(r => r.login || r.name).filter(Boolean)
-  )
-
-  const items = (collabs || []).map(c => ({
-    id: c.login,
-    name: c.login,
-    selected: currentRequested.has(c.login),
-  }))
-
-  return (
-    <MultiSelect
-      title="Request Reviewers"
-      items={items}
-      onSubmit={async (selectedIds) => {
-        const current = [...currentRequested]
-        const toAdd    = selectedIds.filter(id => !current.includes(id))
-        const toRemove = current.filter(id => !selectedIds.includes(id))
-        try {
-          if (toAdd.length)    await requestReviewers(repo, pr.number, toAdd)
-          if (toRemove.length) await removeReviewers(repo, pr.number, toRemove)
-        } catch (err) { onError?.(`✗ Reviewer update failed: ${err.message}`) }
-        onClose()
-      }}
-      onCancel={onClose}
-    />
   )
 }
