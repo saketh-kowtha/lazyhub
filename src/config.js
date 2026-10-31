@@ -96,6 +96,11 @@ function tabsFromToml(toml) {
   return tabs
 }
 
+/**
+ * Project the merged TOML config into the legacy camelCase shape the UI reads.
+ * @param {Object} toml merged config
+ * @returns {Object} legacy config
+ */
 export function legacyFromToml(toml) {
   const customPanes = customPanesFromToml(toml)
   const customTabs = tabsFromToml(toml)

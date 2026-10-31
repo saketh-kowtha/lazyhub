@@ -15,6 +15,7 @@ The single source of truth is `~/.config/lazyhub/lazyhub.toml`.
 - `lazyhub.toml` is sparse: it holds only what you chose. First run writes a comment header, never a copy of the defaults, so upgrades can change the default actions and keys. Copies written by older releases are recognised on load: an `[actions.*]` field or `[keymaps.*]` binding identical to a value lazyhub once shipped is ignored, and a binding to an unknown action id is ignored with a one-time notice. Your real customisations are kept, including actions you define yourself under `[actions.*]`. Re-setting a value to an old shipped default has no effect: it is indistinguishable from a frozen copy, so the current default applies.
 - `[defaults].repo` (`"owner/name"`, default empty) is written once, when first-run
   onboarding completes (cancelling writes nothing). Precedence at startup: the
+  repository named with `--repo owner/name` (this launch only, never saved), the
   repository picked in a first-run flow for this launch, then the repository
   detected from the current directory (remote URL or `gh repo view`), then
   `[defaults].repo`, then the interactive picker. The saved value is a fallback

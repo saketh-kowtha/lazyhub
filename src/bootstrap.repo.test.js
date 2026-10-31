@@ -69,6 +69,24 @@ describe('bootstrap repository precedence and persistence', () => {
   })
 })
 
+describe('bootstrap --repo override (#466)', () => {
+  it('beats the repo detected from the current directory and the saved one, and is not persisted', async () => {
+    stubEnv('cwd/repo')
+    loadSavedRepo.mockReturnValue('saved/repo')
+    await bootstrap(vi.fn(), { repoOverride: 'flag/repo' })
+    expect(process.env.GHUI_REPO).toBe('flag/repo')
+    expect(saveDefaultRepo).not.toHaveBeenCalled()
+  })
+
+  it('names the repo for a bare #N reference', async () => {
+    stubEnv('cwd/repo')
+    execa.mockImplementation(async (bin, args) => ({ exitCode: 0, stdout: bin === 'gh' && String(args[1]).startsWith('repos/') ? 'false' : 'ok\n', stderr: '' }))
+    await bootstrap(vi.fn(), { repoOverride: 'flag/repo', open: { repo: null, number: 7, kind: 'issue', host: null } })
+    expect(process.env.GHUI_REPO).toBe('flag/repo')
+    delete process.env.GHUI_ISSUE
+  })
+})
+
 describe('bootstrap opening a PR/issue by reference (#315)', () => {
   const OPEN_ENV = ['GHUI_PR', 'GHUI_ISSUE', 'GHUI_VIEW']
   let saved
