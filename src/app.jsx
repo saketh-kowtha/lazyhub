@@ -383,16 +383,33 @@ export function App({ repo }) {
   const goToDetail   = useCallback((item) => {
     setSelectedItem(item); setView('detail')
   }, [])
-  const goToDiff       = useCallback((item) => { setSelectedItem({ ...item, _fromList: view === 'list' }); setView('diff') }, [view])
+  // The detail pane hands back its own fetched PR; keep the dashboard identity (_repo/_kind) of the item (#493).
+  const goToDiff       = useCallback((item) => {
+    setSelectedItem(prev => ({ ...item, _kind: item._kind ?? prev?._kind, _repo: item._repo ?? prev?._repo, _fromList: view === 'list' }))
+    setView('diff')
+  }, [view])
   const goToComments   = useCallback(() => setView('comments'), [])
-  const goToConflict   = useCallback(() => setView('conflict'), [])
-  const [actionsBranch, setActionsBranch] = useState(null)
+  // An item opened from a dashboard section can belong to another repo (#493).
+  // Local-git views (conflict resolution, checkout) run in the launch directory, so they
+  // are only offered for the launch repo. Moving them onto findLocalCheckout (#471) is
+  // part of the services layer (#479).
+  const itemIsForeign = !!selectedItem?._repo && String(selectedItem._repo).toLowerCase() !== String(repo || '').toLowerCase()
+  const goToConflict   = useCallback(() => {
+    if (itemIsForeign) {
+      addToast({ message: `Conflict resolution needs a local checkout of ${selectedItem._repo}; open it from that repository's clone`, variant: 'error' })
+      return
+    }
+    setView('conflict')
+  }, [itemIsForeign, selectedItem, addToast])
+  const [actionsTarget, setActionsTarget] = useState({ repo: null, branch: null })
   const goToActions    = useCallback((branch) => {
-    setActionsBranch(branch || null)
+    setActionsTarget({ repo: selectedItem?._repo || null, branch: branch || null })
     setPane('actions')
     setSelectedItem(null)
     setView('list')
-  }, [])
+  }, [selectedItem])
+  const actionsBranch = actionsTarget.branch
+  const actionsRepo = actionsTarget.repo
   const goBack         = useCallback(() => {
     if (view === 'comments') { setView('diff'); return }
     if (view === 'conflict') { setView('detail'); return }
@@ -408,7 +425,7 @@ export function App({ repo }) {
   }, [view, appMode])
 
   const tree = renderAppView({
-    actionsBranch, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
+    actionsBranch, actionsRepo, itemIsForeign, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
     exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail,
     goToDiff, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,

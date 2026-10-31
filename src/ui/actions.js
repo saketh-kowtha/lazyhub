@@ -597,6 +597,9 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
     context:  ['pr-list', 'pr-detail'],
     keys:     ['c'],
     run:      (ctx) => {
+      if (ctx.localGit === false) {
+        throw new Error(`No local checkout of ${ctx.repo} here; run lazyhub inside a clone to check out its PRs`)
+      }
       if (ctx.selectedItem?.number && ctx.repo) {
         onClose()
         return checkoutBranch(ctx.repo, ctx.selectedItem.number)
