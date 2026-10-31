@@ -6,6 +6,7 @@ import React, { useState, useCallback, useEffect, useContext, useRef, memo } fro
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
+import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { classifyGhFailure, listBranches, deleteBranch, listPRs, findLocalCheckout, checkoutRemoteBranch } from '../../executor.js'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
@@ -100,9 +101,20 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
-  const showStatus = (msg, isError = false) => {
+  const statusTimer = useRef(null)
+  useEffect(() => () => { clearTimeout(statusTimer.current) }, [])
+  const showStatus = (msg, isError = false, sticky = false) => {
+    clearTimeout(statusTimer.current)
     setStatusMsg({ msg, isError, persist: isError })
-    if (!isError) setTimeout(() => setStatusMsg(null), 3000)
+    if (!isError && !sticky) statusTimer.current = setTimeout(() => setStatusMsg(null), 3000)
+  }
+  // Pending/double-submit guard for every write on this pane (#453).
+  const { run: pendingRun } = usePendingWrite((msg) => showStatus(msg, false, true))
+  // Resolves true only when fn ran (false when ignored as a double submit).
+  const runWrite = async (label, fn) => {
+    let ran = false
+    await pendingRun(label, async () => { ran = true; return fn() })
+    return ran
   }
 
   const moveCursor = useCallback((delta) => {
@@ -187,11 +199,11 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
     if (matchesAction('branch.push', input, key)) {
       // Push current branch
       if (!requireLocal()) return
-      import('execa').then(({ execa }) => {
-        execa('git', ['push', local.remote, 'HEAD'], { cwd: localDir })
-          .then(() => showStatus('Pushed'))
-          .catch(err => showStatus(`Push failed: ${err.message}`, true))
-      })
+      runWrite('Pushing', async () => {
+        const { execa } = await import('execa')
+        await execa('git', ['push', local.remote, 'HEAD'], { cwd: localDir })
+      }).then(ran => { if (ran) showStatus('Pushed') })
+        .catch(err => showStatus(`Push failed: ${err.message}`, true))
       return
     }
   })
@@ -224,7 +236,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
           onConfirm={async () => {
             setDialog(null)
             try {
-              await checkoutRemoteBranch(local, selectedBranch.name)
+              if (!await runWrite(`Checking out ${sanitize(selectedBranch.name)}`, () => checkoutRemoteBranch(local, selectedBranch.name))) return
               showStatus(`✓ Checked out ${sanitize(selectedBranch.name)}`)
               refreshCurrentBranch()
             } catch (err) {
@@ -250,7 +262,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
           onConfirm={async () => {
             setDialog(null)
             try {
-              await deleteBranch(repo, selectedBranch.name)
+              if (!await runWrite(`Deleting ${sanitize(selectedBranch.name)}`, () => deleteBranch(repo, selectedBranch.name))) return
               showStatus(`Deleted ${sanitize(selectedBranch.name)}`)
               refetch()
             } catch (err) {
@@ -284,8 +296,10 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
               }
               setDialog(null)
               try {
-                const { execa } = await import('execa')
-                await execa('git', ['checkout', '-b', name], { cwd: localDir })
+                if (!await runWrite(`Creating ${name}`, async () => {
+                  const { execa } = await import('execa')
+                  await execa('git', ['checkout', '-b', name], { cwd: localDir })
+                })) return
                 showStatus(`✓ Created and checked out ${name}`)
                 refreshCurrentBranch()
                 refetch()

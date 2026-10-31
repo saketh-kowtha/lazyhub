@@ -9,6 +9,7 @@ import { useActionResolver, useKeymapInput } from '../../../config/keymap.js'
 import { useGh } from '../../../hooks/useGh.js'
 import { getPRDiff, listPRComments, addPRLineComment, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo, reviewPR } from '../../../executor.js'
 import { contextFooterHints } from '../../../ui/actions.js'
+import { usePendingWrite } from '../../../hooks/usePendingWrite.js'
 import { getAICodeReview, AIError } from '../../../ai/index.js'
 import { loadConfig } from '../../../config.js'
 import { AppContext } from '../../../context.js'
@@ -96,6 +97,13 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   //   delete:      { mode: 'delete', commentId, commentBody }
   const COMMENT_TYPES = ['comment', 'suggestion', 'request-changes']
   const [commentStatus, setCommentStatus] = useState(null)
+  const { run: pendingRun } = usePendingWrite(setCommentStatus)
+  // Resolves true only when fn actually ran (false when ignored as a double submit).
+  const runWrite = async (label, fn) => {
+    let ran = false
+    await pendingRun(label, async () => { ran = true; return fn() })
+    return ran
+  }
   const [splitView, setSplitView] = useState(_diffCfg.defaultView === 'split')
   const resolveAction = useActionResolver(['global', 'diff'])
   const footerKeys = useMemo(
@@ -591,8 +599,8 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
       setDialog('merge-admin')
     } else {
       setDialog(null)
-      mergePR(repo, prNumber, strategy, msg)
-        .then(() => onBack())
+      runWrite(`Merging #${prNumber}`, () => mergePR(repo, prNumber, strategy, msg))
+        .then(ran => { if (ran) onBack() })
         .catch(err => {
           setCommentStatus(`✗ Merge failed: ${err.message}`)
           setTimeout(() => setCommentStatus(null), 5000)
@@ -614,8 +622,8 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   const confirmAdminMerge = () => {
     const pending = typeof adminMergeMsg === 'object' ? adminMergeMsg : { strategy: 'admin-merge', msg: adminMergeMsg }
     setDialog(null)
-    mergePR(repo, prNumber, pending.strategy, pending.msg || undefined, { allowAdmin: true })
-      .then(() => onBack())
+    runWrite(`Merging #${prNumber}`, () => mergePR(repo, prNumber, pending.strategy, pending.msg || undefined, { allowAdmin: true }))
+      .then(ran => { if (ran) onBack() })
       .catch(err => {
         setCommentStatus(`✗ Merge failed: ${err.message}`)
         setTimeout(() => setCommentStatus(null), 5000)
@@ -625,7 +633,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   const submitApproval = async (values) => {
     setDialog(null)
     try {
-      await reviewPR(repo, prNumber, 'approve', values.body || '')
+      if (!await runWrite(`Approving PR #${prNumber}`, () => reviewPR(repo, prNumber, 'approve', values.body || ''))) return
       setCommentStatus(`✓ Approved PR #${prNumber}`)
       setTimeout(() => setCommentStatus(null), 3000)
     } catch (err) {
@@ -637,7 +645,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   const submitChanges = async (values) => {
     setDialog(null)
     try {
-      await reviewPR(repo, prNumber, 'request-changes', values.body || '')
+      if (!await runWrite(`Requesting changes on PR #${prNumber}`, () => reviewPR(repo, prNumber, 'request-changes', values.body || ''))) return
       setCommentStatus(`✓ Requested changes on PR #${prNumber}`)
       setTimeout(() => setCommentStatus(null), 3000)
     } catch (err) {

@@ -148,6 +148,21 @@ describe('shared issue editor contracts', () => {
     await sendInput('', { return: true })
     await waitForExpectation(() => expect(addIssueComment).toHaveBeenCalledWith('owner/repo', 11, 'lAr'))
   })
+
+  it('shows a pending status while a reply is being sent (#453)', async () => {
+    let release
+    addIssueComment.mockReturnValue(new Promise(r => { release = r }))
+    const view = await renderIssue(<IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
+    await flush(20)
+    await sendInput('c')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Reply:'))
+    await sendInput('hi')
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Sending reply'))
+    release()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Reply sent'))
+  })
 })
 
 describe('issue detail empty reply', () => {
@@ -250,5 +265,28 @@ describe('issue list load-more (#506)', () => {
     expect(view.lastFrame()).toContain('Issue number 4')
     expect(refetch).not.toHaveBeenCalled()
     expect(listIssuesPage).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a pending status for close and ignores a second close while it runs (#453)', async () => {
+    let release
+    closeIssue.mockReturnValue(new Promise(r => { release = r }))
+    getIssueRow.mockResolvedValue({ ...mk(1), state: 'CLOSED' })
+    const view = mountWith(page([mk(1), mk(2)], { totalCount: 2 }))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue number 1'))
+    await flush(30)
+    await sendInput('X')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Close issue #1'))
+    await flush(20)
+    await sendInput('y')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Closing #1'))
+    await flush(20)
+    await sendInput('X')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Close issue #1'))
+    await flush(20)
+    await sendInput('y')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('still in progress'))
+    expect(closeIssue).toHaveBeenCalledTimes(1)
+    release()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Closed #1'))
   })
 })

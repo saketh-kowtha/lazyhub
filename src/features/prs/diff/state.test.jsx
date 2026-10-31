@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useGh } from '../../../hooks/useGh.js'
-import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRComments, mergePR } from '../../../executor.js'
+import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRComments, mergePR, reviewPR } from '../../../executor.js'
 import { firstActionKey } from '../../../config/actions.js'
 import { sendInput } from '../../../test/input-bus.js'
 import { cleanup, renderWithProviders, waitForExpectation } from '../../../test/test-helpers.jsx'
@@ -103,6 +103,34 @@ describe('diff state and render contracts', () => {
     currentState.confirmAdminMerge()
     await waitForExpectation(() => expect(onBack).toHaveBeenCalledOnce())
     expect(mergePR).toHaveBeenCalledExactlyOnceWith('owner/repo', 42, 'admin-squash', 'reviewed change', { allowAdmin: true })
+  })
+
+  it('shows a pending status and ignores a second merge while one is in flight (#453)', async () => {
+    let release
+    mergePR.mockReturnValue(new Promise(r => { release = r }))
+    const { onBack } = mountSession()
+    await waitForExpectation(() => expect(currentState).not.toBeNull())
+    currentState.submitMerge('squash')
+    await waitForExpectation(() => expect(currentState.commentStatus).toContain('Merging #42'))
+    currentState.submitMerge('squash')
+    await waitForExpectation(() => expect(currentState.commentStatus).toContain('still in progress'))
+    expect(mergePR).toHaveBeenCalledTimes(1)
+    release()
+    await waitForExpectation(() => expect(onBack).toHaveBeenCalledOnce())
+  })
+
+  it('shows a pending status and submits a review once (#453)', async () => {
+    let release
+    reviewPR.mockReturnValue(new Promise(r => { release = r }))
+    mountSession()
+    await waitForExpectation(() => expect(currentState).not.toBeNull())
+    currentState.submitApproval({ body: 'ok' })
+    await waitForExpectation(() => expect(currentState.commentStatus).toContain('Approving'))
+    currentState.submitChanges({ body: 'no' })
+    await waitForExpectation(() => expect(currentState.commentStatus).toContain('still in progress'))
+    expect(reviewPR).toHaveBeenCalledTimes(1)
+    release()
+    await waitForExpectation(() => expect(currentState.commentStatus).toContain('Approved'))
   })
 })
 

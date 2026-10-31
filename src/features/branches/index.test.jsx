@@ -106,3 +106,24 @@ it('pushes to the remote that points at the viewed repo, not a hardcoded origin 
   await waitForExpectation(() => expect(execa).toHaveBeenCalledWith('git', ['push', 'upstream', 'HEAD'], expect.anything()))
   expect(execa).not.toHaveBeenCalledWith('git', ['push', 'origin', 'HEAD'], expect.anything())
 })
+
+it('shows a pending status while a push runs and ignores a second push (#453)', async () => {
+  let release
+  execa.mockImplementation(async (_cmd, args) => {
+    if (args[0] === 'remote') return { stdout: 'origin\thttps://github.com/o/r.git (fetch)' }
+    if (args[0] === 'push') return new Promise(r => { release = r })
+    return { stdout: 'main' }
+  })
+  const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
+  await waitForInputReady(view)
+  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/► main/))
+  await waitForInputReady(view)
+  view.stdin.write('p')
+  await waitForExpectation(() => expect(view.lastFrame()).toContain('Pushing…'))
+  await waitForInputReady(view)
+  view.stdin.write('p')
+  await waitForExpectation(() => expect(view.lastFrame()).toContain('still in progress'))
+  expect(execa.mock.calls.filter(([, args]) => args[0] === 'push')).toHaveLength(1)
+  release({ stdout: '' })
+  await waitForExpectation(() => expect(view.lastFrame()).toContain('Pushed'))
+})
