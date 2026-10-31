@@ -273,3 +273,32 @@ export function PRDetailSkeleton() {
     </Box>
   )
 }
+
+// ─── PR diff skeleton ─────────────────────────────────────────────────────────
+// Mirrors DiffView: title row, then gutter + code bars. Footer is added by the caller.
+
+export function DiffSkeleton({ prNumber, count = 14 }) {
+  const { t } = useTheme()
+  const frame = usePulse()
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <Box paddingX={1} justifyContent="space-between">
+        <Text color={t.ui.selected} bold>PR #{prNumber} Diff</Text>
+        <Bar width={9} frame={frame} />
+      </Box>
+      <Box flexDirection="column" flexGrow={1} overflow="hidden">
+        <Box paddingX={1} gap={1}>
+          <Bar width={3} frame={frame} />
+          <Bar width={30} frame={frame} bold />
+        </Box>
+        {Array.from({ length: count }, (_, i) => (
+          <Box key={i} paddingX={1} gap={1}>
+            <Bar width={4} frame={frame} />
+            <Bar width={4} frame={frame} />
+            <Bar width={8 + ((i * 7) % 40)} frame={frame} />
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  )
+}

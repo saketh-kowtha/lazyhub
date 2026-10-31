@@ -15,8 +15,10 @@ import { AIReviewPane } from '../../../components/AIReviewPane.jsx'
 import { useTheme } from '../../../theme.js'
 import { TextInput, colorChalk, applyThemeStyle, sanitize } from '../../../utils.js'
 import { CommentThread } from '../../../components/CommentThread.jsx'
-import { Spinner } from '../../../components/Spinner.jsx'
-import { syntaxHighlight } from './highlight.js'
+import { DiffSkeleton } from '../../../components/Skeleton.jsx'
+import { FailureNotice } from '../../../components/FailureNotice.jsx'
+import { classifyGhFailure } from '../../../executor.js'
+import { syntaxHighlight, expandTabs } from './highlight.js'
 import { openEditorSync } from './editor.js'
 
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
@@ -58,7 +60,7 @@ const DiffLine = React.memo(({ row, isSelected, lang, isMatch, t }) => {
   if (row.type === 'hunk') {
     return (
       <Text wrap="truncate">
-        {cur + applyThemeStyle(`${gutterOld}│${gutterNew}   ${row.text}`, t.diff.hunkFg, t.diff.hunkBg)}
+        {cur + applyThemeStyle(`${gutterOld}│${gutterNew}   ${expandTabs(row.text)}`, t.diff.hunkFg, t.diff.hunkBg)}
       </Text>
     )
   }
@@ -198,7 +200,7 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
 export function DiffView({ prNumber, state }) {
   const { t } = useTheme()
   const {
-    stdout, visibleHeight, diffStats, isLargeDiff, diffWarningAck,
+    stdout, visibleHeight, diffStats, isLargeDiff, diffTooLarge, diffRefreshError, diffWarningAck,
     prMeta, repoInfo, loading, error, cursor, scrollOffset, dialog, setDialog,
     adminMergeMsg, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
     footerKeys, showTree, treeCursor, findQuery, setFindQuery, findActive,
@@ -208,6 +210,19 @@ export function DiffView({ prNumber, state }) {
     treeRows, commentsByLine, jumpTo, handleAiJumpTo, handleAiPost,
     submitMerge, selectAdminMethod, confirmAdminMerge, submitApproval, submitChanges
   } = state
+
+  if (diffTooLarge) {
+    return (
+      <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
+        <Text color={t.ci.pending} bold>⚠ Large diff: GitHub would not return it here</Text>
+        <Text color={t.ui.muted}>The diff is too large to load in the terminal.</Text>
+        <Box marginTop={1} gap={3}>
+          <Text color={t.ui.muted}>[{firstActionKey('pr.open-browser', 'o')}] Open in browser</Text>
+          <Text color={t.ui.dim}>[Esc] Back</Text>
+        </Box>
+      </Box>
+    )
+  }
 
   if (isLargeDiff && !diffWarningAck) {
     return (
@@ -284,13 +299,15 @@ export function DiffView({ prNumber, state }) {
   }
 
   if (loading) return (
-    <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Box gap={1}><Spinner /><Text color={t.ui.muted}>Loading diff…</Text></Box>
+    <Box flexDirection="column" flexGrow={1}>
+      <DiffSkeleton prNumber={prNumber} />
+      <FooterKeys keys={footerKeys} />
     </Box>
   )
   if (error) return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Text color={t.ci.fail}>⚠ Failed to load diff — {firstActionKey('list.refresh', 'r')} to retry</Text>
+      <FailureNotice failure={classifyGhFailure(error)} />
+      <Text color={t.ui.dim}>[{firstActionKey('list.refresh', 'r')}] retry</Text>
     </Box>
   )
 
@@ -305,6 +322,7 @@ export function DiffView({ prNumber, state }) {
     <Box flexDirection="column" flexGrow={1}>
       <Box paddingX={1} justifyContent="space-between">
         <Text color={t.ui.selected} bold>PR #{prNumber} Diff</Text>
+        {diffRefreshError && <Text color={t.ci.pending}>⚠ showing cached diff, refresh failed [{firstActionKey('list.refresh', 'r')}] retry</Text>}
         {commentStatus && <Text color={t.ci.pass}>{commentStatus}</Text>}
         {splitView && <Text color={t.ui.muted}>[split]</Text>}
         <Text color={t.ui.dim}>{cursor + 1} / {rows.length}</Text>
@@ -473,7 +491,7 @@ export function DiffView({ prNumber, state }) {
             paddingX={1} marginX={1} marginBottom={0}>
             <Box gap={1}>
               <Text color={t.ui.dim}>❯ Line {row?.newLine ?? row?.oldLine}</Text>
-              <Text color={t.diff.ctxFg} wrap="truncate">{(row?.text || '').slice(0, 60)}</Text>
+              <Text color={t.diff.ctxFg} wrap="truncate">{expandTabs(row?.text || '').slice(0, 60)}</Text>
             </Box>
             <Box gap={3}>
               {COMMENT_TYPES.map(type => {

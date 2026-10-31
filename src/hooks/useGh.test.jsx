@@ -3,6 +3,7 @@ import { Text } from 'ink'
 import { describe, expect, it } from 'vitest'
 import { render, cleanup } from 'ink-testing-library'
 import { useGh } from './useGh.js'
+import { cacheKey as mkDiskKey, writeCache } from '../cache.js'
 import { flush } from '../test/test-helpers.jsx'
 
 function defer() {
@@ -51,6 +52,123 @@ describe('useGh async races (#434)', () => {
     await flush(20)
     expect(view.lastFrame()).not.toContain('data=ONE')
     expect(view.lastFrame()).toContain('loading=true')
+    cleanup()
+  })
+})
+
+describe('useGh enabled option (#451)', () => {
+  it('defers the fetch until enabled, and a true->false flip does not strand loading', async () => {
+    const d = defer()
+    let calls = 0
+    async function gatedFetch() { calls++; return d.promise }
+    function View({ on }) {
+      const { data, loading } = useGh(gatedFetch, ['g'], { enabled: on })
+      return <Text>{`data=${data ?? 'none'} loading=${loading}`}</Text>
+    }
+    const view = render(<View on={false} />)
+    await flush(10)
+    expect(calls).toBe(0)
+    view.rerender(<View on={true} />)
+    await flush(10)
+    expect(calls).toBe(1)
+    expect(view.lastFrame()).toContain('loading=true')
+    view.rerender(<View on={false} />)
+    await flush(10)
+    expect(view.lastFrame()).toContain('loading=false')
+    cleanup()
+  })
+})
+
+describe('useGh stale-while-revalidate (#454)', () => {
+  it('renders cached data on the very first frame with no loading frame', async () => {
+    const second = defer()
+    let call = 0
+    async function swrFetch() { call++; return call === 1 ? 'CACHED' : second.promise }
+
+    const frames = []
+    function View() {
+      const { data, loading, isStale } = useGh(swrFetch, ['x'], { ttl: 0 })
+      frames.push(`data=${data ?? 'none'} loading=${loading} stale=${isStale}`)
+      return <Text>{frames[frames.length - 1]}</Text>
+    }
+
+    const first = render(<View />)
+    await flush(20)
+    expect(first.lastFrame()).toContain('data=CACHED')
+    first.unmount()
+
+    frames.length = 0
+    const view = render(<View />)
+    expect(frames[0]).toBe('data=CACHED loading=false stale=true')
+    expect(view.lastFrame()).toContain('data=CACHED')
+    await flush(20)
+    expect(frames.some(f => f.includes('data=none') || f.includes('loading=true'))).toBe(false)
+    second.resolve('FRESH')
+    await flush(20)
+    expect(view.lastFrame()).toContain('data=FRESH loading=false stale=false')
+    cleanup()
+  })
+})
+
+describe('useGh seeding (#454)', () => {
+  it('seeds from fresh memory cache without refetching', async () => {
+    let calls = 0
+    async function memSeedFetch() { calls++; return 'MEM' }
+    const frames = []
+    function View() {
+      const { data, loading, isStale } = useGh(memSeedFetch, ['m'])
+      frames.push(`data=${data ?? 'none'} loading=${loading} stale=${isStale}`)
+      return <Text>{frames[frames.length - 1]}</Text>
+    }
+    const first = render(<View />)
+    await flush(20)
+    first.unmount()
+    frames.length = 0
+    render(<View />)
+    await flush(20)
+    expect(frames[0]).toBe('data=MEM loading=false stale=false')
+    expect(calls).toBe(1)
+    cleanup()
+  })
+
+  it('seeds from the disk cache alone as stale, then revalidates', async () => {
+    const d = defer()
+    async function diskSeedFetch() { return d.promise }
+    writeCache(mkDiskKey(['o/r', 'diskSeedFetch', ['o/r', 1]]), 'DISK', { repo: 'o/r', op: 'diskSeedFetch' })
+    const frames = []
+    function View() {
+      const { data, loading, isStale } = useGh(diskSeedFetch, ['o/r', 1])
+      frames.push(`data=${data ?? 'none'} loading=${loading} stale=${isStale}`)
+      return <Text>{frames[frames.length - 1]}</Text>
+    }
+    const view = render(<View />)
+    expect(frames[0]).toBe('data=DISK loading=false stale=true')
+    await flush(20)
+    expect(frames.some(f => f.includes('loading=true'))).toBe(false)
+    d.resolve('NET')
+    await flush(20)
+    expect(view.lastFrame()).toContain('data=NET loading=false stale=false')
+    cleanup()
+  })
+
+  it('re-seeds when the key changes so the previous key data is never shown', async () => {
+    const d = defer()
+    async function reseedFetch(id) { return id === 'a' ? 'DATA-A' : d.promise }
+    const frames = []
+    function View({ id }) {
+      const { data, loading } = useGh(reseedFetch, [id])
+      const line = `${id}:data=${data ?? 'none'} loading=${loading}`
+      React.useEffect(() => { frames.push(line) })
+      return <Text>{line}</Text>
+    }
+    const view = render(<View id="a" />)
+    await flush(20)
+    expect(view.lastFrame()).toContain('a:data=DATA-A')
+    frames.length = 0
+    view.rerender(<View id="b" />)
+    await flush(20)
+    expect(frames.filter(f => f.startsWith('b:')).every(f => !f.includes('DATA-A'))).toBe(true)
+    expect(frames[0]).toBe('b:data=none loading=true')
     cleanup()
   })
 })

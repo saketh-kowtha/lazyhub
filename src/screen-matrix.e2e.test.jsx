@@ -87,7 +87,6 @@ const SCREENS = [
  * @type {Array<{ screen: string, kind: string, at?: string[], issue: string }>}
  */
 const KNOWN_DEFECTS = [
-  { screen: 'pr-diff', kind: 'control', at: ['80x24', '120x40', '200x50'], issue: '#426' },
   { screen: 'notifications', kind: 'width', at: ['50x15', '60x18', '80x24'], issue: '#428' },
   { screen: 'notifications', kind: 'footer', at: ['50x15'], issue: '#428' },
   { screen: 'issues', kind: 'width', at: ['60x18', '80x24'], issue: '#429' },
