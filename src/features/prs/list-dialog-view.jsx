@@ -10,7 +10,7 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { sanitize } from '../../utils.js'
 import { NewPRDialog } from './NewPRDialog.jsx'
-import { MERGE_OPTIONS, autoMergeOption, canToggleAutoMergeFromList } from './list-row.jsx'
+import { MERGE_OPTIONS, autoMergeOption, canToggleAutoMergeFromList, mergeMethodLabel } from './list-row.jsx'
 import { LabelDialog, AssigneeDialog, AuthorSearchDialog, ReviewerDialog } from './list-dialogs.jsx'
 
 const SELECTION_DIALOGS = { labels: LabelDialog, assignees: AssigneeDialog, reviewers: ReviewerDialog }
@@ -77,7 +77,7 @@ export function renderPRListDialog({
   if (dialog === 'merge-confirm' && selectedPR && mergeOptions) {
     return (
       <ConfirmDialog
-        message={`Merge PR #${selectedPR.number} via --${mergeOptions.strategy}?${mergeOptions.msg ? `\nMessage: "${mergeOptions.msg}"` : ''}`}
+        message={`${mergeMethodLabel(mergeOptions.strategy)}: PR #${selectedPR.number}?${mergeOptions.msg ? `\nMessage: "${mergeOptions.msg}"` : ''}`}
         destructive={true}
         onConfirm={async () => {
           closeDialog()

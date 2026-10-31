@@ -34,7 +34,7 @@ import { loadConfig } from '../../config.js'
 import { firstActionKey } from '../../config/actions.js'
 
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
-import { autoMergeOption, canToggleAutoMergeFromList } from './list-row.jsx'
+import { autoMergeOption, canToggleAutoMergeFromList, allowedMergeOptions, mergeMethodLabel } from './list-row.jsx'
 import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
@@ -42,15 +42,10 @@ import { sortChecks } from './detail/Checks.jsx'
 
 const _editorCfg = loadConfig().editor
 
-const MERGE_OPTIONS_BASE = [
-  { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
-  { value: 'squash', label: '--squash', description: 'Squash all commits into one' },
-  { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
-]
 const MERGE_OPTIONS_ADMIN = [
-  { value: 'admin-merge',  label: '--admin --merge',  description: 'Bypass branch protection + merge commit' },
-  { value: 'admin-squash', label: '--admin --squash', description: 'Bypass branch protection + squash' },
-  { value: 'admin-rebase', label: '--admin --rebase', description: 'Bypass branch protection + rebase' },
+  { value: 'admin-merge',  label: mergeMethodLabel('admin-merge'),  description: 'Administrator override: merge even though protection rules are not met' },
+  { value: 'admin-squash', label: mergeMethodLabel('admin-squash'), description: 'Administrator override: squash even though protection rules are not met' },
+  { value: 'admin-rebase', label: mergeMethodLabel('admin-rebase'), description: 'Administrator override: rebase even though protection rules are not met' },
 ]
 
 export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
@@ -301,7 +296,9 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
 
   if (dialog === 'merge') {
     // Show admin options when confirmed admin, or while repoInfo is still loading
-    const baseOpts = canToggleAutoMergeFromList(pr) ? [...MERGE_OPTIONS_BASE, autoMergeOption(pr)] : MERGE_OPTIONS_BASE
+    // The first allowed method is the default, so `m` then Enter merges it (the footer names the action).
+    const methods = allowedMergeOptions(repoInfo)
+    const baseOpts = canToggleAutoMergeFromList(pr) ? [...methods, autoMergeOption(pr)] : methods
     const mergeOpts = !repoInfo || repoInfo.viewerPermission === 'ADMIN'
       ? [...baseOpts, ...MERGE_OPTIONS_ADMIN]
       : baseOpts
@@ -309,7 +306,8 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
       <OptionPicker
         title={`Merge PR #${pr.number}: ${sanitize(pr.title)}`}
         options={mergeOpts}
-        promptText="Commit message (optional)"
+        promptText="Commit message (optional, Enter to skip)"
+        promptKey="e"
         onSubmit={(val) => {
           const strategy = typeof val === 'object' ? val.value : val
           const msg = typeof val === 'object' ? val.text : undefined
