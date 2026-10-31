@@ -78,7 +78,9 @@ export function flattenFiles(files) {
   const rows = []
   for (const file of files) {
     rows.push({ type: 'file-header', filename: file.filename, addCount: file.addCount, delCount: file.delCount })
-    for (const line of file.lines) rows.push({ ...line, filename: file.filename })
+    // Reuse the parsed line objects (stamped with their filename) instead of
+    // spreading a second copy of every line: an open diff held ~3x its text (#457).
+    for (const line of file.lines) { line.filename = file.filename; rows.push(line) }
   }
   return rows
 }
