@@ -65,7 +65,7 @@ Warm-cache output shape:
 }
 ```
 
-Cold-cache behavior: prints `lazyhub: no data - open the app once` and exits 0.
+Cold-cache behavior: with `--format json` prints `{"schema_version":1,"counts":null,"cache_age_seconds":null,"reason":"no_cache"}` and exits 0; other formats print `lazyhub: no data - open the app once` and exit 0. `counts: null` means no cached data, distinct from zero counts.
 
 ## Review Evidence (internal executor API, `schema_version` 1)
 
