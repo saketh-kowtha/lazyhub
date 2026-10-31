@@ -20,7 +20,9 @@ beforeEach(() => {
     data: fn === listBranches ? [{ name: EVIL }] : [],
     loading: false, refetch: vi.fn(),
   }))
-  execa.mockResolvedValue({ stdout: 'main' })
+  execa.mockImplementation(async (_cmd, args) => (
+    args[0] === 'remote' ? { stdout: 'origin\tgit@github.com:o/r.git (fetch)' } : { stdout: 'main' }
+  ))
 })
 
 it('strips terminal escapes from branch names in rows and the checkout dialog', async () => {

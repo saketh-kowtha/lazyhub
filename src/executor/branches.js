@@ -221,6 +221,39 @@ export async function getUnpushedCommits(branch) {
 }
 
 /**
+ * True when a remote URL points at the given owner/repo slug (any host,
+ * ssh or https, optional .git suffix). Case-insensitive like GitHub.
+ * @param {string} url
+ * @param {string} repo  "owner/name" (a leading host segment is ignored)
+ */
+export function remoteMatchesRepo(url, repo) {
+  const want = String(repo || '').split('/').filter(Boolean).slice(-2).join('/').toLowerCase()
+  if (!want || !url) return false
+  const path = String(url).trim().replace(/^[a-z+]+:\/\//i, '').replace(/^[^@/]+@/, '').replace(/^[^/:]+[:/]/, '')
+  const got = path.replace(/\/+$/, '').replace(/\.git$/i, '').split('/').slice(-2).join('/').toLowerCase()
+  return got === want
+}
+
+/**
+ * Directory of the local checkout of `repo`, or null when there is none.
+ * Only the launch directory is considered (lazyhub keeps no clone registry):
+ * it counts when one of its remotes is `repo`. Never throws.
+ * @param {string} repo
+ * @returns {Promise<string|null>}
+ */
+export async function findLocalCheckout(repo) {
+  const cwd = process.cwd()
+  try {
+    const result = await execa('git', ['remote', '-v'], { cwd, reject: false })
+    if (result.exitCode) return null
+    const urls = String(result.stdout || '').split('\n').map(l => l.split(/\s+/)[1]).filter(Boolean)
+    return urls.some(u => remoteMatchesRepo(u, repo)) ? cwd : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Get the current local git branch name.
  */
 export async function getCurrentBranch() {
