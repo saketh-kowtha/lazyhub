@@ -3,7 +3,7 @@
  * Supports: reply, edit, delete per comment
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
@@ -13,6 +13,7 @@ import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { firstActionKey } from '../../config/actions.js'
 import { contextFooterHints } from '../../ui/actions.js'
 import { useGh } from '../../hooks/useGh.js'
+import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import {
   listPRComments, resolveThread,
   replyToComment, editPRComment, deletePRComment,
@@ -93,10 +94,17 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   }, [visibleCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Status helper ──────────────────────────────────────────────────────────
-  const flash = useCallback((msg) => {
+  // One timer: a newer message is never cleared by an older message's timeout. A sticky
+  // message (a write in flight) stays until the next message replaces it.
+  const flashTimer = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null))
+  const flash = useCallback((msg, { sticky = false } = {}) => {
+    if (flashTimer.current) clearTimeout(flashTimer.current)
+    flashTimer.current = null
     setStatusMsg(msg)
-    setTimeout(() => setStatusMsg(null), 3000)
+    if (!sticky) flashTimer.current = setTimeout(() => setStatusMsg(null), 3000)
   }, [])
+  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current) }, [])
+  const { run: runWrite } = usePendingWrite(useCallback((msg) => flash(msg, { sticky: true }), [flash]))
 
   // ── Open $EDITOR for multiline edit ───────────────────────────────────────
   const openEditor = useCallback((initial) => {
@@ -130,20 +138,20 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       if (!body) { done(); return }
       const rootId = comment._isRoot ? comment.id : comment._rootId
       if (!rootId) { flash('Cannot determine thread root'); done(); return }
-      replyToComment(repo, prNumber, rootId, body)
+      runWrite('Sending reply', () => replyToComment(repo, prNumber, rootId, body)
         .then(() => { flash('Reply sent'); done(); refetch() })
-        .catch(err => flash(`Failed: ${err.message}`))
+        .catch(err => flash(`Failed: ${err.message}`)))
     } else if (type === 'edit') {
       if (!body) { done(); return }
-      editPRComment(repo, comment.id, body)
+      runWrite('Updating comment', () => editPRComment(repo, comment.id, body)
         .then(() => { flash('Comment updated'); done(); refetch() })
-        .catch(err => flash(`Failed: ${err.message}`))
+        .catch(err => flash(`Failed: ${err.message}`)))
     } else if (type === 'delete') {
-      deletePRComment(repo, comment.id)
+      runWrite('Deleting comment', () => deletePRComment(repo, comment.id)
         .then(() => { flash('Comment deleted'); done(); refetch() })
-        .catch(err => flash(`Failed: ${err.message}`))
+        .catch(err => flash(`Failed: ${err.message}`)))
     }
-  }, [action, actionText, repo, prNumber, flash, refetch])
+  }, [action, actionText, repo, prNumber, flash, refetch, runWrite])
 
   // ── Keyboard ──────────────────────────────────────────────────────────────
   useKeymapInput((input, key) => {
@@ -213,9 +221,9 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       // threadId is the GraphQL ReviewThread node ID (e.g. PRRT_kwDO...)
       const threadId = comment.threadId
       if (!threadId) { flash('Thread ID unavailable'); return }
-      resolveThread(threadId)
+      runWrite('Resolving thread', () => resolveThread(threadId)
         .then(() => { flash('Thread resolved'); refetch() })
-        .catch(err => flash(`Failed: ${err.message}`))
+        .catch(err => flash(`Failed: ${err.message}`)))
       return
     }
     if (id === 'comment.filter') {

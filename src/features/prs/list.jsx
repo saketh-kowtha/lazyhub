@@ -29,6 +29,7 @@ import {
   schemeToT,
   canToggleAutoMergeFromList,
 } from './list-row.jsx'
+import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { renderPRListDialog } from './list-dialog-view.jsx'
 import { PRListView } from './list-view.jsx'
 
@@ -144,10 +145,11 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
-  const showStatus = (msg, isError = false) => {
+  const showStatus = (msg, isError = false, sticky = false) => {
     setStatusMsg({ msg: sanitize(msg), isError, persist: isError })
-    if (!isError) setTimeout(() => setStatusMsg(null), 3000)
+    if (!isError && !sticky) setTimeout(() => setStatusMsg(null), 3000)
   }
+  const { run: runWrite } = usePendingWrite((msg) => showStatus(msg, false, true))
 
   const moveCursor = useCallback((delta) => {
     const next = Math.max(0, Math.min(items.length - 1, cursor + delta))
@@ -295,7 +297,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const dialogView = renderPRListDialog({
     dialog, selectedPR, items, repo, repoInfo, authorFilter, effectiveHeight,
     mergeOptions, setMergeOptions, setDialog, setCursor, setScrollOffset,
-    setAuthorFilter, showStatus, closeDialog, refetch,
+    setAuthorFilter, showStatus, closeDialog, refetch, runWrite,
   })
   if (dialogView) return dialogView
 

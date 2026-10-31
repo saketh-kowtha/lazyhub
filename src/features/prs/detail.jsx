@@ -33,6 +33,8 @@ import { openInEditor, editorLabel } from '../../editor.js'
 import { loadConfig } from '../../config.js'
 import { firstActionKey } from '../../config/actions.js'
 
+import { usePendingWrite } from '../../hooks/usePendingWrite.js'
+import { autoMergeOption, canToggleAutoMergeFromList } from './list-row.jsx'
 import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
@@ -82,10 +84,11 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   const [checkLogLines, setCheckLogLines] = useState([])
   const [checkLogLoading, setCheckLogLoading] = useState(false)
 
-  const showStatus = (msg, isError = false) => {
+  const showStatus = (msg, isError = false, sticky = false) => {
     setStatusMsg({ msg, isError, persist: isError })
-    if (!isError) setTimeout(() => setStatusMsg(null), 3000)
+    if (!isError && !sticky) setTimeout(() => setStatusMsg(null), 3000)
   }
+  const { run: runWrite } = usePendingWrite((msg) => showStatus(msg, false, true))
 
   React.useEffect(() => {
     notifyDialog(!!dialog)
@@ -124,7 +127,6 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   const visibleHeight = Math.max(3, termRows - 8)
   const maxScroll     = Math.max(0, filteredRows.length - visibleHeight)
   const visibleRows   = filteredRows.slice(scrollY, scrollY + visibleHeight)
-  const autoMergeHint = pr?.state === 'OPEN' && !pr?.isDraft ? '  [M] auto-merge' : ''
 
   const openCheckInBrowser = (check) => {
     if (!check?.url) return
@@ -298,9 +300,10 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
 
   if (dialog === 'merge') {
     // Show admin options when confirmed admin, or while repoInfo is still loading
+    const baseOpts = canToggleAutoMergeFromList(pr) ? [...MERGE_OPTIONS_BASE, autoMergeOption(pr)] : MERGE_OPTIONS_BASE
     const mergeOpts = !repoInfo || repoInfo.viewerPermission === 'ADMIN'
-      ? [...MERGE_OPTIONS_BASE, ...MERGE_OPTIONS_ADMIN]
-      : MERGE_OPTIONS_BASE
+      ? [...baseOpts, ...MERGE_OPTIONS_ADMIN]
+      : baseOpts
     return (
       <OptionPicker
         title={`Merge PR #${pr.number}: ${sanitize(pr.title)}`}
@@ -309,10 +312,11 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
         onSubmit={(val) => {
           const strategy = typeof val === 'object' ? val.value : val
           const msg = typeof val === 'object' ? val.text : undefined
+          if (strategy === 'auto-merge') { setDialog('auto-merge'); return }
           setDialog(null)
-          mergePR(repo, pr.number, strategy, msg, { allowAdmin: strategy.startsWith('admin-') })
-            .then(() => refetch())
-            .catch(err => showStatus(`✗ Merge failed: ${err.message}`, true))
+          runWrite(`Merging #${pr.number}`, () => mergePR(repo, pr.number, strategy, msg, { allowAdmin: strategy.startsWith('admin-') })
+            // Two-argument then: a refetch problem after a successful merge must not read as "Merge failed".
+            .then(() => { showStatus(`✓ Merged PR #${pr.number}`); refetch() }, err => showStatus(`✗ Merge failed: ${sanitize(err.message)}`, true)))
         }}
         onCancel={() => setDialog(null)}
       />
@@ -326,9 +330,9 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
         onConfirm={() => {
           const check = rerunCheck
           setDialog(null)
-          rerunCheckRun(repo, check.id)
+          runWrite(`Re-running ${check.name}`, () => rerunCheckRun(repo, check.id)
             .then(() => showStatus(`↺ Re-run triggered for ${check.name}`))
-            .catch(err => showStatus(`✗ Re-run failed: ${err.message}`, true))
+            .catch(err => showStatus(`✗ Re-run failed: ${err.message}`, true)))
         }}
         onCancel={() => setDialog(null)}
       />
@@ -342,12 +346,12 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
         message={`${disabling ? 'Disable' : 'Enable'} auto-merge on PR #${pr.number}: ${sanitize(pr.title)}?`}
         onConfirm={() => {
           setDialog(null)
-          const request = disabling
+          const request = () => disabling
             ? disableAutoMerge(repo, prNumber)
             : enableAutoMerge(repo, prNumber, repoInfo?.squashMergeAllowed ? 'squash' : 'merge')
-          request
+          runWrite(`${disabling ? 'Disabling' : 'Enabling'} auto-merge on #${pr.number}`, () => request()
             .then(() => { showStatus(disabling ? '✓ Auto-merge disabled' : '⟳ Auto-merge enabled'); refetch() })
-            .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
+            .catch(err => { showStatus(`✗ Auto-merge failed: ${sanitize(err.message)}`, true); refetch() }))
         }}
         onCancel={() => setDialog(null)}
       />
@@ -361,8 +365,10 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
         destructive={true}
         onConfirm={async () => {
           setDialog(null)
-          try { await closePR(repo, pr.number); refetch() }
-          catch (err) { showStatus(`✗ Close failed: ${err.message}`, true) }
+          await runWrite(`Closing #${pr.number}`, async () => {
+            try { await closePR(repo, pr.number); showStatus(`✓ Closed PR #${pr.number}`); refetch() }
+            catch (err) { showStatus(`✗ Close failed: ${err.message}`, true) }
+          })
         }}
         onCancel={() => setDialog(null)}
       />
@@ -383,12 +389,14 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
         onSubmit={async (val) => {
           const action = typeof val === 'object' ? val.value : val
           setDialog(null)
-          try {
-            if (action === 'ready') await markPRReady(repo, pr.number)
-            else await convertPRToDraft(repo, pr.number)
-            showStatus(action === 'ready' ? '✓ Marked ready for review' : '✓ Converted to draft')
-            refetch()
-          } catch (err) { showStatus(`✗ Failed: ${err.message}`, true) }
+          await runWrite(`Updating #${pr.number}`, async () => {
+            try {
+              if (action === 'ready') await markPRReady(repo, pr.number)
+              else await convertPRToDraft(repo, pr.number)
+              showStatus(action === 'ready' ? '✓ Marked ready for review' : '✓ Converted to draft')
+              refetch()
+            } catch (err) { showStatus(`✗ Failed: ${err.message}`, true) }
+          })
         }}
         onCancel={() => setDialog(null)}
       />
@@ -411,11 +419,13 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
               const newBase = baseInput.trim()
               if (!newBase || newBase === pr.baseRefName) { setDialog(null); return }
               setDialog(null)
-              try {
-                await editPRBase(repo, pr.number, newBase)
-                showStatus(`✓ Base branch changed to ${newBase}`)
-                refetch()
-              } catch (err) { showStatus(`✗ Failed: ${err.message}`, true) }
+              await runWrite(`Changing base of #${pr.number}`, async () => {
+                try {
+                  await editPRBase(repo, pr.number, newBase)
+                  showStatus(`✓ Base branch changed to ${newBase}`)
+                  refetch()
+                } catch (err) { showStatus(`✗ Failed: ${err.message}`, true) }
+              })
             }}
           />
         </Box>
@@ -433,10 +443,12 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
         fields={[{ name: 'body', label: 'Comment (optional)', type: 'text' }]}
         onSubmit={async (values) => {
           setDialog(null)
-          try {
-            await reviewPR(repo, pr.number, 'approve', values.body || '')
-            showStatus(`✓ Approved PR #${pr.number}`)
-          } catch (err) { showStatus(`✗ ${err.message}`, true) }
+          await runWrite(`Approving #${pr.number}`, async () => {
+            try {
+              await reviewPR(repo, pr.number, 'approve', values.body || '')
+              showStatus(`✓ Approved PR #${pr.number}`)
+            } catch (err) { showStatus(`✗ ${err.message}`, true) }
+          })
         }}
         onCancel={() => setDialog(null)}
       />
@@ -450,10 +462,12 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
         fields={[{ name: 'body', label: 'Describe the changes needed', type: 'text' }]}
         onSubmit={async (values) => {
           setDialog(null)
-          try {
-            await reviewPR(repo, pr.number, 'request-changes', values.body)
-            showStatus(`✓ Requested changes on PR #${pr.number}`)
-          } catch (err) { showStatus(`✗ ${err.message}`, true) }
+          await runWrite(`Requesting changes on #${pr.number}`, async () => {
+            try {
+              await reviewPR(repo, pr.number, 'request-changes', values.body)
+              showStatus(`✓ Requested changes on PR #${pr.number}`)
+            } catch (err) { showStatus(`✗ ${err.message}`, true) }
+          })
         }}
         onCancel={() => setDialog(null)}
       />
@@ -461,15 +475,15 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   }
 
   if (dialog === 'labels') {
-    return <LabelDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(err) => { setDialog(null); showStatus(`✗ Label update failed: ${sanitize(err.message)}`, true) }} />
+    return <LabelDialog repo={repo} pr={pr} runWrite={runWrite} onClose={() => { setDialog(null); refetch() }} onError={(err) => { setDialog(null); showStatus(`✗ Label update failed: ${sanitize(err.message)}`, true) }} />
   }
 
   if (dialog === 'assignees') {
-    return <AssigneeDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(err) => { setDialog(null); showStatus(`✗ Assignee update failed: ${sanitize(err.message)}`, true) }} />
+    return <AssigneeDialog repo={repo} pr={pr} runWrite={runWrite} onClose={() => { setDialog(null); refetch() }} onError={(err) => { setDialog(null); showStatus(`✗ Assignee update failed: ${sanitize(err.message)}`, true) }} />
   }
 
   if (dialog === 'reviewers') {
-    return <ReviewerDialog repo={repo} pr={pr} onClose={() => { setDialog(null); refetch() }} onError={(err) => { setDialog(null); showStatus(`✗ Reviewer update failed: ${sanitize(err.message)}`, true) }} />
+    return <ReviewerDialog repo={repo} pr={pr} runWrite={runWrite} onClose={() => { setDialog(null); refetch() }} onError={(err) => { setDialog(null); showStatus(`✗ Reviewer update failed: ${sanitize(err.message)}`, true) }} />
   }
 
   if (dialog === 'check-logs') {
@@ -522,10 +536,10 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
           : checkCursor !== null
             ? <Text color={t.ui.selected}>[j/k] nav checks  [Enter/o] open  [l] annotations  [R] rerun  [Esc] exit checks</Text>
             : maxScroll > 0
-              ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  [j/k] scroll  [gg/G] top/bottom{autoMergeHint}</Text>
+              ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  [j/k] scroll  [gg/G] top/bottom</Text>
               : pr?.mergeable === 'CONFLICTING'
                 ? <Text color={t.pr.conflict || t.ci.pending}>[C] resolve conflicts  [c] checks  [d] diff  [m] merge  [l] labels  [A] assignees  [R] reviewers</Text>
-                : <Text color={t.ui.dim}>[d] diff  [E] editor  [m] merge  [M] auto-merge  [c] checks  [l] labels  [A] assignees  [R] reviewers</Text>
+                : <Text color={t.ui.dim}>[d] diff  [E] editor  [m] merge/auto-merge  [c] checks  [l] labels  [A] assignees  [R] reviewers</Text>
         }
         <Text color={t.ui.dim}>[/] search  [?] help  [Esc] back</Text>
       </Box>

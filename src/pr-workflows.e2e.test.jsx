@@ -247,7 +247,11 @@ describe('PR detail and diff E2E flows', () => {
           onOpenActions={() => {}}
         />
         <InputDriver events={[
-          { input: 'M' },
+          { input: 'm' },
+          { input: 'j' },
+          { input: 'j' },
+          { input: 'j' },
+          { input: '', key: { return: true } },
           { input: 'y' },
           { input: 'c' },
           { input: 'r', key: { ctrl: true } },

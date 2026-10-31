@@ -22,6 +22,9 @@ vi.mock('../executor.js', () => ({
   reviewPR: vi.fn(() => Promise.resolve()),
   closePR: vi.fn(() => Promise.resolve()),
   checkoutBranch: vi.fn(() => Promise.resolve()),
+  enableAutoMerge: vi.fn(() => Promise.resolve()),
+  disableAutoMerge: vi.fn(() => Promise.resolve()),
+  getRepoInfo: vi.fn(() => Promise.resolve({ squashMergeAllowed: true })),
 }))
 
 const context = { pane: 'prs', view: 'list', repo: 'o/r', selectedItem: { number: 7, title: 'Fix retry' } }
@@ -35,6 +38,7 @@ const WRITES = [
   ['Request Changes on PR', 'reviewPR', 'Request changes on PR #7'],
   ['Checkout PR Branch', 'checkoutBranch', 'Check out the branch of PR #7'],
   ['Close PR', 'closePR', 'Close PR #7'],
+  ['Toggle auto-merge', 'enableAutoMerge', 'Enable auto-merge on PR #7'],
 ]
 
 async function type(text) { for (const ch of text) await sendInput(ch, {}) }
