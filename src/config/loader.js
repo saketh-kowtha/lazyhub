@@ -36,6 +36,7 @@ import {
   expandConfigPaths,
   isPlainObject,
 } from './schema.js'
+import { stripFrozenDefaults } from './migrate-frozen.js'
 
 // Resolved dynamically (not via `new URL(..., import.meta.url)`) so esbuild leaves
 // it as a runtime read instead of trying to bundle the .toml as an asset.
@@ -45,6 +46,22 @@ export const DEFAULT_CONFIG_TOML_PATH = join(MODULE_DIR, 'defaultConfig.toml')
 const CONFIG_DIR = join(homedir(), '.config', 'lazyhub')
 export const USER_CONFIG_PATH = join(CONFIG_DIR, 'lazyhub.toml')
 const CACHE_PATH = join(CONFIG_DIR, '.config-cache.toml')
+
+// Unknown action ids found in the user's [keymaps]/[actions] (#475). Reported once per id
+// so a config that is loaded repeatedly does not repeat the warning; the UI drains it.
+const reportedUnknownActions = new Set()
+let pendingUnknownActions = []
+
+/**
+ * Take (and clear) the unknown action ids discovered by loadConfig() since the last call,
+ * so the app can show one visible notice instead of a silent debug.log line.
+ * @returns {string[]} action ids, empty when there is nothing new to report
+ */
+export function takeUnknownActionIds() {
+  const out = pendingUnknownActions
+  pendingUnknownActions = []
+  return out
+}
 
 const REMOTE_TIMEOUT_MS = 5000
 // Cap remote config size. A config file is tiny; this stops a malicious or
@@ -104,7 +121,17 @@ export function loadConfig(opts = {}) {
     }
   }
 
-  const { config: userValidated, warnings } = validateConfig(userRaw)
+  // Drop frozen copies of old defaults (pre-#475 first runs wrote them all) and
+  // bindings to action ids that no longer exist, so current defaults apply.
+  const { config: unfrozen, unknown } = stripFrozenDefaults(userRaw, base)
+  for (const id of unknown) {
+    if (reportedUnknownActions.has(id)) continue
+    reportedUnknownActions.add(id)
+    pendingUnknownActions.push(id)
+    logger.warn(`config: unknown action id "${id}" in ${configPath} — ignored`)
+  }
+
+  const { config: userValidated, warnings } = validateConfig(unfrozen)
   for (const w of warnings) logger.warn(`config: ${w}`)
 
   let merged = mergeConfig(base, userValidated)

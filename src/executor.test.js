@@ -247,6 +247,23 @@ describe('listPRs()', () => {
     })])
   })
 
+  it('normalizes a team review request to an org/slug id with its display name', () => {
+    const result = normalizePRListGraphQL({
+      data: { search: { nodes: [{
+        __typename: 'PullRequest', number: 1,
+        reviewRequests: { nodes: [{ requestedReviewer: { __typename: 'Team', name: 'Core Team', slug: 'core', organization: { login: 'acme' } } }] },
+      }] } },
+    })
+    expect(result[0].reviewRequests).toEqual([{ login: 'acme/core', name: 'Core Team' }])
+  })
+
+  it('queries the team slug and organization so a team can be removed by id', async () => {
+    mockSuccess({ data: { search: { nodes: [], pageInfo: { hasNextPage: false } } } })
+    await listPRs('owner/repo')
+    const query = execa.mock.calls[0][1].find(arg => String(arg).startsWith('query='))
+    expect(query).toMatch(/\.\.\. on Team \{[^}]*slug[^}]*organization \{ login \}/)
+  })
+
   it('requests autoMergeRequest so list view can toggle auto-merge', async () => {
     mockSuccess({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo')

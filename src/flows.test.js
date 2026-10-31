@@ -15,7 +15,7 @@ import {
   GhError, runGh,
   // PR
   listPRs, getPR, mergePR, closePR, markPRReady, convertPRToDraft,
-  editPRBase, reviewPR, addPRComment, getPRDiff, createPR,
+  editPRBase, editPRMembers, reviewPR, addPRComment, getPRDiff, createPR,
   addPRAssignees, removePRAssignees,
   // Issue
   listIssues, getIssue, createIssue, closeIssue,
@@ -334,6 +334,24 @@ describe('PR reviewer flows', () => {
 })
 
 // ─── PR AUTO-MERGE FLOWS ─────────────────────────────────────────────────────
+
+describe('editPRMembers: one gh pr edit for adds and removes', () => {
+  it('sends add and remove for a team id in a single call with exact args', async () => {
+    ok()
+    await editPRMembers('owner/repo', 7, 'reviewer', { add: ['alice', 'bob'], remove: ['acme/core'] })
+    expect(execa).toHaveBeenCalledTimes(1)
+    expect(args()).toEqual(['pr', 'edit', '7', '--repo', 'owner/repo', '--add-reviewer', 'alice,bob', '--remove-reviewer', 'acme/core'])
+  })
+
+  it('omits an empty half and does nothing when both are empty', async () => {
+    ok()
+    await editPRMembers('owner/repo', 7, 'label', { add: [], remove: ['old'] })
+    expect(args()).toEqual(['pr', 'edit', '7', '--repo', 'owner/repo', '--remove-label', 'old'])
+    execa.mockClear()
+    await editPRMembers('owner/repo', 7, 'assignee', { add: [], remove: [] })
+    expect(execa).not.toHaveBeenCalled()
+  })
+})
 
 describe('PR auto-merge flows', () => {
   it('enables auto-merge', async () => {

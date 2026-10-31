@@ -4,15 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from 'ink-testing-library'
 import { renderWithProviders, waitForInputReady, waitForExpectation } from '../../test/test-helpers.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { addLabels, removeLabels, addPRAssignees, removePRAssignees, requestReviewers, removeReviewers } from '../../executor.js'
+import { editPRMembers } from '../../executor.js'
 import { LabelDialog, AssigneeDialog, ReviewerDialog, AuthorSearchDialog } from './list-dialogs.jsx'
 
 vi.mock('../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
 vi.mock('../../executor.js', async (original) => ({
   ...await original(),
-  addLabels: vi.fn(), removeLabels: vi.fn(),
-  addPRAssignees: vi.fn(), removePRAssignees: vi.fn(),
-  requestReviewers: vi.fn(), removeReviewers: vi.fn(),
+  editPRMembers: vi.fn(),
 }))
 
 class CatchRenderError extends React.Component {
@@ -22,7 +20,7 @@ class CatchRenderError extends React.Component {
 }
 
 afterEach(cleanup)
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => vi.resetAllMocks())
 
 describe('PR list dialogs', () => {
   for (const [name, Dialog, message] of [
@@ -59,10 +57,10 @@ describe('PR list dialogs', () => {
     })
   }
 
-  for (const [name, Dialog, field, key, add, remove, extra] of [
-    ['labels', LabelDialog, 'labels', 'name', addLabels, removeLabels, ['pr']],
-    ['assignees', AssigneeDialog, 'assignees', 'login', addPRAssignees, removePRAssignees, []],
-    ['reviewers', ReviewerDialog, 'reviewRequests', 'login', requestReviewers, removeReviewers, []],
+  for (const [name, Dialog, field, key, kind] of [
+    ['labels', LabelDialog, 'labels', 'name', 'label'],
+    ['assignees', AssigneeDialog, 'assignees', 'login', 'assignee'],
+    ['reviewers', ReviewerDialog, 'reviewRequests', 'login', 'reviewer'],
   ]) {
     it(`diffs ${name} and preserves raw IDs when applying additions and removals`, async () => {
       const data = ['keep', 'old', 'new&amp;name'].map(value => ({ [key]: value }))
@@ -85,16 +83,15 @@ describe('PR list dialogs', () => {
       await waitForInputReady(view)
       view.stdin.write('\r')
       await waitForExpectation(() => expect(onClose).toHaveBeenCalledOnce())
-      expect(add).toHaveBeenCalledWith('o/r', 9, ['new&amp;name'], ...extra)
-      expect(remove).toHaveBeenCalledWith('o/r', 9, ['old'], ...extra)
-      expect(add.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0])
+      expect(editPRMembers).toHaveBeenCalledOnce()
+      expect(editPRMembers).toHaveBeenCalledWith('o/r', 9, kind, { add: ['new&amp;name'], remove: ['old'] })
     })
   }
 
   it('reports a failed label update through onError instead of swallowing it', async () => {
     const data = [{ name: 'a' }, { name: 'b' }]
     useGh.mockReturnValue({ loading: false, data })
-    addLabels.mockRejectedValue(new Error('403 forbidden'))
+    editPRMembers.mockRejectedValue(new Error('403 forbidden'))
     const onClose = vi.fn()
     const onError = vi.fn()
     const view = renderWithProviders(<LabelDialog repo="o/r" pr={{ number: 3, labels: [{ name: 'a' }] }} onClose={onClose} onError={onError} />)
@@ -121,30 +118,28 @@ describe('PR list dialogs', () => {
   it('adding a reviewer does not remove a pending team review request that is not in the collaborator list', async () => {
     useGh.mockReturnValue({ loading: false, data: [{ login: 'alice' }, { login: 'bob' }] })
     const onClose = vi.fn()
-    const pr = { number: 7, reviewRequests: [{ login: 'core-team', name: 'core-team' }] }
+    const pr = { number: 7, reviewRequests: [{ login: 'acme/core', name: 'Core Team' }] }
     const view = renderWithProviders(<ReviewerDialog repo="o/r" pr={pr} onClose={onClose} />)
-    expect(view.lastFrame()).toContain('core-team')
+    expect(view.lastFrame()).toContain('Core Team')
     await selectFirstAndSubmit(view, onClose)
-    expect(requestReviewers).toHaveBeenCalledWith('o/r', 7, ['alice'])
-    expect(removeReviewers).not.toHaveBeenCalled()
+    expect(editPRMembers).toHaveBeenCalledWith('o/r', 7, 'reviewer', { add: ['alice'], remove: [] })
   })
 
   it('removes an off-list team request only when the user deselects it', async () => {
     useGh.mockReturnValue({ loading: false, data: [{ login: 'alice' }] })
     const onClose = vi.fn()
-    const pr = { number: 7, reviewRequests: [{ login: 'core-team', name: 'core-team' }] }
+    const pr = { number: 7, reviewRequests: [{ login: 'acme/core', name: 'Core Team' }] }
     const view = renderWithProviders(<ReviewerDialog repo="o/r" pr={pr} onClose={onClose} />)
     await waitForInputReady(view)
     view.stdin.write('\u001b[B')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('2/2'))
     await waitForInputReady(view)
     view.stdin.write(' ')
-    await waitForExpectation(() => expect(view.lastFrame()).toContain('▶ ○ core-team'))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('▶ ○ Core Team'))
     await waitForInputReady(view)
     view.stdin.write('\r')
     await waitForExpectation(() => expect(onClose).toHaveBeenCalledOnce())
-    expect(removeReviewers).toHaveBeenCalledWith('o/r', 7, ['core-team'])
-    expect(requestReviewers).not.toHaveBeenCalled()
+    expect(editPRMembers).toHaveBeenCalledWith('o/r', 7, 'reviewer', { add: [], remove: ['acme/core'] })
   })
 
   it('adding an assignee does not unassign someone missing from the first collaborators page', async () => {
@@ -152,18 +147,16 @@ describe('PR list dialogs', () => {
     const onClose = vi.fn()
     const view = renderWithProviders(<AssigneeDialog repo="o/r" pr={{ number: 8, assignees: [{ login: 'carol' }] }} onClose={onClose} />)
     await selectFirstAndSubmit(view, onClose)
-    expect(addPRAssignees).toHaveBeenCalledWith('o/r', 8, ['alice'])
-    expect(removePRAssignees).not.toHaveBeenCalled()
+    expect(editPRMembers).toHaveBeenCalledWith('o/r', 8, 'assignee', { add: ['alice'], remove: [] })
   })
 
   it('adding a label does not strip a label missing from the fetched label list', async () => {
-    addLabels.mockResolvedValue(undefined)
+    editPRMembers.mockResolvedValue(undefined)
     useGh.mockReturnValue({ loading: false, data: [{ name: 'alice' }] })
     const onClose = vi.fn()
     const view = renderWithProviders(<LabelDialog repo="o/r" pr={{ number: 8, labels: [{ name: 'old-label' }] }} onClose={onClose} />)
     await selectFirstAndSubmit(view, onClose)
-    expect(addLabels).toHaveBeenCalledWith('o/r', 8, ['alice'], 'pr')
-    expect(removeLabels).not.toHaveBeenCalled()
+    expect(editPRMembers).toHaveBeenCalledWith('o/r', 8, 'label', { add: ['alice'], remove: [] })
   })
 
   it('Esc closes the picker while the options are still loading', async () => {
@@ -187,5 +180,46 @@ describe('PR list dialogs', () => {
     await waitForExpectation(() => expect(refetch).toHaveBeenCalled())
     view.stdin.write('\u001b')
     await waitForExpectation(() => expect(onClose).toHaveBeenCalledOnce())
+  })
+  it('removes a team that gh reports with a slug, by org/slug rather than its display name', async () => {
+    useGh.mockReturnValue({ loading: false, data: [{ login: 'alice' }] })
+    const onClose = vi.fn()
+    const pr = { number: 7, reviewRequests: [{ __typename: 'Team', name: 'Core Team', slug: 'acme/core' }] }
+    const view = renderWithProviders(<ReviewerDialog repo="o/r" pr={pr} onClose={onClose} />)
+    expect(view.lastFrame()).toContain('Core Team')
+    await waitForInputReady(view)
+    view.stdin.write('\u001b[B')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('2/2'))
+    await waitForInputReady(view)
+    view.stdin.write(' ')
+    await waitForInputReady(view)
+    view.stdin.write('\r')
+    await waitForExpectation(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(editPRMembers).toHaveBeenCalledWith('o/r', 7, 'reviewer', { add: [], remove: ['acme/core'] })
+  })
+
+  it('keeps the values from when the dialog opened as the diff base when the PR refetches underneath', async () => {
+    useGh.mockReturnValue({ loading: false, data: [{ name: 'alice' }, { name: 'old' }] })
+    const onClose = vi.fn()
+    function Host() {
+      const [pr, setPr] = React.useState({ number: 3, labels: [{ name: 'old' }] })
+      React.useEffect(() => { const id = setTimeout(() => setPr({ number: 3, labels: [] }), 30); return () => clearTimeout(id) }, [])
+      return <LabelDialog repo="o/r" pr={pr} onClose={onClose} />
+    }
+    const view = renderWithProviders(<Host />)
+    await new Promise(r => setTimeout(r, 100))
+    await waitForInputReady(view)
+    view.stdin.write(' ')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('▶ ◉ alice'))
+    await waitForInputReady(view)
+    view.stdin.write('\u001b[B')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('2/2'))
+    await waitForInputReady(view)
+    view.stdin.write(' ')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('▶ ○ old'))
+    await waitForInputReady(view)
+    view.stdin.write('\r')
+    await waitForExpectation(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(editPRMembers).toHaveBeenCalledWith('o/r', 3, 'label', { add: ['alice'], remove: ['old'] })
   })
 })

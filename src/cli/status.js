@@ -67,6 +67,7 @@ function color(text, code) {
  * @returns {string}
  */
 export function formatStatus(summary, format = 'tmux') {
+  if (!summary && format === 'json') return JSON.stringify({ schema_version: 1, counts: null, cache_age_seconds: null, reason: 'no_cache' })
   if (!summary) return 'lazyhub: no data - open the app once'
   if (format === 'json') return JSON.stringify(summary)
   const parts = [

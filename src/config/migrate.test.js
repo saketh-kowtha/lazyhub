@@ -143,7 +143,8 @@ icon = "⚡"
     writeDefaultConfig(configPath)
     const text = readFileSync(configPath, 'utf8')
     expect(parse(text).panes).toBeUndefined()
-    expect(parse(text).app.active_panes).toContain('issues')
+    expect(parse(text)).toEqual({})
+    expect(loadConfig({ configPath }).app.active_panes).toContain('issues')
     expect(loadConfig({ configPath }).panes.issues.icon).toBe('⚑')
   })
 

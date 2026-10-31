@@ -11,7 +11,7 @@ import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { EmptyState } from '../../components/EmptyState.jsx'
 import { IssueRow } from './list-row.jsx'
 
-export function IssueListView({ items, loading, error, filterState, sortMode, statusMsg, filterKeys: FK, actions, t, visibleHeight, visibleIssues, scrollOffset, cursor }) {
+export function IssueListView({ items, loading, error, filterState, sortMode, statusMsg, filterKeys: FK, actions, t, visibleHeight, visibleIssues, scrollOffset, cursor, paging }) {
   return (
     <Box flexDirection="column" flexGrow={1}>
       <Box paddingX={1} gap={1}>
@@ -45,6 +45,19 @@ export function IssueListView({ items, loading, error, filterState, sortMode, st
             />
           )
         })}
+        {!error && items.length > 0 && paging && (
+          <Box paddingX={1}>
+            <Text color={paging.error ? t.ci.fail : t.ui.dim}>
+              {paging.error
+                ? `Could not load more issues; showing ${items.length}${paging.total ? ` of ${paging.total}` : ''} [${firstActionKey('list.refresh', 'r', actions)}] retry`
+                : paging.hasMore
+                  ? `${items.length} of ${paging.total ?? '?'}${paging.loadingMore ? ' · loading more…' : ''}`
+                  : paging.total > items.length
+                    ? `${items.length} of ${paging.total} (GitHub search returns at most ${paging.cap})`
+                    : `${items.length} of ${items.length} · end of list`}
+            </Text>
+          </Box>
+        )}
         {error && (
           <Box paddingX={2} paddingY={1} flexDirection="column">
             <FailureNotice failure={classifyGhFailure(error)} />

@@ -40,6 +40,8 @@ export function renderAppView(ctx) {
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
     showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
   } = ctx
+  // Items opened from a dashboard section keep that section's repository (#493).
+  const itemRepo = selectedItem?._repo || repo
   // ─── Below the minimum size: one clear message instead of a broken frame ──
   if (tooSmall) return <TooSmall cols={columns} rows={rows} minCols={minCols} minRows={minRows} />
   // ─── AI assistant overlay ─────────────────────────────────────────────────
@@ -136,7 +138,7 @@ export function renderAppView(ctx) {
             <ErrorBoundary>
               <ConflictView
                 pr={selectedItem}
-                repo={repo}
+                repo={itemRepo}
                 onBack={goBack}
                 onResolved={() => setView('detail')}
               />
@@ -162,7 +164,7 @@ export function renderAppView(ctx) {
           <ErrorBoundary>
             <PRDiff
               prNumber={selectedItem.number}
-              repo={repo}
+              repo={itemRepo}
               onBack={goBack}
               onViewComments={goToComments}
             />
@@ -179,7 +181,7 @@ export function renderAppView(ctx) {
           <ErrorBoundary>
             <PRComments
               prNumber={selectedItem.number}
-              repo={repo}
+              repo={itemRepo}
               onBack={goBack}
               onJumpToDiff={() => setView('diff')}
             />
@@ -261,7 +263,7 @@ export function renderAppView(ctx) {
                 {...(detailKind === 'issues'
                   ? { issueNumber: selectedItem.number }
                   : { prNumber: selectedItem.number })}
-                repo={repo}
+                repo={itemRepo}
                 onBack={goBack}
                 onOpenDiff={goToDiff}
                 onOpenConflict={detailKind === 'prs' ? goToConflict : undefined}
@@ -310,7 +312,7 @@ export function renderAppView(ctx) {
         }
         const customTab = (_config.customTabs || {})[pane]
         if (customTab) {
-          return <TabView tab={customTab} repo={repo} onOpenItem={(item, kind) => goToDetail({ ...item, _kind: kind })} />
+          return <TabView tab={customTab} repo={repo} onOpenItem={(item, kind, itemRepo) => goToDetail({ ...item, _kind: kind, _repo: itemRepo })} />
         }
         return <Box paddingX={1}><Text color={t.ui.muted}>Unknown pane: {pane}</Text></Box>
       }

@@ -18,13 +18,79 @@ export async function listIssues(repo, filter = {}) {
   if (filter.assignee)  base.push('--assignee',  filter.assignee)
   if (filter.milestone) base.push('--milestone', filter.milestone)
 
-  // Try with comments field; fall back without it for GHE instances where
-  // the field is not available in the issue list GraphQL query.
-  try {
-    return await runGh([...base, '--json', 'number,title,state,author,labels,assignees,updatedAt,body,milestone,comments,url'])
-  } catch (err) {
-    if (!/unknown|field|not found/i.test(err.message)) throw err
-    return runGh([...base, '--json', 'number,title,state,author,labels,assignees,updatedAt,body,milestone,url'])
+  // No `comments`: the full array grows with every issue; the list never needs it (#506).
+  return runGh([...base, '--json', 'number,title,state,author,labels,assignees,updatedAt,body,milestone,url'])
+}
+
+const ISSUE_PAGE_MAX = 100
+const ISSUE_STATES = new Set(['open', 'closed', 'all'])
+
+function q(value) {
+  return String(value || '').replace(/"/g, '\\"').trim()
+}
+
+/**
+ * One cursor page of issues (GraphQL search). Never refetches earlier pages:
+ * pass the previous page's `endCursor` as `filter.after`.
+ * @param {string} repo
+ * @param {object} filter  state, author, label, assignee, milestone, limit, after
+ * @returns {Promise<{items: object[], hasNextPage: boolean, endCursor: string|null, totalCount: number}>}
+ */
+export async function listIssuesPage(repo, filter = {}) {
+  const r = getRepo(repo)
+  const state = ISSUE_STATES.has(filter.state) ? filter.state : 'open'
+  const parts = [`repo:${r}`, 'is:issue', 'sort:updated-desc']
+  if (state !== 'all') parts.push(`state:${state}`)
+  if (filter.author)    parts.push(`author:${q(filter.author)}`)
+  if (filter.assignee)  parts.push(`assignee:${q(filter.assignee)}`)
+  if (filter.label)     parts.push(`label:"${q(filter.label)}"`)
+  if (filter.milestone) parts.push(`milestone:"${q(filter.milestone)}"`)
+  const limit = Math.max(1, Math.min(Number(filter.limit || 50), ISSUE_PAGE_MAX))
+  const query = `
+    query($searchQuery: String!, $limit: Int!, $after: String) {
+      search(type: ISSUE, first: $limit, after: $after, query: $searchQuery) {
+        issueCount
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          __typename
+          ... on Issue {
+            number title state url updatedAt body
+            author { login }
+            labels(first: 20) { nodes { name color } }
+            assignees(first: 10) { nodes { login name } }
+            milestone { title }
+            comments { totalCount }
+          }
+        }
+      }
+    }
+  `
+  const result = await runGh([
+    'api', 'graphql',
+    '-f', `query=${query}`,
+    '-f', `searchQuery=${parts.join(' ')}`,
+    '-F', `limit=${limit}`,
+    ...(filter.after ? ['-f', `after=${filter.after}`] : []),
+  ])
+  const search = result?.data?.search
+  const items = (search?.nodes || []).filter(n => n && n.number).map(n => ({
+    number: n.number,
+    title: n.title,
+    state: n.state,
+    url: n.url,
+    updatedAt: n.updatedAt,
+    body: n.body,
+    author: n.author,
+    labels: n.labels?.nodes || [],
+    assignees: n.assignees?.nodes || [],
+    milestone: n.milestone,
+    commentCount: n.comments?.totalCount ?? 0,
+  }))
+  return {
+    items,
+    hasNextPage: Boolean(search?.pageInfo?.hasNextPage && search.pageInfo.endCursor),
+    endCursor: search?.pageInfo?.endCursor || null,
+    totalCount: Number(search?.issueCount ?? items.length),
   }
 }
 

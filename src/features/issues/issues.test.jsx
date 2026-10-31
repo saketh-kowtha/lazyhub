@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IssueList } from './list.jsx'
 import { IssueDetail } from './detail.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { getIssue, listIssues, listLabels, listCollaborators, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees, addIssueComment } from '../../executor.js'
+import { getIssue, listIssuesPage, listLabels, listCollaborators, addLabels, removeLabels, addIssueAssignees, removeIssueAssignees, addIssueComment } from '../../executor.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -13,7 +13,7 @@ vi.mock('ink', async () => {
 })
 vi.mock('../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
 vi.mock('../../executor.js', () => ({
-  getIssue: vi.fn(), listIssues: vi.fn(), listLabels: vi.fn(), listCollaborators: vi.fn(),
+  getIssue: vi.fn(), listIssuesPage: vi.fn(), listLabels: vi.fn(), listCollaborators: vi.fn(),
   closeIssue: vi.fn(), createIssue: vi.fn(), addLabels: vi.fn(), removeLabels: vi.fn(),
   addIssueAssignees: vi.fn(), removeIssueAssignees: vi.fn(), addIssueComment: vi.fn(),
 }))
@@ -32,11 +32,12 @@ const issue = {
   comments: [{ author: { login: 'reviewer&amp;safe' }, body: 'Comment body', createdAt: '2026-06-06T10:00:00Z' }],
 }
 const refetch = vi.fn()
+const page = (items, extra = {}) => ({ items, hasNextPage: false, endCursor: null, totalCount: items.length, ...extra })
 
 beforeEach(() => {
   vi.clearAllMocks()
   useGh.mockImplementation(fn => ({
-    data: fn === listIssues ? [issue] : fn === getIssue ? issue
+    data: fn === listIssuesPage ? page([issue]) : fn === getIssue ? issue
       : fn === listLabels ? [{ name: 'bug&amp;safe', color: 'ff0000' }, { name: 'new&amp;safe', color: '00ff00' }]
         : fn === listCollaborators ? [{ login: 'assignee&amp;safe' }, { login: 'new&amp;safe' }] : null,
     loading: false, error: null, refetch,
@@ -170,8 +171,8 @@ describe('issue list cursor after the list shrinks', () => {
   it('keeps a valid selection when a refetch returns fewer issues', async () => {
     const second = { ...issue, number: 12, title: 'Second issue' }
     useGh.mockImplementation(fn => {
-      const [data, setData] = React.useState(fn === listIssues ? [issue, second] : null)
-      return { data, loading: false, error: null, refetch: () => setData(fn === listIssues ? [issue] : null) }
+      const [data, setData] = React.useState(fn === listIssuesPage ? page([issue, second]) : null)
+      return { data, loading: false, error: null, refetch: () => setData(fn === listIssuesPage ? page([issue]) : null) }
     })
     const onSelectIssue = vi.fn()
     const view = renderWithProviders(<IssueList repo="owner/repo" onSelectIssue={onSelectIssue} />)
@@ -183,5 +184,39 @@ describe('issue list cursor after the list shrinks', () => {
     await flush(20)
     await sendInput('', { return: true })
     expect(onSelectIssue).toHaveBeenCalledWith(expect.objectContaining({ number: 11 }))
+  })
+})
+
+describe('issue list load-more (#506)', () => {
+  const mk = (n) => ({ ...issue, number: n, title: `Issue number ${n}` })
+  const mountWith = (first) => {
+    useGh.mockImplementation(fn => ({
+      data: fn === listIssuesPage ? first : null, loading: false, error: null, refetch,
+    }))
+    return renderWithProviders(<IssueList repo="owner/repo" onSelectIssue={vi.fn()} />)
+  }
+
+  it('fetches the next page by cursor once, appends it and shows N of M', async () => {
+    listIssuesPage.mockResolvedValue(page([mk(4), mk(5)], { totalCount: 5 }))
+    const view = mountWith(page([mk(1), mk(2), mk(3)], { hasNextPage: true, endCursor: 'c1', totalCount: 5 }))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue number 5'))
+    expect(listIssuesPage).toHaveBeenCalledTimes(1)
+    expect(listIssuesPage).toHaveBeenCalledWith('owner/repo', expect.objectContaining({ after: 'c1' }))
+    expect(view.lastFrame()).toContain('Issue number 1')
+    expect(view.lastFrame()).toContain('5 of 5')
+  })
+
+  it('says the host caps results instead of silently truncating', async () => {
+    const view = mountWith(page([mk(1), mk(2)], { totalCount: 1400 }))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('2 of 1400 (GitHub search returns at most 1000)'))
+    expect(listIssuesPage).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed page without retry looping', async () => {
+    listIssuesPage.mockRejectedValue(new Error('boom'))
+    const view = mountWith(page([mk(1)], { hasNextPage: true, endCursor: 'c1', totalCount: 9 }))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Could not load more issues; showing 1 of 9'))
+    await flush(30)
+    expect(listIssuesPage).toHaveBeenCalledTimes(1)
   })
 })
