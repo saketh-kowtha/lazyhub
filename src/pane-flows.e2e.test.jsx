@@ -61,6 +61,7 @@ vi.mock('./executor.js', () => ({
   removeIssueAssignees: vi.fn(),
   listBranches: vi.fn(),
   deleteBranch: vi.fn(),
+  findLocalCheckout: vi.fn(async () => process.cwd()),
   listPRs: vi.fn(),
   listRuns: vi.fn(),
   getRunLogs: vi.fn(),
@@ -84,7 +85,11 @@ function ghResult(data, extra = {}) {
 describe('Pane E2E user flows', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    execa.mockResolvedValue({ stdout: 'main', exitCode: 0 })
+    execa.mockImplementation(async (_cmd, args) => (
+      args[0] === 'remote'
+        ? { stdout: 'origin\thttps://github.com/owner/repo.git (fetch)', exitCode: 0 }
+        : { stdout: 'main', exitCode: 0 }
+    ))
 
     useGh.mockImplementation((fn) => {
       if (fn === listIssuesPage) {
