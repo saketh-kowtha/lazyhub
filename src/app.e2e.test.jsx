@@ -186,7 +186,7 @@ describe('App shell user flows', () => {
     await waitForExpectation(() => expect(view.lastFrame()).toContain('PRS LIST'))
   })
 
-  it('number keys jump to the Nth active pane from the list and from detail', async () => {
+  it('number keys jump to the Nth active pane from list views only', async () => {
     const view = renderWithProviders(<App repo="owner/repo" />)
     await flush(20)
     // panes in this harness: prs, issues, branches, actions, notifications
@@ -203,10 +203,43 @@ describe('App shell user flows', () => {
     await sendInput('9') // out of range: ignored
     await flush(10)
     expect(view.lastFrame()).toContain('PRS LIST')
+  })
+
+  it('number keys do nothing in a detail view (#450)', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
     await sendInput('o')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DETAIL 7'))
     await sendInput('2')
-    await waitForExpectation(() => expect(view.lastFrame()).toContain('ISSUES LIST'))
+    await flush(30)
+    expect(view.lastFrame()).toContain('PR DETAIL 7')
+    expect(view.lastFrame()).not.toContain('ISSUES LIST')
+  })
+
+  it('a digit after the <Space> leader does not jump panes (#450)', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+    await sendInput(' ')
+    await flush(20)
+    await sendInput('2')
+    await flush(30)
+    expect(view.lastFrame()).toContain('PRS LIST')
+    expect(view.lastFrame()).not.toContain('ISSUES LIST')
+  })
+
+  it('help lists 1-9 under the list view keys, not under global keys in a detail view (#450)', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+    await sendInput('?')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Keyboard Reference'))
+    expect(view.lastFrame()).toMatch(/1-9\s+jump to pane/)
+    await sendInput('', { escape: true })
+    await flush(20)
+    await sendInput('o')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DETAIL 7'))
+    await sendInput('?')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Keyboard Reference'))
+    expect(view.lastFrame()).not.toMatch(/1-9\s+jump to pane/)
   })
 
   it('number keys do nothing while a pane dialog (search, pickers) is open', async () => {
