@@ -60,22 +60,6 @@ export async function cancelRun(repo, runId) {
   return runGh(args)
 }
 
-// ─── Release functions ────────────────────────────────────────────────────────
-
-/**
- * List releases.
- * @param repo
- */
-export async function listReleases(repo) {
-  const args = [
-    'release', 'list',
-    '--repo', getRepo(repo),
-    '--json', 'name,tagName,isPrerelease,isDraft,publishedAt,url',
-    '--limit', '20',
-  ]
-  return runGh(args)
-}
-
 // ─── Notification functions ───────────────────────────────────────────────────
 
 /**
@@ -97,7 +81,7 @@ export async function getPRChecks(repo, number) {
       'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/commits/${encodeURIComponent(pr.headRefOid)}/check-runs`,
       '--jq', '[.check_runs[] | {id: .id, name: .name, status: .status, conclusion: .conclusion, appName: .app.name, url: .html_url}]',
     ]
-    return runGh(checkArgs)
+    return await runGh(checkArgs)
   } catch {
     return []
   }
@@ -146,7 +130,7 @@ export async function getBranchProtection(repo, branch) {
     '--jq', '{requiredReviews: (.required_pull_request_reviews.required_approving_review_count // 0), requireCodeOwnerReviews: (.required_pull_request_reviews.require_code_owner_reviews // false), requireStatusChecks: (.required_status_checks != null), requiredChecks: ([(.required_status_checks.contexts // []), (.required_status_checks.checks // [] | map(.context))] | add // [])}',
   ]
   try {
-    return runGh(args)
+    return await runGh(args)
   } catch {
     return null
   }

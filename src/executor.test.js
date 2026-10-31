@@ -37,7 +37,8 @@ import {
   cancelRun,
   rerunCheckRun,
   getCheckRunAnnotations,
-  listReleases,
+  getPRChecks,
+  getBranchProtection,
   listNotifications,
   markNotificationRead,
   getPRDiff,
@@ -46,7 +47,6 @@ import {
   listPRComments,
   resolveThread,
   createPR,
-  listGists,
   getGist,
   deleteGist,
   getPRReviewComments,
@@ -571,18 +571,6 @@ describe('getCheckRunAnnotations()', () => {
   })
 })
 
-// ─── Release functions ────────────────────────────────────────────────────────
-
-describe('listReleases()', () => {
-  it('calls gh release list', async () => {
-    mockSuccess([{ name: 'v1.0.0' }])
-    await listReleases('owner/repo')
-    const [, args] = execa.mock.calls[0]
-    expect(args).toContain('release')
-    expect(args).toContain('list')
-  })
-})
-
 // ─── Notification functions ───────────────────────────────────────────────────
 
 describe('listNotifications()', () => {
@@ -779,15 +767,6 @@ describe('GhError fields', () => {
 
 // ─── Gist functions ───────────────────────────────────────────────────────────
 
-describe('listGists', () => {
-  it('calls gh gist list', async () => {
-    mockSuccess([{ id: 'abc123', description: 'test gist' }])
-    const result = await listGists()
-    expect(execa).toHaveBeenCalledWith('gh', expect.arrayContaining(['gist', 'list']), expect.anything())
-    expect(result[0].id).toBe('abc123')
-  })
-})
-
 describe('getGist', () => {
   it('calls gh gist view --raw', async () => {
     execa.mockResolvedValue({ exitCode: 0, stdout: 'const x = 1', stderr: '' })
@@ -883,6 +862,20 @@ describe('addPRReviewThreadReply', () => {
     }
     expect(allFArgs.some(a => a.startsWith('threadId='))).toBe(true)
     expect(result).toMatchObject({ ok: true, commentId: 999 })
+  })
+})
+
+describe('swallowed rejections', () => {
+  it('getBranchProtection resolves null when gh fails (its catch is meant to do that)', async () => {
+    mockFailure('Branch not protected', 1)
+    await expect(getBranchProtection('a/b', 'main')).resolves.toBeNull()
+  })
+
+  it('getPRChecks resolves [] when the check-runs call fails (its catch is meant to do that)', async () => {
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify({ headRefOid: 'abc123' }), stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'HTTP 502' })
+    await expect(getPRChecks('a/b', 1)).resolves.toEqual([])
   })
 })
 
