@@ -147,6 +147,7 @@ function sendResponse(socket, id, payload) {
 function handleMessage(socket, raw) {
   let msg
   try { msg = JSON.parse(raw) } catch { return }
+  if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return
   const { id, type } = msg
 
   switch (type) {

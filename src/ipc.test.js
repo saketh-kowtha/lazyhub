@@ -193,3 +193,39 @@ describe.skipIf(!posix)('IDE socket GitHub writes', () => {
     expect(onResolveThread).toHaveBeenCalledWith('T')
   })
 })
+
+describe.skipIf(!posix)('IPC message validation', () => {
+  async function waitForSocket(path) {
+    for (let i = 0; i < 100; i += 1) {
+      const ok = await new Promise(resolve => {
+        const c = connect(path)
+        c.once('connect', () => { c.destroy(); resolve(true) })
+        c.once('error', () => resolve(false))
+      })
+      if (ok) return
+      await new Promise(r => setTimeout(r, 20))
+    }
+    throw new Error('socket never came up')
+  }
+
+  it.each(['null', '5', '"str"', 'true'])(
+    'a well-formed JSON line that is not an object (%s) must not crash the process',
+    async (line) => {
+      const uncaught = []
+      const onUncaught = err => uncaught.push(err)
+      process.on('uncaughtException', onUncaught)
+      try {
+        const path = ipc.startIPC()
+        await waitForSocket(path)
+        const client = connect(path)
+        await new Promise(resolve => client.once('connect', resolve))
+        client.write(`${line}\n`)
+        await new Promise(r => setTimeout(r, 150))
+        client.destroy()
+      } finally {
+        process.off('uncaughtException', onUncaught)
+      }
+      expect(uncaught.map(e => e.message)).toEqual([])
+    },
+  )
+})
