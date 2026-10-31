@@ -42,7 +42,13 @@ export function TabView({ tab, repo, onOpenItem }) {
 
   // Each pane reports its loaded rows and refetch here; handlers read them at key time.
   const paneData = useRef([])
-  const report = useCallback((idx, data) => { paneData.current[idx] = data }, [])
+  const [failed, setFailed] = useState([])
+  const report = useCallback((idx, data) => {
+    paneData.current[idx] = data
+    // Which panes are failing, so only the first one prints the full notice (#469).
+    setFailed(prev => (Boolean(prev[idx]) === Boolean(data.failed) ? prev : Object.assign([...prev], { [idx]: Boolean(data.failed) })))
+  }, [])
+  const firstFailed = failed.findIndex(Boolean)
   const resolve = useActionResolver('tab-list')
 
   const section = Math.min(selection.section, Math.max(0, panes.length - 1))
@@ -99,6 +105,7 @@ export function TabView({ tab, repo, onOpenItem }) {
               active={idx === section}
               cursor={cursorOf(idx)}
               onData={(data) => report(idx, data)}
+              repeatOf={firstFailed >= 0 && idx > firstFailed ? firstFailed : null}
             />
           </Box>
         ))}
