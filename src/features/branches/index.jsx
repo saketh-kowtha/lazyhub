@@ -2,12 +2,12 @@
  * src/features/branches/index.jsx — Branch list pane
  */
 
-import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect, useContext, useRef, memo } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
-import { classifyGhFailure, listBranches, deleteBranch, listPRs, findLocalCheckout, checkoutRemoteBranch } from '../../executor.js'
+import { classifyGhFailure, listBranches, deleteBranch, listOpenPRBranches, findLocalCheckout, checkoutRemoteBranch } from '../../executor.js'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
@@ -46,7 +46,9 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
   const { data: branches, loading, error, refetch, isStale } = useGh(listBranches, [repo])
-  const { data: prs } = useGh(listPRs, [repo, { state: 'open', limit: 100 }], { ttl: 120_000 })
+  // Slim head-branch list for the PR marker only (#456), not the full PR list.
+  const { data: prHeads } = useGh(listOpenPRBranches, [repo], { ttl: 120_000 })
+  const openPRHeads = useMemo(() => new Set(Array.isArray(prHeads) ? prHeads : []), [prHeads])
   const [currentBranch, setCurrentBranch] = useState(null)
   // Local git only ever runs in a checkout of the repo being viewed (#471).
   // undefined = still resolving, null = no local checkout of `repo`, else { dir, remote }
@@ -137,9 +139,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
     return false
   }
 
-  const hasOpenPR = selectedBranch && (prs || []).some(
-    pr => pr.headRefName === selectedBranch.name && pr.state === 'OPEN'
-  )
+  const hasOpenPR = !!selectedBranch && openPRHeads.has(selectedBranch.name)
 
   useKeymapInput((input, key) => {
     if (statusMsg?.persist) { setStatusMsg(null); return }
@@ -328,7 +328,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
         {visibleBranches.map((branch, i) => {
           const idx = scrollOffset + i
           const isSelected = idx === cursor
-          const hasPR = (prs || []).some(pr => pr.headRefName === branch.name && pr.state === 'OPEN')
+          const hasPR = openPRHeads.has(branch.name)
           const isCurrent = currentBranch && branch.name === currentBranch
           return (
             <BranchRow

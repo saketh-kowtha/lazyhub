@@ -4,7 +4,7 @@ import { cleanup } from 'ink-testing-library'
 import { execa } from 'execa'
 import { renderWithProviders, waitForInputReady, waitForExpectation } from '../../test/test-helpers.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { listBranches, clearLocalCheckoutCache } from '../../executor.js'
+import { listBranches, listPRs, listOpenPRBranches, clearLocalCheckoutCache } from '../../executor.js'
 import { BranchList } from './index.jsx'
 
 vi.mock('execa', () => ({ execa: vi.fn() }))
@@ -126,4 +126,16 @@ it('shows a pending status while a push runs and ignores a second push (#453)', 
   expect(execa.mock.calls.filter(([, args]) => args[0] === 'push')).toHaveLength(1)
   release({ stdout: '' })
   await waitForExpectation(() => expect(view.lastFrame()).toContain('Pushed'))
+})
+
+it('marks branches with an open PR from a slim head-branch query, not the full PR list (#456)', async () => {
+  useGh.mockImplementation(fn => ({
+    data: fn === listBranches ? [{ name: 'main' }, { name: 'dev' }]
+      : fn === listOpenPRBranches ? ['dev'] : [],
+    loading: false, refetch: vi.fn(),
+  }))
+  const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
+  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/dev.*PR/))
+  expect(view.lastFrame()).not.toMatch(/main.*PR/)
+  expect(useGh.mock.calls.map(([fn]) => fn)).not.toContain(listPRs)
 })

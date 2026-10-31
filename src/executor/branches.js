@@ -67,6 +67,46 @@ export async function listBranches(repo) {
   return all
 }
 
+const OPEN_PR_HEADS_QUERY = `
+  query($owner: String!, $name: String!, $after: String) {
+    repository(owner: $owner, name: $name) {
+      pullRequests(states: OPEN, first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes { headRefName }
+      }
+    }
+  }
+`
+/** Safety ceiling on open-PR head pages (5000 open PRs); each page is fetched once. */
+export const OPEN_PR_HEADS_MAX_PAGES = 50
+
+/**
+ * Head branch names of every open PR, for the Branches pane's "PR" marker.
+ * Slim on purpose (#456): no check contexts, bodies, labels or reviewers; the
+ * pane shows only whether a PR exists. Follows the cursor to the last page.
+ * @param repo
+ * @returns {Promise<string[]>}
+ */
+export async function listOpenPRBranches(repo) {
+  const [owner, name] = getRepo(repo).split('/')
+  const heads = []
+  let after = null
+  for (let page = 0; page < OPEN_PR_HEADS_MAX_PAGES; page++) {
+    const result = await runGh([
+      'api', 'graphql',
+      '-f', `query=${OPEN_PR_HEADS_QUERY}`,
+      '-f', `owner=${owner}`,
+      '-f', `name=${name}`,
+      ...(after ? ['-f', `after=${after}`] : []),
+    ])
+    const conn = result?.data?.repository?.pullRequests
+    for (const node of conn?.nodes || []) if (node?.headRefName) heads.push(node.headRefName)
+    if (!conn?.pageInfo?.hasNextPage || !conn.pageInfo.endCursor) break
+    after = conn.pageInfo.endCursor
+  }
+  return heads
+}
+
 /**
  * Checkout a PR's branch.
  * @param repo
