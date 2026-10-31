@@ -6,7 +6,7 @@ budgets), with #201 (`1`-`4` sections) and #177 (queue is read-only). Protocol B
 **Status (2026-10-23): accepted with the maintainer decisions of 2026-10-22, and
 partly implemented.** Decisions applied below: global pane jumps are a GitHub-style
 `g` prefix (`g h` home, `g p` PRs, `g i` issues, `g b` branches, `g a` actions,
-`g n` inbox); digits `1`-`9` also jump to the Nth active pane (restored, `app.jump-pane`;
+`g n` inbox); digits `1`-`9` also jump to the Nth active pane from list views only (restored, `app.jump-pane`; decided 2026-10-31: not after the `<Space>` leader, not in detail, diff, comments, settings, dialogs or inputs;
 if #201 sections land they need a different key); the queue stays read-only, so the "approve" budget is measured
 queue -> PR detail (`Enter`, `a`, confirm = 3). Sections marked **(implemented)** are
 live in the registry (`defaultConfig.toml` `[actions.*]`, read through
@@ -58,7 +58,7 @@ Source lines are from this checkout (`origin/main` at c4ae169).
 | `l` | labels; check logs (detail.jsx:395); open run log (`workflow.logs`) | 3 |
 | `t` | file tree (diff.jsx:941); `Space t` theme | 2 |
 | `:` | command palette; go to line in diff (diff.jsx:953) | 2 |
-| `1`-`9` | jump to pane by position (app.jsx). #201 wants `1`-`4` for sections | 2 |
+| `1`-`9` | jump to pane by position, list views only (app.jsx). #201 can use `1`-`4` for sections in detail views | 2 |
 | `Space` | leader prefix (app); toggle in dialogs; stage in ConflictView; skip in AI review; checkout in branches | 5 |
 | `Ctrl+G` | submit compose; `dialog.top`, `dialog.bottom`, `dialog.filter-top` also include it | 4 |
 | `Ctrl+A` / `Ctrl+E` / `Ctrl+K` | global AI assistant / compose editor / filter-up, versus readline start/end/kill in `TextInput` (utils.js:324-337) | 2 each |

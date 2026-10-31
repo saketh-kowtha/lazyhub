@@ -35,7 +35,7 @@ export const LEGACY_ACTION_VALUES = {
     keys: [["1", "2", "3", "4", "5", "6", "7", "8", "9"]],
     hint: ["1-9"],
     label: ["jump to pane"],
-    description: ["Jump to the Nth active pane (list and detail views)"],
+    description: ["Jump to the Nth active pane (list views only)", "Jump to the Nth active pane (list and detail views)"],
     scope: ["global"],
     group: ["nav"],
   },

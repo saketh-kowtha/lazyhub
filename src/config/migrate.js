@@ -46,6 +46,15 @@ export function migrateStateJsonToToml(opts = {}) {
 
   if (!existsSync(statePath)) return { migrated: false, deleted: false, reason: 'missing-state-json' }
 
+  // A config that does not parse cannot take [state]; leave state.json for the next start
+  // (writeConfig refuses broken files). This runs at startup, so it must never throw (#435).
+  if (existsSync(configPath)) {
+    try { parse(readFileSync(configPath, 'utf8')) } catch (err) {
+      logger.warn('config: lazyhub.toml is not valid TOML; keeping state.json for now', { error: err.message })
+      return { migrated: false, deleted: false, reason: 'invalid-toml' }
+    }
+  }
+
   const existingState = readTomlState(configPath)
   if (existingState !== undefined) {
     try {
@@ -69,7 +78,12 @@ export function migrateStateJsonToToml(opts = {}) {
 
   if (!isPlainObject(state)) return { migrated: false, deleted: false, reason: 'state-json-not-object' }
 
-  writeConfig({ state }, { configPath })
+  try {
+    writeConfig({ state }, { configPath })
+  } catch (err) {
+    logger.warn('config: could not migrate state.json into lazyhub.toml', { error: err.message })
+    return { migrated: false, deleted: false, reason: 'write-failed' }
+  }
   ensurePrivateDir(dirname(backupPath))
   writePrivateFile(backupPath, stateText.endsWith('\n') ? stateText : `${stateText}\n`)
   unlinkSync(statePath)

@@ -68,6 +68,19 @@ prScope = "all"
   })
 })
 
+describe('migrateStateJsonToToml with an invalid lazyhub.toml (#435)', () => {
+  it('returns invalid-toml, keeps state.json and does not throw', () => {
+    writeFileSync(statePath, JSON.stringify({ prScope: 'all' }))
+    writeFileSync(configPath, '[theme\nname = "x"\n')
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    let result
+    expect(() => { result = migrateStateJsonToToml({ statePath, configPath, backupPath }) }).not.toThrow()
+    expect(result).toEqual({ migrated: false, deleted: false, reason: 'invalid-toml' })
+    expect(existsSync(statePath)).toBe(true)
+    expect(readFileSync(configPath, 'utf8')).toBe('[theme\nname = "x"\n')
+  })
+})
+
 describe('migrateLegacyPaneIcons', () => {
   const legacy = `# my config
 [panes.prs]

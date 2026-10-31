@@ -25,6 +25,7 @@ import { WhichKey } from './ui/WhichKey.jsx'
 import { loadConfig, CONFIG_PATH } from './config.js'
 import { ConfigProvider } from './config/index.js'
 import { takeUnknownActionIds } from './config/loader.js'
+import { setConfigWriteNotifier } from './config/writer.js'
 import { migrateStateJsonToToml } from './config/migrate.js'
 import { useLayout } from './hooks/useLayout.js'
 import { AppContext } from './context.js'
@@ -135,6 +136,12 @@ export function App({ repo }) {
     if (ids.length > 0) {
       addToast({ message: `lazyhub.toml: unknown action id${ids.length > 1 ? 's' : ''} ignored: ${ids.join(', ')}`, variant: 'warning', durationMs: 8000 })
     }
+  }, [addToast])
+
+  // A failed config save (e.g. lazyhub.toml has a syntax error) becomes a visible notice (#435).
+  useEffect(() => {
+    setConfigWriteNotifier((message) => addToast({ message, variant: 'error' }))
+    return () => setConfigWriteNotifier(null)
   }, [addToast])
 
   const dialogActiveRef    = useRef(false)
@@ -276,9 +283,10 @@ export function App({ repo }) {
       return
     }
 
-    // 1-9: jump straight to the Nth active pane. Dialogs, inputs and overlays
-    // were filtered out above; the diff/comments/conflict views keep their own keys.
-    if (!showHelp && (view === 'list' || view === 'detail') && matchesAction('app.jump-pane', input, key, _config.toml)) {
+    // 1-9: jump straight to the Nth active pane, from list views only (#450). Detail,
+    // diff, comments and settings keep their own keys, and a digit after the <Space>
+    // leader never jumps. Dialogs, inputs and overlays were filtered out above.
+    if (!showHelp && !leaderActive && view === 'list' && matchesAction('app.jump-pane', input, key, _config.toml)) {
       const target = PANES[Number(input) - 1]
       if (target) goToPane(target)
       return
