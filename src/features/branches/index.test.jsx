@@ -4,7 +4,7 @@ import { cleanup } from 'ink-testing-library'
 import { execa } from 'execa'
 import { renderWithProviders, waitForInputReady, waitForExpectation } from '../../test/test-helpers.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { listBranches } from '../../executor.js'
+import { listBranches, clearLocalCheckoutCache } from '../../executor.js'
 import { BranchList } from './index.jsx'
 
 vi.mock('execa', () => ({ execa: vi.fn() }))
@@ -15,6 +15,7 @@ afterEach(cleanup)
 let head
 beforeEach(() => {
   vi.clearAllMocks()
+  clearLocalCheckoutCache()
   head = 'main'
   useGh.mockImplementation(fn => ({
     data: fn === listBranches ? [{ name: 'main' }, { name: 'dev' }] : [],
@@ -90,4 +91,18 @@ it('runs local commands only in the matching checkout (#471)', async () => {
     expect(cmd).toBe('git')
     expect(opts.cwd).toBe(process.cwd())
   }
+})
+
+it('pushes to the remote that points at the viewed repo, not a hardcoded origin (#471)', async () => {
+  execa.mockImplementation(async (_cmd, args) => {
+    if (args[0] === 'remote') return { stdout: 'origin\tgit@github.com:me/r.git (fetch)\nupstream\tgit@github.com:o/r.git (fetch)' }
+    return { stdout: 'main' }
+  })
+  const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
+  await waitForInputReady(view)
+  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/► main/))
+  await waitForInputReady(view)
+  view.stdin.write('p')
+  await waitForExpectation(() => expect(execa).toHaveBeenCalledWith('git', ['push', 'upstream', 'HEAD'], expect.anything()))
+  expect(execa).not.toHaveBeenCalledWith('git', ['push', 'origin', 'HEAD'], expect.anything())
 })

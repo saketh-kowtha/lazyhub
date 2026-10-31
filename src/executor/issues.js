@@ -29,6 +29,15 @@ function q(value) {
   return String(value || '').replace(/"/g, '\\"').trim()
 }
 
+// An unquoted search qualifier value: a login, a bot login or @me. Anything else
+// (spaces, quotes, colons) could smuggle extra qualifiers into the query.
+const SEARCH_LOGIN = /^(?:@me|[A-Za-z0-9][A-Za-z0-9_.-]*(?:\[bot\])?)$/
+function searchLogin(value) {
+  const login = String(value || '').trim()
+  if (!SEARCH_LOGIN.test(login)) throw new Error(`Invalid login for an issue search: ${JSON.stringify(login)}`)
+  return login
+}
+
 /**
  * One cursor page of issues (GraphQL search). Never refetches earlier pages:
  * pass the previous page's `endCursor` as `filter.after`.
@@ -39,10 +48,13 @@ function q(value) {
 export async function listIssuesPage(repo, filter = {}) {
   const r = getRepo(repo)
   const state = ISSUE_STATES.has(filter.state) ? filter.state : 'open'
-  const parts = [`repo:${r}`, 'is:issue', 'sort:updated-desc']
+  // Newest first by creation, like `gh issue list`; 'oldest' is server-side so the
+  // list never re-sorts under the cursor as pages arrive.
+  const sort = filter.sort === 'oldest' ? 'sort:created-asc' : 'sort:created-desc'
+  const parts = [`repo:${r}`, 'is:issue', sort]
   if (state !== 'all') parts.push(`state:${state}`)
-  if (filter.author)    parts.push(`author:${q(filter.author)}`)
-  if (filter.assignee)  parts.push(`assignee:${q(filter.assignee)}`)
+  if (filter.author)    parts.push(`author:${searchLogin(filter.author)}`)
+  if (filter.assignee)  parts.push(`assignee:${searchLogin(filter.assignee)}`)
   if (filter.label)     parts.push(`label:"${q(filter.label)}"`)
   if (filter.milestone) parts.push(`milestone:"${q(filter.milestone)}"`)
   const limit = Math.max(1, Math.min(Number(filter.limit || 50), ISSUE_PAGE_MAX))
@@ -106,6 +118,24 @@ export async function getIssue(repo, number) {
     '--json', 'number,title,state,author,body,labels,assignees,updatedAt,milestone,comments,url',
   ]
   return runGh(args)
+}
+
+/**
+ * One issue as a list row (the listIssuesPage shape), without its comments, so the
+ * list can patch a row after a write instead of refetching every page (D16).
+ * @param {string} repo
+ * @param {number} number
+ */
+export async function getIssueRow(repo, number) {
+  const n = await runGh([
+    'issue', 'view', String(number),
+    '--repo', getRepo(repo),
+    '--json', 'number,title,state,url,updatedAt,body,author,labels,assignees,milestone',
+  ])
+  return {
+    number: n.number, title: n.title, state: n.state, url: n.url, updatedAt: n.updatedAt, body: n.body,
+    author: n.author, labels: n.labels || [], assignees: n.assignees || [], milestone: n.milestone,
+  }
 }
 
 /**

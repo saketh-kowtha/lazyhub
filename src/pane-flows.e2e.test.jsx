@@ -61,7 +61,7 @@ vi.mock('./executor.js', () => ({
   removeIssueAssignees: vi.fn(),
   listBranches: vi.fn(),
   deleteBranch: vi.fn(),
-  findLocalCheckout: vi.fn(async () => process.cwd()),
+  findLocalCheckout: vi.fn(async () => ({ dir: process.cwd(), remote: 'origin' })),
   listPRs: vi.fn(),
   listRuns: vi.fn(),
   getRunLogs: vi.fn(),

@@ -8,7 +8,7 @@ import React, { useState, useCallback, useEffect, useContext, useRef } from 'rea
 import { useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
-import { listIssuesPage } from '../../executor.js'
+import { listIssuesPage, getIssueRow } from '../../executor.js'
 import { sanitize } from '../../utils.js'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -34,15 +34,31 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
   const FK = _cfg.keys
   const [filterState, setFilterState] = useState(_cfg.defaultFilter)
   const [sortMode, setSortMode] = useState('default') // 'default' | 'oldest'
-  const { data: firstPage, loading, error, refetch: refetchFirst, isStale } = useGh(listIssuesPage, [repo, { state: filterState, limit: _cfg.pageSize }])
+  const { data: firstPage, loading, error, refetch: refetchFirst, isStale } = useGh(listIssuesPage, [repo, { state: filterState, limit: _cfg.pageSize, sort: sortMode }])
 
   // Later pages are fetched by cursor and appended; earlier pages are never refetched (D16).
-  const pageKey = `${repo}|${filterState}`
-  const [more, setMore] = useState({ key: pageKey, items: [], endCursor: null, hasNextPage: null, totalCount: null, loading: false, error: null })
-  const extra = more.key === pageKey ? more : { items: [], endCursor: null, hasNextPage: null, totalCount: null, loading: false, error: null }
+  const pageKey = `${repo}|${filterState}|${sortMode}`
+  const emptyMore = (key) => ({ key, items: [], endCursor: null, hasNextPage: null, totalCount: null, loading: false, error: null })
+  const [more, setMore] = useState(() => emptyMore(pageKey))
+  const extra = more.key === pageKey ? more : emptyMore(pageKey)
+  // Writes patch rows in place (number -> row, or null when it left this filter) and
+  // prepend created issues, so a close or label edit at row 400 keeps every loaded page.
+  const [overlay, setOverlay] = useState({ key: pageKey, rows: {}, added: [] })
+  const patches = overlay.key === pageKey ? overlay : { key: pageKey, rows: {}, added: [] }
   const inFlight = useRef(false)
+  const currentKey = useRef(pageKey)
+  currentKey.current = pageKey
+  // A new filter/sort starts clean: no pages, cursor or in-flight request carried over.
+  useEffect(() => {
+    inFlight.current = false
+    setMore(emptyMore(pageKey))
+    setOverlay({ key: pageKey, rows: {}, added: [] })
+  }, [pageKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Explicit `r`: start over from page 1.
   const refetch = useCallback(() => {
-    setMore({ key: pageKey, items: [], endCursor: null, hasNextPage: null, totalCount: null, loading: false, error: null })
+    inFlight.current = false
+    setMore(emptyMore(pageKey))
+    setOverlay({ key: pageKey, rows: {}, added: [] })
     refetchFirst()
   }, [pageKey, refetchFirst])
   const [cursor, setCursor] = useState(initialCursor)
@@ -59,29 +75,62 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
     const seen = new Set()
     return [...(firstPage?.items || []), ...extra.items].filter(i => !seen.has(i.number) && seen.add(i.number))
   }, [firstPage, extra.items])
-  const items = sortMode === 'oldest'
-    ? [...rawItems].sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt))
-    : rawItems
+  const items = React.useMemo(() => {
+    const seen = new Set()
+    return [...patches.added, ...rawItems]
+      .filter(i => !seen.has(i.number) && seen.add(i.number))
+      .map(i => (i.number in patches.rows ? patches.rows[i.number] : i))
+      .filter(Boolean)
+  }, [rawItems, patches])
   const STATE_CYCLE = ['open', 'closed']
 
   const loadMore = useCallback(async () => {
     if (inFlight.current || !endCursor) return
+    const requestKey = pageKey
     inFlight.current = true
-    setMore(prev => ({ ...(prev.key === pageKey ? prev : { items: [] }), key: pageKey, loading: true, error: null }))
+    setMore(prev => ({ ...(prev.key === requestKey ? prev : emptyMore(requestKey)), loading: true, error: null }))
     try {
-      const page = await listIssuesPage(repo, { state: filterState, limit: _cfg.pageSize, after: endCursor })
+      const page = await listIssuesPage(repo, { state: filterState, limit: _cfg.pageSize, sort: sortMode, after: endCursor })
+      if (currentKey.current !== requestKey) return // filter changed meanwhile: drop the stale page
       setMore(prev => ({
-        key: pageKey,
-        items: [...(prev.key === pageKey ? prev.items : []), ...page.items],
+        key: requestKey,
+        items: [...(prev.key === requestKey ? prev.items : []), ...page.items],
         endCursor: page.endCursor, hasNextPage: page.hasNextPage, totalCount: page.totalCount,
         loading: false, error: null,
       }))
     } catch (err) {
-      setMore(prev => ({ ...(prev.key === pageKey ? prev : { items: [] }), key: pageKey, loading: false, error: err }))
+      if (currentKey.current !== requestKey) return
+      setMore(prev => ({ ...(prev.key === requestKey ? prev : emptyMore(requestKey)), loading: false, error: err }))
     } finally {
-      inFlight.current = false
+      if (currentKey.current === requestKey) inFlight.current = false
     }
-  }, [repo, filterState, endCursor, pageKey])
+  }, [repo, filterState, sortMode, endCursor, pageKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Retry only the page that failed; the pages already loaded stay.
+  const retryPage = useCallback(() => {
+    setMore(prev => (prev.key === pageKey ? { ...prev, error: null } : prev))
+  }, [pageKey])
+
+  // After a write, re-read just that issue and patch its row (or drop it when it no
+  // longer matches the filter). Falls back to a full refetch only if that read fails.
+  const refreshIssue = useCallback(async (number, { added = false } = {}) => {
+    const key = pageKey
+    try {
+      const row = await getIssueRow(repo, number)
+      if (currentKey.current !== key) return
+      const keep = filterState === 'all' || String(row.state).toLowerCase() === filterState
+      setOverlay(prev => {
+        const base = prev.key === key ? prev : { key, rows: {}, added: [] }
+        return {
+          key,
+          rows: { ...base.rows, [number]: keep ? row : null },
+          added: added && keep && sortMode !== 'oldest' ? [row, ...base.added] : base.added,
+        }
+      })
+    } catch {
+      refetch()
+    }
+  }, [repo, filterState, sortMode, pageKey, refetch])
 
   // Fetch the next cursor page when the cursor nears the end of what is loaded.
   useEffect(() => {
@@ -153,7 +202,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
 
     if (matchesAction('cursor.down', input, key, _actions)) { moveCursor(1);  return }
     if (matchesAction('cursor.up', input, key, _actions))   { moveCursor(-1); return }
-    if (matchesAction('list.refresh', input, key, _actions)) { refetch(); return }
+    if (matchesAction('list.refresh', input, key, _actions)) { if (extra.error) retryPage(); else refetch(); return }
     if (matchesAction('list.search', input, key, _actions)) { setDialog('fuzzy'); return }
     if (matchesAction('issue.new', input, key, _actions)) { setDialog('new'); return }
 
@@ -242,6 +291,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
         onClose={() => setDialog(null)}
         showStatus={showStatus}
         refetch={refetch}
+        refreshIssue={refreshIssue}
       />
     )
   }

@@ -263,3 +263,12 @@ describe('filterActions — recent use ranking', () => {
     expect(ranked.indexOf('pr.copy-url')).toBeLessThan(ranked.indexOf('pr.approve'))
   })
 })
+
+describe('pr.checkout on a cross-repo item (#493)', () => {
+  it('refuses to run when the item has no local clone here', () => {
+    const onClose = vi.fn()
+    const action = buildActions({ onNavigate: vi.fn(), onTheme: vi.fn(), onClose, onQuit: vi.fn() }).find(a => a.id === 'pr.checkout')
+    expect(() => action.run({ repo: 'other/project', localGit: false, selectedItem: { number: 5 }, _confirmed: true })).toThrow(/No local checkout of other\/project/)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+})
