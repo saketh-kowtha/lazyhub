@@ -13,6 +13,7 @@ import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { firstActionKey } from '../../config/actions.js'
 import { contextFooterHints } from '../../ui/actions.js'
 import { useGh } from '../../hooks/useGh.js'
+import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import {
   listPRComments, resolveThread,
   replyToComment, editPRComment, deletePRComment,
@@ -97,6 +98,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
     setStatusMsg(msg)
     setTimeout(() => setStatusMsg(null), 3000)
   }, [])
+  const { run: runWrite } = usePendingWrite(flash)
 
   // ── Open $EDITOR for multiline edit ───────────────────────────────────────
   const openEditor = useCallback((initial) => {
@@ -130,20 +132,20 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       if (!body) { done(); return }
       const rootId = comment._isRoot ? comment.id : comment._rootId
       if (!rootId) { flash('Cannot determine thread root'); done(); return }
-      replyToComment(repo, prNumber, rootId, body)
+      runWrite('Sending reply', () => replyToComment(repo, prNumber, rootId, body)
         .then(() => { flash('Reply sent'); done(); refetch() })
-        .catch(err => flash(`Failed: ${err.message}`))
+        .catch(err => flash(`Failed: ${err.message}`)))
     } else if (type === 'edit') {
       if (!body) { done(); return }
-      editPRComment(repo, comment.id, body)
+      runWrite('Updating comment', () => editPRComment(repo, comment.id, body)
         .then(() => { flash('Comment updated'); done(); refetch() })
-        .catch(err => flash(`Failed: ${err.message}`))
+        .catch(err => flash(`Failed: ${err.message}`)))
     } else if (type === 'delete') {
-      deletePRComment(repo, comment.id)
+      runWrite('Deleting comment', () => deletePRComment(repo, comment.id)
         .then(() => { flash('Comment deleted'); done(); refetch() })
-        .catch(err => flash(`Failed: ${err.message}`))
+        .catch(err => flash(`Failed: ${err.message}`)))
     }
-  }, [action, actionText, repo, prNumber, flash, refetch])
+  }, [action, actionText, repo, prNumber, flash, refetch, runWrite])
 
   // ── Keyboard ──────────────────────────────────────────────────────────────
   useKeymapInput((input, key) => {
@@ -213,9 +215,9 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       // threadId is the GraphQL ReviewThread node ID (e.g. PRRT_kwDO...)
       const threadId = comment.threadId
       if (!threadId) { flash('Thread ID unavailable'); return }
-      resolveThread(threadId)
+      runWrite('Resolving thread', () => resolveThread(threadId)
         .then(() => { flash('Thread resolved'); refetch() })
-        .catch(err => flash(`Failed: ${err.message}`))
+        .catch(err => flash(`Failed: ${err.message}`)))
       return
     }
     if (id === 'comment.filter') {

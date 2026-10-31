@@ -20,6 +20,7 @@ export function renderPRListDialog({
   dialog, selectedPR, items, repo, repoInfo, authorFilter, effectiveHeight,
   mergeOptions, setMergeOptions, setDialog, setCursor, setScrollOffset,
   setAuthorFilter, showStatus, closeDialog, refetch,
+  runWrite = (_label, fn) => fn(),
 }) {
   if (dialog === 'fuzzy') {
     const fuzzyItems = items.map(pr => ({ ...pr, authorLogin: pr.author?.login || '' }))
@@ -80,13 +81,15 @@ export function renderPRListDialog({
         destructive={true}
         onConfirm={async () => {
           closeDialog()
-          try {
-            await mergePR(repo, selectedPR.number, mergeOptions.strategy, mergeOptions.msg)
-            showStatus(`✓ Merged PR #${selectedPR.number}`)
-            refetch()
-          } catch (err) {
-            showStatus(`✗ Merge failed: ${err.message}`, true)
-          }
+          await runWrite(`Merging #${selectedPR.number}`, async () => {
+            try {
+              await mergePR(repo, selectedPR.number, mergeOptions.strategy, mergeOptions.msg)
+              showStatus(`✓ Merged PR #${selectedPR.number}`)
+              refetch()
+            } catch (err) {
+              showStatus(`✗ Merge failed: ${err.message}`, true)
+            }
+          })
         }}
         onCancel={closeDialog}
       />
@@ -100,12 +103,14 @@ export function renderPRListDialog({
         destructive={false}
         onConfirm={async () => {
           closeDialog()
-          try {
-            await checkoutBranch(repo, selectedPR.number)
-            showStatus(`✓ Checked out ${selectedPR.headRefName}`)
-          } catch (err) {
-            showStatus(`✗ Checkout: ${err.message}`, true)
-          }
+          await runWrite(`Checking out #${selectedPR.number}`, async () => {
+            try {
+              await checkoutBranch(repo, selectedPR.number)
+              showStatus(`✓ Checked out ${selectedPR.headRefName}`)
+            } catch (err) {
+              showStatus(`✗ Checkout: ${err.message}`, true)
+            }
+          })
         }}
         onCancel={closeDialog}
       />
@@ -119,12 +124,12 @@ export function renderPRListDialog({
         message={`${disabling ? 'Disable' : 'Enable'} auto-merge on PR #${selectedPR.number}: ${sanitize(selectedPR.title)}?`}
         onConfirm={() => {
           closeDialog()
-          const request = disabling
+          const request = () => disabling
             ? disableAutoMerge(repo, selectedPR.number)
             : enableAutoMerge(repo, selectedPR.number, repoInfo?.squashMergeAllowed ? 'squash' : 'merge')
-          request
+          return runWrite(`${disabling ? 'Disabling' : 'Enabling'} auto-merge on #${selectedPR.number}`, () => request()
             .then(() => { showStatus(disabling ? '✓ Auto-merge disabled' : '⟳ Auto-merge enabled'); refetch() })
-            .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true))
+            .catch(err => showStatus(`✗ Auto-merge failed: ${err.message}`, true)))
         }}
         onCancel={closeDialog}
       />
@@ -138,13 +143,15 @@ export function renderPRListDialog({
         destructive={true}
         onConfirm={async () => {
           closeDialog()
-          try {
-            await closePR(repo, selectedPR.number)
-            showStatus(`Closed PR #${selectedPR.number}`)
-            refetch()
-          } catch (err) {
-            showStatus(`Failed: ${err.message}`, true)
-          }
+          await runWrite(`Closing #${selectedPR.number}`, async () => {
+            try {
+              await closePR(repo, selectedPR.number)
+              showStatus(`Closed PR #${selectedPR.number}`)
+              refetch()
+            } catch (err) {
+              showStatus(`Failed: ${err.message}`, true)
+            }
+          })
         }}
         onCancel={closeDialog}
       />
@@ -155,7 +162,7 @@ export function renderPRListDialog({
   if (SelectionDialog && selectedPR) {
     return (
       <SelectionDialog
-        repo={repo} pr={selectedPR}
+        repo={repo} pr={selectedPR} runWrite={runWrite}
         onError={(err) => showStatus(`✗ Updating ${dialog} failed: ${sanitize(err.message)}`, true)}
         onClose={() => { closeDialog(); refetch() }}
       />
@@ -170,12 +177,14 @@ export function renderPRListDialog({
         fields={[{ name: 'body', label: approving ? 'Optional comment (Ctrl+G to submit, leave empty to skip)' : 'Describe the changes needed', type: 'text' }]}
         onSubmit={async (values) => {
           closeDialog()
-          try {
-            await reviewPR(repo, selectedPR.number, approving ? 'approve' : 'request-changes', approving ? values.body || '' : values.body)
-            showStatus(approving ? `✓ Approved PR #${selectedPR.number}` : `✓ Requested changes on PR #${selectedPR.number}`)
-          } catch (err) {
-            showStatus(`✗ ${err.message}`, true)
-          }
+          await runWrite(approving ? `Approving #${selectedPR.number}` : `Requesting changes on #${selectedPR.number}`, async () => {
+            try {
+              await reviewPR(repo, selectedPR.number, approving ? 'approve' : 'request-changes', approving ? values.body || '' : values.body)
+              showStatus(approving ? `✓ Approved PR #${selectedPR.number}` : `✓ Requested changes on PR #${selectedPR.number}`)
+            } catch (err) {
+              showStatus(`✗ ${err.message}`, true)
+            }
+          })
         }}
         onCancel={closeDialog}
       />

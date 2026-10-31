@@ -1,7 +1,7 @@
 // @ts-check
 
 /** PR label, collaborator and author pickers used by the list pane. */
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useGh } from '../../hooks/useGh.js'
 import { classifyGhFailure, listLabels, listCollaborators, addLabels, removeLabels, addPRAssignees, removePRAssignees, requestReviewers, removeReviewers } from '../../executor.js'
@@ -32,11 +32,14 @@ function PickerStatus({ title, children, onCancel, onRetry = undefined }) {
   )
 }
 
-function PRSelectionDialog({ repo, pr, current, getOptions, field, loadingText, title = '', add, remove, onClose, onError }) {
+function PRSelectionDialog({ repo, pr, current, getOptions, field, loadingText, title = '', add, remove, onClose, onError, runWrite = (_label, fn) => fn() }) {
   const { scheme } = useTheme()
   const t = schemeToT(scheme)
+  const [saving, setSaving] = useState(false)
+  const submitted = useRef(false)
   const { data: options, loading, error, refetch } = useGh(getOptions, [repo])
   const hasOptions = Array.isArray(options) && options.length > 0
+  if (saving) return <PickerStatus title={title} onCancel={onClose}><Text color={t.ui.muted}>Updating #{pr.number}…</Text></PickerStatus>
   if (loading && !hasOptions) {
     return <PickerStatus title={title} onCancel={onClose}><Text color={t.ui.muted}>{loadingText}</Text></PickerStatus>
   }
@@ -64,11 +67,20 @@ function PRSelectionDialog({ repo, pr, current, getOptions, field, loadingText, 
       title={title}
       items={items}
       onSubmit={async (selectedIds) => {
+        if (submitted.current) return
         const toAdd = selectedIds.filter(id => !current.includes(id))
         const toRemove = current.filter(id => !selectedIds.includes(id))
+        if (!toAdd.length && !toRemove.length) { onClose(); return }
+        submitted.current = true
+        setSaving(true)
+        let ran = false
         try {
-          if (toAdd.length) await add(repo, pr.number, toAdd)
-          if (toRemove.length) await remove(repo, pr.number, toRemove)
+          await runWrite(`Updating #${pr.number}`, async () => {
+            ran = true
+            if (toAdd.length) await add(repo, pr.number, toAdd)
+            if (toRemove.length) await remove(repo, pr.number, toRemove)
+          })
+          if (!ran && onError) onError(new Error('another update is still in progress'))
         } catch (err) {
           if (onError) onError(err)
         }
@@ -82,18 +94,18 @@ function PRSelectionDialog({ repo, pr, current, getOptions, field, loadingText, 
 const addPRLabels = (repo, number, labels) => addLabels(repo, number, labels, 'pr')
 const removePRLabels = (repo, number, labels) => removeLabels(repo, number, labels, 'pr')
 
-export function LabelDialog({ repo, pr, onClose, onError }) {
+export function LabelDialog({ repo, pr, onClose, onError, runWrite }) {
   return <PRSelectionDialog
-    repo={repo} pr={pr} onClose={onClose} onError={onError}
+    repo={repo} pr={pr} onClose={onClose} onError={onError} runWrite={runWrite}
     current={pr.labels?.map(label => label.name) || []}
     getOptions={listLabels} field="name" loadingText="Loading labels…"
     add={addPRLabels} remove={removePRLabels}
   />
 }
 
-export function AssigneeDialog({ repo, pr, onClose, onError }) {
+export function AssigneeDialog({ repo, pr, onClose, onError, runWrite }) {
   return <PRSelectionDialog
-    repo={repo} pr={pr} onClose={onClose} onError={onError}
+    repo={repo} pr={pr} onClose={onClose} onError={onError} runWrite={runWrite}
     current={pr.assignees?.map(assignee => assignee.login) || []}
     getOptions={listCollaborators} field="login" loadingText="Loading collaborators…"
     add={addPRAssignees} remove={removePRAssignees}
@@ -126,10 +138,10 @@ export function AuthorSearchDialog({ current, onSubmit, onCancel }) {
   )
 }
 
-export function ReviewerDialog({ repo, pr, onClose, onError }) {
+export function ReviewerDialog({ repo, pr, onClose, onError, runWrite }) {
   const current = [...new Set((pr.reviewRequests || []).map(reviewer => reviewer.login || reviewer.name).filter(Boolean))]
   return <PRSelectionDialog
-    repo={repo} pr={pr} onClose={onClose} onError={onError}
+    repo={repo} pr={pr} onClose={onClose} onError={onError} runWrite={runWrite}
     current={current} title="Request Reviewers"
     getOptions={listCollaborators} field="login" loadingText="Loading collaborators…"
     add={requestReviewers} remove={removeReviewers}

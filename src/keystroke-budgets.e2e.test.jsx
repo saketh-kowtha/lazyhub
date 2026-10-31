@@ -297,6 +297,24 @@ describe('write keys confirm first and cancel does nothing', () => {
     expect(executor.enableAutoMerge).not.toHaveBeenCalled()
   })
 
+  it('shows a pending status and ignores a repeat merge until the first settles (#453)', async () => {
+    let release
+    executor.mergePR.mockImplementation(() => new Promise(resolve => { release = resolve }))
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Retry in webhook sender'))
+    await flush(30)
+    await press([key('m'), ENTER, ENTER, key('y')])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Merging #'))
+    await press([key('m'), ENTER, ENTER, key('y')])
+    await flush(30)
+    expect(executor.mergePR).toHaveBeenCalledTimes(1)
+    release()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Merged PR #'))
+    await press([key('m'), ENTER, ENTER, key('y')])
+    await waitForExpectation(() => expect(executor.mergePR).toHaveBeenCalledTimes(2))
+    release()
+  })
+
   it('auto-merge writes only after yes', async () => {
     const view = renderWithProviders(<App repo="owner/repo" />)
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Retry in webhook sender'))
