@@ -37,6 +37,7 @@ export function getConfigDocumentationModel(config = loadConfig()) {
   return {
     theme: config.theme || {},
     defaults: config.defaults || {},
+    features: config.features || {},
     panes,
     actions,
   }
@@ -60,7 +61,7 @@ export function generateConfigReferenceMarkdown(config = loadConfig()) {
     '',
     table(['Key', 'Value'], [
       ['theme.name', model.theme.name || ''],
-      ['defaults.pr_scope', model.defaults.pr_scope || ''],
+      ['features.prs.default_scope', model.features?.prs?.default_scope || ''],
       ['defaults.ai_provider', model.defaults.ai_provider || ''],
       ['defaults.repo', model.defaults.repo || ''],
       ['defaults.repo_host', model.defaults.repo_host || ''],

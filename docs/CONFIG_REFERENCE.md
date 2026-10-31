@@ -22,6 +22,10 @@ The single source of truth is `~/.config/lazyhub/lazyhub.toml`.
   clear the key (and `repo_host`, the host it was saved under; a saved repo is ignored when `GH_HOST` differs) by hand, or rerun `lazyhub --onboarding`, to change it.
 - `[ui].icons` (`auto` | `unicode` | `ascii`, default `auto`) controls the ASCII icon fallback. `auto` switches to ASCII on `TERM=linux` or `dumb`, a non-UTF-8 `LC_ALL`/`LC_CTYPE`/`LANG` (e.g. `C`), and legacy Windows consoles (no `WT_SESSION`/`TERM_PROGRAM`). Every symbol is replaced by an ASCII character of the same width.
 - `[ui].no_color` (default `false`) drops all colors, keeping bold/inverse. The `NO_COLOR` environment variable (non-empty) does the same.
+- `[ui].show_hints` (default `true`): `false` hides the footer key hints, the same layout as `[layout].compact_footer = true`.
+- `[layout].preview_panel` (default `true`): `false` turns off the PR detail popover that floats over the PR list.
+- `[features.prs].default_scope` (`mine` | `reviewing` | `all`, default `mine`) is the PR list scope on first launch; afterwards the last scope you used is remembered. `[defaults].pr_scope` is a retired alias, honoured only while `default_scope` is left at its default.
+- Removed because nothing read them: `[ui].density`, `[ui].high_contrast` (pick the `lazyhub-high-contrast` theme instead) and `[diff].max_lines` (diffs are never cut off). Old files that still contain them load without a warning.
 - `[state]` stores auto-managed runtime state migrated from the old `state.json`.
 - `[ai.second_opinion]` controls cross-model review routing for agent-authored
   PRs. It defaults to `enabled = true`; `[ai.second_opinion.map]` maps detected
