@@ -192,7 +192,10 @@ function route(cmd, args) {
   const [a, b] = args
   if (a === 'api' && b === 'graphql') {
     const q = args.find(x => String(x).startsWith('searchQuery=')) || ''
-    if (/is:issue/.test(q)) return json({ data: { search: { pageInfo: { hasNextPage: false }, nodes: [] } } })
+    if (/is:issue/.test(q)) {
+      const nodes = ISSUES.map(i => ({ ...i, __typename: 'Issue', labels: { nodes: i.labels }, assignees: { nodes: i.assignees }, comments: { totalCount: i.comments.length } }))
+      return json({ data: { search: { issueCount: nodes.length, pageInfo: { hasNextPage: false, endCursor: null }, nodes } } })
+    }
     return json({ data: { search: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: PR_NODES } } })
   }
   if (a === 'api' && /^repos\/[^/]+\/[^/]+\/branches\?/.test(b)) return json(BRANCHES)
