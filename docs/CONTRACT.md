@@ -143,9 +143,12 @@ repository resolved from `repo`, the startup repository or the saved default),
 stdout carries JSON-RPC only; if `gh` is missing or unauthenticated it prints one
 line to stderr and exits non-zero.
 
+Removed: `lazyhub_query` / `query` was a placeholder that returned canned text. It is no
+longer advertised, and calling it now returns `MCP_UNKNOWN_TOOL`.
+
 | Tool | Inputs | Output | Side effects |
 | --- | --- | --- | --- |
-| `lazyhub_pr_list`, `list_prs` | `repo`, `state`, `limit` | slim PR array (no `body`; at most 10 checks per PR, full count in `checksTotal` when more) | none |
+| `lazyhub_pr_list`, `list_prs` | `repo`, `state`, `limit` | slim PR array (no `body`; at most 10 checks per PR, failing first then pending then passing; `checksSummary {failing, pending, passing, total}` on every row that has checks) | none |
 | `lazyhub_pr_view`, `get_pr` | `repo`, `number` | PR object | none |
 | `lazyhub_pr_diff`, `get_pr_diff` | `repo`, `number` | diff text | none |
 | `lazyhub_watch_ci`, `get_checks` | `repo`, `number` | checks array/object | none |

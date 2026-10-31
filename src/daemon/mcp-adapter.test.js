@@ -20,7 +20,7 @@ describe('daemon MCP adapter', () => {
   it('exposes lazyhub-prefixed tools and executes aliases', async () => {
     const { TOOLS, callTool } = await import('./mcp-adapter.js')
     expect(TOOLS.map(tool => tool.name)).toContain('lazyhub_pr_list')
-    await expect(callTool('lazyhub_pr_list', { repo: 'owner/repo' })).resolves.toEqual([{ number: 1, statusCheckRollup: [] }])
+    await expect(callTool('lazyhub_pr_list', { repo: 'owner/repo' })).resolves.toEqual([{ number: 1 }])
   })
 
   it('does not advertise mutating tools', async () => {
@@ -125,14 +125,31 @@ describe('daemon MCP adapter', () => {
     expect(JSON.parse(text)[0].number).toBe(1)
   })
 
-  it('slims list_prs: no body, checks capped with the real total reported', async () => {
+  it('slims list_prs: no body; failing checks survive the cap; summary reports the full tally', async () => {
     const { listPRs } = await import('../executor.js')
-    const checks = Array.from({ length: 25 }, (_, i) => ({ name: `c${i}`, status: 'COMPLETED', conclusion: 'SUCCESS' }))
+    const checks = Array.from({ length: 25 }, (_, i) => ({ name: `c${i + 1}`, status: 'COMPLETED', conclusion: i + 1 === 14 ? 'FAILURE' : 'SUCCESS' }))
+    checks[3] = { name: 'c4', status: 'IN_PROGRESS', conclusion: null }
     listPRs.mockResolvedValueOnce([{ number: 7, title: 't', body: 'x'.repeat(5000), statusCheckRollup: checks }])
     const { callTool } = await import('./mcp-adapter.js')
     const [pr] = await callTool('list_prs', { repo: 'owner/repo' })
     expect(pr).not.toHaveProperty('body')
     expect(pr.statusCheckRollup).toHaveLength(10)
-    expect(pr.checksTotal).toBe(25)
+    expect(pr.statusCheckRollup[0].name).toBe('c14')
+    expect(pr.statusCheckRollup[1].name).toBe('c4')
+    expect(pr.checksSummary).toEqual({ failing: 1, pending: 1, passing: 23, total: 25 })
+  })
+
+  it('omits statusCheckRollup when the source row has none', async () => {
+    const { callTool } = await import('./mcp-adapter.js')
+    const [pr] = await callTool('list_prs', { repo: 'owner/repo' })
+    expect(pr).toEqual({ number: 1 })
+  })
+
+  it('keeps resource_type in the input schemas the validator accepts', async () => {
+    const { TOOLS } = await import('./mcp-adapter.js')
+    const by = Object.fromEntries(TOOLS.map(t => [t.name, t.inputSchema]))
+    expect(by.get_pr.properties.resource_type.enum).toEqual(['pr'])
+    expect(by.get_issue.properties.resource_type.enum).toEqual(['issue'])
+    expect(by.list_notifications.properties.resource_type).toBeUndefined()
   })
 })

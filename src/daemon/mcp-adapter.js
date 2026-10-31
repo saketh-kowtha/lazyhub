@@ -37,7 +37,7 @@ const MUTATING_TOOLS = new Set([
 const MCP_MUTATIONS_DISABLED = 'MCP mutating tools are disabled until governed authorization is available'
 
 // list_prs is read by agents: no PR bodies, and at most this many checks per PR
-// (the full count is reported, never silently truncated).
+// (failing first; the full tally is always in checksSummary).
 const MAX_CHECKS_PER_PR = 10
 
 // package.json sits beside src/ in the checkout and beside dist/ when installed.
@@ -98,13 +98,14 @@ const PROP = {
   issueState: { type: 'string', enum: STATES.list_issues },
 }
 const schema = (properties, required = []) => ({ type: 'object', properties, ...(required.length ? { required } : {}) })
+const RT = (tool) => ({ type: 'string', enum: [RESOURCE_TYPES[tool]] })
 const SCHEMAS = {
-  list_prs: schema({ repo: PROP.repo, state: PROP.prState, limit: PROP.limit }),
-  get_pr: schema({ repo: PROP.repo, number: PROP.number }, ['number']),
-  get_pr_diff: schema({ repo: PROP.repo, number: PROP.number }, ['number']),
-  get_checks: schema({ repo: PROP.repo, number: PROP.number }, ['number']),
-  list_issues: schema({ repo: PROP.repo, state: PROP.issueState, limit: PROP.limit }),
-  get_issue: schema({ repo: PROP.repo, number: PROP.number }, ['number']),
+  list_prs: schema({ resource_type: RT('list_prs'), repo: PROP.repo, state: PROP.prState, limit: PROP.limit }),
+  get_pr: schema({ resource_type: RT('get_pr'), repo: PROP.repo, number: PROP.number }, ['number']),
+  get_pr_diff: schema({ resource_type: RT('get_pr_diff'), repo: PROP.repo, number: PROP.number }, ['number']),
+  get_checks: schema({ resource_type: RT('get_checks'), repo: PROP.repo, number: PROP.number }, ['number']),
+  list_issues: schema({ resource_type: RT('list_issues'), repo: PROP.repo, state: PROP.issueState, limit: PROP.limit }),
+  get_issue: schema({ resource_type: RT('get_issue'), repo: PROP.repo, number: PROP.number }, ['number']),
   list_notifications: schema({}),
   list_branches: schema({ repo: PROP.repo }),
 }
@@ -126,17 +127,34 @@ const TOOLS = [
   ['list_branches', 'List branches'],
 ].map(([name, description]) => ({ name, description, inputSchema: SCHEMAS[TOOL_ALIASES[name] || name] }))
 
+const FAILING = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE'])
+const PASSING = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED'])
+const checkRank = (c) => {
+  const v = String(c?.conclusion || '').toUpperCase()
+  if (FAILING.has(v)) return 0
+  if (PASSING.has(v)) return 2
+  return 1 // no conclusion yet: queued, in progress, pending
+}
+
 /**
- * Slim a PR list row for agents: drop the body, cap the checks.
+ * Slim a PR list row for agents: drop the body, keep at most MAX_CHECKS_PER_PR
+ * checks (failing first, then pending, then passing) and always report the
+ * full tally in checksSummary, so nothing is truncated silently.
  * @param {any} pr
  */
 function slimPR(pr) {
   const { body: _body, statusCheckRollup, ...rest } = pr
-  const checks = Array.isArray(statusCheckRollup) ? statusCheckRollup : []
+  if (!Array.isArray(statusCheckRollup)) return rest
+  const counts = [0, 0, 0]
+  for (const c of statusCheckRollup) counts[checkRank(c)] += 1
+  const ordered = statusCheckRollup
+    .map((c, i) => [c, i])
+    .sort((x, y) => checkRank(x[0]) - checkRank(y[0]) || x[1] - y[1])
+    .map(([c]) => c)
   return {
     ...rest,
-    statusCheckRollup: checks.slice(0, MAX_CHECKS_PER_PR),
-    ...(checks.length > MAX_CHECKS_PER_PR ? { checksTotal: checks.length } : {}),
+    statusCheckRollup: ordered.slice(0, MAX_CHECKS_PER_PR),
+    checksSummary: { failing: counts[0], pending: counts[1], passing: counts[2], total: statusCheckRollup.length },
   }
 }
 
