@@ -5,6 +5,7 @@
 
 import { getHljs } from '../../../highlight.js'
 import { applyThemeStyle } from '../../../utils.js'
+import stringWidth from 'string-width'
 
 /** Resolve a filename extension to a supported highlight language.
  * @param {string} filename
@@ -119,14 +120,38 @@ function htmlToChalk(html, bgColor, t) {
 const _syntaxCache = new Map()
 const _SYNTAX_CACHE_MAX = 5000
 
+/**
+ * Expand TAB characters to spaces at tab stops (no config key exists, default 4),
+ * so width math and the terminal agree. Display-width aware for wide characters.
+ * @param {string} text
+ * @param {number} [width]
+ */
+export function expandTabs(text, width = 4) {
+  if (typeof text !== 'string' || !text.includes('\t')) return text
+  let out = ''
+  let col = 0
+  for (const ch of text) {
+    if (ch === '\t') {
+      const n = width - (col % width)
+      out += ' '.repeat(n)
+      col += n
+    } else {
+      out += ch
+      col += stringWidth(ch)
+    }
+  }
+  return out
+}
+
 /** Color a code line, preserving its diff background and the bounded cache.
- * @param {string} code
+ * @param {string} rawCode
  * @param {string|null} lang
  * @param {string|null} bgColor
  * @param {object} t theme tokens
  * @returns {string} terminal text
  */
-export function syntaxHighlight(code, lang, bgColor, t) {
+export function syntaxHighlight(rawCode, lang, bgColor, t) {
+  const code = expandTabs(rawCode)
   if (!lang) {
     return applyThemeStyle(code, t.syntax.default, bgColor)
   }
