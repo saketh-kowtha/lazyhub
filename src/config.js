@@ -11,9 +11,9 @@ import { dirname } from 'path'
 import { ensurePrivateDir, tightenFile, writePrivateFile } from './secure-fs.js'
 import { logger } from './utils-core.js'
 import { migrateLegacyPaneIcons } from './config/migrate.js'
-import { loadConfig as loadTomlConfig, USER_CONFIG_PATH, DEFAULT_CONFIG_TOML_PATH } from './config/loader.js'
+import { loadConfig as loadTomlConfig, USER_CONFIG_PATH } from './config/loader.js'
 import { DEFAULT_CONFIG } from './config/schema.js'
-import { readState as readTomlState, removeSectionTree, writeConfig as writeTomlConfig, writeState as writeTomlState } from './config/writer.js'
+import { readState as readTomlState, writeConfig as writeTomlConfig, writeState as writeTomlState } from './config/writer.js'
 
 export const BUILTIN_PANES = ['prs', 'issues', 'branches', 'actions', 'notifications']
 export const CONFIG_PATH = USER_CONFIG_PATH
@@ -236,9 +236,14 @@ export function saveDefaultRepo(repo) {
   writeTomlConfig({ defaults: { repo, repo_host: process.env.GH_HOST || 'github.com' } })
 }
 
+const SPARSE_CONFIG_HEADER = `# lazyhub configuration (TOML).
+# Only settings you choose are stored here. Everything else follows the built-in
+# defaults, so upgrades can improve them. See docs/CONFIG_REFERENCE.md for every key.
+`
+
 /**
- * Create lazyhub.toml from bundled defaults if it does not exist; otherwise tighten
- * its permissions and migrate legacy pinned pane icons.
+ * Create a sparse lazyhub.toml (comment header only) if it does not exist; otherwise
+ * tighten its permissions and migrate legacy pinned pane icons.
  * @param {string} [configPath] user config path (defaults to CONFIG_PATH)
  */
 export function writeDefaultConfig(configPath = CONFIG_PATH) {
@@ -255,9 +260,10 @@ export function writeDefaultConfig(configPath = CONFIG_PATH) {
   } catch {
     try {
       ensurePrivateDir(dirname(configPath))
-      // Pane presentation ([panes.*]) is not pinned: those values are defaults, so
-      // omitting them lets future default changes reach existing users.
-      writePrivateFile(configPath, removeSectionTree(readFileSync(DEFAULT_CONFIG_TOML_PATH, 'utf8'), 'panes'))
+      // Sparse on purpose (#475): never copy the bundled defaults here. A copy pins every
+      // default, so later default changes (new key scopes, renamed actions) would be
+      // overridden by the frozen values. Only settings the user chooses get written.
+      writePrivateFile(configPath, SPARSE_CONFIG_HEADER)
     } catch (err) {
       // Non-fatal: defaults are bundled and loaded in-memory.
       logger.warn('config: could not write default lazyhub.toml', { error: err.message })
