@@ -151,6 +151,14 @@ export const unrouted = []
 /** Every command seen, for asserting hermeticity. */
 export const seen = []
 
+let asciiOnly = false
+/**
+ * Flatten every non-ASCII character in the canned output to "x" (one cell each), so a suite
+ * can exercise behaviour without tripping the wide-glyph layout defects tracked elsewhere.
+ * @param {boolean} on
+ */
+export function setAsciiOnly(on) { asciiOnly = on }
+
 function json(value) { return { stdout: JSON.stringify(value), stderr: '', exitCode: 0 } }
 function text(value) { return { stdout: value, stderr: '', exitCode: 0 } }
 
@@ -167,7 +175,7 @@ export function routeExeca(cmd, args = []) {
     unrouted.push(line.slice(0, 160))
     return thenable(json([]))
   }
-  return thenable(result)
+  return thenable(asciiOnly ? { ...result, stdout: result.stdout.replace(/[^\u0000-\u007f]/gu, 'x') } : result)
 }
 
 function thenable(result) {
@@ -206,6 +214,7 @@ function route(cmd, args) {
   if (a === 'repo' && b === 'view') {
     return json({ name: 'repo', owner: { login: 'owner' }, defaultBranchRef: { name: 'main' }, squashMergeAllowed: true, mergeCommitAllowed: true, rebaseMergeAllowed: true, deleteBranchOnMerge: false, viewerPermission: 'ADMIN' })
   }
+  if (a === 'label' && b === 'list') return json([{ name: 'bug', color: 'd73a4a', description: 'Something is broken' }, { name: 'p1', color: '0e8a16', description: '' }])
   if (a === 'auth') return text('Logged in')
   // Writes: succeed silently. The executor audits them to the (temp) HOME.
   if (['close', 'merge', 'ready', 'review', 'comment', 'create', 'edit', 'checkout', 'delete', 'rerun', 'cancel'].includes(b)) return text('')
