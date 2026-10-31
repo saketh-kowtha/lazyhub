@@ -34,6 +34,7 @@ describe('ConflictView double submit (#453)', () => {
     await flush(20)
     view.stdin.write('\r')
     view.stdin.write('\r')
+    await waitForExpectation(() => expect(gitCommit).toHaveBeenCalled())
     await flush(40)
     expect(gitCommit).toHaveBeenCalledTimes(1)
     release()
