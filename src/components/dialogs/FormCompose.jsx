@@ -120,7 +120,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
                   value={val}
                   onChange={(v) => setValues(prev => ({ ...prev, [field.name]: v }))}
                   focus={isActive}
-                  onEnter={() => setActiveField(f => Math.min(fields.length - 1, f + 1))}
+                  onEnter={() => (i === fields.length - 1 ? onSubmit(values) : setActiveField(f => Math.min(fields.length - 1, f + 1)))}
                 />
               )}
             </Box>
@@ -128,7 +128,11 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
         )
       })}
       <Box marginTop={1}>
-        <Text color={t.ui.dim}>[Tab] next field  [Ctrl+Enter / Ctrl+G] submit  [Esc] cancel</Text>
+        <Text color={t.ui.dim}>
+          {fields[activeField]?.type !== 'multiline' && activeField === fields.length - 1
+            ? '[Enter] submit  [Tab] next field  [Esc] cancel'
+            : '[Tab] next field  [Ctrl+Enter / Ctrl+G] submit  [Esc] cancel'}
+        </Text>
       </Box>
     </Box>
   )

@@ -197,10 +197,31 @@ export const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded, maskTitle 
 })
 
 export const MERGE_OPTIONS = [
-  { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
-  { value: 'squash', label: '--squash', description: 'Squash all commits into one' },
-  { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
+  { value: 'merge',  label: 'Create a merge commit', description: 'All commits are kept and joined with a merge commit' },
+  { value: 'squash', label: 'Squash and merge',      description: 'Combine all commits into one commit on the base branch' },
+  { value: 'rebase', label: 'Rebase and merge',      description: 'Replay each commit onto the base branch' },
 ]
+
+/**
+ * Human wording for a merge strategy value (never the raw CLI flag).
+ * @param {string} strategy  'merge' | 'squash' | 'rebase' | 'admin-<method>'
+ */
+export function mergeMethodLabel(strategy) {
+  const admin = String(strategy).startsWith('admin-')
+  const base = admin ? String(strategy).slice('admin-'.length) : strategy
+  const label = MERGE_OPTIONS.find(o => o.value === base)?.label ?? String(strategy)
+  return admin ? `${label} (bypass branch protection)` : label
+}
+
+/**
+ * Merge methods the repository allows; unknown repo info allows all of them.
+ * @param {object} [repoInfo]  getRepoInfo result
+ */
+export function allowedMergeOptions(repoInfo) {
+  const flag = { merge: 'mergeCommitAllowed', squash: 'squashMergeAllowed', rebase: 'rebaseMergeAllowed' }
+  const allowed = MERGE_OPTIONS.filter(o => repoInfo?.[flag[o.value]] !== false)
+  return allowed.length ? allowed : MERGE_OPTIONS
+}
 
 export function canToggleAutoMergeFromList(pr) {
   return pr?.state === 'OPEN' && !pr?.isDraft

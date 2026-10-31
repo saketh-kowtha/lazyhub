@@ -20,6 +20,7 @@ import { useGh } from './hooks/useGh.js'
 import * as executor from './executor.js'
 import { disarmPrefix } from './config/keymap.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
+import { timelinePage } from './test/timeline.js'
 
 const exitSpy = vi.hoisted(() => vi.fn())
 const execaSpy = vi.hoisted(() => vi.fn(() => Object.assign(Promise.resolve({}), { stdin: { end: () => {} } })))
@@ -65,7 +66,7 @@ vi.mock('./features/tabs/view.jsx', () => ({ TabView: () => <Text>TAB VIEW</Text
 vi.mock('./executor.js', () => {
   const fns = [
     'listPRs', 'getPR', 'getRepoInfo', 'getPRChecks', 'getBranchProtection', 'getPRDiffStats', 'getPRDiff',
-    'listPRComments', 'resolveThread', 'replyToComment', 'editPRComment', 'deletePRComment', 'addPRLineComment',
+    'listPRComments', 'listPRTimelinePage', 'resolveThread', 'replyToComment', 'editPRComment', 'deletePRComment', 'addPRLineComment',
     'reviewPR', 'mergePR', 'closePR', 'checkoutBranch', 'enableAutoMerge', 'disableAutoMerge', 'markPRReady',
     'convertPRToDraft', 'editPRBase', 'requestReviewers', 'removeReviewers', 'addPRAssignees', 'removePRAssignees',
     'addLabels', 'removeLabels', 'listLabels', 'listCollaborators', 'rerunCheckRun', 'getCheckRunAnnotations',
@@ -204,6 +205,7 @@ describe('keystroke budgets', () => {
       if (fn === executor.getPRDiffStats) return ghResult({ additions: 2, deletions: 0, changedFiles: 1 })
       if (fn === executor.getPRDiff) return ghResult(DIFF)
       if (fn === executor.listPRComments) return ghResult(COMMENTS)
+      if (fn === executor.listPRTimelinePage) return ghResult(timelinePage(COMMENTS))
       if (fn === executor.listRuns) return ghResult([RUN])
       return ghResult(null)
     })
@@ -264,6 +266,7 @@ describe('write keys confirm first and cancel does nothing', () => {
       if (fn === executor.getPRChecks) return ghResult(PR.statusCheckRollup)
       if (fn === executor.getBranchProtection) return ghResult({ requiredReviews: 1 })
       if (fn === executor.listPRComments) return ghResult(COMMENTS)
+      if (fn === executor.listPRTimelinePage) return ghResult(timelinePage(COMMENTS))
       if (fn === executor.listRuns) return ghResult([RUN])
       return ghResult(null)
     })

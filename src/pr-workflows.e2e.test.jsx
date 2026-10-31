@@ -17,6 +17,7 @@ import {
   getPRDiffStats,
   getPRDiff,
   listPRComments,
+  listPRTimelinePage,
   getPR as getPRMeta,
 } from './executor.js'
 import { getAICodeReview } from './ai/index.js'
@@ -64,6 +65,7 @@ vi.mock('./executor.js', () => ({
   getPRDiffStats: vi.fn(),
   getPRDiff: vi.fn(),
   listPRComments: vi.fn(),
+  listPRTimelinePage: vi.fn(),
   addPRLineComment: vi.fn(),
   replyToComment: vi.fn(),
   editPRComment: vi.fn(),

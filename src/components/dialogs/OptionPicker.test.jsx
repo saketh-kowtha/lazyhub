@@ -43,3 +43,26 @@ describe('auto-merge picker option', () => {
     expect(canToggleAutoMergeFromList({ state: 'MERGED' })).toBe(false)
   })
 })
+
+describe('OptionPicker promptKey and initialIndex (#468)', () => {
+  const methods = [{ value: 'a', label: 'First' }, { value: 'b', label: 'Second' }]
+
+  it('the prompt key opens the message step, titled, without submitting', async () => {
+    const onSubmit = vi.fn()
+    const view = renderWithProviders(<OptionPicker title="Merge PR #1" options={methods} promptText="Commit message" promptKey="e" initialIndex={1} onSubmit={onSubmit} onCancel={() => {}} />)
+    await waitForInputReady(view)
+    expect(view.lastFrame()).toContain('[Enter] Second')
+    view.stdin.write('e')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Commit message'))
+    expect(view.lastFrame()).toContain('Merge PR #1')
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('Enter submits the initial option at once', async () => {
+    const onSubmit = vi.fn()
+    const view = renderWithProviders(<OptionPicker options={methods} promptText="Commit message" promptKey="e" initialIndex={1} onSubmit={onSubmit} onCancel={() => {}} />)
+    await waitForInputReady(view)
+    view.stdin.write('\r')
+    await waitForExpectation(() => expect(onSubmit).toHaveBeenCalledWith('b'))
+  })
+})
