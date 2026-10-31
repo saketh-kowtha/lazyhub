@@ -95,7 +95,7 @@ export function HelpOverlay({ pane, view, actionCtx, onClose, availableWidth, av
           <Text color={t.ui.selected} wrap="truncate">~/.config/lazyhub/lazyhub.toml</Text>
           {!narrow && <Box flexGrow={1} />}
           {!narrow && <Text color={t.ui.dim}>Docs:</Text>}
-          {!narrow && <Text color={t.ui.selected}>https://saketh-kowtha.github.io/lgh</Text>}
+          {!narrow && <Text color={t.ui.selected}>https://saketh-kowtha.github.io/lazyhub</Text>}
         </Box>
       </Box>
     </Box>
