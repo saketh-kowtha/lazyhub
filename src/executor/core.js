@@ -268,11 +268,17 @@ async function execGh(args, { timeout = GH_TIMEOUT, json, stdin, interactive, co
     })
   }
 
+  // No exit code and failed=true means gh never started (e.g. ENOENT off PATH).
+  const spawnFailed = result.exitCode === undefined && Boolean(result.failed)
+
   if (result.exitCode !== 0) {
     const stderr = (combine ? result.all : result.stderr) || ''
     let message = `gh ${args.slice(0, 3).join(' ')} failed`
 
-    if (stderr.includes('rate limit')) {
+    if (spawnFailed) {
+      message = result.shortMessage || result.message || message
+      message = message.replace(/[a-zA-Z0-9_-]{40,}/g, '[REDACTED]')
+    } else if (stderr.includes('rate limit')) {
       message = 'GitHub API rate limit exceeded'
     } else if (stderr.includes('not found') || stderr.includes('Could not resolve') || /HTTP\s*404/i.test(stderr)) {
       message = 'Resource not found'
@@ -295,8 +301,9 @@ async function execGh(args, { timeout = GH_TIMEOUT, json, stdin, interactive, co
     throw new GhError({
       message,
       stderr: stderr.replace(/[a-zA-Z0-9_-]{20,}/g, '[REDACTED]'),
-      exitCode: result.exitCode,
+      exitCode: spawnFailed ? 127 : result.exitCode,
       args: args.map(arg => typeof arg === 'string' ? arg.replace(/[a-zA-Z0-9_-]{40,}/g, '[REDACTED]') : arg),
+      ...(spawnFailed ? { code: result.code } : {}),
     })
   }
 

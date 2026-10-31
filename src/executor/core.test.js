@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('execa', () => ({ execa: vi.fn() }))
 vi.mock('../daemon/lifecycle.js', () => ({ requestDaemon: vi.fn() }))
@@ -10,6 +10,7 @@ import { requestDaemon } from '../daemon/lifecycle.js'
 import { writeAuditEntry } from '../daemon/audit.js'
 import { invalidateRepoCache } from '../cache.js'
 import { runGh, GhError, getGhCallHistory } from './core.js'
+import { classifyGhFailure } from './classify.js'
 
 const ok = (stdout = '[]') => ({ exitCode: 0, stdout, stderr: '' })
 const WRITE = ['pr', 'merge', '7', '--repo', 'o/r']
@@ -74,5 +75,34 @@ describe('runGh fail-closed write handling', () => {
     await expect(runGh(TYPED_READ)).resolves.toEqual([])
     expect(requestDaemon).toHaveBeenCalledTimes(1)
     expect(execa).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('runGh spawn failure', () => {
+  const savedPath = process.env.PATH
+  afterEach(() => { process.env.PATH = savedPath })
+
+  // execa is mocked for this file; restore the real spawner so ENOENT is real.
+  const useRealExeca = async () => {
+    const actual = await vi.importActual('execa')
+    execa.mockImplementation(actual.execa)
+  }
+
+  it('a missing gh binary is classified as gh_missing, not unknown', async () => {
+    await useRealExeca()
+    process.env.PATH = '/nonexistent-dir-for-audit'
+    let err
+    try { await runGh(['pr', 'list', '--repo', 'a/b']) } catch (e) { err = e }
+    expect(err).toBeDefined()
+    expect(classifyGhFailure(err).kind).toBe('gh_missing')
+  })
+
+  it('a missing gh binary keeps the spawn error text and a numeric exit code', async () => {
+    await useRealExeca()
+    process.env.PATH = '/nonexistent-dir-for-audit'
+    let err
+    try { await runGh(['pr', 'list', '--repo', 'a/b']) } catch (e) { err = e }
+    expect(`${err.message} ${err.stderr}`).toMatch(/ENOENT/)
+    expect(Number.isInteger(err.exitCode)).toBe(true)
   })
 })
