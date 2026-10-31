@@ -72,7 +72,7 @@ export const ATTRIBUTION_LABELS = Object.freeze({
 
 export const ENFORCEMENT_NOTE = 'Enforcement: none. Watch-only blocks nothing and installs no required check, so no operation is github_enforced or managed_gateway.'
 
-export const ATTRIBUTION_NOTE = 'Attribution is who GitHub says acted. A GitHub user account does not prove a human wrote the change, and unattributed activity neither grants authority nor changes coverage.'
+const ATTRIBUTION_NOTE = 'Attribution is who GitHub says acted. A GitHub user account does not prove a human wrote the change, and unattributed activity neither grants authority nor changes coverage.'
 
 /**
  * Non-zero attribution counts as plain text, e.g. "known agent 2, unattributed 1".
