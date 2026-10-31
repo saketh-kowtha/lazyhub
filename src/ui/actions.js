@@ -36,6 +36,9 @@ import {
   checkoutBranch,
   closePR,
   reviewPR,
+  enableAutoMerge,
+  disableAutoMerge,
+  getRepoInfo,
 } from '../executor.js'
 import { getActionConfig } from '../config/actions.js'
 import { sanitize } from '../utils.js'
@@ -553,6 +556,27 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
     },
   })
 
+  // Auto-merge has no default key (M is the merged filter, #448); it lives in the
+  // merge picker (m) and here. Enable uses the repo's preferred allowed method.
+  actions.push({
+    id:       'pr.auto-merge',
+    write:    true,
+    confirmText: (ctx) => `${ctx.selectedItem?.autoMergeRequest ? 'Disable' : 'Enable'} auto-merge on PR #${ctx.selectedItem?.number}?`,
+    label:    'Toggle auto-merge',
+    hint:     'Enable or disable auto-merge on the focused pull request',
+    category: 'pr',
+    context:  ['pr-list', 'pr-detail'],
+    keys:     [],
+    run:      async (ctx) => {
+      if (!ctx.selectedItem?.number || !ctx.repo) return undefined
+      onClose()
+      if (ctx.selectedItem.autoMergeRequest) return disableAutoMerge(ctx.repo, ctx.selectedItem.number)
+      const info = await getRepoInfo(ctx.repo)
+      const method = info?.squashMergeAllowed ? 'squash' : info?.mergeCommitAllowed === false && info?.rebaseMergeAllowed ? 'rebase' : 'merge'
+      return enableAutoMerge(ctx.repo, ctx.selectedItem.number, method)
+    },
+  })
+
   actions.push({
     id:       'pr.approve',
     write:    true,
@@ -597,6 +621,9 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
     context:  ['pr-list', 'pr-detail'],
     keys:     ['c'],
     run:      (ctx) => {
+      if (ctx.localGit === false) {
+        throw new Error(`No local checkout of ${ctx.repo} here; run lazyhub inside a clone to check out its PRs`)
+      }
       if (ctx.selectedItem?.number && ctx.repo) {
         onClose()
         return checkoutBranch(ctx.repo, ctx.selectedItem.number)

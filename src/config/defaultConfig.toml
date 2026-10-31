@@ -484,10 +484,10 @@ scope = "pr-list,pr-detail,diff"
 group = "action"
 
 [actions."pr.auto-merge"]
-keys = ["M"]
-hint = "M"
+keys = []
+hint = "palette"
 label = "auto-merge"
-description = "Toggle auto-merge for selected PR"
+description = "Toggle auto-merge for selected PR (merge picker m, or command palette)"
 scope = "pr-list,pr-detail"
 group = "action"
 
@@ -591,7 +591,7 @@ group = "filter"
 keys = ["M"]
 hint = "M"
 label = "merged"
-description = "Toggle merged PRs when auto-merge is unavailable"
+description = "Toggle merged PRs"
 scope = "pr-list"
 group = "filter"
 

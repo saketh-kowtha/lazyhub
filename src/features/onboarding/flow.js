@@ -2,8 +2,8 @@
  * features/onboarding/flow.js — logic behind the zero-configuration first run (#70).
  *
  * Everything here is read-only: each gh call goes through runGh() as an
- * allowlisted read, and the report is the watch-only report (#246) plus the
- * doctor coverage model (#133), reused verbatim so the vocabulary cannot drift.
+ * allowlisted read. The governance report is not shown on first run (#517); it
+ * lives behind `lazyhub watch-only`.
  * Nothing is installed, created, authenticated or written; no marker file is
  * kept either: a first run is simply "no lazyhub.toml yet", and the normal
  * startup that follows completion creates it.
@@ -11,10 +11,7 @@
 
 import { existsSync } from 'fs'
 import { classifyGhFailure, runGh } from '../../executor.js'
-import { fetchPullRequestActivityPage, resolveCurrentRepo } from '../../executor/activity.js'
-import { checkCoverage } from '../../cli/doctor/coverage.js'
-import { generateWatchOnlyReport } from '../../watch-only/index.js'
-import { explainReason } from '../../watch-only/report.js'
+import { resolveCurrentRepo } from '../../executor/activity.js'
 import { CONFIG_PATH } from '../../config.js'
 import { isOwnerName } from '../../config/schema.js'
 export { isOwnerName }
@@ -129,49 +126,4 @@ export function windowStart(total, selected, size) {
   if (total <= size) return 0
   const start = selected - Math.floor(size / 2)
   return Math.max(0, Math.min(start, total - size))
-}
-
-/**
- * @param {object} watch  watch-only report
- * @returns {{pull_requests: number, pages: number, by_attribution: Record<string, number>}}
- */
-function summarizeActivity(watch) {
-  const by_attribution = { agent: 0, automation: 0, human: 0, shared: 0, unknown: 0 }
-  for (const op of watch.operations) {
-    for (const k of Object.keys(by_attribution)) by_attribution[k] += op.observed.by_attribution[k]
-  }
-  return { pull_requests: watch.observation.pull_requests_examined, pages: watch.observation.pages_fetched, by_attribution }
-}
-
-/**
- * Observe one repository and build the report shown on screen: the doctor
- * coverage model plus attribution totals from the watch-only report. Both read
- * from one memoized set of GraphQL pages, so the repository is queried once.
- *
- * @param {string} repo  owner/name
- * @param {{fetchPage?: Function}} [opts]  injectable for tests
- * @returns {Promise<{coverage: object, activity: object|null}>}
- */
-export async function loadOnboardingReport(repo, { fetchPage = fetchPullRequestActivityPage } = {}) {
-  const pages = new Map()
-  const memo = (r, o) => {
-    const key = `${o?.after ?? ''}|${o?.limit ?? ''}`
-    if (!pages.has(key)) pages.set(key, fetchPage(r, o))
-    return pages.get(key)
-  }
-  const [coverage, watch] = await Promise.all([
-    checkCoverage({ repo, watchOnly: { fetchPage: memo } }),
-    generateWatchOnlyReport({ repo, fetchPage: memo }).catch(() => null),
-  ])
-  return { coverage, activity: watch ? summarizeActivity(watch) : null }
-}
-
-/**
- * Plain-language meaning of a gap code (shared wording: watch-only/report.js).
- *
- * @param {string} code
- * @returns {string}
- */
-export function explainGap(code) {
-  return explainReason(code)?.[0] ?? ''
 }

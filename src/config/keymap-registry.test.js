@@ -20,11 +20,8 @@ const CONTEXTS = ['pr-list', 'issue-list', 'branch-list', 'workflow-list', 'noti
   'pr-detail', 'pr-checks', 'diff', 'pr-comments', 'issue-detail']
 
 // Known pre-existing collisions, each a separate follow-up. Do not add to this
-// list: fix the binding instead. (pr.auto-merge needs the merge-picker option
-// from keymap-canonical.md before `M` can be freed.)
-const KNOWN_COLLISIONS = {
-  'pr-list': { M: ['pr.auto-merge', 'pr.filter-merged'] },
-}
+// list: fix the binding instead.
+const KNOWN_COLLISIONS = {}
 
 function bindingsFor(scope) {
   const byToken = new Map()

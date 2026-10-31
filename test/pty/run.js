@@ -202,6 +202,31 @@ async function runReferenceFlow() {
   }
 }
 
+// #517: a true first run (no config, no preselected repo) must reach Focus within
+// 2 keys. The governance report is no longer a step in between.
+async function runFirstRunFlow() {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-first-'))
+  const stubBin = installGhStub(temp)
+  let output = ''
+  let term
+  try {
+    const { GHUI_REPO: _preselected, ...env } = childEnv(stubBin, temp)
+    term = spawnTerminal(env)
+    term.onData(data => { output += data })
+    await waitForScreen(() => output, /Pick a repository to open/, 'first-run repository list')
+    await settle()
+    output = ''
+    term.write('\r') // key 1: open the highlighted repository
+    const screen = await waitForScreen(() => output, /Focus|Pull Requests|PTY harness fixture PR/, 'Focus after one key')
+    assert.doesNotMatch(screen, /Coverage \(|ungoverned|Enforcement/, 'no governance report before Focus')
+    term.write('q')
+    await waitForExit(term)
+  } finally {
+    try { term?.kill() } catch {}
+    rmSync(temp, { recursive: true, force: true })
+  }
+}
+
 async function runCrashFlow() {
   const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-crash-'))
   const stubBin = installGhStub(temp)
@@ -361,7 +386,8 @@ async function runResizeFlow() {
     await settle()
     await sendUntil(() => writeChord(term, 'gp'), () => screen.text(), /PTY harness fixture PR/, 'PR list at 120x40')
     await waitUntil(showing(/⌂ lazyhub/), 'sidebar at 120x40')
-    assert.ok(screen.text().split('\n').some(l => /^─{120}$/.test(l.trim())), 'footer rule spans 120 columns')
+    // The footer paints in the same frame burst as the sidebar but a PTY may split that burst across chunks, so wait for it.
+    await waitUntil(() => (screen.text().split('\n').some(l => /^─{120}$/.test(l.trim())) ? true : screen.text()), 'footer rule spans 120 columns')
 
     const resizeTo = (cols, rows) => {
       const wrapsBefore = screen.wraps
@@ -442,6 +468,7 @@ if (ptyProblem) skipOrFail(`node-pty cannot spawn in this shell: ${ptyProblem}`)
 
 await runLazyhubFlow()
 await runReferenceFlow()
+await runFirstRunFlow()
 await runCrashFlow()
 await runDegradedFlow()
 await runDayOneErrorFlow({

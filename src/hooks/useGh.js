@@ -10,7 +10,10 @@ import { recordGhFailure, recordGhSuccess } from './useGhHealth.js'
 
 // In-memory cache: key → { data, timestamp }, LRU-capped so a long session
 // (many repos/pages) cannot grow without bound.
-const cache = createLruCache(200)
+let cache = createLruCache(200)
+
+/** Drop the in-memory cache (tests). */
+export function resetGhMemoryCache() { cache = createLruCache(200) }
 
 const DEFAULT_TTL = 30_000 // 30 seconds
 
@@ -21,20 +24,42 @@ const DEFAULT_TTL = 30_000 // 30 seconds
  * @param {Array}    deps    - dependency array, used as cache key
  * @param {Object}   [options] - { ttl: number (ms) }
  * @param {number}   [options.ttl]
+ * @param {boolean}  [options.enabled=true] - false defers the fetch until it flips true
  * @returns {{ data, loading, error, refetch, mutate, isStale }}
  */
-export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [isStale, setIsStale] = useState(false)
-  const mountedRef = useRef(true)
-  // Request generation: only the latest request may touch state (#434).
-  const reqRef = useRef(0)
-
+export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } = {}) {
   const cacheKey = JSON.stringify([fetchFn.name, ...deps])
   const repo = typeof deps[0] === 'string' ? deps[0] : process.env.GHUI_REPO
   const diskCacheKey = makeDiskCacheKey([repo, fetchFn.name, deps])
+  // Stale-while-revalidate (#454): seed from the memory/disk cache synchronously so a
+  // revisit renders cached data on the first frame instead of a loading frame.
+  // The disk read is remembered so fetchData does not read the same file again.
+  const diskMemoRef = useRef(null)
+  const readSeed = () => {
+    const mem = cache.get(cacheKey)
+    if (mem) return { data: mem.data, stale: Date.now() - mem.timestamp >= ttl }
+    const disk = readCache(diskCacheKey)
+    diskMemoRef.current = { key: diskCacheKey, value: disk }
+    return disk ? { data: disk.payload, stale: true } : null
+  }
+  const [seed] = useState(readSeed)
+  const [data, setData] = useState(seed ? seed.data : null)
+  const [loading, setLoading] = useState(!seed)
+  const [error, setError] = useState(null)
+  const [isStale, setIsStale] = useState(Boolean(seed?.stale))
+  // Re-seed when the key changes so a reused component never shows the previous key's data.
+  const [seededKey, setSeededKey] = useState(cacheKey)
+  if (seededKey !== cacheKey) {
+    const next = readSeed()
+    setSeededKey(cacheKey)
+    setData(next ? next.data : null)
+    setLoading(!next)
+    setIsStale(Boolean(next?.stale))
+    setError(null)
+  }
+  const mountedRef = useRef(true)
+  // Request generation: only the latest request may touch state (#434).
+  const reqRef = useRef(0)
   const callSite = `${fetchFn.name || 'unnamed'}:${diskCacheKey}`
 
   const fetchData = useCallback(async (bypassCache = false) => {
@@ -44,9 +69,15 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
 
     const now = Date.now()
     const cached = cache.get(cacheKey)
-    const diskCached = readCache(diskCacheKey)
+    const fresh = !bypassCache && cached && now - cached.timestamp < ttl
+    let diskCached = null
+    if (!fresh) {
+      const memo = diskMemoRef.current
+      diskMemoRef.current = null
+      diskCached = memo && memo.key === diskCacheKey ? memo.value : readCache(diskCacheKey)
+    }
 
-    if (!bypassCache && cached && now - cached.timestamp < ttl) {
+    if (fresh) {
       setData(cached.data)
       setLoading(false)
       setError(null)
@@ -54,8 +85,8 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
       return
     }
 
-    if (!bypassCache && diskCached) {
-      setData(diskCached.payload)
+    if (!bypassCache && (cached || diskCached)) {
+      setData(cached ? cached.data : diskCached.payload)
       setLoading(false)
       setIsStale(true)
     } else {
@@ -113,12 +144,13 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL } = {}) {
 
   useEffect(() => {
     mountedRef.current = true
-    fetchData(false)
+    if (enabled) fetchData(false)
+    else setLoading(false) // a disabled hook is not loading; also un-sticks a true->false flip
     return () => {
       reqRef.current++ // eslint-disable-line react-hooks/exhaustive-deps
       mountedRef.current = false
     }
-  }, [cacheKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cacheKey, enabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return { data, loading, error, refetch, mutate, isStale }
 }

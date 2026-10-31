@@ -102,7 +102,7 @@ Initialize response:
 ```json
 {
   "protocolVersion": "2024-11-05",
-  "serverInfo": { "name": "lazyhub", "version": "1.0.0" },
+  "serverInfo": { "name": "lazyhub", "version": "<package.json version>" },
   "capabilities": { "tools": {} }
 }
 ```
@@ -130,9 +130,25 @@ Tool call error response:
 
 All GitHub-backed tools use the `gh` CLI through `src/executor.js`.
 
+`tools/list` advertises only implemented read-only tools (no placeholders, no
+mutating tools), each with its own `inputSchema`; `number` is `required` for
+`get_pr`, `get_pr_diff`, `get_checks`, `get_issue` and their `lazyhub_*` aliases.
+Results are compact JSON. Error codes: `MCP_INVALID_REPO` (bad `repo`, or no
+repository resolved from `repo`, the startup repository or the saved default),
+`MCP_INVALID_NUMBER` (missing or non-positive `number`), `MCP_INVALID_STATE`,
+`MCP_INVALID_LIMIT`, `MCP_RESOURCE_MISMATCH`, `MCP_UNKNOWN_TOOL`,
+`MCP_MUTATIONS_DISABLED`.
+
+`lazyhub --mcp` runs a headless preflight: no prompts and no `gh auth login`;
+stdout carries JSON-RPC only; if `gh` is missing or unauthenticated it prints one
+line to stderr and exits non-zero.
+
+Removed: `lazyhub_query` / `query` was a placeholder that returned canned text. It is no
+longer advertised, and calling it now returns `MCP_UNKNOWN_TOOL`.
+
 | Tool | Inputs | Output | Side effects |
 | --- | --- | --- | --- |
-| `lazyhub_pr_list`, `list_prs` | `repo`, `state`, `limit` | PR array | none |
+| `lazyhub_pr_list`, `list_prs` | `repo`, `state`, `limit` | slim PR array (no `body`; at most 10 checks per PR, failing first then pending then passing; `checksSummary {failing, pending, passing, total}` on every row that has checks) | none |
 | `lazyhub_pr_view`, `get_pr` | `repo`, `number` | PR object | none |
 | `lazyhub_pr_diff`, `get_pr_diff` | `repo`, `number` | diff text | none |
 | `lazyhub_watch_ci`, `get_checks` | `repo`, `number` | checks array/object | none |
@@ -145,7 +161,6 @@ All GitHub-backed tools use the `gh` CLI through `src/executor.js`.
 | `close_issue` | `repo`, `number` | `gh issue close` result | closes issue |
 | `list_notifications` | none | notification array | none |
 | `list_branches` | `repo` | branch array | none |
-| `lazyhub_query`, `query` | freeform object | placeholder answer | none |
 
 ## Schema Version Policy
 

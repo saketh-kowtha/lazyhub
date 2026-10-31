@@ -33,7 +33,7 @@ import { contextFooterHints } from './ui/actions.js'
 
 export function renderAppView(ctx) {
   const {
-    actionsBranch, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
+    actionsBranch, actionsRepo, itemIsForeign, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
     exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail,
     goToDiff, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
@@ -84,7 +84,7 @@ export function renderAppView(ctx) {
           <Box flexDirection="row" flexGrow={1} overflow="hidden" justifyContent="center" alignItems="flex-start" paddingY={2}>
             <Box width={Math.min(columns - 4, 80)}>
               <CommandPalette
-                context={{ pane, view, selectedItem, repo, themeName: _config.theme }}
+                context={{ pane, view, selectedItem, repo: itemRepo, localGit: !itemIsForeign, themeName: _config.theme }}
                 onClose={() => { setShowPalette(false); setAppMode('NORMAL') }}
                 onNavigate={(opts) => {
                   setShowPalette(false); setAppMode('NORMAL')
@@ -144,7 +144,7 @@ export function renderAppView(ctx) {
               />
             </ErrorBoundary>
           </Box>
-          <StatusBar repo={repo} pane={pane} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
+          <StatusBar repo={itemRepo} pane={pane} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
           <FooterKeys hidden={compactFooter} keys={[
             { key: 'j/k', label: 'navigate' },
             { key: 'e/Enter', label: 'open editor' },
@@ -273,7 +273,7 @@ export function renderAppView(ctx) {
               />
             </ErrorBoundary>
           </Box>
-          <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
+          <StatusBar repo={itemRepo} pane={pane} count={paneState.count} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
           <FooterKeys hidden={compactFooter} keys={detailFooter} />
         </Box>
       </AppContext.Provider>
@@ -294,7 +294,7 @@ export function renderAppView(ctx) {
           onSelectIssue={goToDetail} onPaneState={onPaneState} />
       )
       case 'branches':     return <BranchList repo={repo} listHeight={listHeight} onPaneState={onPaneState} />
-      case 'actions':      return <ActionList repo={repo} listHeight={listHeight} onPaneState={onPaneState} initialBranch={actionsBranch} />
+      case 'actions':      return <ActionList repo={actionsRepo || repo} listHeight={listHeight} onPaneState={onPaneState} initialBranch={actionsBranch} />
       case 'notifications': return (
         <NotificationList repo={repo} listHeight={listHeight} onPaneState={onPaneState}
           onNavigateTo={(notif) => {

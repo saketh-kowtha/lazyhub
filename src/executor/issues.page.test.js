@@ -16,10 +16,25 @@ describe('listIssuesPage (#506)', () => {
     const page = await listIssuesPage('o/r', { state: 'closed', label: 'bug', limit: 50, after: 'c1' })
     const args = runGh.mock.calls[0][0]
     expect(args).toContain('after=c1')
-    expect(args.find(a => a.startsWith('searchQuery='))).toBe('searchQuery=repo:o/r is:issue sort:updated-desc state:closed label:"bug"')
+    expect(args.find(a => a.startsWith('searchQuery='))).toBe('searchQuery=repo:o/r is:issue sort:created-desc state:closed label:"bug"')
     expect(args).toContain('limit=50')
     expect(page).toMatchObject({ hasNextPage: true, endCursor: 'c2', totalCount: 7 })
     expect(page.items[0]).toMatchObject({ number: 3, labels: [{ name: 'bug' }], commentCount: 4 })
+  })
+
+  it('sorts oldest first on the server when asked', async () => {
+    runGh.mockResolvedValue({ data: { search: { issueCount: 0, pageInfo: {}, nodes: [] } } })
+    await listIssuesPage('o/r', { sort: 'oldest' })
+    expect(runGh.mock.calls[0][0].find(a => a.startsWith('searchQuery='))).toContain('sort:created-asc')
+  })
+
+  it('rejects author/assignee values that would add search qualifiers', async () => {
+    runGh.mockResolvedValue({ data: { search: { issueCount: 0, pageInfo: {}, nodes: [] } } })
+    await expect(listIssuesPage('o/r', { author: 'x state:closed' })).rejects.toThrow(/Invalid login/)
+    await expect(listIssuesPage('o/r', { assignee: 'a"b' })).rejects.toThrow(/Invalid login/)
+    expect(runGh).not.toHaveBeenCalled()
+    await listIssuesPage('o/r', { author: '@me', assignee: 'dependabot[bot]' })
+    expect(runGh.mock.calls[0][0].find(a => a.startsWith('searchQuery='))).toContain('author:@me assignee:dependabot[bot]')
   })
 
   it('omits after on the first page and reports the end', async () => {
