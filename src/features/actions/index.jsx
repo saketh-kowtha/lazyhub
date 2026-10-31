@@ -7,6 +7,7 @@ import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
+import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { classifyGhFailure, listRuns, getRunLogs, rerunRun, cancelRun } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
@@ -88,9 +89,20 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
-  const showStatus = (msg, isError = false) => {
+  const statusTimer = useRef(null)
+  useEffect(() => () => { clearTimeout(statusTimer.current) }, [])
+  const showStatus = (msg, isError = false, sticky = false) => {
+    clearTimeout(statusTimer.current)
     setStatusMsg({ msg, isError, persist: isError })
-    if (!isError) setTimeout(() => setStatusMsg(null), 3000)
+    if (!isError && !sticky) statusTimer.current = setTimeout(() => setStatusMsg(null), 3000)
+  }
+  // Pending/double-submit guard for rerun and cancel (#453).
+  const { run: pendingRun } = usePendingWrite((msg) => showStatus(msg, false, true))
+  // Resolves true only when fn ran (false when ignored as a double submit).
+  const runWrite = async (label, fn) => {
+    let ran = false
+    await pendingRun(label, async () => { ran = true; return fn() })
+    return ran
   }
 
   const moveCursor = useCallback((delta) => {
@@ -203,8 +215,8 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
           message={`Re-run failed jobs: ${sanitize(run.workflowName)} on ${sanitize(run.headBranch)}?`}
           onConfirm={() => {
             setDialog(null)
-            rerunRun(repo, run.databaseId)
-              .then(() => { showStatus('Re-run triggered'); refetch() })
+            runWrite('Re-running', () => rerunRun(repo, run.databaseId))
+              .then(ran => { if (ran) { showStatus('Re-run triggered'); refetch() } })
               .catch(err => showStatus(`Failed: ${err.message}`, true))
           }}
           onCancel={() => setDialog(null)}
@@ -223,7 +235,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
           onConfirm={async () => {
             setDialog(null)
             try {
-              await cancelRun(repo, run.databaseId)
+              if (!await runWrite('Cancelling', () => cancelRun(repo, run.databaseId))) return
               showStatus('Run cancelled')
               refetch()
             } catch (err) {

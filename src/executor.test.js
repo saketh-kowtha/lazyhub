@@ -27,6 +27,8 @@ import {
   addLabels,
   removeLabels,
   listCollaborators,
+  editIssueMembers,
+  listOpenPRBranches,
   requestReviewers,
   listBranches,
   checkoutBranch,
@@ -449,6 +451,33 @@ describe('listCollaborators()', () => {
     expect(args).toContain('api')
     expect(args.some(a => a.includes('collaborators'))).toBe(true)
   })
+
+  it('follows pages past the first 100 collaborators (#513)', async () => {
+    const page = n => Array.from({ length: n }, (_, i) => ({ login: `u${i}` }))
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(page(100)), stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(page(40)), stderr: '' })
+    const rows = await listCollaborators('owner/repo')
+    expect(rows).toHaveLength(140)
+    expect(execa.mock.calls[0][1].some(a => a.includes('per_page=100'))).toBe(true)
+    expect(execa.mock.calls[1][1].some(a => a.includes('page=2'))).toBe(true)
+    expect(execa).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('editIssueMembers()', () => {
+  it('adds and removes in one gh issue edit call', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+    await editIssueMembers('owner/repo', 7, 'label', { add: ['a', 'b'], remove: ['c'] })
+    expect(execa).toHaveBeenCalledTimes(1)
+    const [, args] = execa.mock.calls[0]
+    expect(args).toEqual(expect.arrayContaining(['issue', 'edit', '7', '--add-label', 'a,b', '--remove-label', 'c']))
+  })
+
+  it('does nothing for an empty change', async () => {
+    await editIssueMembers('owner/repo', 7, 'assignee', { add: [], remove: [] })
+    expect(execa).not.toHaveBeenCalled()
+  })
 })
 
 describe('requestReviewers()', () => {
@@ -470,6 +499,31 @@ describe('listBranches()', () => {
     const [, args] = execa.mock.calls[0]
     expect(args).toContain('api')
     expect(args.some(a => a.includes('branches'))).toBe(true)
+  })
+})
+
+describe('listOpenPRBranches() (#456)', () => {
+  const graph = (names, next) => JSON.stringify({ data: { repository: { pullRequests: {
+    pageInfo: { hasNextPage: !!next, endCursor: next || null },
+    nodes: names.map(headRefName => ({ headRefName })),
+  } } } })
+
+  it('asks GraphQL only for head branch names, never check contexts or bodies', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: graph(['feat/a', 'fix/b']), stderr: '' })
+    const rows = await listOpenPRBranches('owner/repo')
+    expect(rows).toEqual(['feat/a', 'fix/b'])
+    const query = execa.mock.calls[0][1].find(a => a.startsWith('query='))
+    expect(query).toContain('headRefName')
+    expect(query).not.toMatch(/statusCheckRollup|contexts|body|reviewRequests|labels/)
+  })
+
+  it('follows the cursor to every open PR, fetching each page once', async () => {
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: graph(['a'], 'c1'), stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: graph(['b']), stderr: '' })
+    expect(await listOpenPRBranches('owner/repo')).toEqual(['a', 'b'])
+    expect(execa).toHaveBeenCalledTimes(2)
+    expect(execa.mock.calls[1][1]).toContain('after=c1')
   })
 })
 

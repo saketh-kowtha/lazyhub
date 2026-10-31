@@ -8,6 +8,7 @@ import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { firstActionKey } from '../../config/actions.js'
 import { useGh } from '../../hooks/useGh.js'
 import { getIssue, addIssueComment } from '../../executor.js'
+import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
@@ -57,6 +58,8 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
     setTimeout(() => { setStatusMsg(null); setStatusIsError(false) }, 5000)
   }
 
+  const { run: runWrite } = usePendingWrite(setStatusMsg)
+
   const doReply = useCallback(() => {
     const text = replyText.trim()
     if (!text) {
@@ -66,10 +69,11 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
     }
     setReplyMode(false)
     setReplyText('')
-    addIssueComment(repo, issueNumber, text)
-      .then(() => { setStatusMsg('Reply sent'); refetch(); setTimeout(() => setStatusMsg(null), 3000) })
+    let ran = false
+    runWrite('Sending reply', () => { ran = true; return addIssueComment(repo, issueNumber, text) })
+      .then(() => { if (!ran) return; setStatusMsg('Reply sent'); refetch(); setTimeout(() => setStatusMsg(null), 3000) })
       .catch(err => { setStatusMsg(`Failed: ${err.message}`); setTimeout(() => setStatusMsg(null), 5000) })
-  }, [repo, issueNumber, replyText, refetch])
+  }, [repo, issueNumber, replyText, refetch, runWrite])
 
   useKeymapInput((input, key) => {
     if (dialog) return

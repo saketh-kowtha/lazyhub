@@ -226,16 +226,44 @@ export async function removeLabels(repo, number, labels, type = 'issue') {
 
 // ─── Collaborator / reviewer functions ───────────────────────────────────────
 
+const COLLAB_PAGE_SIZE = 100
+/** Safety ceiling on collaborator pages (5000 people); every earlier page is fetched exactly once. */
+export const COLLAB_MAX_PAGES = 50
+
 /**
- * List collaborators for a repo.
+ * List collaborators for a repo, following pages until a short page (D16: a
+ * picker must offer everyone, not just the first 30 or 100).
  * @param repo
  */
 export async function listCollaborators(repo) {
   const r = getRepo(repo)
-  const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/collaborators`,
-    '--jq', '[.[] | {login: .login, name: .name}]',
-  ]
+  const all = []
+  for (let page = 1; page <= COLLAB_MAX_PAGES; page++) {
+    const args = [
+      'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/collaborators?per_page=${COLLAB_PAGE_SIZE}&page=${page}`,
+      '--jq', '[.[] | {login: .login, name: .name}]',
+    ]
+    const rows = await runGh(args)
+    if (!Array.isArray(rows)) return page === 1 ? rows : all
+    all.push(...rows)
+    if (rows.length < COLLAB_PAGE_SIZE) break
+  }
+  return all
+}
+
+/**
+ * Add and remove labels or assignees on an issue in ONE edit call, so a
+ * partial failure cannot leave only half of the user's change applied.
+ * @param {string} repo
+ * @param {number} number
+ * @param {'label'|'assignee'} kind
+ * @param {{add?: string[], remove?: string[]}} change
+ */
+export async function editIssueMembers(repo, number, kind, { add = [], remove = [] }) {
+  if (!add.length && !remove.length) return undefined
+  const args = ['issue', 'edit', String(number), '--repo', getRepo(repo)]
+  if (add.length) args.push(`--add-${kind}`, add.join(','))
+  if (remove.length) args.push(`--remove-${kind}`, remove.join(','))
   return runGh(args)
 }
 

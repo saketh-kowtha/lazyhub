@@ -11,7 +11,7 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { IssueLabelDialog, IssueAssigneeDialog } from './dialogs.jsx'
 
-export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor, setScrollOffset, onClose, showStatus, refetch, refreshIssue = undefined }) {
+export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor, setScrollOffset, onClose, showStatus, runWrite, refetch, refreshIssue = undefined }) {
   // Patch the one changed row when the list supports it; otherwise refetch (D16).
   const changed = (number, opts) => (refreshIssue ? refreshIssue(number, opts) : refetch())
   if (dialog === 'fuzzy') {
@@ -41,7 +41,8 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
           onConfirm={async () => {
             onClose()
             try {
-              await closeIssue(repo, selectedIssue.number)
+              const { ran } = await runWrite(`Closing #${selectedIssue.number}`, () => closeIssue(repo, selectedIssue.number))
+              if (!ran) return
               showStatus(`Closed #${selectedIssue.number}`)
               changed(selectedIssue.number)
             } catch (err) {
@@ -66,7 +67,8 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
           onSubmit={async (values) => {
             onClose()
             try {
-              const created = await createIssue(repo, /** @type {any} */ ({ title: values.title, body: values.body }))
+              const { ran, result: created } = await runWrite('Creating issue', () => createIssue(repo, /** @type {any} */ ({ title: values.title, body: values.body })))
+              if (!ran) return
               showStatus('Issue created')
               const number = Number(String(created || '').match(/\/issues\/(\d+)/)?.[1])
               if (number) changed(number, { added: true })
