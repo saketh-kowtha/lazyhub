@@ -865,6 +865,20 @@ describe('addPRReviewThreadReply', () => {
   })
 })
 
+describe('swallowed rejections', () => {
+  it('getBranchProtection resolves null when gh fails (its catch is meant to do that)', async () => {
+    mockFailure('Branch not protected', 1)
+    await expect(getBranchProtection('a/b', 'main')).resolves.toBeNull()
+  })
+
+  it('getPRChecks resolves [] when the check-runs call fails (its catch is meant to do that)', async () => {
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify({ headRefOid: 'abc123' }), stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'HTTP 502' })
+    await expect(getPRChecks('a/b', 1)).resolves.toEqual([])
+  })
+})
+
 describe('resolvePRReviewThread', () => {
   it('calls gh api graphql with the resolve mutation', async () => {
     mockSuccess({
@@ -1001,19 +1015,5 @@ describe('error message redaction', () => {
       expect(err.message).toContain('[REDACTED]')
       expect(err.message).not.toContain('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
     }
-  })
-})
-
-describe('swallowed rejections', () => {
-  it('getBranchProtection resolves null when gh fails (its catch is meant to do that)', async () => {
-    mockFailure('Branch not protected', 1)
-    await expect(getBranchProtection('a/b', 'main')).resolves.toBeNull()
-  })
-
-  it('getPRChecks resolves [] when the check-runs call fails (its catch is meant to do that)', async () => {
-    execa
-      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify({ headRefOid: 'abc123' }), stderr: '' })
-      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'HTTP 502' })
-    await expect(getPRChecks('a/b', 1)).resolves.toEqual([])
   })
 })
