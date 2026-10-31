@@ -5,7 +5,7 @@ import { InputDriver } from './test/input-driver.jsx'
 import { execa } from 'execa'
 import { useGh } from './hooks/useGh.js'
 import {
-  listIssues,
+  listIssuesPage,
   closeIssue,
   listBranches,
   listPRs,
@@ -50,7 +50,7 @@ vi.mock('./hooks/useGh.js', () => ({
 }))
 
 vi.mock('./executor.js', () => ({
-  listIssues: vi.fn(),
+  listIssuesPage: vi.fn(),
   closeIssue: vi.fn(),
   createIssue: vi.fn(),
   listLabels: vi.fn(),
@@ -87,8 +87,8 @@ describe('Pane E2E user flows', () => {
     execa.mockResolvedValue({ stdout: 'main', exitCode: 0 })
 
     useGh.mockImplementation((fn) => {
-      if (fn === listIssues) {
-        return ghResult([
+      if (fn === listIssuesPage) {
+        return ghResult({ hasNextPage: false, endCursor: null, totalCount: 1, items: [
           {
             number: 11,
             title: 'Crash on startup',
@@ -99,7 +99,7 @@ describe('Pane E2E user flows', () => {
             assignees: [],
             url: 'https://example.test/issues/11',
           },
-        ])
+        ] })
       }
 
       if (fn === listBranches) {
