@@ -29,7 +29,8 @@ Commands:
   serve [--status|--stop]         manage the background daemon
 
 Options:
-  --repo owner/name               open this repository for this launch (not saved)
+  --repo owner/name               open this repository for this launch (not saved);
+                                  on GitHub Enterprise Server: GH_HOST=host lazyhub --repo owner/name
   --mouse                         enable mouse scrolling
   --onboarding                    rerun first-run setup
   -v, --version                   print the version
@@ -47,10 +48,12 @@ export function parseCliArgs(args, opts = {}) {
   if (args.includes('--help') || args.includes('-h')) return { help: true }
   const positional = []
   let repo
+  let onboarding = false
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]
     // Both are read later at startup: --mouse by the renderer, --onboarding by shouldOnboard().
-    if (arg === '--mouse' || arg === '--onboarding') continue
+    if (arg === '--mouse') continue
+    if (arg === '--onboarding') { onboarding = true; continue }
     if (arg === '--repo' || arg.startsWith('--repo=')) {
       if (repo !== undefined) return { error: '--repo may be given only once' }
       const value = arg === '--repo' ? args[i + 1] : arg.slice('--repo='.length)
@@ -64,9 +67,13 @@ export function parseCliArgs(args, opts = {}) {
     if (arg.startsWith('-')) return { error: `unknown option: ${arg}` }
     positional.push(arg)
   }
+  if (onboarding && repo) return { error: '--onboarding and --repo cannot be combined: --repo already names the repository' }
   const withRepo = out => (repo ? { ...out, repo } : out)
   if (positional.length === 0) return withRepo({ ref: null })
   if (positional.length > 1) return { error: 'expected at most one PR or issue reference' }
   const parsed = parseItemReference(positional[0], opts)
+  if (parsed.ok && repo && parsed.ref?.repo && parsed.ref.repo.toLowerCase() !== repo.toLowerCase()) {
+    return { error: `--repo ${repo} conflicts with the reference's repository ${parsed.ref.repo}` }
+  }
   return parsed.ok ? withRepo({ ref: parsed.ref }) : { error: `${parsed.error}: ${JSON.stringify(positional[0]).slice(0, 80)}` }
 }

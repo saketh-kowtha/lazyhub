@@ -29,6 +29,14 @@ describe('parseCliArgs', () => {
     expect(parseCliArgs(['--repo', 'a/b', '--repo', 'c/d']).error).toMatch(/only once/)
   })
 
+  it('rejects --repo that disagrees with a reference, or is combined with --onboarding (#466)', () => {
+    expect(parseCliArgs(['--repo', 'a/b', 'c/d#4']).error).toMatch(/conflicts with the reference's repository c\/d/)
+    expect(parseCliArgs(['--repo', 'A/B', 'a/b#4']).error).toBeUndefined()
+    expect(parseCliArgs(['--repo', 'a/b', '#4']).repo).toBe('a/b')
+    expect(parseCliArgs(['--onboarding', '--repo', 'a/b']).error).toMatch(/cannot be combined/)
+    expect(USAGE).toContain('GH_HOST=host lazyhub --repo owner/name')
+  })
+
   it('rejects unknown options and multiple references', () => {
     expect(parseCliArgs(['--nope']).error).toBe('unknown option: --nope')
     expect(parseCliArgs(['o/r#1', 'o/r#2']).error).toMatch(/at most one/)

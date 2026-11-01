@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { sendInput } from './test/input-bus.js'
 import { InputDriver } from './test/input-driver.jsx'
 import { disarmPrefix, getArmedPrefix } from './config/keymap.js'
-import { App } from './app.jsx'
+import { App, AppRoot } from './app.jsx'
 import { AppContext } from './context.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
@@ -79,18 +79,18 @@ vi.mock('./features/notifications/index.jsx', () => ({ NotificationList: () => <
 vi.mock('./features/prs/comments.jsx', () => ({ PRComments: ({ prNumber }) => <Text>{`COMMENTS ${prNumber}`}</Text> }))
 vi.mock('./features/prs/ConflictView.jsx', () => ({ ConflictView: ({ pr }) => <Text>{`CONFLICT ${pr.number}`}</Text> }))
 vi.mock('./features/prs/list.jsx', () => ({
-  PRList: ({ onSelectPR, onOpenDiff }) => {
+  PRList: ({ repo, onSelectPR, onOpenDiff }) => {
     const { notifyDialog } = useContext(AppContext)
     useInput((input) => {
       if (input === 'x') notifyDialog(true)
       if (input === 'o') onSelectPR({ number: 7, title: 'Open detail' })
       if (input === 'd') onOpenDiff({ number: 9, title: 'Open diff' })
     })
-    return <Text>PRS LIST</Text>
+    return <Text>{`PRS LIST ${repo}`}</Text>
   },
 }))
 vi.mock('./features/prs/detail.jsx', () => ({
-  PRDetail: ({ prNumber }) => <Text>{`PR DETAIL ${prNumber}`}</Text>,
+  PRDetail: ({ repo, prNumber }) => <Text>{`PR DETAIL ${prNumber} ${repo}`}</Text>,
 }))
 vi.mock('./features/prs/diff.jsx', () => ({
   PRDiff: ({ prNumber }) => <Text>{`PR DIFF ${prNumber}`}</Text>,
@@ -340,6 +340,40 @@ describe('App shell user flows', () => {
     switcherProps.current.onDone({ status: 'completed', repo: 'owner/repo' }) // the current repo: no remount
     switcherProps.current.onDone({ status: 'completed', repo: 'acme/other' })
     await waitForExpectation(() => expect(onSwitchRepo).toHaveBeenCalledExactlyOnceWith('acme/other'))
+  })
+
+  it('AppRoot: switching repo remounts onto the new repo, drops the old item and the launch deep link (#466)', async () => {
+    const saved = Object.fromEntries(['GHUI_REPO', 'GHUI_PR', 'GHUI_ISSUE', 'GHUI_VIEW'].map(k => [k, process.env[k]]))
+    Object.assign(process.env, { GHUI_REPO: 'a/b', GHUI_PR: '42', GHUI_VIEW: 'detail', GHUI_ISSUE: '7' })
+    try {
+      const view = renderWithProviders(<AppRoot initialRepo="a/b" />)
+      await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DETAIL 42 a/b'))
+      await sendInput('', { escape: true })
+      await sendInput(':')
+      await waitForExpectation(() => expect(view.lastFrame()).toContain('PALETTE'))
+      paletteProps.current.context.onSwitchRepo()
+      await waitForExpectation(() => expect(view.lastFrame()).toContain('REPO PICKER'))
+      switcherProps.current.onDone({ status: 'completed', repo: 'c/d' })
+      await waitForExpectation(() => expect(view.lastFrame()).toContain('c/d'))
+      const frame = view.lastFrame()
+      expect(frame).toContain('PRS LIST c/d')
+      expect(frame).not.toContain('a/b')
+      expect(frame).not.toContain('PR DETAIL')
+      expect(process.env.GHUI_REPO).toBe('c/d')
+      expect([process.env.GHUI_PR, process.env.GHUI_ISSUE, process.env.GHUI_VIEW]).toEqual([undefined, undefined, undefined])
+    } finally {
+      for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v }
+    }
+  })
+
+  it('unmounting App (a repo switch) disarms the which-key prefix and clears its timers (#466)', async () => {
+    const view = renderWithProviders(<App repo="owner/repo" />)
+    await flush(20)
+    await sendInput('g')
+    await waitForExpectation(() => expect(getArmedPrefix()).not.toBeNull())
+    view.unmount()
+    await flush(10)
+    expect(getArmedPrefix()).toBeNull()
   })
 
   it('opens settings from the shell', async () => {
