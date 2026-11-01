@@ -1,6 +1,21 @@
 import { execa } from 'execa'
 import { runGh } from './core.js'
 
+/** A hung git call must not block every later write in the view (#453). */
+export const GIT_OP_TIMEOUT_MS = 60_000
+
+/**
+ * Throw for a failed or timed-out git result (reject:false results never throw themselves).
+ * @param {{ exitCode?: number, timedOut?: boolean, stderr?: string, stdout?: string }} result
+ * @param {string} what  e.g. 'git add'
+ */
+export function assertGitOk(result, what) {
+  if (result.timedOut) throw new Error(`${what} timed out after ${GIT_OP_TIMEOUT_MS / 1000} s`)
+  if (result.exitCode !== 0) {
+    throw new Error((result.stderr || result.stdout || `${what} failed`).split('\n')[0].trim())
+  }
+}
+
 /**
  * View raw content of a gist.
  * @param id
@@ -24,7 +39,7 @@ export async function deleteGist(id) {
  */
 export async function isInMerge() {
   const result = await execa('git', ['rev-parse', '--verify', 'MERGE_HEAD'],
-    { cwd: process.cwd(), reject: false })
+    { cwd: process.cwd(), reject: false, timeout: GIT_OP_TIMEOUT_MS })
   return result.exitCode === 0
 }
 
@@ -36,7 +51,7 @@ export async function isInMerge() {
  */
 export async function getConflictedFiles() {
   const result = await execa('git', ['status', '--porcelain'],
-    { cwd: process.cwd(), reject: false })
+    { cwd: process.cwd(), reject: false, timeout: GIT_OP_TIMEOUT_MS })
   if (result.exitCode !== 0 || !result.stdout.trim()) return []
 
   return result.stdout.trim().split('\n')
@@ -57,7 +72,7 @@ export async function getConflictedFiles() {
 export async function countFileConflicts(filePath) {
   try {
     const r = await execa('grep', ['-c', '^<<<<<<< ', filePath],
-      { cwd: process.cwd(), reject: false })
+      { cwd: process.cwd(), reject: false, timeout: GIT_OP_TIMEOUT_MS })
     return parseInt(r.stdout.trim(), 10) || 0
   } catch { return 0 }
 }
@@ -69,10 +84,8 @@ export async function countFileConflicts(filePath) {
 export async function gitAdd(files) {
   if (!files?.length) return
   const result = await execa('git', ['add', '--', ...files],
-    { cwd: process.cwd(), reject: false })
-  if (result.exitCode !== 0) {
-    throw new Error((result.stderr || 'git add failed').split('\n')[0].trim())
-  }
+    { cwd: process.cwd(), reject: false, timeout: GIT_OP_TIMEOUT_MS })
+  assertGitOk(result, 'git add')
 }
 
 /**
@@ -82,10 +95,8 @@ export async function gitAdd(files) {
 export async function gitUnstage(files) {
   if (!files?.length) return
   const result = await execa('git', ['restore', '--staged', '--', ...files],
-    { cwd: process.cwd(), reject: false })
-  if (result.exitCode !== 0) {
-    throw new Error((result.stderr || 'git restore failed').split('\n')[0].trim())
-  }
+    { cwd: process.cwd(), reject: false, timeout: GIT_OP_TIMEOUT_MS })
+  assertGitOk(result, 'git restore')
 }
 
 /**
@@ -93,10 +104,8 @@ export async function gitUnstage(files) {
  */
 export async function gitMergeAbort() {
   const result = await execa('git', ['merge', '--abort'],
-    { cwd: process.cwd(), reject: false })
-  if (result.exitCode !== 0) {
-    throw new Error((result.stderr || 'git merge --abort failed').split('\n')[0].trim())
-  }
+    { cwd: process.cwd(), reject: false, timeout: GIT_OP_TIMEOUT_MS })
+  assertGitOk(result, 'git merge --abort')
 }
 
 /**
@@ -105,10 +114,8 @@ export async function gitMergeAbort() {
  */
 export async function gitCommit(message) {
   const result = await execa('git', ['commit', '-m', message],
-    { cwd: process.cwd(), reject: false })
-  if (result.exitCode !== 0) {
-    throw new Error((result.stderr || result.stdout || 'git commit failed').split('\n')[0].trim())
-  }
+    { cwd: process.cwd(), reject: false, timeout: GIT_OP_TIMEOUT_MS })
+  assertGitOk(result, 'git commit')
   return result.stdout
 }
 
@@ -118,8 +125,10 @@ export async function gitCommit(message) {
  * @param {string} branch
  */
 export async function gitMergeBranch(branch) {
-  return execa('git', ['merge', branch, '--no-edit'],
-    { cwd: process.cwd(), reject: false })
+  const result = await execa('git', ['merge', branch, '--no-edit'],
+    { cwd: process.cwd(), reject: false, timeout: GIT_OP_TIMEOUT_MS })
+  if (result.timedOut) throw new Error(`git merge timed out after ${GIT_OP_TIMEOUT_MS / 1000} s`)
+  return result
 }
 
 /**
@@ -128,7 +137,7 @@ export async function gitMergeBranch(branch) {
 export async function getMergeCommitMessage() {
   try {
     const r = await execa('cat', ['.git/MERGE_MSG'],
-      { cwd: process.cwd(), reject: false })
+      { cwd: process.cwd(), reject: false, timeout: GIT_OP_TIMEOUT_MS })
     return r.stdout.trim() || 'Merge conflict resolution'
   } catch { return 'Merge conflict resolution' }
 }

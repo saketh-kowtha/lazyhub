@@ -33,6 +33,7 @@ import {
   getMergeCommitMessage, pushBranch,
 } from '../../executor.js'
 import { openInEditor } from '../../editor.js'
+import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 
 const _editorCfg = loadConfig().editor
 
@@ -75,10 +76,19 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
   // The commit-message editor shows once every file is staged; typed text must not arm the `g` prefix.
   useKeyScope('input', files.length > 0 && files.every(f => f.staged))
 
-  const showStatus = useCallback((msg, isError = false) => {
+  // One status timer: every new message cancels the previous timeout, so a stale 4 s
+  // timer can never clear a later (or sticky pending) message.
+  const statusTimer = useRef(null)
+  useEffect(() => () => { clearTimeout(statusTimer.current) }, [])
+  const showStatus = useCallback((msg, isError = false, sticky = false) => {
+    clearTimeout(statusTimer.current)
     setStatusMsg({ msg, isError })
-    if (!isError) setTimeout(() => setStatusMsg(null), 4000)
+    if (!isError && !sticky) statusTimer.current = setTimeout(() => setStatusMsg(null), 4000)
   }, [])
+
+  // One in-flight guard for every local/remote write in this view (#453): shows
+  // "label…" while it runs and ignores a repeat submit instead of racing it.
+  const { run: guard } = usePendingWrite((msg) => showStatus(msg, false, true))
 
   useEffect(() => {
     notifyDialog(!!dialog)
@@ -140,7 +150,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
     if (phase === PHASE.DONE) return
 
     if (phase === PHASE.SETUP) {
-      if (key.return || input === 's') { doSetup(); return }
+      if (key.return || input === 's') { guard('Setting up merge', doSetup); return }
       if (input === 'o') { openInBrowser(); return }
       return
     }
@@ -158,7 +168,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
     }
 
     if (input === ' ' && file) {
-      if (file.staged) { doUnstage(file) } else { doStage(file) }
+      if (file.staged) { guard(`Unstaging ${file.path}`, () => doUnstage(file)) } else { guard(`Staging ${file.path}`, () => doStage(file)) }
       return
     }
 
@@ -183,7 +193,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
         showStatus('✗ Stage all resolved files first ([Space] to stage)', true)
         return
       }
-      doCommitAndPush()
+      guard('Committing and pushing', doCommitAndPush)
       return
     }
 
@@ -335,7 +345,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
           <ConfirmDialog
             message="Abort merge? All unsaved conflict resolution will be lost."
             destructive={true}
-            onConfirm={doAbort}
+            onConfirm={() => { setDialog(null); guard('Aborting merge', doAbort) }}
             onCancel={() => setDialog(null)}
           />
         </Box>
@@ -525,7 +535,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
               value={commitMsg}
               onChange={setCommitMsg}
               focus={true}
-              onEnter={doCommitAndPush}
+              onEnter={() => guard('Committing and pushing', doCommitAndPush)}
             />
           </Box>
           <Text color={t.ui.dim}>
