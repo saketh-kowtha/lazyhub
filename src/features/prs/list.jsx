@@ -135,9 +135,10 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const [dialog, setDialog] = useState(null)
   const [mergeOptions, setMergeOptions] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
-  // Popover is auto-shown for the focused row. ESC dismisses it for the
-  // current row; any cursor change clears the dismissal so it reappears.
-  const [popoverDismissed, setPopoverDismissed] = useState(false)
+  // Preview panel: shown beside the list for the focused row when the terminal is wide
+  // enough (and [layout].preview_panel is on). Esc dismisses it and it stays dismissed
+  // while the cursor moves; `p` toggles it again.
+  const [popoverDismissed, setPopoverDismissed] = useState(_appConfig.layout?.previewPanel === false)
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
 
@@ -231,7 +232,6 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
   const moveCursor = useCallback((delta) => {
     const next = Math.max(0, Math.min(items.length - 1, cursor + delta))
-    if (next !== cursor) setPopoverDismissed(false)
     setCursor(next)
     if (next < scrollOffset) setScrollOffset(next)
     if (next >= scrollOffset + effectiveHeight) setScrollOffset(next - effectiveHeight + 1)
@@ -271,6 +271,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     if (matchesAction('cursor.down', input, key, _actions)) { moveCursor(1);  return }
     if (matchesAction('cursor.up', input, key, _actions))   { moveCursor(-1); return }
     if (matchesAction('list.refresh', input, key, _actions)) { if (extra.error) retryPage(); else refetch(); return }
+    if (input === 'p' && !key.ctrl && !key.meta) { setPopoverDismissed(d => !d); return }
     if (matchesAction('list.search', input, key, _actions)) { openDialog('fuzzy'); return }
 
     const focusedPR = !loading && items.length > 0 ? items[cursor] : null

@@ -14,7 +14,7 @@ const t = schemeToT(lazyhubDark)
 const filler = 'x'.repeat(44)
 const pr = (number, marker, login = 'maria-lopez') => ({
   number,
-  title: `${filler}${marker}`,
+  title: `${marker}${filler}`,
   state: 'OPEN',
   updatedAt: new Date().toISOString(),
   author: { login },
@@ -44,21 +44,29 @@ const six = () => [
   pr(1, 'AAAAAA'), pr(2, 'SELECTED'), pr(3, 'BBBBBB'),
   pr(4, 'CCCCCC'), pr(5, 'DDDDDD'), pr(6, 'EEEEEE'),
 ]
+const MARKERS = ['AAAAAA', 'SELECTED', 'BBBBBB', 'CCCCCC', 'DDDDDD', 'EEEEEE']
 
-describe('PR list popover', () => {
+describe('PR list preview panel (#461)', () => {
+  it('sits beside the list on a wide terminal and never covers a row', () => {
+    const frame = renderList(170, six(), 1)
+    expect(frame).toContain('unresolved') // panel rendered
+    for (const marker of MARKERS) expect(frame).toContain(marker)
+    for (const line of frame.split('\n')) expect(line.length).toBeLessThanOrEqual(170)
+  })
+
   for (const cols of [80, 100]) {
-    it(`leaves no orphan title fragments from rows it covers at ${cols} cols`, () => {
-      const items = [
-        pr(1, 'AAAAAA'), pr(2, 'SELECTED'), pr(3, 'BBBBBB'),
-        pr(4, 'CCCCCC'), pr(5, 'DDDDDD'), pr(6, 'EEEEEE'),
-      ]
-      const frame = renderList(cols, items, 1)
-      expect(frame).toContain('unresolved') // popover rendered
-      for (const marker of ['BBBBBB', 'CCCCCC', 'DDDDDD', 'EEEEEE']) {
-        expect(frame).not.toContain(marker)
-      }
+    it(`keeps every row fully visible at ${cols} cols, where the panel does not fit beside the list`, () => {
+      const frame = renderList(cols, six(), 1)
+      expect(frame).not.toContain('unresolved')
+      for (const marker of MARKERS) expect(frame).toContain(marker)
     })
   }
+
+  it('stays hidden once dismissed', () => {
+    const frame = renderList(170, six(), 3, { popoverDismissed: true })
+    expect(frame).not.toContain('unresolved')
+    for (const marker of MARKERS) expect(frame).toContain(marker)
+  })
 })
 
 describe('PR list paging footer (#508)', () => {

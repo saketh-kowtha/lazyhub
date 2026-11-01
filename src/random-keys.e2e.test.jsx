@@ -106,8 +106,6 @@ const SIZES = [[80, 24], [120, 40], [60, 18], [200, 50], [50, 15]]
  * @type {Array<{ size: number[], keys: string[], reason: RegExp, issue: string }>}
  */
 const KNOWN_FAILURES = [
-  // G (cursor.bottom) on the PR list at 80x24: the peek panel draws past the right edge (frame line 13 is 105 columns wide).
-  { size: [80, 24], keys: ['2', 'G'], reason: /is \d+ wide \(max 80\)/, issue: 'not yet filed (see PR description)' },
 ]
 
 function positiveInt(raw, fallback) {

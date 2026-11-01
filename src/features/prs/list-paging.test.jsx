@@ -91,3 +91,19 @@ describe('PR list cursor paging (#508)', () => {
   })
 })
 
+describe('PR list preview dismissal (#461)', () => {
+  it('stays dismissed while the cursor moves, and p brings it back', async () => {
+    term.columns = 170
+    const view = mount(170)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('loading…'))
+    await flush(20)
+    await sendInput('', { escape: true })
+    await waitForExpectation(() => expect(view.lastFrame()).not.toContain('loading…'))
+    await sendInput('j')
+    await sendInput('j')
+    await flush(30)
+    expect(view.lastFrame()).not.toContain('loading…')
+    await sendInput('p')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('loading…'))
+  })
+})

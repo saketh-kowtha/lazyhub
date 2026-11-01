@@ -9,7 +9,7 @@ import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { EmptyState } from '../../components/EmptyState.jsx'
 import { classifyGhFailure } from '../../executor.js'
 import { firstActionKey } from '../../config/actions.js'
-import { Popover, calcPopoverPosition } from '../../ui/Popover.jsx'
+import { Popover } from '../../ui/Popover.jsx'
 import {
   PRDetailPopoverContentMemo,
   PRRow,
@@ -17,6 +17,9 @@ import {
   POPOVER_WIDTH,
   POPOVER_HEIGHT,
 } from './list-row.jsx'
+
+const MIN_TITLE_COLS = 24
+const MIN_PANEL_COLS = 36
 
 export function PRListView({
   items,
@@ -46,33 +49,14 @@ export function PRListView({
   scheme,
   paging,
 }) {
-  const popoverRowIndex = cursor - scrollOffset
-  const popoverAnchor = {
-    x: 1,
-    y: 1 + popoverRowIndex,
-    width: innerWidth ? innerWidth - 2 : termCols - 2,
-    height: 1,
-  }
-  const effectivePopoverWidth = Math.min(POPOVER_WIDTH, termCols - 4)
-  // Rows the popover floats over (list-relative y = 1 + row index).  Their titles
-  // are blanked so no orphan fragments show to the popover's right.
-  // The preview collapses when the pane cannot hold it (responsive layout): it needs
-  // the list's chrome (header, status, footer) plus its own height, and 70+ columns.
-  const popoverFits = termRows >= POPOVER_HEIGHT + 8 && termCols >= 70
-  const popoverVisible = !!selectedPR && !dialog && !popoverDismissed && popoverFits
-  const popoverTop = popoverVisible
-    ? calcPopoverPosition({
-        anchor: popoverAnchor,
-        popoverWidth: effectivePopoverWidth,
-        popoverHeight: POPOVER_HEIGHT,
-        termCols,
-        termRows,
-        preferredSide: 'right',
-      }).top
-    : 0
-  const isCovered = (rowIndex) =>
-    popoverVisible && rowIndex !== popoverRowIndex &&
-    1 + rowIndex >= popoverTop && 1 + rowIndex < popoverTop + POPOVER_HEIGHT
+  // The preview is a side panel: it takes the right-hand columns and the rows are narrowed
+  // to the rest, so it never covers a PR. A pane too narrow for both shows rows only.
+  const listWidth = innerWidth || termCols - 2
+  const panelWidth = Math.min(POPOVER_WIDTH, listWidth - PR_ROW_FIXED_COLS - MIN_TITLE_COLS)
+  const panelFits = termRows >= POPOVER_HEIGHT + 8 && panelWidth >= MIN_PANEL_COLS
+  const popoverVisible = !!selectedPR && !dialog && !popoverDismissed && panelFits
+  const titleWidth = innerWidth ? innerWidth - PR_ROW_FIXED_COLS - (popoverVisible ? panelWidth : 0) : undefined
+  const popoverAnchor = { x: listWidth - panelWidth, y: 1, width: 0, height: 1 }
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -105,7 +89,7 @@ export function PRListView({
               {termCols >= 100 ? `[${filterKeys.filterOpen}]open [${filterKeys.filterClosed}]closed [${filterKeys.filterMerged}]merged ` : ''}[s]scope [@]author
             </Text>
         }
-        {items.length >= config.pageSize && <Text color={t.ui.dim}> ({items.length})</Text>}
+        {panelFits && <Text color={t.ui.dim}> [p]review</Text>}
       </Box>
 
       {error && (
@@ -135,9 +119,8 @@ export function PRListView({
             pr={pr}
             isSelected={idx === cursor}
             t={t}
-            titleWidth={innerWidth ? innerWidth - PR_ROW_FIXED_COLS : undefined}
+            titleWidth={titleWidth}
             expanded={expansionEnabled && idx === cursor}
-            maskTitle={isCovered(i)}
           />
         )
       })}
@@ -162,7 +145,7 @@ export function PRListView({
       {popoverVisible && (
         <Popover
           anchor={popoverAnchor}
-          popoverWidth={effectivePopoverWidth}
+          popoverWidth={panelWidth}
           popoverHeight={POPOVER_HEIGHT}
           termCols={termCols}
           termRows={termRows}
@@ -173,7 +156,7 @@ export function PRListView({
             pr={selectedPR}
             t={t}
             scheme={scheme}
-            width={effectivePopoverWidth}
+            width={panelWidth}
           />
         </Popover>
       )}
