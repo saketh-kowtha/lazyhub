@@ -215,6 +215,15 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
             </Box>
           )
         })}
+        {!error && items.length > 0 && (notifications?.truncated || notifications?.partialError) && (
+          <Box paddingX={1}>
+            <Text color={t.ci.pending}>
+              {notifications.partialError
+                ? `Showing ${items.length}; a later page failed (${sanitize(notifications.partialError).slice(0, 60)}) [${firstActionKey('list.refresh', 'r')}] retry`
+                : `Showing the newest ${items.length}; older notifications are not loaded`}
+            </Text>
+          </Box>
+        )}
         {error && (
           <Box paddingX={2} paddingY={1} flexDirection="column">
             <FailureNotice failure={classifyGhFailure(error)} />

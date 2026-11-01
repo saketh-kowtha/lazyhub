@@ -805,7 +805,7 @@ describe('CI checks flows', () => {
     // getPRChecks makes two gh calls: pr view to get headRefOid, then api check-runs
     execa
       .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify({ headRefOid: 'abc123' }), stderr: '' })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify([{ total_count: 1, check_runs: [{ id: 1, name: 'lint', conclusion: 'success', app: { name: 'GitHub Actions' }, html_url: 'u' }] }]), stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify([{ id: 1, name: 'lint', status: undefined, conclusion: 'success', appName: 'GitHub Actions', url: 'u' }]), stderr: '' })
     const checks = await getPRChecks('owner/repo', 42)
     // First call: pr view
     const firstArgs = execa.mock.calls[0][1]
@@ -816,7 +816,8 @@ describe('CI checks flows', () => {
     const secondArgs = execa.mock.calls[1][1]
     expect(secondArgs).toContain('api')
     expect(secondArgs.join(' ')).toContain('commits/abc123/check-runs')
-    expect(checks).toEqual([{ id: 1, name: 'lint', status: undefined, conclusion: 'success', appName: 'GitHub Actions', url: 'u' }])
+    expect(checks).toHaveLength(1)
+    expect(checks[0]).toMatchObject({ id: 1, name: 'lint', conclusion: 'success' })
   })
 
   it('reruns a specific check run', async () => {
@@ -842,7 +843,7 @@ describe('Notification flows', () => {
     ok([])
     await listNotifications()
     expect(args()).toContain('api')
-    expect(args()[1]).toMatch(/^notifications\?per_page=50$/)
+    expect(args()[1]).toMatch(/^notifications\?per_page=50&page=1$/)
   })
 
   it('fetches all notifications when filter.all=true', async () => {

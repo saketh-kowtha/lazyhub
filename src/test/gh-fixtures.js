@@ -204,7 +204,7 @@ function route(cmd, args) {
   if (a === 'api' && /\/branches\/.+\/protection/.test(b)) return json({ required_status_checks: null })
   if (a === 'api' && /\/branches\//.test(b)) return json(BRANCHES[0])
   // `--paginate --slurp` wraps the pages in an array.
-  if (a === 'api' && /^notifications(\?|$)/.test(b)) return json([NOTIFICATIONS.map(n => ({ id: n.id, unread: n.unread, reason: n.reason, subject: n.subject, repository: { full_name: n.repository.fullName, name: n.repository.name }, updated_at: n.updatedAt }))])
+  if (a === 'api' && /^notifications(\?|$)/.test(b)) return json(/[?&]page=([2-9]|\d\d)/.test(b) ? [] : NOTIFICATIONS.map(n => ({ id: n.id, unread: n.unread, reason: n.reason, subject: n.subject, repository: { full_name: n.repository.fullName, name: n.repository.name }, updated_at: n.updatedAt })))
   if (a === 'api' && /collaborators|assignees/.test(b)) return json([{ login: 'alice' }, { login: 'bob' }])
   if (a === 'api' && /\/labels/.test(b)) return json([{ name: 'bug', color: 'd73a4a' }, { name: 'p1', color: '0e8a16' }])
   if (a === 'api' && /check-runs|check-suites|statuses|annotations/.test(b)) return json([])

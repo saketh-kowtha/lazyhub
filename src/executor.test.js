@@ -602,36 +602,76 @@ describe('listNotifications()', () => {
 })
 
 describe('pagination is never silently capped (#440)', () => {
-  it('getPRChecks follows every page of check-runs (the API defaults to 30)', async () => {
+  const ok = (value) => ({ exitCode: 0, stdout: JSON.stringify(value), stderr: '' })
+  const fail = (stderr) => ({ exitCode: 1, stdout: '', stderr })
+  const runs = (from, n) => Array.from({ length: n }, (_, i) => ({ id: from + i, name: `c${from + i}`, conclusion: 'success' }))
+  const endpoint = (call) => execa.mock.calls[call][1][1]
+
+  it('getPRChecks pages by hand (no --paginate/--slurp) until a short page', async () => {
     execa
-      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify({ headRefOid: 'abc123' }), stderr: '' })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: JSON.stringify([
-          { total_count: 3, check_runs: [{ id: 1, name: 'a' }, { id: 2, name: 'b' }] },
-          { total_count: 3, check_runs: [{ id: 3, name: 'c', conclusion: 'failure' }] },
-        ]),
-        stderr: '',
-      })
+      .mockResolvedValueOnce(ok({ headRefOid: 'abc123' }))
+      .mockResolvedValueOnce(ok(runs(1, 100)))
+      .mockResolvedValueOnce(ok(runs(101, 7)))
     const checks = await getPRChecks('a/b', 1)
-    const args = execa.mock.calls[1][1]
-    expect(args).toContain('--paginate')
-    expect(args).toContain('--slurp')
-    expect(args[1]).toMatch(/per_page=100/)
-    expect(checks.map(c => c.id)).toEqual([1, 2, 3])
-    expect(checks[2].conclusion).toBe('failure')
+    expect(checks).toHaveLength(107)
+    expect(endpoint(1)).toMatch(/check-runs\?per_page=100&page=1$/)
+    expect(endpoint(2)).toMatch(/per_page=100&page=2$/)
+    expect(execa).toHaveBeenCalledTimes(3)
+    for (const [, args] of execa.mock.calls) { expect(args).not.toContain('--paginate'); expect(args).not.toContain('--slurp') }
+    expect(checks.truncated).toBe(false)
   })
 
-  it('listNotifications follows every page (the API defaults to 50) and keeps the row shape', async () => {
-    const n = (id) => ({ id, unread: true, reason: 'mention', subject: { title: `t${id}`, type: 'Issue', url: 'u' }, repository: { full_name: 'o/r', name: 'r' }, updated_at: 'now' })
-    mockSuccess([[n('1'), n('2')], [n('3')]])
+  it('getPRChecks keeps the pages it has and says so when a later page fails', async () => {
+    execa
+      .mockResolvedValueOnce(ok({ headRefOid: 'abc123' }))
+      .mockResolvedValueOnce(ok(runs(1, 100)))
+      .mockResolvedValueOnce(fail('HTTP 502'))
+    const checks = await getPRChecks('a/b', 1)
+    expect(checks.filter(c => c.id)).toHaveLength(100)
+    expect(checks.at(-1).name).toMatch(/checks incomplete.*page failed/)
+    expect(checks.error).toMatch(/502/)
+  })
+
+  it('getPRChecks stops at the page ceiling and flags truncation', async () => {
+    execa.mockResolvedValueOnce(ok({ headRefOid: 'abc123' }))
+    execa.mockResolvedValue(ok(runs(1, 100)))
+    const checks = await getPRChecks('a/b', 1)
+    expect(checks.truncated).toBe(true)
+    expect(execa).toHaveBeenCalledTimes(1 + 20)
+    expect(checks.at(-1).name).toMatch(/checks incomplete.*page limit/)
+  })
+
+  const note = (id) => ({ id, unread: true, reason: 'mention', subject: { title: `t${id}`, type: 'Issue', url: 'u' }, repository: { full_name: 'o/r', name: 'r' }, updated_at: 'now' })
+  const notes = (from, n) => Array.from({ length: n }, (_, i) => note(String(from + i)))
+
+  it('listNotifications pages by hand and keeps the row shape', async () => {
+    execa.mockResolvedValueOnce(ok(notes(1, 50))).mockResolvedValueOnce(ok(notes(51, 2)))
     const list = await listNotifications({ all: true })
-    const [, args] = execa.mock.calls[0]
-    expect(args).toContain('--paginate')
-    expect(args).toContain('--slurp')
-    expect(args[1]).toMatch(/per_page=50.*all=true/)
-    expect(list.map(x => x.id)).toEqual(['1', '2', '3'])
+    expect(list).toHaveLength(52)
+    expect(endpoint(0)).toMatch(/^notifications\?per_page=50&page=1&all=true$/)
+    expect(endpoint(1)).toMatch(/page=2&all=true$/)
     expect(list[0]).toEqual({ id: '1', unread: true, reason: 'mention', subject: { title: 't1', type: 'Issue', url: 'u' }, repository: { fullName: 'o/r', name: 'r' }, updatedAt: 'now' })
+    expect(list.truncated).toBe(false)
+  })
+
+  it('listNotifications bounds the walk and flags truncation', async () => {
+    execa.mockResolvedValue(ok(notes(1, 50)))
+    const list = await listNotifications({ all: true })
+    expect(list.truncated).toBe(true)
+    expect(list).toHaveLength(20 * 50)
+    expect(execa).toHaveBeenCalledTimes(20)
+  })
+
+  it('listNotifications keeps earlier pages when a later one fails, and gives all=true a longer timeout', async () => {
+    execa.mockResolvedValueOnce(ok(notes(1, 50))).mockResolvedValueOnce(fail('HTTP 500'))
+    const list = await listNotifications({ all: true })
+    expect(list).toHaveLength(50)
+    expect(list.partialError).toMatch(/500/)
+    expect(execa.mock.calls[0][2].timeout).toBeGreaterThan(30_000)
+    execa.mockClear()
+    execa.mockResolvedValueOnce(ok([]))
+    await listNotifications()
+    expect(execa.mock.calls[0][2].timeout).toBeLessThanOrEqual(30_000)
   })
 })
 
