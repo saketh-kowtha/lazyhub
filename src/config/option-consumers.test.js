@@ -56,10 +56,8 @@ describe('options that had no consumer', () => {
     expect(legacyFromToml(withUser({ layout: { compact_footer: true } })).layout.compactFooter).toBe(true)
   })
 
-  it('[layout].preview_panel reaches the PR list (it hides the detail popover)', () => {
+  it('[layout].preview_panel is projected to the legacy config (the render test is src/features/prs/list-preview-panel.test.jsx)', () => {
     expect(legacyFromToml(withUser({ layout: { preview_panel: false } })).layout.previewPanel).toBe(false)
-    const src = readFileSync(new URL('../features/prs/list.jsx', import.meta.url), 'utf8')
-    expect(src).toMatch(/previewPanel === false/)
   })
 })
 
