@@ -15,6 +15,7 @@ import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
 import { TextInput, sanitize } from '../../utils.js'
+import { logger } from '../../utils-core.js'
 import { BranchListSkeleton } from '../../components/Skeleton.jsx'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
 
@@ -48,7 +49,11 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
   const { data: branches, loading, error, refetch, isStale } = useGh(listBranches, [repo])
   // Slim head-branch list for the PR marker only (#456), not the full PR list.
   const { data: prHeads } = useGh(listOpenPRBranches, [repo], { ttl: 120_000 })
-  const openPRHeads = useMemo(() => new Set(Array.isArray(prHeads) ? prHeads : []), [prHeads])
+  const openPRHeads = useMemo(() => new Set(Array.isArray(prHeads?.heads) ? prHeads.heads : []), [prHeads])
+  const prMarkersTruncated = !!prHeads?.truncated
+  useEffect(() => {
+    if (prMarkersTruncated) logger.warn(`branches: open-PR walk for ${repo} hit its page ceiling; PR markers may be incomplete`)
+  }, [prMarkersTruncated, repo])
   const [currentBranch, setCurrentBranch] = useState(null)
   // Local git only ever runs in a checkout of the repo being viewed (#471).
   // undefined = still resolving, null = no local checkout of `repo`, else { dir, remote }
@@ -316,6 +321,9 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
 
   return (
     <Box flexDirection="column" flexGrow={1}>
+      {prMarkersTruncated && (
+        <Box paddingX={1}><Text color={t.ui.dim}>PR markers may be incomplete: only the first 5,000 open PRs were checked</Text></Box>
+      )}
       {statusMsg && (
         <Box paddingX={1}>
           <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>

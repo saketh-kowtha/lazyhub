@@ -8,7 +8,7 @@
 import React, { useState, useRef } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useGh } from '../../hooks/useGh.js'
-import { classifyGhFailure, listLabels, listCollaborators, editIssueMembers } from '../../executor.js'
+import { classifyGhFailure, listLabels, listCollaborators, editIssueMembers, collaboratorsTruncated, COLLAB_MAX_ROWS } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { useKeyScope } from '../../keyscope.js'
@@ -69,7 +69,8 @@ function IssueSelectionDialog({ repo, issue, current: currentNow, getOptions, fi
     if (!listed.has(id)) items.push({ id, name: sanitize(id), selected: true })
   }
 
-  return (
+  const truncated = field === 'login' && collaboratorsTruncated(options)
+  const picker = (
     <MultiSelect
       items={items}
       onSubmit={async (selectedIds) => {
@@ -88,6 +89,13 @@ function IssueSelectionDialog({ repo, issue, current: currentNow, getOptions, fi
       }}
       onCancel={onClose}
     />
+  )
+  if (!truncated) return picker
+  return (
+    <Box flexDirection="column" paddingX={loadingPadding}>
+      <Text color={t.ci.pending}>{`showing first ${COLLAB_MAX_ROWS.toLocaleString('en-US')} collaborators`}</Text>
+      {picker}
+    </Box>
   )
 }
 

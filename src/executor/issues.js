@@ -229,6 +229,14 @@ export async function removeLabels(repo, number, labels, type = 'issue') {
 const COLLAB_PAGE_SIZE = 100
 /** Safety ceiling on collaborator pages (5000 people); every earlier page is fetched exactly once. */
 export const COLLAB_MAX_PAGES = 50
+export const COLLAB_MAX_ROWS = COLLAB_PAGE_SIZE * COLLAB_MAX_PAGES
+
+/**
+ * True when a collaborator list stopped at the ceiling, so more people may exist.
+ * Derived from the length so it survives the disk cache (an array property would not).
+ * @param {unknown} rows
+ */
+export const collaboratorsTruncated = rows => Array.isArray(rows) && rows.length >= COLLAB_MAX_ROWS
 
 /**
  * List collaborators for a repo, following pages until a short page (D16: a

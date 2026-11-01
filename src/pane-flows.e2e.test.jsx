@@ -116,7 +116,7 @@ describe('Pane E2E user flows', () => {
         ])
       }
 
-      if (fn === listOpenPRBranches) return ghResult(['feature-1'])
+      if (fn === listOpenPRBranches) return ghResult({ heads: ['feature-1'], truncated: false })
 
       if (fn === listPRs) {
         return ghResult([

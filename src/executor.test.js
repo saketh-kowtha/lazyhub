@@ -29,6 +29,9 @@ import {
   listCollaborators,
   editIssueMembers,
   listOpenPRBranches,
+  OPEN_PR_HEADS_MAX_PAGES,
+  collaboratorsTruncated,
+  COLLAB_MAX_ROWS,
   requestReviewers,
   listBranches,
   checkoutBranch,
@@ -462,6 +465,15 @@ describe('listCollaborators()', () => {
     expect(execa.mock.calls[0][1].some(a => a.includes('per_page=100'))).toBe(true)
     expect(execa.mock.calls[1][1].some(a => a.includes('page=2'))).toBe(true)
     expect(execa).toHaveBeenCalledTimes(2)
+    expect(collaboratorsTruncated(rows)).toBe(false)
+  })
+
+  it('reports truncation when the page ceiling is reached (D16)', async () => {
+    const full = JSON.stringify(Array.from({ length: 100 }, (_, i) => ({ login: `u${i}` })))
+    execa.mockResolvedValue({ exitCode: 0, stdout: full, stderr: '' })
+    const rows = await listCollaborators('owner/repo')
+    expect(rows).toHaveLength(COLLAB_MAX_ROWS)
+    expect(collaboratorsTruncated(rows)).toBe(true)
   })
 })
 
@@ -505,13 +517,13 @@ describe('listBranches()', () => {
 describe('listOpenPRBranches() (#456)', () => {
   const graph = (names, next) => JSON.stringify({ data: { repository: { pullRequests: {
     pageInfo: { hasNextPage: !!next, endCursor: next || null },
-    nodes: names.map(headRefName => ({ headRefName })),
+    nodes: names.map(n => (typeof n === 'string' ? { headRefName: n, isCrossRepository: false } : n)),
   } } } })
 
   it('asks GraphQL only for head branch names, never check contexts or bodies', async () => {
     execa.mockResolvedValue({ exitCode: 0, stdout: graph(['feat/a', 'fix/b']), stderr: '' })
     const rows = await listOpenPRBranches('owner/repo')
-    expect(rows).toEqual(['feat/a', 'fix/b'])
+    expect(rows).toEqual({ heads: ['feat/a', 'fix/b'], truncated: false })
     const query = execa.mock.calls[0][1].find(a => a.startsWith('query='))
     expect(query).toContain('headRefName')
     expect(query).not.toMatch(/statusCheckRollup|contexts|body|reviewRequests|labels/)
@@ -521,9 +533,26 @@ describe('listOpenPRBranches() (#456)', () => {
     execa
       .mockResolvedValueOnce({ exitCode: 0, stdout: graph(['a'], 'c1'), stderr: '' })
       .mockResolvedValueOnce({ exitCode: 0, stdout: graph(['b']), stderr: '' })
-    expect(await listOpenPRBranches('owner/repo')).toEqual(['a', 'b'])
+    expect((await listOpenPRBranches('owner/repo')).heads).toEqual(['a', 'b'])
     expect(execa).toHaveBeenCalledTimes(2)
     expect(execa.mock.calls[1][1]).toContain('after=c1')
+  })
+
+  it('ignores fork PRs that reuse a branch name that exists in this repo', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: graph([
+      { headRefName: 'main', isCrossRepository: true },
+      { headRefName: 'feat/a', isCrossRepository: false },
+    ]), stderr: '' })
+    const { heads } = await listOpenPRBranches('owner/repo')
+    expect(heads).toEqual(['feat/a'])
+    expect(execa.mock.calls[0][1].find(a => a.startsWith('query='))).toContain('isCrossRepository')
+  })
+
+  it('says so when the page ceiling stops the walk instead of truncating silently', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: graph(['x'], 'more'), stderr: '' })
+    const res = await listOpenPRBranches('owner/repo')
+    expect(execa).toHaveBeenCalledTimes(OPEN_PR_HEADS_MAX_PAGES)
+    expect(res.truncated).toBe(true)
   })
 })
 

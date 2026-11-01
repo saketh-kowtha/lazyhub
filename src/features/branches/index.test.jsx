@@ -1,6 +1,7 @@
 import React from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { cleanup } from 'ink-testing-library'
+import { logger } from '../../utils-core.js'
 import { execa } from 'execa'
 import { renderWithProviders, waitForInputReady, waitForExpectation } from '../../test/test-helpers.jsx'
 import { useGh } from '../../hooks/useGh.js'
@@ -131,11 +132,24 @@ it('shows a pending status while a push runs and ignores a second push (#453)', 
 it('marks branches with an open PR from a slim head-branch query, not the full PR list (#456)', async () => {
   useGh.mockImplementation(fn => ({
     data: fn === listBranches ? [{ name: 'main' }, { name: 'dev' }]
-      : fn === listOpenPRBranches ? ['dev'] : [],
+      : fn === listOpenPRBranches ? { heads: ['dev'], truncated: false } : [],
     loading: false, refetch: vi.fn(),
   }))
   const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
   await waitForExpectation(() => expect(view.lastFrame()).toMatch(/dev.*PR/))
   expect(view.lastFrame()).not.toMatch(/main.*PR/)
   expect(useGh.mock.calls.map(([fn]) => fn)).not.toContain(listPRs)
+})
+
+it('logs and says so when the open-PR walk hit its ceiling, so markers may be incomplete (D16)', async () => {
+  const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+  useGh.mockImplementation(fn => ({
+    data: fn === listBranches ? [{ name: 'main' }, { name: 'dev' }]
+      : fn === listOpenPRBranches ? { heads: ['dev'], truncated: true } : [],
+    loading: false, refetch: vi.fn(),
+  }))
+  const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
+  await waitForExpectation(() => expect(view.lastFrame()).toContain('PR markers may be incomplete'))
+  await waitForExpectation(() => expect(warn).toHaveBeenCalledWith(expect.stringContaining('may be incomplete')))
+  warn.mockRestore()
 })

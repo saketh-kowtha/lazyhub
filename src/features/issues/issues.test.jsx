@@ -14,6 +14,8 @@ vi.mock('ink', async () => {
 vi.mock('../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
 vi.mock('../../executor.js', async () => ({
   ...await vi.importActual('../../executor/classify.js'),
+  collaboratorsTruncated: (await vi.importActual('../../executor/issues.js')).collaboratorsTruncated,
+  COLLAB_MAX_ROWS: (await vi.importActual('../../executor/issues.js')).COLLAB_MAX_ROWS,
   getIssue: vi.fn(), getIssueRow: vi.fn(), listIssuesPage: vi.fn(), listLabels: vi.fn(), listCollaborators: vi.fn(),
   closeIssue: vi.fn(), createIssue: vi.fn(), editIssueMembers: vi.fn(), addIssueComment: vi.fn(),
 }))
@@ -147,6 +149,19 @@ describe('shared issue editor contracts', () => {
     await sendInput(' ')
     await sendInput('', { return: true })
     await waitForExpectation(() => expect(editIssueMembers).toHaveBeenCalledExactlyOnceWith('owner/repo', 11, 'label', { add: ['new&amp;safe'], remove: [] }))
+  })
+
+  it('says when the collaborator list stopped at its ceiling (D16)', async () => {
+    const many = Array.from({ length: 5000 }, (_, i) => ({ login: `user${i}` }))
+    useGh.mockImplementation(fn => ({
+      data: fn === listIssuesPage ? page([issue]) : fn === listCollaborators ? many : null,
+      loading: false, error: null, refetch,
+    }))
+    const view = await renderIssue(<IssueList repo="owner/repo" onSelectIssue={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
+    await flush(20)
+    await sendInput('A')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('showing first 5,000 collaborators'))
   })
 
   it('lets Esc close a picker that is still loading (#513)', async () => {
