@@ -1,9 +1,17 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
 
 const root = new URL('../', import.meta.url)
+
+describe('npm scratch dirs never land in the worktree', () => {
+  it('the test writes under os.tmpdir() and .gitignore covers stray .dependency-overrides-* dirs', () => {
+    expect(readFileSync(new URL('dependency-overrides.test.js', new URL('./', import.meta.url)), 'utf8')).not.toMatch(/mkdtempSync\(new URL/)
+    expect(readFileSync(new URL('.gitignore', root), 'utf8')).toContain('.dependency-overrides-*/')
+  })
+})
 
 describe('Dependabot dependency overrides (#355)', () => {
   it.each(['individual', 'grouped'])('%s update can change the direct esbuild specification', async (mode) => {
@@ -16,7 +24,7 @@ describe('Dependabot dependency overrides (#355)', () => {
       manifest.devDependencies[name] = version
       lock.packages[''].devDependencies[name] = version
     }
-    const dir = mkdtempSync(new URL('.dependency-overrides-', root))
+    const dir = mkdtempSync(join(tmpdir(), 'lazyhub-dependency-overrides-'))
     try {
       writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
       writeFileSync(join(dir, 'package-lock.json'), JSON.stringify(lock))
