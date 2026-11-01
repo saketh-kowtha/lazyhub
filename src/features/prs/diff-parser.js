@@ -69,7 +69,8 @@ export function parseDiff(diffText) {
 
 /**
  * Flatten the parsed file array into a single array of renderable rows,
- * prepending a `file-header` row for each file.
+ * prepending a `file-header` row for each file. The line rows are the parsed line
+ * objects themselves (not copies), so this stamps `filename` onto them in place.
  *
  * @param {Array} files — return value of parseDiff()
  * @returns {Array}

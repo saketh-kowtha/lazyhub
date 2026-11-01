@@ -120,10 +120,63 @@ describe('disk cache', () => {
     expect(cache.peekCache('huge')).not.toBeNull()
   }))
 
-  it('bounds directory scans: files beyond MAX_SCAN are deleted, not read (#455)', () => withCacheDir(async (cache, dir) => {
-    for (let i = 0; i < cache.MAX_SCAN + 50; i++) writeFileSync(join(dir, `f${i}.json`), '{}')
+  it('bounds directory scans: surplus files beyond the scan limit are deleted oldest-first, and listCacheEntries takes the newest (#455)', () => withCacheDir(async (cache, dir) => {
+    cache.setMaxScan(5)
+    for (let i = 0; i < 8; i++) {
+      writeFileSync(join(dir, `f${i}.json`), JSON.stringify({ ts: i, payload: i, meta: {} }))
+      utimesSync(join(dir, `f${i}.json`), 1000 + i, 1000 + i) // f7 newest
+    }
+    expect(cache.listCacheEntries().map(e => e.key).sort()).toEqual(['f3', 'f4', 'f5', 'f6', 'f7'])
     await cache.evictCache(Infinity, Infinity)
-    expect(readdirSync(dir).length).toBe(cache.MAX_SCAN)
+    expect(readdirSync(dir).sort()).toEqual(['f3.json', 'f4.json', 'f5.json', 'f6.json', 'f7.json'])
+  }))
+
+  it('an invalidated repo is a miss immediately, before the queued file removal runs (#455 review)', () => withCacheDir(async (cache) => {
+    const k = cache.cacheKey(['x'])
+    cache.writeCache(k, 'PRE-WRITE', { repo: 'o/r', op: 'listPRs' })
+    await cache.flushCache()
+    cache.invalidateRepoCache('o/r') // not awaited, as in executor/core.js
+    expect(cache.readCache(k)).toBeNull()
+    expect(cache.peekCache(k)).toBeNull()
+    expect(await cache.readCacheAsync(k)).toBeNull()
+    expect(cache.listCacheEntries()).toEqual([])
+    await new Promise(r => setTimeout(r, 20))
+    expect(cache.readCache(k)).toBeNull()
+  }))
+
+  it('a cold read already in flight when the invalidate lands does not re-admit the entry (#455 review)', () => withCacheDir(async (cache, dir) => {
+    writeFileSync(join(dir, 'cold.json'), JSON.stringify({ meta: { repo: 'o/r' }, ts: Date.now() - 5, payload: 'OLD' }))
+    const inFlight = cache.readCacheAsync('cold')
+    cache.invalidateRepoCache('o/r')
+    expect(await inFlight).toBeNull()
+    expect(cache.peekCache('cold')).toBeNull()
+  }))
+
+  it('warmCache does not admit entries from an invalidated repo, and writes after the invalidate survive it (#455 review)', () => withCacheDir(async (cache, dir) => {
+    writeFileSync(join(dir, 'old.json'), JSON.stringify({ meta: { repo: 'o/r' }, ts: Date.now() - 5, payload: 'OLD' }))
+    writeFileSync(join(dir, 'legacy.json'), JSON.stringify({ ts: 1, payload: 'L', meta: {} }))
+    const done = cache.invalidateRepoCache('o/r')
+    cache.writeCache('new', 'NEW', { repo: 'o/r' }) // after the invalidation, same ms or not
+    await cache.warmCache()
+    expect(cache.peekCache('old')).toBeNull()
+    expect(cache.peekCache('legacy')).toBeNull()
+    await done
+    await cache.flushCache()
+    expect(readdirSync(dir).sort()).toEqual(['new.json'])
+    expect(cache.readCache('new')?.payload).toBe('NEW')
+  }))
+
+  it('refreshes mtime of known keys so a cross-process rewrite is never evicted, and clears old .tmp files (#455 review)', () => withCacheDir(async (cache, dir) => {
+    cache.writeCache('a', 'a')
+    cache.writeCache('b', 'b')
+    await cache.flushCache()
+    const future = Date.now() / 1000 + 100
+    utimesSync(join(dir, 'a.json'), future, future) // another process rewrote a
+    writeFileSync(join(dir, '.stale.tmp'), 'x')
+    utimesSync(join(dir, '.stale.tmp'), 1000, 1000)
+    writeFileSync(join(dir, '.fresh.tmp'), 'x')
+    await cache.evictCache(Infinity, 1)
+    expect(readdirSync(dir).sort()).toEqual(['.fresh.tmp', 'a.json'])
   }))
 })
 

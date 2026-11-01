@@ -13,7 +13,7 @@
  * daemon callers that are not on a key-handling path.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'fs'
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'fs'
 import { mkdir, open, readFile, readdir, rename, rm, stat, chmod } from 'fs/promises'
 import { createHash, randomBytes } from 'crypto'
 import { homedir } from 'os'
@@ -155,6 +155,36 @@ let chain = Promise.resolve()
 let warmPromise = null
 let dirReady = false
 
+/**
+ * Synchronous invalidation tombstones: repo -> ms. Set the instant invalidateRepoCache
+ * is called, so no read path can serve a pre-write entry while the async file removal
+ * is still queued. An entry is a miss when its repo is tombstoned and ts <= the stamp.
+ */
+const invalidatedAt = new Map()
+/** repo -> count of invalidations whose file removal has not finished. */
+const pendingInvalidations = new Map()
+/** The batch currently being written (so the exit hook can still flush it). */
+let inflight = new Map()
+let maxScan = MAX_SCAN
+
+/**
+ * True when the entry predates an invalidation of its repo, or has no repo while
+ * any invalidation is still pending (legacy entries cannot be attributed).
+ * @param {{ts:number, meta?:{repo?:string}}} entry
+ */
+function isTombstoned(entry) {
+  const repo = entry?.meta?.repo
+  if (!repo) return pendingInvalidations.size > 0
+  const at = invalidatedAt.get(repo)
+  return at !== undefined && entry.ts <= at
+}
+
+/**
+ * Test hook: lower the scan bound.
+ * @param {number} n
+ */
+export function setMaxScan(n) { maxScan = n }
+
 function enqueue(task) {
   const run = chain.then(task, task)
   chain = run.catch(() => {})
@@ -166,10 +196,13 @@ function enqueue(task) {
  * @param key
  */
 export function peekCache(key) {
-  return pending.get(key) || mirror.get(key) || null
+  const hot = pending.get(key) || mirror.get(key) || null
+  if (hot && isTombstoned(hot)) { mirror.delete(key); return null }
+  return hot
 }
 
 function admit(key, entry) {
+  if (isTombstoned(entry)) return
   mirror.set(key, entry)
 }
 
@@ -208,49 +241,67 @@ async function mapLimit(items, limit, fn) {
 }
 
 /**
- * Repo recorded in a file's leading `{"meta":{...},"ts":...` header; undefined for legacy files.
- * @param head
+ * Repo and ts recorded in a file's leading `{"meta":{...},"ts":N,...` header; repo is
+ * undefined for legacy files.
+ * @param {string} head
  */
-function repoFromHead(head) {
-  const m = /^\{"meta":(\{[^}]*\}),"ts":\d/.exec(head)
-  if (!m) return undefined
-  try { return JSON.parse(m[1]).repo ?? null } catch { return undefined }
+function infoFromHead(head) {
+  const m = /^\{"meta":(\{[^}]*\}),"ts":(\d+)/.exec(head)
+  if (!m) return { repo: undefined, ts: undefined }
+  try { return { repo: JSON.parse(m[1]).repo ?? null, ts: Number(m[2]) } } catch { return { repo: undefined, ts: undefined } }
 }
 
-async function indexFile(name) {
+async function indexFile(name, st) {
   const full = join(CACHE_DIR, name)
   try {
-    const st = await stat(full)
-    let repo
+    let info
     const fh = await open(full, 'r')
     try {
       const buf = Buffer.alloc(HEAD_BYTES)
       const { bytesRead } = await fh.read(buf, 0, HEAD_BYTES, 0)
-      repo = repoFromHead(buf.toString('utf8', 0, bytesRead))
+      info = infoFromHead(buf.toString('utf8', 0, bytesRead))
     } finally {
       await fh.close()
     }
-    index.set(name.slice(0, -'.json'.length), { size: st.size, mtime: st.mtimeMs, repo })
+    index.set(name.slice(0, -'.json'.length), { size: st.size, mtime: st.mtimeMs, ...info })
   } catch {
     // vanished or unreadable: not indexed
   }
 }
 
 /**
- * Bring the index in line with the directory using one bounded async readdir. Only
- * files not already indexed are opened. Files beyond MAX_SCAN are deleted.
+ * Bring the index in line with the directory using one bounded async readdir plus a
+ * stat per file (so cross-process rewrites refresh mtime/size). Only files not yet
+ * indexed are opened. Files beyond maxScan are deleted, oldest mtime first, and
+ * orphaned `.tmp` files older than a minute are removed.
  */
 async function refreshIndex() {
-  let names
-  try { names = (await readdir(CACHE_DIR)).filter(n => n.endsWith('.json')) } catch { names = [] }
-  const present = new Set(names.map(n => n.slice(0, -'.json'.length)))
+  let all
+  try { all = await readdir(CACHE_DIR) } catch { all = [] }
+  const now = Date.now()
+  const tmps = all.filter(n => n.startsWith('.') && n.endsWith('.tmp'))
+  await mapLimit(tmps, SCAN_CONCURRENCY, async n => {
+    try {
+      const st = await stat(join(CACHE_DIR, n))
+      if (now - st.mtimeMs > 60_000) await rm(join(CACHE_DIR, n), { force: true })
+    } catch { /* gone */ }
+  })
+  const names = all.filter(n => n.endsWith('.json'))
+  const stats = new Map()
+  await mapLimit(names, SCAN_CONCURRENCY, async n => {
+    try { stats.set(n, await stat(join(CACHE_DIR, n))) } catch { /* vanished */ }
+  })
+  const live = [...stats.entries()].sort((a, b) => b[1].mtimeMs - a[1].mtimeMs)
+  const keep = live.slice(0, maxScan)
+  await mapLimit(live.slice(maxScan), SCAN_CONCURRENCY, ([n]) => rm(join(CACHE_DIR, n), { force: true }))
+  const present = new Set(keep.map(([n]) => n.slice(0, -'.json'.length)))
   for (const key of [...index.keys()]) if (!present.has(key)) index.delete(key)
-  if (names.length > MAX_SCAN) {
-    const surplus = names.slice(MAX_SCAN)
-    names = names.slice(0, MAX_SCAN)
-    await mapLimit(surplus, SCAN_CONCURRENCY, n => rm(join(CACHE_DIR, n), { force: true }))
+  const fresh = []
+  for (const [n, st] of keep) {
+    const known = index.get(n.slice(0, -'.json'.length))
+    if (known) { known.size = st.size; known.mtime = st.mtimeMs } else fresh.push([n, st])
   }
-  await mapLimit(names.filter(n => !index.has(n.slice(0, -'.json'.length))), SCAN_CONCURRENCY, indexFile)
+  await mapLimit(fresh, SCAN_CONCURRENCY, ([n, st]) => indexFile(n, st))
 }
 
 async function evictFromIndex(maxBytes, maxEntries, protect = new Set()) {
@@ -271,21 +322,24 @@ async function evictFromIndex(maxBytes, maxEntries, protect = new Set()) {
 
 async function flushNow() {
   if (pending.size === 0) return
-  const batch = [...pending.entries()]
+  inflight = new Map(pending)
   pending.clear()
   await ensureDir()
   const written = new Set()
-  for (const [key, entry] of batch) {
+  for (const [key, entry] of [...inflight]) {
     try {
-      if (approxBytes(entry.payload) > MAX_ENTRY_BYTES) continue
-      const data = JSON.stringify({ meta: entry.meta, ts: entry.ts, payload: entry.payload })
-      if (data.length > MAX_ENTRY_BYTES) continue
-      await atomicWrite(pathFor(key), data)
-      index.set(key, { size: data.length, mtime: Date.now(), repo: entry.meta?.repo ?? null })
-      written.add(key)
+      if (!isTombstoned(entry) && approxBytes(entry.payload) <= MAX_ENTRY_BYTES) {
+        const data = JSON.stringify({ meta: entry.meta, ts: entry.ts, payload: entry.payload })
+        if (data.length <= MAX_ENTRY_BYTES) {
+          await atomicWrite(pathFor(key), data)
+          index.set(key, { size: data.length, mtime: Date.now(), repo: entry.meta?.repo ?? null, ts: entry.ts })
+          written.add(key)
+        }
+      }
     } catch {
       // best-effort cache
     }
+    inflight.delete(key)
     await yieldTurn() // let the input thread run between big stringify calls
   }
   if (written.size > 0) {
@@ -313,13 +367,28 @@ let exitHooked = false
 function hookExit() {
   if (exitHooked) return
   exitHooked = true
-  // Last-chance sync flush so a quit right after a fetch does not lose the entry.
+  // Last-chance sync flush so a quit right after a fetch does not lose the entry, and
+  // queued removals survive the quit.
   process.on('exit', () => {
-    for (const [key, entry] of pending) {
+    for (const [key, entry] of [...inflight, ...pending]) {
       try {
-        if (approxBytes(entry.payload) > MAX_ENTRY_BYTES) continue
+        if (isTombstoned(entry) || approxBytes(entry.payload) > MAX_ENTRY_BYTES) continue
         ensurePrivateDir(CACHE_DIR)
         writePrivateFile(pathFor(key), JSON.stringify({ meta: entry.meta, ts: entry.ts, payload: entry.payload }))
+      } catch { /* best effort */ }
+    }
+    for (const repo of pendingInvalidations.keys()) {
+      try {
+        const at = invalidatedAt.get(repo) ?? 0
+        for (const name of readdirSync(CACHE_DIR)) {
+          if (!name.endsWith('.json')) continue
+          const full = join(CACHE_DIR, name)
+          try {
+            const head = readFileSync(full, 'utf8').slice(0, HEAD_BYTES)
+            const info = infoFromHead(head)
+            if (info.repo === undefined || (info.repo === repo && (info.ts ?? 0) <= at)) rmSync(full, { force: true })
+          } catch { /* best effort */ }
+        }
       } catch { /* best effort */ }
     }
   })
@@ -341,7 +410,7 @@ export function warmCache() {
       if (mirror.has(key) || pending.has(key)) continue
       try {
         const parsed = JSON.parse(await readFile(pathFor(key), 'utf8'))
-        if (wellFormed(parsed)) { admit(key, parsed); budget -= info.size }
+        if (wellFormed(parsed) && !isTombstoned(parsed)) { admit(key, parsed); budget -= info.size }
       } catch { /* corrupt entries are misses */ }
       await yieldTurn()
     }
@@ -356,6 +425,10 @@ export function resetCacheState() {
   index.clear()
   warmPromise = null
   dirReady = false
+  invalidatedAt.clear()
+  pendingInvalidations.clear()
+  inflight = new Map()
+  maxScan = MAX_SCAN
 }
 
 // ---------------------------------------------------------------------------
@@ -375,6 +448,8 @@ export async function readCacheAsync(key) {
     if (!wellFormed(parsed)) return null
     const again = peekCache(key) // a newer write may have landed while reading
     if (again) return again
+    // An invalidation that landed while the read was in flight makes this a miss.
+    if (isTombstoned(parsed)) return null
     admit(key, parsed)
     return parsed
   } catch {
@@ -386,13 +461,17 @@ export async function readCacheAsync(key) {
  * Synchronous read for one-shot CLI/daemon callers (not for the TUI input path:
  * use peekCache/readCacheAsync). Memory first, then the file.
  * @param {string} key
+ * @param {{ bypassMirror?: boolean }} [opts] bypassMirror: validate against the file
+ *   (still honoring this process's own unflushed writes) instead of trusting a
+ *   mirror copy that another process may have superseded (the daemon uses this).
  */
-export function readCache(key) {
-  const hot = peekCache(key)
+export function readCache(key, { bypassMirror = false } = {}) {
+  const own = pending.get(key) || inflight.get(key)
+  const hot = bypassMirror ? (own && !isTombstoned(own) ? own : null) : peekCache(key)
   if (hot) return hot
   try {
     const parsed = JSON.parse(readFileSync(pathFor(key), 'utf8'))
-    return wellFormed(parsed) ? parsed : null
+    return wellFormed(parsed) && !isTombstoned(parsed) ? parsed : null
   } catch {
     return null
   }
@@ -405,11 +484,19 @@ export function readCache(key) {
 export function listCacheEntries() {
   if (!existsSync(CACHE_DIR)) return []
   const entries = []
-  for (const file of readdirSync(CACHE_DIR).slice(0, MAX_SCAN)) {
-    if (!file.endsWith('.json')) continue
+  // Newest maxScan files, not the first ones readdir happens to return.
+  const files = readdirSync(CACHE_DIR)
+    .filter(file => file.endsWith('.json'))
+    .map(file => {
+      try { return { file, mtime: statSync(join(CACHE_DIR, file)).mtimeMs } } catch { return null }
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.mtime - a.mtime)
+    .slice(0, maxScan)
+  for (const { file } of files) {
     try {
       const parsed = JSON.parse(readFileSync(join(CACHE_DIR, file), 'utf8'))
-      if (!wellFormed(parsed)) continue
+      if (!wellFormed(parsed) || isTombstoned(parsed)) continue
       entries.push({ key: file.slice(0, -'.json'.length), ...parsed })
     } catch {
       // Ignore corrupt cache entries; the normal TUI refresh path will replace them.
@@ -426,7 +513,10 @@ export function listCacheEntries() {
  * @param {object} meta
  */
 export function writeCache(key, payload, meta = {}) {
-  const entry = { ts: Date.now(), payload, meta }
+  let ts = Date.now()
+  const at = invalidatedAt.get(meta?.repo)
+  if (at !== undefined && ts <= at) ts = at + 1 // written after the invalidation, even within the same ms
+  const entry = { ts, payload, meta }
   pending.set(key, entry)
   admit(key, entry)
   hookExit()
@@ -442,6 +532,12 @@ export function writeCache(key, payload, meta = {}) {
  */
 export function invalidateRepoCache(repo) {
   if (!repo) return Promise.resolve()
+  // Tombstone first, synchronously: reads treat anything written before now as a miss
+  // until (and after) the queued file removal runs.
+  const at = Date.now()
+  invalidatedAt.set(repo, Math.max(at, invalidatedAt.get(repo) ?? 0))
+  pendingInvalidations.set(repo, (pendingInvalidations.get(repo) ?? 0) + 1)
+  hookExit()
   for (const key of mirror.keys()) {
     if (mirror.get(key)?.meta?.repo === repo) mirror.delete(key)
   }
@@ -449,13 +545,18 @@ export function invalidateRepoCache(repo) {
   return enqueue(async () => {
     await flushNow() // flush other repos' pending writes first so the index is complete
     await refreshIndex()
-    const doomed = [...index.entries()].filter(([, e]) => e.repo === undefined || e.repo === repo)
+    // Never remove an entry written after this invalidation (ts > at).
+    const doomed = [...index.entries()].filter(([, e]) => e.repo === undefined || (e.repo === repo && (e.ts ?? 0) <= at))
     await mapLimit(doomed, SCAN_CONCURRENCY, async ([key]) => {
       await rm(pathFor(key), { force: true })
       index.delete(key)
       mirror.delete(key)
     })
-  }).catch(() => {})
+  }).catch(() => {}).finally(() => {
+    const left = (pendingInvalidations.get(repo) ?? 1) - 1
+    if (left > 0) pendingInvalidations.set(repo, left)
+    else pendingInvalidations.delete(repo)
+  })
 }
 
 /**
