@@ -166,6 +166,40 @@ describe('disk cache', () => {
     expect(cache.readCache('new')?.payload).toBe('NEW')
   }))
 
+  it('a repo-less write landing right after an invalidation is not dropped (#455 review)', () => withCacheDir(async (cache, dir) => {
+    cache.writeCache('old-legacy', 'L', {})
+    await cache.flushCache()
+    const done = cache.invalidateRepoCache('o/r')
+    cache.writeCache('notif', 'N', { op: 'listNotifications' }) // no meta.repo
+    expect(cache.peekCache('notif')?.payload).toBe('N')
+    expect(cache.peekCache('old-legacy')).toBeNull() // written before the invalidation
+    await done
+    await cache.flushCache()
+    expect(cache.readCache('notif')?.payload).toBe('N')
+    expect(existsSync(join(dir, 'notif.json'))).toBe(true)
+  }))
+
+  it('the invalidate task keeps a file another process just rewrote (#455 review)', () => withCacheDir(async (cache, dir) => {
+    cache.writeCache('a', 'OLD', { repo: 'o/r' })
+    await cache.flushCache()
+    // Another process rewrites the file after this process indexed it, with a newer ts.
+    const fresh = Date.now() + 5000
+    writeFileSync(join(dir, 'a.json'), JSON.stringify({ meta: { repo: 'o/r' }, ts: fresh, payload: 'REWRITTEN' }))
+    const future = fresh / 1000
+    utimesSync(join(dir, 'a.json'), future, future)
+    await cache.invalidateRepoCache('o/r')
+    expect(existsSync(join(dir, 'a.json'))).toBe(true)
+  }))
+
+  it('flushCacheOnExit persists unflushed writes and queued removals synchronously (#455 review)', () => withCacheDir(async (cache, dir) => {
+    writeFileSync(join(dir, 'doomed.json'), JSON.stringify({ meta: { repo: 'o/r' }, ts: 1, payload: 'x'.repeat(2_000_000) }))
+    writeFileSync(join(dir, 'keep.json'), JSON.stringify({ meta: { repo: 'o/other' }, ts: 1, payload: 'k' }))
+    cache.invalidateRepoCache('o/r') // removal still queued
+    cache.writeCache('unflushed', 'U', { repo: 'o/other' })
+    cache.flushCacheOnExit() // what the exit hook runs; no awaiting
+    expect(readdirSync(dir).sort()).toEqual(['keep.json', 'unflushed.json'])
+  }))
+
   it('refreshes mtime of known keys so a cross-process rewrite is never evicted, and clears old .tmp files (#455 review)', () => withCacheDir(async (cache, dir) => {
     cache.writeCache('a', 'a')
     cache.writeCache('b', 'b')

@@ -13,7 +13,7 @@
  * daemon callers that are not on a key-handling path.
  */
 
-import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'fs'
+import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync } from 'fs'
 import { mkdir, open, readFile, readdir, rename, rm, stat, chmod } from 'fs/promises'
 import { createHash, randomBytes } from 'crypto'
 import { homedir } from 'os'
@@ -168,13 +168,24 @@ let inflight = new Map()
 let maxScan = MAX_SCAN
 
 /**
- * True when the entry predates an invalidation of its repo, or has no repo while
- * any invalidation is still pending (legacy entries cannot be attributed).
+ * Stamp of the newest invalidation whose file removal is still pending (0 if none).
+ * Entries with no repo cannot be attributed, so they are judged against this.
+ */
+function latestPendingStamp() {
+  let latest = 0
+  for (const repo of pendingInvalidations.keys()) latest = Math.max(latest, invalidatedAt.get(repo) ?? 0)
+  return latest
+}
+
+/**
+ * True when the entry predates an invalidation of its repo, or has no repo and
+ * predates the newest still-pending invalidation (legacy entries cannot be
+ * attributed; repo-less entries written afterwards are fine).
  * @param {{ts:number, meta?:{repo?:string}}} entry
  */
 function isTombstoned(entry) {
   const repo = entry?.meta?.repo
-  if (!repo) return pendingInvalidations.size > 0
+  if (!repo) return entry.ts <= latestPendingStamp()
   const at = invalidatedAt.get(repo)
   return at !== undefined && entry.ts <= at
 }
@@ -299,7 +310,10 @@ async function refreshIndex() {
   const fresh = []
   for (const [n, st] of keep) {
     const known = index.get(n.slice(0, -'.json'.length))
-    if (known) { known.size = st.size; known.mtime = st.mtimeMs } else fresh.push([n, st])
+    // A changed mtime means another process rewrote the file: re-read its header so
+    // repo and ts are current too (the invalidate task compares ts).
+    if (known && known.mtime === st.mtimeMs) known.size = st.size
+    else fresh.push([n, st])
   }
   await mapLimit(fresh, SCAN_CONCURRENCY, ([n, st]) => indexFile(n, st))
 }
@@ -369,29 +383,43 @@ function hookExit() {
   exitHooked = true
   // Last-chance sync flush so a quit right after a fetch does not lose the entry, and
   // queued removals survive the quit.
-  process.on('exit', () => {
-    for (const [key, entry] of [...inflight, ...pending]) {
-      try {
-        if (isTombstoned(entry) || approxBytes(entry.payload) > MAX_ENTRY_BYTES) continue
-        ensurePrivateDir(CACHE_DIR)
-        writePrivateFile(pathFor(key), JSON.stringify({ meta: entry.meta, ts: entry.ts, payload: entry.payload }))
-      } catch { /* best effort */ }
-    }
-    for (const repo of pendingInvalidations.keys()) {
-      try {
-        const at = invalidatedAt.get(repo) ?? 0
-        for (const name of readdirSync(CACHE_DIR)) {
-          if (!name.endsWith('.json')) continue
-          const full = join(CACHE_DIR, name)
+  process.on('exit', flushCacheOnExit)
+}
+
+/**
+ * Synchronously persist unflushed writes (including the in-flight batch) and apply
+ * queued invalidations. Registered for process exit; exported so tests can call it
+ * directly. Only each file's first HEAD_BYTES are read to attribute it.
+ */
+export function flushCacheOnExit() {
+  for (const [key, entry] of [...inflight, ...pending]) {
+    try {
+      if (isTombstoned(entry) || approxBytes(entry.payload) > MAX_ENTRY_BYTES) continue
+      ensurePrivateDir(CACHE_DIR)
+      writePrivateFile(pathFor(key), JSON.stringify({ meta: entry.meta, ts: entry.ts, payload: entry.payload }))
+    } catch { /* best effort */ }
+  }
+  for (const repo of pendingInvalidations.keys()) {
+    try {
+      const at = invalidatedAt.get(repo) ?? 0
+      for (const name of readdirSync(CACHE_DIR)) {
+        if (!name.endsWith('.json')) continue
+        const full = join(CACHE_DIR, name)
+        try {
+          const fd = openSync(full, 'r')
+          let head
           try {
-            const head = readFileSync(full, 'utf8').slice(0, HEAD_BYTES)
-            const info = infoFromHead(head)
-            if (info.repo === undefined || (info.repo === repo && (info.ts ?? 0) <= at)) rmSync(full, { force: true })
-          } catch { /* best effort */ }
-        }
-      } catch { /* best effort */ }
-    }
-  })
+            const buf = Buffer.alloc(HEAD_BYTES)
+            head = buf.toString('utf8', 0, readSync(fd, buf, 0, HEAD_BYTES, 0))
+          } finally {
+            closeSync(fd)
+          }
+          const info = infoFromHead(head)
+          if (info.repo === undefined || (info.repo === repo && (info.ts ?? 0) <= at)) rmSync(full, { force: true })
+        } catch { /* best effort */ }
+      }
+    } catch { /* best effort */ }
+  }
 }
 
 /**
@@ -514,7 +542,7 @@ export function listCacheEntries() {
  */
 export function writeCache(key, payload, meta = {}) {
   let ts = Date.now()
-  const at = invalidatedAt.get(meta?.repo)
+  const at = meta?.repo ? invalidatedAt.get(meta.repo) : latestPendingStamp() || undefined
   if (at !== undefined && ts <= at) ts = at + 1 // written after the invalidation, even within the same ms
   const entry = { ts, payload, meta }
   pending.set(key, entry)
