@@ -16,8 +16,9 @@
  *      browser, clipboard, editor or a git mutation are removed from the random key set.
  *   3. A canary: shims for open, xdg-open, git, pbcopy, xclip, xsel, code, vi, vim, nano (and
  *      $EDITOR/$VISUAL) head PATH; each appends to a marker file and exits 1. The marker must be
- *      empty, and this worktree's own git state (HEAD, symbolic HEAD, HEAD reflog) must be unchanged.
- *      Branch refs are shared by every worktree of a clone, so they are NOT compared (#546).
+ *      empty, and the fuzz runs with cwd in a throwaway git repo whose HEAD, refs (branches, tags) and
+ *      worktree list must be unchanged. A real checkout's refs are shared with other worktrees, so it is
+ *      never used as the baseline (#546).
  *
  * Knobs: LAZYHUB_FUZZ_RUNS (sequences, default 12), LAZYHUB_FUZZ_KEYS (keys per sequence,
  * default 60), LAZYHUB_FUZZ_SEED (base seed, default 20260601). Sequence i uses seed+i.
@@ -42,16 +43,21 @@ const harness = vi.hoisted(() => {
   // Layer 3 (canary), part 1: the state of the real checkout we run in, measured with the real
   // git by absolute path BEFORE any shim goes on PATH. Compared again after the suite.
   const gitBin = cp.spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim()
-  // Only state THIS worktree owns: HEAD, the symbolic ref, and the per-worktree HEAD reflog. The branch list
-  // is shared by every worktree of the clone, so another worktree creating a branch must not trip the canary (#546).
-  const snapshot = (cwd = process.cwd()) => {
-    const git = (...a) => cp.spawnSync(gitBin, a, { cwd, encoding: 'utf8' }).stdout
-    const gitDir = git('rev-parse', '--absolute-git-dir').trim()
-    let reflog = ''
-    try { reflog = fs.readFileSync(path.join(gitDir, 'logs', 'HEAD'), 'utf8') } catch { /* no reflog yet */ }
-    return [git('rev-parse', 'HEAD'), git('symbolic-ref', '-q', 'HEAD'), `reflog:${reflog.split('\n').filter(Boolean).length}\n${reflog}`].join('\n--\n')
+  // The fuzz runs with cwd set to a throwaway repo of its own (#546). Refs, tags and the HEAD reflog of a
+  // real checkout are shared with every other worktree of the clone, so nothing there can be compared
+  // reliably; the sandbox is private to this process, so ANY ref or HEAD change in it is the app's doing.
+  const gitEnv = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' }
+  const realGit = (cwd, ...a) => cp.spawnSync(gitBin, a, { cwd, encoding: 'utf8', env: gitEnv })
+  const makeSandbox = () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lazyhub-fuzz-cwd-'))
+    realGit(dir, 'init', '-q', '-b', 'main')
+    realGit(dir, 'commit', '-q', '--allow-empty', '-m', 'init')
+    return dir
   }
-  const before = gitBin ? snapshot() : ''
+  const snapshot = (cwd) => [['rev-parse', 'HEAD'], ['symbolic-ref', '-q', 'HEAD'], ['for-each-ref', '--format=%(refname) %(objectname)'], ['worktree', 'list', '--porcelain']]
+    .map(a => realGit(cwd, ...a).stdout).join('\n--\n')
+  const sandbox = gitBin ? makeSandbox() : ''
+  const before = gitBin ? snapshot(sandbox) : ''
   // Layer 3, part 2: shims for every binary the app could launch. Each appends its name and argv to
   // a marker file and exits 1, so a leak is both recorded and visibly failing. The marker must stay empty.
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'lazyhub-fake-bin-'))
@@ -65,7 +71,7 @@ const harness = vi.hoisted(() => {
   process.env.VISUAL = path.join(bin, 'editor')
   process.env.BROWSER = path.join(bin, 'open')
   return {
-    columns: 80, rows: 24, exit: vi.fn(), network: [], fs, bin, marker, gitBin, before, snapshot,
+    columns: 80, rows: 24, exit: vi.fn(), network: [], fs, bin, marker, gitBin, before, snapshot, sandbox, makeSandbox, realGit,
     // Layer 1 recorders: every process the app asks for, at every boundary.
     execaCalls: [], spawned: [], realSpawnSync: cp.spawnSync,
     fakeChildProcess: async (id) => {
@@ -476,23 +482,30 @@ function assertCanary() {
   const marker = markerContents()
   if (marker) throw new Error(`hermetic canary: a real process was launched:\n${marker}`)
   if (harness.gitBin) {
-    const after = harness.snapshot()
-    if (after !== harness.before) throw new Error(`hermetic canary: this worktree's git state changed (HEAD / symbolic ref / HEAD reflog)\nbefore:\n${harness.before}\nafter:\n${after}`)
+    const after = harness.snapshot(harness.sandbox)
+    if (after !== harness.before) throw new Error(`hermetic canary: the fuzz sandbox repo changed (HEAD / refs / worktrees)\nbefore:\n${harness.before}\nafter:\n${after}`)
   }
 }
 
 describe('random keys: seeded fuzz of the real App', () => {
+  let originalCwd
   const vocab = keyVocabulary()
 
   beforeAll(() => {
     setAsciiOnly(true)
     unrouted.length = 0
     process.on('unhandledRejection', onRejection)
+    originalCwd = process.cwd()
+    if (harness.sandbox) process.chdir(harness.sandbox)
   })
   afterAll(() => {
     process.off('unhandledRejection', onRejection)
     setAsciiOnly(false)
-    try { assertCanary() } finally { harness.fs.rmSync(harness.bin, { recursive: true, force: true }) }
+    try { assertCanary() } finally {
+      process.chdir(originalCwd)
+      harness.fs.rmSync(harness.bin, { recursive: true, force: true })
+      if (harness.sandbox) harness.fs.rmSync(harness.sandbox, { recursive: true, force: true })
+    }
   })
   beforeEach(() => {
     harness.exit.mockClear()
@@ -568,27 +581,39 @@ describe('random keys: seeded fuzz of the real App', () => {
       harness.fs.writeFileSync(harness.marker, '')
     })
 
-    it('a branch created by ANOTHER worktree does not trip the canary, but a checkout in this one does (#546)', () => {
-      const { gitBin, fs: nfs } = harness
-      const os = require('node:os')
-      const path = require('node:path')
-      const root = nfs.mkdtempSync(path.join(os.tmpdir(), 'lazyhub-canary-'))
-      const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
-      const git = (cwd, ...a) => { const r = harness.realSpawnSync(gitBin, a, { cwd, encoding: 'utf8', env }); if (r.status !== 0) throw new Error(`git ${a.join(' ')}: ${r.stderr}`); return r.stdout }
+    it('the fuzz cwd is the sandbox repo, not the real checkout (#546)', () => {
+      if (!harness.gitBin) return
+      expect(harness.fs.realpathSync(process.cwd())).toBe(harness.fs.realpathSync(harness.sandbox))
+    })
+
+    it.each([
+      ['git branch X', ['branch', 'leak-x']],
+      ['git branch -f', ['branch', '-f', 'leak-x', 'HEAD']],
+      ['git tag', ['tag', 'leak-tag']],
+      ['git update-ref', ['update-ref', 'refs/heads/leak-ref', 'HEAD']],
+      ['git checkout -b', ['checkout', '-q', '-b', 'leak-co']],
+    ])('%s run from the fuzz cwd is caught (#546)', (_name, args) => {
+      if (!harness.gitBin) return
+      const r = harness.realGit(process.cwd(), ...args)
+      expect(r.status, r.stderr).toBe(0)
+      expect(() => assertCanary()).toThrow(/hermetic canary: the fuzz sandbox repo changed/)
+      // put the sandbox back exactly as it was
+      harness.realGit(process.cwd(), 'checkout', '-q', 'main')
+      for (const ref of ['refs/heads/leak-x', 'refs/heads/leak-ref', 'refs/heads/leak-co', 'refs/tags/leak-tag']) harness.realGit(process.cwd(), 'update-ref', '-d', ref)
+      expect(() => assertCanary()).not.toThrow()
+    })
+
+    it('a branch created in a different worktree or clone does not trip the canary (#546)', () => {
+      if (!harness.gitBin) return
+      const other = harness.makeSandbox()
       try {
-        const main = path.join(root, 'main'), other = path.join(root, 'other')
-        nfs.mkdirSync(main)
-        git(main, 'init', '-q', '-b', 'main')
-        git(main, 'commit', '-q', '--allow-empty', '-m', 'init')
-        git(main, 'worktree', 'add', '-q', '-b', 'wt-other', other)
-        const before = harness.snapshot(main)
-        git(other, 'branch', 'created-elsewhere')
-        git(other, 'checkout', '-q', '-b', 'moved-elsewhere')
-        expect(git(main, 'branch', '--list')).toContain('created-elsewhere')
-        expect(harness.snapshot(main)).toBe(before)
-        git(main, 'checkout', '-q', '-b', 'leak')
-        expect(harness.snapshot(main)).not.toBe(before)
-      } finally { nfs.rmSync(root, { recursive: true, force: true }) }
+        harness.realGit(other, 'branch', 'created-elsewhere')
+        harness.realGit(other, 'worktree', 'add', '-q', '-b', 'wt', `${other}-wt`)
+        expect(() => assertCanary()).not.toThrow()
+      } finally {
+        harness.fs.rmSync(other, { recursive: true, force: true })
+        harness.fs.rmSync(`${other}-wt`, { recursive: true, force: true })
+      }
     })
 
     it('process mocks catch spawning: the browser key goes to the mocked execa, never to the OS', async () => {
