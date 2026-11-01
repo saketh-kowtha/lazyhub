@@ -60,7 +60,8 @@ try {
 
   const text = name => screens[name].text()
   assert.match(text('focus'), /Focus|Pull Requests/, 'focus screen rendered')
-  assert.match(text('prs'), /PTY harness fixture PR/, 'PR list shows the PR title')
+  // The list truncates the title to the pane width (the preview panel only fits on wide terminals).
+  assert.match(text('prs'), /#186\s+PTY h/, 'PR list shows the PR row')
   assert.match(text('prs'), /Pull Requests/, 'PR list keeps its pane title')
   assert.match(text('prs'), /open\/closed\/merged . mine/, 'PR filter bar is not garbled at 80 columns')
   assert.match(text('detail'), /Fixture body/, 'PR detail shows the body')
