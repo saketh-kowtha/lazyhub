@@ -77,7 +77,7 @@ export function renderPRListDialog({
   if (dialog === 'merge-confirm' && selectedPR && mergeOptions) {
     return (
       <ConfirmDialog
-        message={`${mergeMethodLabel(mergeOptions.strategy)}: PR #${selectedPR.number}?${mergeOptions.msg ? `\nMessage: "${mergeOptions.msg}"` : ''}`}
+        message={`Merge PR #${selectedPR.number} via ${mergeMethodLabel(mergeOptions.strategy)}?${mergeOptions.msg ? `\nMessage: "${mergeOptions.msg}"` : ''}`}
         destructive={true}
         onConfirm={async () => {
           closeDialog()

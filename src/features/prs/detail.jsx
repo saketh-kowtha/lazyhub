@@ -34,19 +34,14 @@ import { loadConfig } from '../../config.js'
 import { firstActionKey } from '../../config/actions.js'
 
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
-import { autoMergeOption, canToggleAutoMergeFromList, allowedMergeOptions, mergeMethodLabel } from './list-row.jsx'
+import { autoMergeOption, canToggleAutoMergeFromList } from './list-row.jsx'
+import { allowedMergeOptions, ADMIN_MERGE_OPTIONS, mergeMethodLabel, preferredMergeIndex, mergeStatusLine } from './merge-methods.js'
 import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
 import { sortChecks } from './detail/Checks.jsx'
 
 const _editorCfg = loadConfig().editor
-
-const MERGE_OPTIONS_ADMIN = [
-  { value: 'admin-merge',  label: mergeMethodLabel('admin-merge'),  description: 'Administrator override: merge even though protection rules are not met' },
-  { value: 'admin-squash', label: mergeMethodLabel('admin-squash'), description: 'Administrator override: squash even though protection rules are not met' },
-  { value: 'admin-rebase', label: mergeMethodLabel('admin-rebase'), description: 'Administrator override: rebase even though protection rules are not met' },
-]
 
 export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
   useKeyScope('view')
@@ -66,6 +61,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
   const [scrollY, setScrollY] = useState(0)
   const [dialog, setDialog]   = useState(null)
   const [adminMergeMsg, setAdminMergeMsg] = useState('')
+  const [mergeChoice, setMergeChoice] = useState(null) // { strategy, msg } awaiting confirmation
   const [rerunCheck, setRerunCheck] = useState(null) // check awaiting re-run confirmation
   const [searching, setSearching] = useState(false)
   const [searchText, setSearchText] = useState('')
@@ -260,7 +256,11 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
       return
     }
     if (id === 'list.search') { setSearching(true); setSearchText(''); return }
-    if (id === 'pr.merge' && open) { setDialog('merge'); return }
+    if (id === 'pr.merge' && open) {
+      // The picker is built from repoInfo (allowed methods, admin rights): never open it before that loads.
+      if (!repoInfo) { showStatus('Loading repository settings… try again in a moment'); return }
+      setDialog('merge'); return
+    }
     if (id === 'pr.close' && open) { setDialog('close'); return }
     if (id === 'pr.draft' && open) { setDialog('draft'); return }
     if (id === 'pr.base' && open) { setDialog('base'); return }
@@ -294,26 +294,42 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
 
   // ── Dialogs ────────────────────────────────────────────────────────────────
 
-  if (dialog === 'merge') {
-    // Show admin options when confirmed admin, or while repoInfo is still loading
-    // The first allowed method is the default, so `m` then Enter merges it (the footer names the action).
+  if (dialog === 'merge' && repoInfo) {
+    // Options are fixed once repoInfo is loaded, so they never change under the cursor, and only admins see bypass.
     const methods = allowedMergeOptions(repoInfo)
     const baseOpts = canToggleAutoMergeFromList(pr) ? [...methods, autoMergeOption(pr)] : methods
-    const mergeOpts = !repoInfo || repoInfo.viewerPermission === 'ADMIN'
-      ? [...baseOpts, ...MERGE_OPTIONS_ADMIN]
-      : baseOpts
+    const mergeOpts = repoInfo.viewerPermission === 'ADMIN' ? [...baseOpts, ...ADMIN_MERGE_OPTIONS] : baseOpts
     return (
       <OptionPicker
-        title={`Merge PR #${pr.number}: ${sanitize(pr.title)}`}
+        title={`Merge PR #${pr.number}: ${sanitize(pr.title)}  (${mergeStatusLine(pr, checks)})`}
         options={mergeOpts}
+        initialIndex={preferredMergeIndex(methods)}
         promptText="Commit message (optional, Enter to skip)"
         promptKey="e"
         onSubmit={(val) => {
           const strategy = typeof val === 'object' ? val.value : val
           const msg = typeof val === 'object' ? val.text : undefined
           if (strategy === 'auto-merge') { setDialog('auto-merge'); return }
+          // Choosing a method never merges by itself: a confirm (default No) always follows.
+          setMergeChoice({ strategy, msg })
+          setDialog('merge-confirm')
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
+  if (dialog === 'merge-confirm' && mergeChoice) {
+    const { strategy, msg } = mergeChoice
+    const admin = strategy.startsWith('admin-')
+    return (
+      <ConfirmDialog
+        message={`${admin ? 'ADMIN BYPASS: ' : ''}Merge PR #${pr.number} via ${mergeMethodLabel(strategy)}?${msg ? `\nMessage: "${sanitize(msg)}"` : ''}`}
+        destructive={true}
+        requireText={admin ? String(pr.number) : null}
+        onConfirm={() => {
           setDialog(null)
-          runWrite(`Merging #${pr.number}`, () => mergePR(repo, pr.number, strategy, msg, { allowAdmin: strategy.startsWith('admin-') })
+          runWrite(`Merging #${pr.number}`, () => mergePR(repo, pr.number, strategy, msg, { allowAdmin: admin })
             // Two-argument then: a refetch problem after a successful merge must not read as "Merge failed".
             .then(() => { showStatus(`✓ Merged PR #${pr.number}`); refetch() }, err => showStatus(`✗ Merge failed: ${sanitize(err.message)}`, true)))
         }}

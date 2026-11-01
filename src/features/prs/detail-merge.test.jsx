@@ -56,26 +56,83 @@ describe('merge flow wording and keystrokes (#468)', () => {
     expect(frame).not.toMatch(/--merge|--squash|--rebase|--admin/)
   })
 
-  it('merges with the default method in two keys: m, Enter', async () => {
+  const ENTER = ['', { return: true }]
+
+  it('m then Enter never merges by itself: it asks, defaulting to No', async () => {
     const view = await open()
     await sendInput('m')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Merge PR #42'))
     await flush(20)
-    await sendInput('', { return: true })
-    await waitForExpectation(() => expect(mergePR).toHaveBeenCalledTimes(1))
-    expect(mergePR.mock.calls[0].slice(0, 3)).toEqual(['o/r', 42, 'merge'])
+    await sendInput(...ENTER)
+    await waitForExpectation(() => expect(view.lastFrame()).toMatch(/Merge PR #42 via Squash and merge\?/))
+    expect(mergePR).not.toHaveBeenCalled()
+    // A held or double Enter lands on the default No and cancels.
+    await flush(20)
+    await sendInput(...ENTER)
+    await sendInput(...ENTER)
+    await flush(20)
+    expect(mergePR).not.toHaveBeenCalled()
   })
 
-  it('defaults to the first merge method the repository allows', async () => {
-    repoInfo = { squashMergeAllowed: true, mergeCommitAllowed: false, rebaseMergeAllowed: false, viewerPermission: 'WRITE' }
+  it('m, Enter, y merges with the preferred method (squash)', async () => {
     const view = await open()
     await sendInput('m')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Merge PR #42'))
-    expect(view.lastFrame()).not.toContain('Rebase and merge')
     await flush(20)
-    await sendInput('', { return: true })
+    await sendInput(...ENTER)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('via Squash and merge'))
+    await flush(20)
+    await sendInput('y')
     await waitForExpectation(() => expect(mergePR).toHaveBeenCalledTimes(1))
-    expect(mergePR.mock.calls[0][2]).toBe('squash')
+    expect(mergePR.mock.calls[0].slice(0, 3)).toEqual(['o/r', 42, 'squash'])
+  })
+
+  it('defaults to the first allowed method when squash is not allowed', async () => {
+    repoInfo = { squashMergeAllowed: false, mergeCommitAllowed: true, rebaseMergeAllowed: true, viewerPermission: 'WRITE' }
+    const view = await open()
+    await sendInput('m')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Merge PR #42'))
+    expect(view.lastFrame()).not.toContain('Squash and merge')
+    await flush(20)
+    await sendInput(...ENTER)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('via Create a merge commit'))
+    await sendInput('y')
+    await waitForExpectation(() => expect(mergePR).toHaveBeenCalledTimes(1))
+    expect(mergePR.mock.calls[0][2]).toBe('merge')
+  })
+
+  it('shows mergeability, CI and approvals in the picker title', async () => {
+    const view = await open()
+    await sendInput('m')
+    await waitForExpectation(() => expect(view.lastFrame()).toMatch(/clean · no CI · 0 approvals/))
+  })
+
+  it('does not open the picker until repository settings have loaded', async () => {
+    repoInfo = null
+    const view = await open()
+    await sendInput('m')
+    await flush(20)
+    expect(view.lastFrame()).not.toContain('Squash and merge')
+    expect(view.lastFrame()).toContain('Loading repository settings')
+  })
+
+  it('hides bypass options from non-admins and requires typing the PR number for admins', async () => {
+    let view = await open()
+    await sendInput('m')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Merge PR #42'))
+    expect(view.lastFrame()).not.toContain('bypass')
+    cleanup()
+    repoInfo = { ...repoInfo, viewerPermission: 'ADMIN' }
+    view = await open()
+    await sendInput('m')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('(bypass branch protection)'))
+    await flush(20)
+    for (let i = 0; i < 3; i++) await sendInput('j')
+    await sendInput(...ENTER)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Type 42 to confirm'))
+    await sendInput('y')
+    await flush(20)
+    expect(mergePR).not.toHaveBeenCalled()
   })
 
   it('e adds a commit message before merging', async () => {
