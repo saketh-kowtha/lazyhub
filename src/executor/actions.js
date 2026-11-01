@@ -77,11 +77,15 @@ export async function getPRChecks(repo, number) {
       '--json', 'headRefOid',
     ])
     if (!pr?.headRefOid) return []
+    // check-runs returns 30 per page by default; follow every page (a hidden failing check is worse than a slow list).
     const checkArgs = [
-      'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/commits/${encodeURIComponent(pr.headRefOid)}/check-runs`,
-      '--jq', '[.check_runs[] | {id: .id, name: .name, status: .status, conclusion: .conclusion, appName: .app.name, url: .html_url}]',
+      'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/commits/${encodeURIComponent(pr.headRefOid)}/check-runs?per_page=100`,
+      '--paginate', '--slurp',
     ]
-    return await runGh(checkArgs)
+    const pages = await runGh(checkArgs)
+    return (Array.isArray(pages) ? pages : [pages])
+      .flatMap(page => page?.check_runs || [])
+      .map(c => ({ id: c.id, name: c.name, status: c.status, conclusion: c.conclusion, appName: c.app?.name, url: c.html_url }))
   } catch {
     return []
   }

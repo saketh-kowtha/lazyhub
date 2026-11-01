@@ -197,12 +197,14 @@ function route(cmd, args) {
       const nodes = ISSUES.map(i => ({ ...i, __typename: 'Issue', labels: { nodes: i.labels }, assignees: { nodes: i.assignees }, comments: { totalCount: i.comments.length } }))
       return json({ data: { search: { issueCount: nodes.length, pageInfo: { hasNextPage: false, endCursor: null }, nodes } } })
     }
+    if (args.some(x => /pullRequest\(number/.test(String(x)))) return json({ data: { repository: { pullRequest: PR_NODES.find(n => args.includes(`number=${n.number}`)) || PR_NODES[0] } } })
     return json({ data: { search: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: PR_NODES } } })
   }
   if (a === 'api' && /^repos\/[^/]+\/[^/]+\/branches\?/.test(b)) return json(BRANCHES)
   if (a === 'api' && /\/branches\/.+\/protection/.test(b)) return json({ required_status_checks: null })
   if (a === 'api' && /\/branches\//.test(b)) return json(BRANCHES[0])
-  if (a === 'api' && b === 'notifications') return json(NOTIFICATIONS)
+  // `--paginate --slurp` wraps the pages in an array.
+  if (a === 'api' && /^notifications(\?|$)/.test(b)) return json([NOTIFICATIONS.map(n => ({ id: n.id, unread: n.unread, reason: n.reason, subject: n.subject, repository: { full_name: n.repository.fullName, name: n.repository.name }, updated_at: n.updatedAt }))])
   if (a === 'api' && /collaborators|assignees/.test(b)) return json([{ login: 'alice' }, { login: 'bob' }])
   if (a === 'api' && /\/labels/.test(b)) return json([{ name: 'bug', color: 'd73a4a' }, { name: 'p1', color: '0e8a16' }])
   if (a === 'api' && /check-runs|check-suites|statuses|annotations/.test(b)) return json([])

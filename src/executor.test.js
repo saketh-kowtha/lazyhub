@@ -597,7 +597,41 @@ describe('listNotifications()', () => {
     await listNotifications()
     const [, args] = execa.mock.calls[0]
     expect(args).toContain('api')
-    expect(args).toContain('notifications')
+    expect(args[1]).toMatch(/^notifications\?per_page=50/)
+  })
+})
+
+describe('pagination is never silently capped (#440)', () => {
+  it('getPRChecks follows every page of check-runs (the API defaults to 30)', async () => {
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify({ headRefOid: 'abc123' }), stderr: '' })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: JSON.stringify([
+          { total_count: 3, check_runs: [{ id: 1, name: 'a' }, { id: 2, name: 'b' }] },
+          { total_count: 3, check_runs: [{ id: 3, name: 'c', conclusion: 'failure' }] },
+        ]),
+        stderr: '',
+      })
+    const checks = await getPRChecks('a/b', 1)
+    const args = execa.mock.calls[1][1]
+    expect(args).toContain('--paginate')
+    expect(args).toContain('--slurp')
+    expect(args[1]).toMatch(/per_page=100/)
+    expect(checks.map(c => c.id)).toEqual([1, 2, 3])
+    expect(checks[2].conclusion).toBe('failure')
+  })
+
+  it('listNotifications follows every page (the API defaults to 50) and keeps the row shape', async () => {
+    const n = (id) => ({ id, unread: true, reason: 'mention', subject: { title: `t${id}`, type: 'Issue', url: 'u' }, repository: { full_name: 'o/r', name: 'r' }, updated_at: 'now' })
+    mockSuccess([[n('1'), n('2')], [n('3')]])
+    const list = await listNotifications({ all: true })
+    const [, args] = execa.mock.calls[0]
+    expect(args).toContain('--paginate')
+    expect(args).toContain('--slurp')
+    expect(args[1]).toMatch(/per_page=50.*all=true/)
+    expect(list.map(x => x.id)).toEqual(['1', '2', '3'])
+    expect(list[0]).toEqual({ id: '1', unread: true, reason: 'mention', subject: { title: 't1', type: 'Issue', url: 'u' }, repository: { fullName: 'o/r', name: 'r' }, updatedAt: 'now' })
   })
 })
 
