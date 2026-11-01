@@ -328,7 +328,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       termRows={termRows}
       selectedPR={selectedPR}
       dialog={dialog}
-      popoverDismissed={popoverDismissed}
+      popoverDismissed={popoverDismissed || _appConfig.layout.previewPanel === false}
       setPopoverDismissed={setPopoverDismissed}
       expansionEnabled={expansionEnabled}
       scheme={scheme}

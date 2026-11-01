@@ -81,7 +81,6 @@ export const DEFAULT_CONFIG = {
     overrides: {},
   },
   defaults: {
-    pr_scope: 'mine',
     ai_provider: 'claude-code',
     repo: '',
     repo_host: '',
@@ -115,7 +114,6 @@ export const DEFAULT_CONFIG = {
   diff: {
     default_view: 'unified',
     syntax_highlight: true,
-    max_lines: 2000,
   },
   editor: {
     command: 'auto',
@@ -126,11 +124,9 @@ export const DEFAULT_CONFIG = {
     allow_writes: false,
   },
   ui: {
-    density: 'compact',
     show_hints: true,
     no_color: false,
     icons: 'auto',
-    high_contrast: false,
   },
   keymaps: {
     global: {
@@ -360,6 +356,9 @@ function checkType(val, type) {
  * @param {string} path dotted section path for messages
  * @returns {Object|undefined} cleaned object, or undefined if `val` isn't a table
  */
+/** Spec marker for an option that was removed because nothing read it: old files keep loading without a warning. */
+const RETIRED = Object.freeze({ retired: true })
+
 function validateFlat(val, spec, warnings, path) {
   if (!isPlainObject(val)) {
     warnings.push(`[${path}] must be a table — section ignored`)
@@ -368,6 +367,7 @@ function validateFlat(val, spec, warnings, path) {
   const out = {}
   for (const [k, v] of Object.entries(val)) {
     const fs = spec[k]
+    if (fs === RETIRED) continue
     if (!fs) {
       warnings.push(`unknown key "${k}" in [${path}] — ignored`)
       continue
@@ -405,6 +405,7 @@ const META_SPEC = {
 const DEFAULTS_SPEC = {
   repo:        { type: 'string', validate: (v) => (v === '' || isOwnerName(v) ? null : 'must be owner/name') },
   repo_host:   { type: 'string', validate: (v) => (v === '' || /^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:\d{1,5})?$/.test(v) ? null : 'must be a host name') },
+  // Legacy alias of [features.prs].default_scope (used only while that key is still at its default).
   pr_scope:    { type: 'string', enum: ['mine', 'reviewing', 'all'] },
   ai_provider: { type: 'string', enum: ['claude-code', 'codex', 'gemini-cli', 'anthropic-api', 'openai-compatible'] },
 }
@@ -443,7 +444,7 @@ const ACTIONS_FEATURE_SPEC = {
 const DIFF_SPEC = {
   default_view:     { type: 'string', enum: ['unified', 'split'] },
   syntax_highlight: { type: 'boolean' },
-  max_lines:        { type: 'integer', validate: (v) => (v > 0 ? null : 'must be positive') },
+  max_lines:        RETIRED, // diffs are never capped (D16: no silent truncation)
 }
 
 const EDITOR_SPEC = {
@@ -457,11 +458,11 @@ const IPC_SPEC = {
 }
 
 const UI_SPEC = {
-  density:       { type: 'string', enum: ['compact', 'comfortable'] },
+  density:       RETIRED, // never had a consumer (#465)
   show_hints:    { type: 'boolean' },
   no_color:      { type: 'boolean' },
   icons:         { type: 'string', enum: ['auto', 'unicode', 'ascii'] },
-  high_contrast: { type: 'boolean' },
+  high_contrast: RETIRED, // use [theme].name = "lazyhub-high-contrast"
 }
 
 const AGENT_SPEC = {
@@ -608,7 +609,10 @@ function validateKeymaps(val, warnings) {
 function normalizeKeyForValidation(key) {
   const raw = String(key || '').trim()
   const angle = raw.match(/^<(.+)>$/)
-  const body = (angle ? angle[1] : raw).toLowerCase()
+  const rawBody = angle ? angle[1] : raw
+  // A single character is case-sensitive at runtime (`a` approves, `A` edits assignees).
+  if (rawBody.length === 1) return rawBody
+  const body = rawBody.toLowerCase()
   if (body === 'return') return 'enter'
   if (body === 'escape') return 'esc'
   if (body.startsWith('c-')) return `ctrl+${body.slice(2)}`

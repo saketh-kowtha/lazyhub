@@ -96,7 +96,7 @@ const { ensureDaemon } = await import('../src/daemon/lifecycle.js')
 // disk (config, daemon files). Quitting exits here and leaves nothing behind.
 let onboardedRepo
 const { shouldOnboard } = await import('../src/features/onboarding/flow.js')
-if (!parsedArgs.ref && shouldOnboard()) { // an explicit reference skips onboarding
+if (!parsedArgs.ref && !parsedArgs.repo && shouldOnboard()) { // an explicit reference or --repo skips onboarding
   const { runOnboarding } = await import('../src/features/onboarding/Onboarding.jsx')
   const onboarding = await runOnboarding()
   if (onboarding.status !== 'completed') process.exit(0)
@@ -114,4 +114,4 @@ if (cfg.ipc?.enabled !== false) {
   if (socketPath) process.env.LAZYHUB_SOCKET = socketPath
 }
 
-await bootstrap(renderApp, { repo: onboardedRepo, open: parsedArgs.ref })
+await bootstrap(renderApp, { repo: onboardedRepo, repoOverride: parsedArgs.repo, open: parsedArgs.ref })

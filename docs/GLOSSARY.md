@@ -150,7 +150,7 @@ Alphabetical. Cross-references in **bold**.
 
 **Popover** — Absolute-positioned, non-blocking overlay attached to a focused list row. Auto-shows on focus, ESC-dismissible. `src/ui/Popover.jsx`. Distinct from **dialog**.
 
-**PR scope** — The default filter for the PR list: `mine` / `reviewing` / `all`. Set via `[defaults].pr_scope`. Not to be confused with **scope** (permissions).
+**PR scope** — The default filter for the PR list: `mine` / `reviewing` / `all`. Set via `[features.prs].default_scope` (`mine` / `reviewing` / `all`); the last scope you used is remembered and wins on later launches. Not to be confused with **scope** (permissions).
 
 **Pre-publish smoke test** — Live `gh` call in CI immediately before `npm publish` to catch executor regressions that mocks miss. Phase J5 #141.
 

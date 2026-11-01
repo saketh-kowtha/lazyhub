@@ -12,3 +12,6 @@ PROMPT.md
 
 # test artifacts
 coverage/
+
+# scratch dirs of an interrupted dependency-overrides test
+.dependency-overrides-*/
