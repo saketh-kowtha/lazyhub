@@ -16,7 +16,7 @@ import { TextInput } from '../../utils.js'
 import { useKeyScope } from '../../keyscope.js'
 import { matchesAction } from '../../config/actions.js'
 
-export function FormCompose({ title, fields = [], onSubmit, onCancel, validate }) {
+export function FormCompose({ title, fields = [], onSubmit, onCancel, validate = null }) {
   useKeyScope('dialog')
   const { t } = useTheme()
   const [activeField, setActiveField] = useState(0)

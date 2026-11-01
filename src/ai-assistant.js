@@ -228,7 +228,7 @@ async function callReadOnlyTool(toolName, toolInput, repo) {
     case 'get_repo_info':      return getRepoInfo(repo)
     case 'list_notifications': return listNotifications()
     case 'list_pr_comments': {
-      const comments = await listPRComments(repo, toolInput.number)
+      const comments = /** @type {any} */ (await listPRComments(repo, toolInput.number))
       // Say so when GitHub has more than this first page, so the model does not treat it as complete.
       return comments.truncated
         ? { comments, truncated: comments.truncated, note: 'Incomplete: only the first page of review threads (and first replies per thread) is listed.' }
