@@ -2,7 +2,7 @@
  * Issue detail controller: query, scrolling, reply and dialog lifecycle.
  */
 
-import React, { useState, useContext, useMemo, useCallback } from 'react'
+import React, { useState, useContext, useMemo, useCallback, useRef, useEffect } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { firstActionKey } from '../../config/actions.js'
@@ -52,28 +52,42 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
   const maxScroll = Math.max(0, contentRows.length - visibleHeight)
   const visibleRows = contentRows.slice(scrollY, scrollY + visibleHeight)
 
+  // One status timer: a new message cancels the previous timer, so a stale timeout
+  // can never clear a later (or sticky pending) message.
+  const statusTimer = useRef(null)
+  useEffect(() => () => { clearTimeout(statusTimer.current) }, [])
+  const setStatus = useCallback((msg, ms = 0, isError = false) => {
+    clearTimeout(statusTimer.current)
+    setStatusIsError(isError)
+    setStatusMsg(msg)
+    if (ms) statusTimer.current = setTimeout(() => { setStatusMsg(null); setStatusIsError(false) }, ms)
+  }, [])
+
   const reportDialogError = (what, err) => {
-    setStatusIsError(true)
-    setStatusMsg(`✗ Updating ${what} failed: ${sanitize(err.message)}`)
-    setTimeout(() => { setStatusMsg(null); setStatusIsError(false) }, 5000)
+    setStatus(`✗ Updating ${what} failed: ${sanitize(err.message)}`, 5000, true)
   }
 
-  const { run: runWrite } = usePendingWrite(setStatusMsg)
+  // Pending messages are sticky: no timer until the write settles.
+  const { run: runWrite } = usePendingWrite((msg) => setStatus(msg))
 
   const doReply = useCallback(() => {
     const text = replyText.trim()
     if (!text) {
-      setStatusMsg('Reply cannot be empty')
-      setTimeout(() => setStatusMsg(null), 3000)
+      setStatus('Reply cannot be empty', 3000)
       return
     }
-    setReplyMode(false)
-    setReplyText('')
     let ran = false
-    runWrite('Sending reply', () => { ran = true; return addIssueComment(repo, issueNumber, text) })
-      .then(() => { if (!ran) return; setStatusMsg('Reply sent'); refetch(); setTimeout(() => setStatusMsg(null), 3000) })
-      .catch(err => { setStatusMsg(`Failed: ${err.message}`); setTimeout(() => setStatusMsg(null), 5000) })
-  }, [repo, issueNumber, replyText, refetch, runWrite])
+    // The typed text is cleared only once the write really starts; an ignored
+    // second submit keeps what the user typed.
+    runWrite('Sending reply', () => {
+      ran = true
+      setReplyMode(false)
+      setReplyText('')
+      return addIssueComment(repo, issueNumber, text)
+    })
+      .then(() => { if (!ran) return; setStatus('Reply sent', 3000); refetch() })
+      .catch(err => setStatus(`Failed: ${err.message}`, 5000))
+  }, [repo, issueNumber, replyText, refetch, runWrite, setStatus])
 
   useKeymapInput((input, key) => {
     if (dialog) return

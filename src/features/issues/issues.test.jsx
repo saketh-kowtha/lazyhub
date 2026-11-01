@@ -211,6 +211,28 @@ describe('shared issue editor contracts', () => {
     await waitForExpectation(() => expect(addIssueComment).toHaveBeenCalledWith('owner/repo', 11, 'lAr'))
   })
 
+  it('keeps the typed text when a second reply is ignored while one is sending (#453)', async () => {
+    let release
+    addIssueComment.mockReturnValue(new Promise(r => { release = r }))
+    const view = await renderIssue(<IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
+    await flush(20)
+    await sendInput('c')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Reply:'))
+    await sendInput('first')
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Sending reply'))
+    await flush(20)
+    await sendInput('c')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Reply:'))
+    await sendInput('second')
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('still in progress'))
+    expect(view.lastFrame()).toContain('second')
+    expect(addIssueComment).toHaveBeenCalledTimes(1)
+    release()
+  })
+
   it('shows a pending status while a reply is being sent (#453)', async () => {
     let release
     addIssueComment.mockReturnValue(new Promise(r => { release = r }))
