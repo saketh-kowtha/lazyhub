@@ -19,7 +19,7 @@ import {
 } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
-import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
+import { ReviewDialog } from '../../components/dialogs/ReviewDialog.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -451,36 +451,18 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     )
   }
 
-  if (dialog === 'approve-body') {
+  if (dialog === 'approve-body' || dialog === 'reqchanges-body') {
+    const approving = dialog === 'approve-body'
     return (
-      <FormCompose
-        title={`Approve PR #${pr.number}`}
-        fields={[{ name: 'body', label: 'Comment (optional)', type: 'text' }]}
-        onSubmit={async (values) => {
+      <ReviewDialog
+        number={pr.number}
+        mode={approving ? 'approve' : 'request-changes'}
+        onSubmit={async (body) => {
           setDialog(null)
-          await runWrite(`Approving #${pr.number}`, async () => {
+          await runWrite(approving ? `Approving #${pr.number}` : `Requesting changes on #${pr.number}`, async () => {
             try {
-              await reviewPR(repo, pr.number, 'approve', values.body || '')
-              showStatus(`✓ Approved PR #${pr.number}`)
-            } catch (err) { showStatus(`✗ ${err.message}`, true) }
-          })
-        }}
-        onCancel={() => setDialog(null)}
-      />
-    )
-  }
-
-  if (dialog === 'reqchanges-body') {
-    return (
-      <FormCompose
-        title={`Request changes on PR #${pr.number}`}
-        fields={[{ name: 'body', label: 'Describe the changes needed', type: 'text' }]}
-        onSubmit={async (values) => {
-          setDialog(null)
-          await runWrite(`Requesting changes on #${pr.number}`, async () => {
-            try {
-              await reviewPR(repo, pr.number, 'request-changes', values.body)
-              showStatus(`✓ Requested changes on PR #${pr.number}`)
+              await reviewPR(repo, pr.number, approving ? 'approve' : 'request-changes', body)
+              showStatus(approving ? `✓ Approved PR #${pr.number}` : `✓ Requested changes on PR #${pr.number}`)
             } catch (err) { showStatus(`✗ ${err.message}`, true) }
           })
         }}

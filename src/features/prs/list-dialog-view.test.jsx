@@ -29,13 +29,13 @@ describe('PR list dialog contract', () => {
   })
 
   for (const [dialog, review, body] of [
-    ['approve-body', 'approve', ''], ['reqchanges-body', 'request-changes', undefined],
+    ['approve-body', 'approve', ''], ['reqchanges-body', 'request-changes', 'needs work'],
   ]) {
     it(`preserves the ${review} request body semantics`, async () => {
       const state = props(dialog)
       const form = renderPRListDialog(state)
       expect(reviewPR).not.toHaveBeenCalled()
-      await form.props.onSubmit({})
+      await form.props.onSubmit(body)
       expect(reviewPR).toHaveBeenCalledWith('o/r', 7, review, body)
       expect(state.closeDialog).toHaveBeenCalledOnce()
       expect(state.refetch).not.toHaveBeenCalled()

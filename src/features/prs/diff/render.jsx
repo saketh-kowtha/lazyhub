@@ -9,7 +9,7 @@ import { firstActionKey } from '../../../config/actions.js'
 import { OptionPicker } from '../../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../../components/dialogs/FuzzySearch.jsx'
-import { FormCompose } from '../../../components/dialogs/FormCompose.jsx'
+import { ReviewDialog } from '../../../components/dialogs/ReviewDialog.jsx'
 import { FooterKeys } from '../../../components/FooterKeys.jsx'
 import { AIReviewPane } from '../../../components/AIReviewPane.jsx'
 import { useTheme } from '../../../theme.js'
@@ -276,23 +276,13 @@ export function DiffView({ prNumber, state }) {
     )
   }
 
-  if (dialog === 'approve-body') {
+  if (dialog === 'approve-body' || dialog === 'reqchanges-body') {
+    const approving = dialog === 'approve-body'
     return (
-      <FormCompose
-        title={`Approve PR #${prNumber}`}
-        fields={[{ name: 'body', label: 'Comment (optional)', type: 'text' }]}
-        onSubmit={submitApproval}
-        onCancel={() => setDialog(null)}
-      />
-    )
-  }
-
-  if (dialog === 'reqchanges-body') {
-    return (
-      <FormCompose
-        title={`Request changes on PR #${prNumber}`}
-        fields={[{ name: 'body', label: 'Describe the changes needed', type: 'text' }]}
-        onSubmit={submitChanges}
+      <ReviewDialog
+        number={prNumber}
+        mode={approving ? 'approve' : 'request-changes'}
+        onSubmit={(body) => (approving ? submitApproval({ body }) : submitChanges({ body }))}
         onCancel={() => setDialog(null)}
       />
     )

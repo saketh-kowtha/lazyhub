@@ -7,7 +7,7 @@ import { enableAutoMerge, disableAutoMerge, mergePR, closePR, checkoutBranch, re
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
-import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
+import { ReviewDialog } from '../../components/dialogs/ReviewDialog.jsx'
 import { sanitize } from '../../utils.js'
 import { NewPRDialog } from './NewPRDialog.jsx'
 import { MERGE_OPTIONS, autoMergeOption, canToggleAutoMergeFromList, mergeMethodLabel } from './list-row.jsx'
@@ -172,14 +172,14 @@ export function renderPRListDialog({
   if ((dialog === 'approve-body' || dialog === 'reqchanges-body') && selectedPR) {
     const approving = dialog === 'approve-body'
     return (
-      <FormCompose
-        title={approving ? `Approve PR #${selectedPR.number}` : `Request changes on PR #${selectedPR.number}`}
-        fields={[{ name: 'body', label: approving ? 'Optional comment (Ctrl+G to submit, leave empty to skip)' : 'Describe the changes needed', type: 'text' }]}
-        onSubmit={async (values) => {
+      <ReviewDialog
+        number={selectedPR.number}
+        mode={approving ? 'approve' : 'request-changes'}
+        onSubmit={async (body) => {
           closeDialog()
           await runWrite(approving ? `Approving #${selectedPR.number}` : `Requesting changes on #${selectedPR.number}`, async () => {
             try {
-              await reviewPR(repo, selectedPR.number, approving ? 'approve' : 'request-changes', approving ? values.body || '' : values.body)
+              await reviewPR(repo, selectedPR.number, approving ? 'approve' : 'request-changes', body)
               showStatus(approving ? `✓ Approved PR #${selectedPR.number}` : `✓ Requested changes on PR #${selectedPR.number}`)
             } catch (err) {
               showStatus(`✗ ${err.message}`, true)

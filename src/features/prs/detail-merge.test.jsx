@@ -147,13 +147,43 @@ describe('merge flow wording and keystrokes (#468)', () => {
   })
 })
 
-describe('approve dialog (#468)', () => {
-  it('Enter approves', async () => {
+describe('approve and request-changes (#468)', () => {
+  const ENTER = ['', { return: true }]
+
+  it('a then Enter does not approve by itself: it asks first, defaulting to No', async () => {
     const view = await open()
     await sendInput('a')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Approve PR #42'))
     await flush(20)
-    await sendInput('', { return: true })
+    await sendInput(...ENTER)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Approve PR #42?'))
+    expect(reviewPR).not.toHaveBeenCalled()
+    await flush(20)
+    await sendInput(...ENTER)
+    await sendInput(...ENTER)
+    await flush(20)
+    expect(reviewPR).not.toHaveBeenCalled()
+  })
+
+  it('a, Enter, y approves', async () => {
+    const view = await open()
+    await sendInput('a')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Approve PR #42'))
+    await flush(20)
+    await sendInput(...ENTER)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Approve PR #42?'))
+    await flush(20)
+    await sendInput('y')
     await waitForExpectation(() => expect(reviewPR).toHaveBeenCalledWith('o/r', 42, 'approve', ''))
+  })
+
+  it('request changes with an empty body does not submit', async () => {
+    const view = await open()
+    await sendInput('x')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Request changes on PR #42'))
+    await flush(20)
+    await sendInput(...ENTER)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('a reason is required'))
+    expect(reviewPR).not.toHaveBeenCalled()
   })
 })

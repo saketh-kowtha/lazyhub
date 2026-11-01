@@ -2,6 +2,7 @@
  * FormCompose.jsx — multi-field form dialog primitive.
  * Props: title, fields ([{name, label, type: 'text'|'multiline'|'select'}])
  *        onSubmit(values), onCancel()
+ *        validate?(values) -> string | null: a message blocks submit and is shown in the dialog
  */
 
 import React, { useState, useCallback } from 'react'
@@ -15,15 +16,24 @@ import { TextInput } from '../../utils.js'
 import { useKeyScope } from '../../keyscope.js'
 import { matchesAction } from '../../config/actions.js'
 
-export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
+export function FormCompose({ title, fields = [], onSubmit, onCancel, validate }) {
   useKeyScope('dialog')
   const { t } = useTheme()
   const [activeField, setActiveField] = useState(0)
+  const [error, setError] = useState(null)
   const [values, setValues] = useState(() => {
     const v = {}
     fields.forEach(f => { v[f.name] = f.defaultValue || '' })
     return v
   })
+
+  // Every submit path goes through here so validation cannot be bypassed.
+  const submit = (vals) => {
+    const problem = validate ? validate(vals) : null
+    if (problem) { setError(problem); return }
+    setError(null)
+    onSubmit(vals)
+  }
 
   const openEditor = useCallback((fieldName) => {
     const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
@@ -60,7 +70,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
     }
 
     if ((key.return && key.ctrl) || matchesAction('dialog.submit', input, key)) {
-      onSubmit(values)
+      submit(values)
       return
     }
 
@@ -74,6 +84,7 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
     }
 
     if (field.type === 'multiline') {
+      if (key.return) return // Enter in a multiline field is inert; Ctrl+G submits
       if (key.backspace || key.delete) {
         setValues(prev => ({ ...prev, [field.name]: (prev[field.name] || '').slice(0, -1) }))
         return
@@ -120,13 +131,14 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel }) {
                   value={val}
                   onChange={(v) => setValues(prev => ({ ...prev, [field.name]: v }))}
                   focus={isActive}
-                  onEnter={() => (i === fields.length - 1 ? onSubmit(values) : setActiveField(f => Math.min(fields.length - 1, f + 1)))}
+                  onEnter={() => (i === fields.length - 1 ? submit(values) : setActiveField(f => Math.min(fields.length - 1, f + 1)))}
                 />
               )}
             </Box>
           </Box>
         )
       })}
+      {error && <Text color={t.ci.fail}>{error}</Text>}
       <Box marginTop={1}>
         <Text color={t.ui.dim}>
           {fields[activeField]?.type !== 'multiline' && activeField === fields.length - 1
