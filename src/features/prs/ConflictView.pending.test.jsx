@@ -5,7 +5,7 @@
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConflictView } from './ConflictView.jsx'
-import { gitCommit, gitUnstage, pushBranch, getConflictedFiles, countFileConflicts } from '../../executor.js'
+import { gitCommit, gitUnstage, gitMergeAbort, pushBranch, getConflictedFiles, countFileConflicts } from '../../executor.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from '../../test/test-helpers.jsx'
 
 vi.mock('../../executor.js', () => ({
@@ -53,6 +53,43 @@ describe('ConflictView double submit (#453)', () => {
     await flush(20)
     view.stdin.write(' ')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Unstaging a.js'))
+    release()
+  })
+
+  it('keeps a pending message when an earlier 4 s status timer expires', async () => {
+    let release
+    gitUnstage.mockReturnValue(new Promise(r => { release = r }))
+    getConflictedFiles.mockResolvedValue([{ path: 'a.js' }])
+    const view = renderWithProviders(
+      <ConflictView pr={{ number: 5, url: 'https://example.test/pr/5', headRefName: 'feature' }} repo="o/r" onBack={() => {}} onResolved={() => {}} />
+    )
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('a.js'))
+    await flush(20)
+    view.stdin.write('e') // sets a 4 s "Opened a.js in editor" status
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Opened a.js'))
+    view.stdin.write(' ')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Unstaging a.js'))
+    await new Promise(r => setTimeout(r, 4300))
+    expect(view.lastFrame()).toContain('Unstaging a.js')
+    release()
+  }, 10000)
+
+  it('closes the abort confirm at once and announces the pending abort', async () => {
+    let release
+    gitMergeAbort.mockReturnValue(new Promise(r => { release = r }))
+    getConflictedFiles.mockResolvedValue([{ path: 'a.js' }])
+    const view = renderWithProviders(
+      <ConflictView pr={{ number: 5, url: 'https://example.test/pr/5', headRefName: 'feature' }} repo="o/r" onBack={() => {}} onResolved={() => {}} />
+    )
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('a.js'))
+    await flush(20)
+    view.stdin.write('A')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Abort merge?'))
+    await flush(20)
+    view.stdin.write('y')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Aborting merge'))
+    expect(view.lastFrame()).not.toContain('Abort merge?')
+    expect(gitMergeAbort).toHaveBeenCalledTimes(1)
     release()
   })
 })

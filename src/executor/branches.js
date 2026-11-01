@@ -1,5 +1,6 @@
 import { execa } from 'execa'
 import { getRepo, runGh } from './core.js'
+import { GIT_OP_TIMEOUT_MS, assertGitOk } from './misc.js'
 import { logger } from '../utils-core.js'
 
 /**
@@ -344,7 +345,7 @@ async function lookupLocalCheckout(cwd, repo) {
  * @param {string} branch
  */
 export async function checkoutRemoteBranch(local, branch) {
-  const run = (args) => execa('git', args, { cwd: local.dir })
+  const run = (args) => execa('git', args, { cwd: local.dir, timeout: GIT_OP_TIMEOUT_MS })
   if (local.remote === 'origin') return run(['checkout', branch])
   await run(['fetch', local.remote, branch])
   const exists = await execa('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { cwd: local.dir, reject: false })
@@ -373,9 +374,8 @@ export async function pushBranch(branch) {
   const result = await execa('git', ['push', 'origin', branch], {
     cwd: process.cwd(),
     reject: false,
+    timeout: GIT_OP_TIMEOUT_MS,
   })
-  if (result.exitCode !== 0) {
-    throw new Error((result.stderr || 'git push failed').split('\n')[0].trim())
-  }
+  assertGitOk(result, 'git push')
   return result.stdout
 }
