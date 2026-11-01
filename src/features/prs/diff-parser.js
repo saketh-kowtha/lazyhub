@@ -69,7 +69,8 @@ export function parseDiff(diffText) {
 
 /**
  * Flatten the parsed file array into a single array of renderable rows,
- * prepending a `file-header` row for each file.
+ * prepending a `file-header` row for each file. The line rows are the parsed line
+ * objects themselves (not copies), so this stamps `filename` onto them in place.
  *
  * @param {Array} files — return value of parseDiff()
  * @returns {Array}
@@ -78,7 +79,9 @@ export function flattenFiles(files) {
   const rows = []
   for (const file of files) {
     rows.push({ type: 'file-header', filename: file.filename, addCount: file.addCount, delCount: file.delCount })
-    for (const line of file.lines) rows.push({ ...line, filename: file.filename })
+    // Reuse the parsed line objects (stamped with their filename) instead of
+    // spreading a second copy of every line: an open diff held ~3x its text (#457).
+    for (const line of file.lines) { line.filename = file.filename; rows.push(line) }
   }
   return rows
 }
