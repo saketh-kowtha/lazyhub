@@ -2,7 +2,7 @@ import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PRList } from './list.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { listPRs } from '../../executor.js'
+import { listPRsPage } from '../../executor.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -14,12 +14,14 @@ vi.mock('../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
+const page = (items) => ({ items, hasNextPage: false, endCursor: null, totalCount: items.length })
+
 describe('PR list cursor after the list shrinks', () => {
   it('keeps a valid selection when a refetch returns fewer PRs', async () => {
     const mk = (number) => ({ number, title: `PR number ${number}`, state: 'OPEN', updatedAt: '2026-06-06T10:00:00Z', headRefName: `b${number}` })
     useGh.mockImplementation(fn => {
-      const [data, setData] = React.useState(fn === listPRs ? [mk(1), mk(2)] : {})
-      return { data, loading: false, error: null, refetch: () => setData(fn === listPRs ? [mk(1)] : {}) }
+      const [data, setData] = React.useState(fn === listPRsPage ? page([mk(1), mk(2)]) : {})
+      return { data, loading: false, error: null, refetch: () => setData(fn === listPRsPage ? page([mk(1)]) : {}) }
     })
     const onSelectPR = vi.fn()
     const view = renderWithProviders(<PRList repo="o/r" listHeight={10} innerWidth={80} onSelectPR={onSelectPR} onOpenDiff={() => {}} />)

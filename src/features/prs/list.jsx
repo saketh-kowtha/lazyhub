@@ -18,7 +18,7 @@ import { useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
-import { listPRs, getRepoInfo } from '../../executor.js'
+import { listPRsPage, getPRRow, getPRPreview, getRepoInfo } from '../../executor.js'
 import { AppContext } from '../../context.js'
 import { usePaneState } from '../../hooks/usePaneState.js'
 import { loadConfig, loadState, saveState } from '../../config.js'
@@ -38,6 +38,11 @@ const _cfg = _appConfig.pr
 const _actions = _appConfig.toml
 const STATE_CYCLE = ['open', 'closed', 'merged']
 const FILTER_BINDINGS = [['filterOpen', 'open'], ['filterClosed', 'closed'], ['filterMerged', 'merged']]
+// GitHub search never returns more than 1,000 results.
+const SEARCH_CAP = 1000
+const PAGE_SIZE = Math.max(1, Math.min(Number(_cfg.pageSize) || 50, 100))
+const PREVIEW_DELAY_MS = 150
+const emptyMore = (key) => ({ key, items: [], endCursor: null, hasNextPage: null, totalCount: null, loading: false, error: null })
 
 export { schemeToT, canToggleAutoMergeFromList } from './list-row.jsx'
 
@@ -64,7 +69,6 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     scope: _persistedScope || _cfg.defaultScope,
     sortMode: 'default',
     authorFilter: '',
-    limit: _cfg.pageSize,
     cursor: 0,
     scrollOffset: 0,
   })
@@ -82,12 +86,36 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const [scope, setScopeRaw] = useState(savedState.scope)
   const [sortMode, setSortModeRaw] = useState(savedState.sortMode)
   const [authorFilter, setAuthorFilterRaw] = useState(savedState.authorFilter)
-  const [limit, setLimitRaw] = useState(savedState.limit)
 
-  // Single state → pass it directly; multi-state → fetch 'all' and filter client-side
-  const apiState = filterStates.size === 1 ? [...filterStates][0] : 'all'
-  const { data: prs, loading, error, refetch, isStale } = useGh(listPRs, [repo, { state: apiState, scope, author: authorFilter || undefined, limit }])
+  // First page through the query cache; later pages are fetched by cursor and appended, and
+  // earlier pages are never refetched (D16). Open+merged is the one state set GitHub search
+  // cannot express, so that set is filtered client-side and shows no total (exactTotal false).
+  const statesList = [...filterStates].sort()
+  const pageFilter = { states: statesList, scope, author: authorFilter || undefined, sort: sortMode, limit: PAGE_SIZE }
+  const pageKey = JSON.stringify([repo, pageFilter])
+  const { data: firstPage, loading, error, refetch: refetchFirst, isStale } = useGh(listPRsPage, [repo, pageFilter])
   const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000 })
+  const [more, setMore] = useState(() => emptyMore(pageKey))
+  const extra = more.key === pageKey ? more : emptyMore(pageKey)
+  // Writes patch rows in place (number -> fresh row) so an approve or label edit keeps every loaded page.
+  const [overlay, setOverlay] = useState({ key: pageKey, rows: {} })
+  const patches = overlay.key === pageKey ? overlay : { key: pageKey, rows: {} }
+  const inFlight = useRef(false)
+  const currentKey = useRef(pageKey)
+  currentKey.current = pageKey
+  // A new filter, scope, author or sort starts clean: no pages, cursor or in-flight request carried over.
+  useEffect(() => {
+    inFlight.current = false
+    setMore(emptyMore(pageKey))
+    setOverlay({ key: pageKey, rows: {} })
+  }, [pageKey])
+  // Explicit `r`: start over from page 1.
+  const refetch = useCallback(() => {
+    inFlight.current = false
+    setMore(emptyMore(pageKey))
+    setOverlay({ key: pageKey, rows: {} })
+    refetchFirst()
+  }, [pageKey, refetchFirst])
 
   const [cursor, setCursorRaw] = useState(savedState.cursor)
   const [scrollOffset, setScrollOffsetRaw] = useState(savedState.scrollOffset)
@@ -102,7 +130,6 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const setScope = (v) => { setScopeRaw(v); setSavedState({ scope: v }); saveState({ prScope: v }) }
   const setSortMode = (v) => { setSortModeRaw(v); setSavedState({ sortMode: v }) }
   const setAuthorFilter = (v) => { setAuthorFilterRaw(v); setSavedState({ authorFilter: v }) }
-  const setLimit = (v) => { setLimitRaw(v); setSavedState({ limit: typeof v === 'function' ? v(limit) : v }) }
   const setCursor = (v) => { setCursorRaw(v); setSavedState({ cursor: typeof v === 'function' ? v(cursor) : v }) }
   const setScrollOffset = (v) => { setScrollOffsetRaw(v); setSavedState({ scrollOffset: typeof v === 'function' ? v(scrollOffset) : v }) }
   const [dialog, setDialog] = useState(null)
@@ -114,10 +141,61 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
 
-  const rawItems = (prs || []).filter(pr => pr && pr.number && filterStates.has((pr.state || '').toLowerCase()))
-  const items = sortMode === 'oldest'
-    ? [...rawItems].sort((a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime())
-    : rawItems
+  const hasNextPage = extra.hasNextPage ?? firstPage?.hasNextPage ?? false
+  const endCursor = extra.endCursor ?? firstPage?.endCursor ?? null
+  const totalCount = firstPage?.exactTotal === false ? null : (extra.totalCount ?? firstPage?.totalCount ?? null)
+  const items = React.useMemo(() => {
+    const seen = new Set()
+    return [...(firstPage?.items || []), ...extra.items]
+      .filter(pr => pr && pr.number && !seen.has(pr.number) && seen.add(pr.number))
+      .map(pr => patches.rows[pr.number] || pr)
+      .filter(pr => filterStates.has((pr.state || '').toLowerCase()))
+  }, [firstPage, extra.items, patches, filterStatesArr]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadMore = useCallback(async () => {
+    if (inFlight.current || !endCursor) return
+    const requestKey = pageKey
+    inFlight.current = true
+    setMore(prev => ({ ...(prev.key === requestKey ? prev : emptyMore(requestKey)), loading: true, error: null }))
+    try {
+      const page = await listPRsPage(repo, { ...pageFilter, after: endCursor })
+      if (currentKey.current !== requestKey) return // filter changed meanwhile: drop the stale page
+      setMore(prev => ({
+        key: requestKey,
+        items: [...(prev.key === requestKey ? prev.items : []), ...page.items],
+        endCursor: page.endCursor, hasNextPage: page.hasNextPage, totalCount: page.totalCount,
+        loading: false, error: null,
+      }))
+    } catch (err) {
+      if (currentKey.current !== requestKey) return
+      setMore(prev => ({ ...(prev.key === requestKey ? prev : emptyMore(requestKey)), loading: false, error: err }))
+    } finally {
+      if (currentKey.current === requestKey) inFlight.current = false
+    }
+  }, [repo, pageKey, endCursor]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Retry only the page that failed; the pages already loaded stay.
+  const retryPage = useCallback(() => {
+    setMore(prev => (prev.key === pageKey ? { ...prev, error: null } : prev))
+  }, [pageKey])
+
+  // After a write, re-read just that PR and patch its row (approve, merge, labels...).
+  // Falls back to a full refetch only if that read fails.
+  const refreshPR = useCallback(async (number) => {
+    const key = pageKey
+    try {
+      const row = await getPRRow(repo, number)
+      if (currentKey.current !== key) return
+      setOverlay(prev => ({ key, rows: { ...(prev.key === key ? prev.rows : {}), [number]: row } }))
+    } catch {
+      refetch()
+    }
+  }, [repo, pageKey, refetch])
+
+  // Fetch the next cursor page when the cursor nears the end of what is loaded.
+  useEffect(() => {
+    if (hasNextPage && !loading && !error && !extra.loading && !extra.error && cursor >= items.length - 10) loadMore()
+  }, [cursor, items.length, hasNextPage, loading, error, extra.loading, extra.error, loadMore])
 
   // Filter keys from config (defaults: O=open, C=closed, M=merged)
   const FK = _cfg.keys
@@ -157,10 +235,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     setCursor(next)
     if (next < scrollOffset) setScrollOffset(next)
     if (next >= scrollOffset + effectiveHeight) setScrollOffset(next - effectiveHeight + 1)
-    if (next >= items.length - 10 && !loading && items.length >= limit) {
-      setLimit(l => l + 100)
-    }
-  }, [cursor, items.length, limit, scrollOffset, effectiveHeight, loading])
+  }, [cursor, items.length, scrollOffset, effectiveHeight])
 
   const openDialog = useCallback((name) => { setDialog(name) }, [])
   const closeDialog = useCallback(() => setDialog(null), [])
@@ -195,7 +270,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
     if (matchesAction('cursor.down', input, key, _actions)) { moveCursor(1);  return }
     if (matchesAction('cursor.up', input, key, _actions))   { moveCursor(-1); return }
-    if (matchesAction('list.refresh', input, key, _actions)) { refetch(); return }
+    if (matchesAction('list.refresh', input, key, _actions)) { if (extra.error) retryPage(); else refetch(); return }
     if (matchesAction('list.search', input, key, _actions)) { openDialog('fuzzy'); return }
 
     const focusedPR = !loading && items.length > 0 ? items[cursor] : null
@@ -292,12 +367,23 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
   // ── Dialogs ───────────────────────────────────────────────────────────────
 
-  const selectedPR = items[cursor]
+  const listPR = items[cursor]
+  // Heavy fields (body, full checks) load for the focused row only, after the cursor settles.
+  const [previewNumber, setPreviewNumber] = useState(null)
+  useEffect(() => {
+    const timer = setTimeout(() => setPreviewNumber(listPR?.number ?? null), PREVIEW_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [listPR?.number])
+  const { data: preview } = useGh(getPRPreview, [repo, previewNumber], { ttl: 60_000, enabled: previewNumber != null && previewNumber === listPR?.number })
+  const selectedPR = React.useMemo(
+    () => (listPR ? { ...listPR, ...(previewNumber === listPR.number && preview && typeof preview.body === 'string' ? preview : {}) } : listPR),
+    [listPR, preview, previewNumber],
+  )
 
   const dialogView = renderPRListDialog({
     dialog, selectedPR, items, repo, repoInfo, authorFilter, effectiveHeight,
     mergeOptions, setMergeOptions, setDialog, setCursor, setScrollOffset,
-    setAuthorFilter, showStatus, closeDialog, refetch, runWrite,
+    setAuthorFilter, showStatus, closeDialog, refetch, refreshPR, runWrite,
   })
   if (dialogView) return dialogView
 
@@ -328,6 +414,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       termRows={termRows}
       selectedPR={selectedPR}
       dialog={dialog}
+      paging={{ hasMore: hasNextPage, total: totalCount, loadingMore: extra.loading, error: extra.error, cap: SEARCH_CAP }}
       popoverDismissed={popoverDismissed}
       setPopoverDismissed={setPopoverDismissed}
       expansionEnabled={expansionEnabled}

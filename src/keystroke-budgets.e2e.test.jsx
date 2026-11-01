@@ -64,7 +64,7 @@ vi.mock('./features/tabs/view.jsx', () => ({ TabView: () => <Text>TAB VIEW</Text
 
 vi.mock('./executor.js', () => {
   const fns = [
-    'listPRs', 'getPR', 'getRepoInfo', 'getPRChecks', 'getBranchProtection', 'getPRDiffStats', 'getPRDiff',
+    'listPRs', 'listPRsPage', 'getPRRow', 'getPRPreview', 'getPR', 'getRepoInfo', 'getPRChecks', 'getBranchProtection', 'getPRDiffStats', 'getPRDiff',
     'listPRComments', 'resolveThread', 'replyToComment', 'editPRComment', 'deletePRComment', 'addPRLineComment',
     'reviewPR', 'mergePR', 'closePR', 'checkoutBranch', 'enableAutoMerge', 'disableAutoMerge', 'markPRReady',
     'convertPRToDraft', 'editPRBase', 'requestReviewers', 'removeReviewers', 'addPRAssignees', 'removePRAssignees',
@@ -196,7 +196,7 @@ describe('keystroke budgets', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useGh.mockImplementation((fn) => {
-      if (fn === executor.listPRs) return ghResult([PR])
+      if (fn === executor.listPRsPage) return ghResult({ items: [PR], hasNextPage: false, endCursor: null, totalCount: 1 })
       if (fn === executor.getPR) return ghResult(PR)
       if (fn === executor.getRepoInfo) return ghResult({ squashMergeAllowed: true, viewerPermission: 'WRITE' })
       if (fn === executor.getPRChecks) return ghResult(PR.statusCheckRollup)
@@ -258,7 +258,7 @@ describe('write keys confirm first and cancel does nothing', () => {
     vi.clearAllMocks()
     layoutState.cols = 120
     useGh.mockImplementation((fn) => {
-      if (fn === executor.listPRs) return ghResult([PR])
+      if (fn === executor.listPRsPage) return ghResult({ items: [PR], hasNextPage: false, endCursor: null, totalCount: 1 })
       if (fn === executor.getPR) return ghResult(PR)
       if (fn === executor.getRepoInfo) return ghResult({ squashMergeAllowed: true, viewerPermission: 'WRITE' })
       if (fn === executor.getPRChecks) return ghResult(PR.statusCheckRollup)

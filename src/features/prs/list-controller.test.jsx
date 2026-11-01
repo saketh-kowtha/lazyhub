@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { cleanup } from 'ink-testing-library'
 import { renderWithProviders, waitForInputReady, waitForExpectation } from '../../test/test-helpers.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { listPRs, checkoutBranch } from '../../executor.js'
+import { listPRsPage, checkoutBranch } from '../../executor.js'
 import { firstActionKey } from '../../config/actions.js'
 import { PRList } from './list.jsx'
 
@@ -15,7 +15,7 @@ beforeEach(() => vi.clearAllMocks())
 
 it('sanitizes the checkout branch in confirmation and success text while preserving the request', async () => {
   const pr = { number: 1, title: 'PR', state: 'OPEN', headRefName: 'safe&amp;branch' }
-  useGh.mockImplementation(fn => ({ data: fn === listPRs ? [pr] : {}, loading: false, refetch: vi.fn() }))
+  useGh.mockImplementation(fn => ({ data: fn === listPRsPage ? { items: [pr], hasNextPage: false, endCursor: null, totalCount: 1 } : {}, loading: false, refetch: vi.fn() }))
   checkoutBranch.mockResolvedValue(undefined)
   const view = renderWithProviders(<PRList repo="o/r" listHeight={10} innerWidth={80} onSelectPR={() => {}} onOpenDiff={() => {}} />)
   await waitForInputReady(view)

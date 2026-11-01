@@ -21,7 +21,7 @@ const pr = (number, marker, login = 'maria-lopez') => ({
   body: 'body',
 })
 
-function renderList(cols, items, cursor) {
+function renderList(cols, items, cursor, extra = {}) {
   const { lastFrame } = renderWithProviders(
     <Box height={24} width={cols}><PRListView
       items={items} loading={false} error={null}
@@ -34,10 +34,16 @@ function renderList(cols, items, cursor) {
       selectedPR={items[cursor]} dialog={null}
       popoverDismissed={false} setPopoverDismissed={() => {}}
       expansionEnabled={false} scheme={lazyhubDark}
+      {...extra}
     /></Box>,
   )
   return lastFrame()
 }
+
+const six = () => [
+  pr(1, 'AAAAAA'), pr(2, 'SELECTED'), pr(3, 'BBBBBB'),
+  pr(4, 'CCCCCC'), pr(5, 'DDDDDD'), pr(6, 'EEEEEE'),
+]
 
 describe('PR list popover', () => {
   for (const cols of [80, 100]) {
@@ -53,6 +59,26 @@ describe('PR list popover', () => {
       }
     })
   }
+})
+
+describe('PR list paging footer (#508)', () => {
+  const paging = (over) => ({ hasMore: true, total: 4321, loadingMore: false, error: null, cap: 1000, ...over })
+
+  it('shows N of M while more pages exist', () => {
+    expect(renderList(100, six(), 0, { paging: paging(), popoverDismissed: true })).toContain('6 of 4321')
+  })
+
+  it('says so when GitHub search stops at its cap', () => {
+    const frame = renderList(120, six(), 0, { paging: paging({ hasMore: false, total: 4321 }), popoverDismissed: true })
+    expect(frame).toContain('6 of 4321')
+    expect(frame).toContain('at most 1000')
+  })
+
+  it('names the retry key when a page failed, and keeps the rows', () => {
+    const frame = renderList(100, six(), 0, { paging: paging({ error: new Error('x') }), popoverDismissed: true })
+    expect(frame).toContain('Could not load more PRs; showing 6 of 4321')
+    expect(frame).toContain('retry')
+  })
 })
 
 describe('PRRow author column', () => {

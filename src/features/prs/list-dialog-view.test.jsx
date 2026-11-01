@@ -9,7 +9,7 @@ const props = (dialog, extra = {}) => ({
   dialog, repo: 'o/r', selectedPR: { number: 7, title: 'PR' }, items: [], repoInfo: {},
   authorFilter: '', effectiveHeight: 5, mergeOptions: null,
   setMergeOptions: vi.fn(), setDialog: vi.fn(), setCursor: vi.fn(), setScrollOffset: vi.fn(),
-  setAuthorFilter: vi.fn(), showStatus: vi.fn(), closeDialog: vi.fn(), refetch: vi.fn(),
+  setAuthorFilter: vi.fn(), showStatus: vi.fn(), closeDialog: vi.fn(), refetch: vi.fn(), refreshPR: vi.fn(),
   ...extra,
 })
 
@@ -25,7 +25,8 @@ describe('PR list dialog contract', () => {
     expect(mergePR).not.toHaveBeenCalled()
     await confirm.props.onConfirm()
     expect(mergePR).toHaveBeenCalledWith('o/r', 7, 'squash', 'commit message')
-    expect(state.refetch).toHaveBeenCalledOnce()
+    expect(state.refreshPR).toHaveBeenCalledWith(7)
+    expect(state.refetch).not.toHaveBeenCalled()
   })
 
   for (const [dialog, review, body] of [
@@ -42,7 +43,7 @@ describe('PR list dialog contract', () => {
     })
   }
 
-  it('reports a failed auto-merge disable with a sanitized message and refetches', async () => {
+  it('reports a failed auto-merge disable with a sanitized message and re-reads the row', async () => {
     disableAutoMerge.mockRejectedValue(new Error('still \u001b[31menabled'))
     const state = props('auto-merge', { selectedPR: { number: 7, title: 'PR', autoMergeRequest: { enabledAt: 'x' } } })
     renderPRListDialog(state).props.onConfirm()
@@ -51,7 +52,7 @@ describe('PR list dialog contract', () => {
     expect(isError).toBe(true)
     expect(msg).toContain('Auto-merge failed')
     expect(msg).not.toContain('\u001b')
-    expect(state.refetch).toHaveBeenCalledOnce()
+    expect(state.refreshPR).toHaveBeenCalledWith(7)
   })
 
   it('keeps the list visible when a selected-PR dialog loses its selection', () => {

@@ -81,11 +81,18 @@ function PRStateBadge({ pr, t }) {
 
 function CIBadge({ pr, t }) {
   const checks = pr.statusCheckRollup
-  if (!checks || checks.length === 0) return null
-  const total   = checks.length
-  const states  = checks.map(c => c.state || c.conclusion || c.status || '')
-  const failing = states.filter(s => /failure|error/i.test(s)).length
-  const pending = states.filter(s => /pending|in_progress|queued/i.test(s)).length
+  let total; let failing; let pending
+  if (checks && checks.length > 0) {
+    total   = checks.length
+    const states = checks.map(c => c.state || c.conclusion || c.status || '')
+    failing = states.filter(s => /failure|error/i.test(s)).length
+    pending = states.filter(s => /pending|in_progress|queued/i.test(s)).length
+  } else if (pr.checkSummary?.total > 0) {
+    // List rows carry only counters; the full check list loads for the focused row.
+    ({ total, failing, pending } = pr.checkSummary)
+  } else {
+    return null
+  }
   if (failing > 0) return <Text color={t.ci.fail}> ✗ {failing}/{total}</Text>
   if (pending > 0) return <Text color={t.ci.pending}> ● {pending}/{total}</Text>
   return <Text color={t.ci.pass}> ✓</Text>
@@ -104,13 +111,24 @@ export const PR_ROW_FIXED_COLS = 44
 
 // Expanded rows and popovers use the same CI summary. The compact row badge
 // retains its separate status fallback for legacy status-only check payloads.
-function summarizeChecks(checks, t) {
+function summarizeChecks(checks, t, summary) {
+  if (!checks.length && summary?.total > 0) {
+    const passing = summary.total - summary.failing - summary.pending
+    return {
+      failing: summary.failing,
+      pending: summary.pending,
+      passing,
+      total: summary.total,
+      ciColor: summary.failing ? t.ci.fail : summary.pending ? t.ci.pending : t.ci.pass,
+    }
+  }
   const failing = checks.filter(check => /failure|error/i.test(check.state || check.conclusion || '')).length
   const pending = checks.filter(check => /pending|in_progress|queued/i.test(check.state || check.conclusion || check.status || '')).length
   return {
     failing,
     pending,
     passing: checks.length - failing - pending,
+    total: checks.length,
     ciColor: failing ? t.ci.fail : pending ? t.ci.pending : checks.length ? t.ci.pass : t.ui.dim,
   }
 }
@@ -123,12 +141,12 @@ function PRExpandedDetail({ pr, t }) {
   const reviewers = (pr.reviewRequests || []).slice(0, 4)
   const bodyLine = (pr.body || '').trim().split('\n').find(l => l.trim()) || ''
 
-  const { failing, pending, passing, ciColor } = summarizeChecks(checks, t)
+  const { failing, pending, passing, total, ciColor } = summarizeChecks(checks, t, pr.checkSummary)
   const ciParts = []
   if (passing) ciParts.push(`✓ ${passing}`)
   if (pending) ciParts.push(`● ${pending}`)
   if (failing) ciParts.push(`✗ ${failing}`)
-  if (checks.length) ciParts.push(`/ ${checks.length}`)
+  if (total) ciParts.push(`/ ${total}`)
 
   const branch = [pr.headRefName, pr.baseRefName].filter(Boolean).map(sanitize).join(' → ')
 
@@ -137,7 +155,7 @@ function PRExpandedDetail({ pr, t }) {
       {branch ? (
         <Text color={t.ui.muted} wrap="truncate">⌥  {branch}</Text>
       ) : null}
-      {checks.length > 0 && (
+      {total > 0 && (
         <Text color={ciColor} wrap="truncate">   {ciParts.join('  ')}</Text>
       )}
       {labels.length > 0 && (
@@ -253,12 +271,14 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
     .map(l => sanitize(l.trimEnd()))
     .filter(l => l.length > 0)
     .slice(0, 6)
+  // The list row carries no body; it loads for the focused row (getPRPreview).
+  if (pr.body === undefined) bodyLines.push('loading…')
   while (bodyLines.length < 6) bodyLines.push('')
 
   // ── CI summary
   const checks   = pr.statusCheckRollup || []
-  const { failing, pending, ciColor } = summarizeChecks(checks, t)
-  const ciLabel  = checks.length === 0 ? 'no checks'
+  const { failing, pending, total, ciColor } = summarizeChecks(checks, t, pr.checkSummary)
+  const ciLabel  = total === 0 ? 'no checks'
     : failing ? `✗ ${failing} failing`
     : pending ? `● ${pending} pending`
     : `✓ ci-pass`
@@ -316,7 +336,7 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
       {/* Hint bar */}
       <Box paddingX={1}>
         <Text color={t.ui.dim} wrap="truncate">
-          {truncateToWidth('↩ open · a approve · m merge · [p] close', innerW)}
+          {truncateToWidth('↩ open · a approve · m merge · Esc hide', innerW)}
         </Text>
       </Box>
     </Box>

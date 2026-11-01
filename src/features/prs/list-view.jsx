@@ -44,6 +44,7 @@ export function PRListView({
   setPopoverDismissed,
   expansionEnabled,
   scheme,
+  paging,
 }) {
   const popoverRowIndex = cursor - scrollOffset
   const popoverAnchor = {
@@ -141,12 +142,20 @@ export function PRListView({
         )
       })}
 
-      {(items.length > effectiveHeight || items.length >= 100) && (
+      {!error && items.length > 0 && (
         <Box paddingX={1} justifyContent="space-between">
-          <Text color={t.ui.dim}>
-            {scrollOffset + 1}–{Math.min(scrollOffset + effectiveHeight, items.length)} / {items.length}
+          <Text color={paging?.error ? t.ci.fail : t.ui.dim}>
+            {paging?.error
+              ? `Could not load more PRs; showing ${items.length}${paging.total ? ` of ${paging.total}` : ''} [${firstActionKey('list.refresh', 'r')}] retry`
+              : paging?.hasMore
+                ? (paging.total != null ? `${items.length} of ${paging.total}` : `${items.length} loaded`) + (paging.loadingMore ? ' · loading more…' : '')
+                : paging?.total > items.length
+                  ? `${items.length} of ${paging.total} (GitHub search returns at most ${paging.cap}; refine the filter to reach older PRs)`
+                  : `${items.length} of ${items.length} · end of list`}
           </Text>
-          {items.length >= 100 && !loading && <Text color={t.ui.dim}>scroll down for more</Text>}
+          {items.length > effectiveHeight && (
+            <Text color={t.ui.dim}>{scrollOffset + 1}–{Math.min(scrollOffset + effectiveHeight, items.length)}</Text>
+          )}
         </Box>
       )}
 
