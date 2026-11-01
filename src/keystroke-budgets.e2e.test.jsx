@@ -139,8 +139,9 @@ async function press(steps) {
 const TASKS = [
   {
     name: 'approve a review-requested PR (queue -> detail)',
-    budget: 3,
-    steps: [ENTER, key('a'), CTRL_G],
+    // Enter on the comment form opens "Approve PR #N?" (default No); y confirms (#468).
+    budget: 4,
+    steps: [ENTER, key('a'), ENTER, key('y')],
     done: () => expect(executor.reviewPR).toHaveBeenCalledWith('owner/repo', 412, 'approve', ''),
   },
   {

@@ -199,7 +199,7 @@ function handleMessage(socket, raw) {
       const state = _stateGetter()
       const repo = msg.repo || state.repo || null
       ;(_reviewCommentsHandler(repo, prNumber))
-        .then(comments => sendResponse(socket, id, { comments: comments || [] }))
+        .then(comments => sendResponse(socket, id, { comments: comments || [], truncated: !!comments?.truncated }))
         .catch(err => sendResponse(socket, id, { comments: [], error: err?.message || 'fetch failed' }))
       break
     }

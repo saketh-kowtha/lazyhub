@@ -85,9 +85,6 @@ const THREAD_FIELDS = `
     nodes { ${COMMENT_FIELDS} }
   }
 `
-// Hard stop for runaway loops (a malformed pageInfo that never ends). 200 pages is 10k+ items.
-const MAX_PAGES = 200
-
 function mapReviewComment(c, thread) {
   return {
     id: c.databaseId,
@@ -106,33 +103,59 @@ function mapReviewComment(c, thread) {
 }
 
 /**
- * Fetch the replies of a thread beyond its first 50, by cursor (#507). Returns every comment
- * node of the thread, first page included.
- * @param thread
+ * Page info that never loops: a connection that claims a next page but returns the cursor we
+ * just sent is reported as `stalled` (the caller shows "incomplete"), not retried forever.
+ * @param conn
+ * @param requestedAfter
  */
-async function completeThreadComments(thread) {
-  const nodes = [...(thread.comments?.nodes || [])]
-  let info = thread.comments?.pageInfo
+function pageOf(conn, requestedAfter = null) {
+  const hasNext = !!conn?.pageInfo?.hasNextPage
+  const endCursor = conn?.pageInfo?.endCursor || null
+  const stalled = hasNext && (!endCursor || endCursor === requestedAfter)
+  return {
+    total: conn?.totalCount ?? (conn?.nodes?.length || 0),
+    hasNextPage: hasNext && !stalled,
+    endCursor,
+    stalled,
+  }
+}
+
+/**
+ * The next page of replies of one review thread (#507). Used on demand, when the user reaches
+ * a thread's "N more replies" row.
+ * @param threadId
+ * @param after  cursor returned by the previous page
+ */
+export async function listPRThreadReplies(threadId, after = null) {
   const query = `
     query($id: ID!, $after: String) {
-      node(id: $id) { ... on PullRequestReviewThread { comments(first: 50, after: $after) {
-        pageInfo { hasNextPage endCursor }
-        nodes { ${COMMENT_FIELDS} }
-      } } }
+      node(id: $id) { ... on PullRequestReviewThread {
+        id
+        isResolved
+        comments(first: 50, after: $after) {
+          totalCount
+          pageInfo { hasNextPage endCursor }
+          nodes { ${COMMENT_FIELDS} }
+        }
+      } }
     }
   `
-  for (let i = 0; info?.hasNextPage && info.endCursor && i < MAX_PAGES; i++) {
-    const res = await runGh(['api', 'graphql', '-f', `id=${thread.id}`, '-f', `after=${info.endCursor}`, '-f', `query=${query}`])
-    const page = res?.data?.node?.comments
-    nodes.push(...(page?.nodes || []))
-    info = page?.pageInfo
+  const args = ['api', 'graphql', '-f', `id=${threadId}`]
+  if (after) args.push('-f', `after=${after}`)
+  args.push('-f', `query=${query}`)
+  const res = await runGh(args)
+  const thread = res?.data?.node
+  return {
+    comments: (thread?.comments?.nodes || []).map(c => mapReviewComment(c, { id: threadId, isResolved: !!thread?.isResolved })),
+    page: pageOf(thread?.comments, after),
   }
-  return nodes
 }
 
 /**
  * One cursor page of review threads and/or PR conversation (issue) comments (#507).
- * Replies beyond a thread's first 50 are fetched by cursor so a thread is never cut short.
+ * Each thread carries its first 50 comments; a thread with more is listed in `partialThreads`
+ * so the view can show "N more replies" and call `listPRThreadReplies` on demand. No per-thread
+ * request is made here, so the first render never waits on them.
  * `threads: false` / `conversation: false` skip that half (load-more of one side only).
  * @param repo
  * @param number
@@ -184,9 +207,13 @@ export async function listPRTimelinePage(repo, number, {
   const tConn = pr?.reviewThreads
   const cConn = pr?.comments
   const reviewComments = []
+  const partialThreads = []
   for (const thread of tConn?.nodes || []) {
-    const nodes = await completeThreadComments(thread)
-    for (const c of nodes) reviewComments.push(mapReviewComment(c, thread))
+    for (const c of thread.comments?.nodes || []) reviewComments.push(mapReviewComment(c, thread))
+    const info = pageOf(thread.comments)
+    if (info.hasNextPage || info.stalled) {
+      partialThreads.push({ threadId: thread.id, total: info.total, endCursor: info.endCursor, stalled: info.stalled })
+    }
   }
   const conversationComments = (cConn?.nodes || []).map(c => ({
     id: c.databaseId,
@@ -203,28 +230,30 @@ export async function listPRTimelinePage(repo, number, {
     threadResolved: false,
     kind: 'conversation',
   }))
-  const pageOf = (conn) => ({
-    total: conn?.totalCount ?? (conn?.nodes?.length || 0),
-    hasNextPage: !!conn?.pageInfo?.hasNextPage,
-    endCursor: conn?.pageInfo?.endCursor || null,
-  })
-  return { comments: reviewComments, conversation: conversationComments, threads: pageOf(tConn), conversationPage: pageOf(cConn) }
+  return {
+    comments: reviewComments,
+    conversation: conversationComments,
+    partialThreads,
+    threads: pageOf(tConn, threadsAfter),
+    conversationPage: pageOf(cConn, conversationAfter),
+  }
 }
 
 /**
- * List every review comment on a PR (all threads, all replies, paged by cursor).
+ * Review comments for the diff view and the AI tool: the first page of threads (100) with each
+ * thread's first 50 comments, in one request. Never walks every thread. When GitHub has more, the
+ * returned array carries `truncated` ({ threads, replies }) so callers can say so; the comments
+ * view pages through the rest.
  * @param repo
  * @param number
  */
 export async function listPRComments(repo, number) {
-  const out = []
-  let after = null
-  for (let i = 0; i < MAX_PAGES; i++) {
-    const page = await listPRTimelinePage(repo, number, { threadsAfter: after, conversation: false, pageSize: 100 })
-    out.push(...page.comments)
-    if (!page.threads.hasNextPage || !page.threads.endCursor) break
-    after = page.threads.endCursor
-  }
+  const page = await listPRTimelinePage(repo, number, { conversation: false, pageSize: 100 })
+  const out = page.comments
+  const truncated = page.threads.hasNextPage || page.threads.stalled || page.partialThreads.length > 0
+    ? { threads: page.threads.hasNextPage || page.threads.stalled, replies: page.partialThreads.length > 0 }
+    : false
+  Object.defineProperty(out, 'truncated', { value: truncated, enumerable: false })
   return out
 }
 
@@ -285,13 +314,34 @@ export async function resolveThread(threadId) {
 }
 
 /**
- * Get PR review comments shaped for IPC.
+ * Get every PR review comment shaped for IPC: all thread pages and all replies, by cursor. The
+ * returned array carries `truncated: true` if GitHub returned a cursor that does not advance, so
+ * the caller can say the list is incomplete instead of looping forever or hiding it.
  * @param repo
  * @param prNumber
  */
 export async function getPRReviewComments(repo, prNumber) {
-  const all = await listPRComments(repo, prNumber)
-  return all.map(c => ({
+  const all = []
+  let after = null
+  let stalled = false
+  for (;;) {
+    const page = await listPRTimelinePage(repo, prNumber, { threadsAfter: after, conversation: false, pageSize: 100 })
+    all.push(...page.comments)
+    for (const part of page.partialThreads) {
+      let cursor = part.stalled ? null : part.endCursor
+      if (part.stalled) stalled = true
+      while (cursor) {
+        const more = await listPRThreadReplies(part.threadId, cursor)
+        all.push(...more.comments)
+        if (more.page.stalled) stalled = true
+        cursor = more.page.hasNextPage ? more.page.endCursor : null
+      }
+    }
+    if (page.threads.stalled) stalled = true
+    if (!page.threads.hasNextPage) break
+    after = page.threads.endCursor
+  }
+  const shaped = all.map(c => ({
     id: c.id,
     threadId: c.threadId,
     path: c.path,
@@ -300,6 +350,8 @@ export async function getPRReviewComments(repo, prNumber) {
     user: c.user?.login || null,
     resolved: c.threadResolved,
   }))
+  Object.defineProperty(shaped, 'truncated', { value: stalled, enumerable: false })
+  return shaped
 }
 
 /**

@@ -128,6 +128,19 @@ describe('assistant mutation containment (B-64: model writes disabled, even if h
     expect(executor.listPRs).toHaveBeenCalledWith('owner/repo', expect.objectContaining({ state: 'open' }))
     expect(result).toMatchObject({ type: 'answer', text: 'one PR' })
   })
+
+  it('tells the model when list_pr_comments returned only part of the comments (#507)', async () => {
+    const partial = Object.defineProperty([{ id: 1 }], 'truncated', { value: { threads: true, replies: false } })
+    executor.listPRComments.mockResolvedValueOnce(partial)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ content: [{ type: 'tool_use', id: 'tu3', name: 'list_pr_comments', input: { number: 5 } }] }))
+      .mockResolvedValueOnce(json({ content: [{ type: 'text', text: 'done' }] }))
+
+    await runAssistantTurn({ ...base, aiConfig: { provider: 'anthropic', anthropicApiKey: 'k' } })
+
+    const secondBody = String(fetchSpy.mock.calls[1][1].body)
+    expect(secondBody).toContain('Incomplete')
+  })
 })
 
 describe('assistant provider boundary (B-65: every round goes through src/ai/index.js + logAiUsage)', () => {

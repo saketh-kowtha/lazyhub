@@ -10,6 +10,7 @@ export function timelinePage(comments = [], conversation = [], over = {}) {
   return {
     comments,
     conversation,
+    partialThreads: [],
     threads: { total: threadIds.size, hasNextPage: false, endCursor: null, ...over.threads },
     conversationPage: { total: conversation.length, hasNextPage: false, endCursor: null, ...over.conversationPage },
   }

@@ -76,6 +76,14 @@ describe('diff state and render contracts', () => {
     expect(view.lastFrame()).toContain('unified')
   })
 
+  it('says so when the inline comments are only the first page (#507)', async () => {
+    const partial = Object.defineProperty([], 'truncated', { value: { threads: true, replies: false } })
+    const base = useGh.getMockImplementation()
+    useGh.mockImplementation(fn => (fn === listPRComments ? { ...base(fn), data: partial } : base(fn)))
+    const { view } = mountSession()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('inline comments incomplete'))
+  })
+
   it('maps the file tree back to diff rows and releases overlay scope on selection', async () => {
     const { view, notifyDialog } = mountSession()
     await waitForExpectation(() => expect(currentState?.rows).toHaveLength(7))
