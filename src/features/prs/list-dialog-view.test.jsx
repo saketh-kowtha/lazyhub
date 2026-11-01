@@ -39,7 +39,17 @@ describe('PR list dialog contract', () => {
       await form.props.onSubmit({})
       expect(reviewPR).toHaveBeenCalledWith('o/r', 7, review, body)
       expect(state.closeDialog).toHaveBeenCalledOnce()
+      // The row's review state is patched in place (#439); the pages are not reset.
+      expect(state.refreshPR).toHaveBeenCalledWith(7)
       expect(state.refetch).not.toHaveBeenCalled()
+    })
+
+    it(`does not patch the row when the ${review} request fails`, async () => {
+      reviewPR.mockRejectedValueOnce(new Error('nope'))
+      const state = props(dialog)
+      await renderPRListDialog(state).props.onSubmit({ body: 'x' })
+      expect(state.showStatus).toHaveBeenCalledWith('✗ nope', true)
+      expect(state.refreshPR).not.toHaveBeenCalled()
     })
   }
 

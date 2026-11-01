@@ -181,6 +181,7 @@ export function renderPRListDialog({
             try {
               await reviewPR(repo, selectedPR.number, approving ? 'approve' : 'request-changes', approving ? values.body || '' : values.body)
               showStatus(approving ? `✓ Approved PR #${selectedPR.number}` : `✓ Requested changes on PR #${selectedPR.number}`)
+              refreshPR(selectedPR.number) // the row's review state is stale otherwise (#439)
             } catch (err) {
               showStatus(`✗ ${err.message}`, true)
             }

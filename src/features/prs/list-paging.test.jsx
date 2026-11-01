@@ -2,7 +2,7 @@ import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PRList } from './list.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { listPRsPage, getPRRow } from '../../executor.js'
+import { listPRsPage, getPRRow, reviewPR } from '../../executor.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -18,7 +18,7 @@ vi.mock('ink', async () => {
 })
 vi.mock('../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
 vi.mock('../../executor.js', async (original) => ({
-  ...await original(), listPRsPage: vi.fn(), getPRRow: vi.fn(),
+  ...await original(), listPRsPage: vi.fn(), getPRRow: vi.fn(), reviewPR: vi.fn(),
 }))
 
 const mk = (number, over = {}) => ({
@@ -30,7 +30,7 @@ const rows = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => mk(fr
 let refetchFirst
 beforeEach(() => {
   term.columns = 60
-  vi.clearAllMocks(); listPRsPage.mockReset(); getPRRow.mockReset()
+  vi.clearAllMocks(); listPRsPage.mockReset(); getPRRow.mockReset(); reviewPR.mockReset()
   listPRsPage.mockResolvedValue({ items: [], hasNextPage: false, endCursor: null, totalCount: 0 })
   refetchFirst = vi.fn()
   useGh.mockImplementation((fn, deps) => {
@@ -88,6 +88,24 @@ describe('PR list cursor paging (#508)', () => {
     await sendInput('f') // open -> closed
     await waitForExpectation(() => expect(useGh.mock.calls.filter(c => c[0] === listPRsPage).at(-1)[1][1]).toMatchObject({ states: ['closed'] }))
     await waitForExpectation(() => expect(view.lastFrame()).toContain('30 of 75')) // loaded pages dropped
+  })
+})
+
+describe('PR list writes patch the row (#439)', () => {
+  it('shows the new review state after approve without resetting the pages', async () => {
+    reviewPR.mockResolvedValue(null)
+    getPRRow.mockResolvedValue(mk(1, { reviewDecision: 'APPROVED', title: 'PR number 1 patched' }))
+    const view = mount()
+    await flush(20)
+    await sendInput('a')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Approve PR #1'))
+    await flush(20)
+    await sendInput('g', { ctrl: true })
+    await waitForExpectation(() => expect(reviewPR).toHaveBeenCalledWith('o/r', 1, 'approve', ''))
+    await waitForExpectation(() => expect(getPRRow).toHaveBeenCalledWith('o/r', 1))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PR number 1 patched'))
+    expect(refetchFirst).not.toHaveBeenCalled()
+    expect(listPRsPage).not.toHaveBeenCalled()
   })
 })
 
