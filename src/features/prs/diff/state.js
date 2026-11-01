@@ -3,7 +3,7 @@
  * src/features/prs/diff/state.js — diff loading, navigation, overlays, and action callbacks.
  */
 
-import { useState, useMemo, useContext, useEffect } from 'react'
+import { useState, useMemo, useContext, useEffect, useRef } from 'react'
 import { useStdout } from 'ink'
 import { useActionResolver, useKeymapInput } from '../../../config/keymap.js'
 import { useGh } from '../../../hooks/useGh.js'
@@ -97,7 +97,16 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   //   delete:      { mode: 'delete', commentId, commentBody }
   const COMMENT_TYPES = ['comment', 'suggestion', 'request-changes']
   const [commentStatus, setCommentStatus] = useState(null)
-  const { run: pendingRun } = usePendingWrite(setCommentStatus)
+  // One status timer: a new message cancels the previous timeout, so a stale timeout
+  // can never clear a later (or sticky pending) message.
+  const statusTimer = useRef(null)
+  useEffect(() => () => { clearTimeout(statusTimer.current) }, [])
+  const flash = (msg, ms = 0) => {
+    clearTimeout(statusTimer.current)
+    setCommentStatus(msg)
+    if (ms) statusTimer.current = setTimeout(() => setCommentStatus(null), ms)
+  }
+  const { run: pendingRun } = usePendingWrite((msg) => flash(msg))
   // Resolves true only when fn actually ran (false when ignored as a double submit).
   const runWrite = async (label, fn) => {
     let ran = false
@@ -327,15 +336,17 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
         const confirm = resolveConfirm(input, key)
         if (confirm === 'dialog.yes') {
           const deleteId = compose.commentId
-          mutateComments(prev => (prev || []).filter(c => c.id !== deleteId))
-          setCompose(null)
-          deletePRComment(repo, deleteId)
-            .then(() => { setCommentStatus('Deleted'); setTimeout(() => setCommentStatus(null), 3000) })
+          runWrite('Deleting comment', () => {
+            mutateComments(prev => (prev || []).filter(c => c.id !== deleteId))
+            return deletePRComment(repo, deleteId)
+          })
+            .then(ran => { if (ran) flash('Deleted', 3000) })
             .catch(err => {
               refetchComments()
-              setCommentStatus(`Failed: ${err.message}`)
-              setTimeout(() => setCommentStatus(null), 3000)
+              flash(`Failed: ${err.message}`, 3000)
             })
+          // The confirm closes either way; an ignored run already announced "still in progress".
+          setCompose(null)
         } else if (confirm === 'dialog.no') {
           setCompose(null)
         }
@@ -368,30 +379,32 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
               createdAt: new Date().toISOString(), pending: true,
               user: { login: '…' }, inReplyToId: null,
             }
-            mutateComments(prev => [...(prev || []), optimisticComment])
-            setCompose(null)
-            setCommentStatus('Posting…')
-            addPRLineComment(repo, prNumber, {
-              body, path: row.filename,
-              line: row.newLine || row.oldLine,
-              side: row.type === 'del' ? 'LEFT' : 'RIGHT',
-              commitId: headRefOid,
-            }).then(() => {
-              setCommentStatus('Comment added')
-              setTimeout(() => setCommentStatus(null), 3000)
+            runWrite('Posting comment', () => {
+              mutateComments(prev => [...(prev || []), optimisticComment])
+              setCompose(null)
+              return addPRLineComment(repo, prNumber, {
+                body, path: row.filename,
+                line: row.newLine || row.oldLine,
+                side: row.type === 'del' ? 'LEFT' : 'RIGHT',
+                commitId: headRefOid,
+              })
+            }).then(ran => {
+              if (!ran) return
+              flash('Comment added', 3000)
               refetchComments()
             }).catch(err => {
               mutateComments(prev => (prev || []).filter(c => c.id !== optimisticId))
-              setCommentStatus(`Failed: ${err.message}`)
-              setTimeout(() => setCommentStatus(null), 3000)
+              flash(`Failed: ${err.message}`, 3000)
             })
           }
         } else if (compose.mode === 'reply') {
           if (body) {
-            setCompose(null)
-            replyToComment(repo, prNumber, compose.rootCommentId, body)
-              .then(() => { setCommentStatus('Reply sent'); refetchComments(); setTimeout(() => setCommentStatus(null), 3000) })
-              .catch(err => { setCommentStatus(`Failed: ${err.message}`); setTimeout(() => setCommentStatus(null), 3000) })
+            runWrite('Sending reply', () => {
+              setCompose(null)
+              return replyToComment(repo, prNumber, compose.rootCommentId, body)
+            })
+              .then(ran => { if (ran) { flash('Reply sent', 3000); refetchComments() } })
+              .catch(err => flash(`Failed: ${err.message}`, 3000))
           } else {
             setCompose(null)
           }
@@ -399,14 +412,15 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
         } else if (compose.mode === 'edit') {
           if (body) {
             const editId = compose.commentId
-            mutateComments(prev => (prev || []).map(c => c.id === editId ? { ...c, body } : c))
-            setCompose(null)
-            editPRComment(repo, editId, body)
-              .then(() => { setCommentStatus('Comment updated'); setTimeout(() => setCommentStatus(null), 3000) })
+            runWrite('Updating comment', () => {
+              mutateComments(prev => (prev || []).map(c => c.id === editId ? { ...c, body } : c))
+              setCompose(null)
+              return editPRComment(repo, editId, body)
+            })
+              .then(ran => { if (ran) flash('Comment updated', 3000) })
               .catch(err => {
                 refetchComments()
-                setCommentStatus(`Failed: ${err.message}`)
-                setTimeout(() => setCommentStatus(null), 3000)
+                flash(`Failed: ${err.message}`, 3000)
               })
           } else {
             setCompose(null)
@@ -573,14 +587,15 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
       return
     }
     setAiPostStatus('posting...')
-    addPRLineComment(repo, prNumber, {
+    runWrite('Posting AI comment', () => addPRLineComment(repo, prNumber, {
       body,
       path:     suggestion.file,
       line:     suggestion.line,
       side:     'RIGHT',
       commitId: headRefOid,
-    })
-      .then(() => {
+    }))
+      .then(ran => {
+        if (!ran) { setAiPostStatus(null); return }
         setAiPostStatus('posted')
         refetch()
         setTimeout(() => setAiPostStatus(null), 2000)
@@ -602,8 +617,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
       runWrite(`Merging #${prNumber}`, () => mergePR(repo, prNumber, strategy, msg))
         .then(ran => { if (ran) onBack() })
         .catch(err => {
-          setCommentStatus(`✗ Merge failed: ${err.message}`)
-          setTimeout(() => setCommentStatus(null), 5000)
+          flash(`✗ Merge failed: ${err.message}`, 5000)
         })
     }
   }
@@ -625,8 +639,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
     runWrite(`Merging #${prNumber}`, () => mergePR(repo, prNumber, pending.strategy, pending.msg || undefined, { allowAdmin: true }))
       .then(ran => { if (ran) onBack() })
       .catch(err => {
-        setCommentStatus(`✗ Merge failed: ${err.message}`)
-        setTimeout(() => setCommentStatus(null), 5000)
+        flash(`✗ Merge failed: ${err.message}`, 5000)
       })
   }
 
@@ -634,11 +647,9 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
     setDialog(null)
     try {
       if (!await runWrite(`Approving PR #${prNumber}`, () => reviewPR(repo, prNumber, 'approve', values.body || ''))) return
-      setCommentStatus(`✓ Approved PR #${prNumber}`)
-      setTimeout(() => setCommentStatus(null), 3000)
+      flash(`✓ Approved PR #${prNumber}`, 3000)
     } catch (err) {
-      setCommentStatus(`✗ ${err.message}`)
-      setTimeout(() => setCommentStatus(null), 5000)
+      flash(`✗ ${err.message}`, 5000)
     }
   }
 
@@ -646,11 +657,9 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
     setDialog(null)
     try {
       if (!await runWrite(`Requesting changes on PR #${prNumber}`, () => reviewPR(repo, prNumber, 'request-changes', values.body || ''))) return
-      setCommentStatus(`✓ Requested changes on PR #${prNumber}`)
-      setTimeout(() => setCommentStatus(null), 3000)
+      flash(`✓ Requested changes on PR #${prNumber}`, 3000)
     } catch (err) {
-      setCommentStatus(`✗ ${err.message}`)
-      setTimeout(() => setCommentStatus(null), 5000)
+      flash(`✗ ${err.message}`, 5000)
     }
   }
 

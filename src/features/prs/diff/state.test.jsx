@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react'
+import React, { act, useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useGh } from '../../../hooks/useGh.js'
-import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRComments, mergePR, reviewPR } from '../../../executor.js'
+import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRComments, mergePR, reviewPR, replyToComment, deletePRComment } from '../../../executor.js'
 import { firstActionKey } from '../../../config/actions.js'
 import { sendInput } from '../../../test/input-bus.js'
 import { cleanup, renderWithProviders, waitForExpectation } from '../../../test/test-helpers.jsx'
@@ -117,6 +117,41 @@ describe('diff state and render contracts', () => {
     expect(mergePR).toHaveBeenCalledTimes(1)
     release()
     await waitForExpectation(() => expect(onBack).toHaveBeenCalledOnce())
+  })
+
+  it('guards diff comment writes: pending status, one call, text kept when ignored (#453)', async () => {
+    let release
+    replyToComment.mockReturnValue(new Promise(r => { release = r }))
+    mountSession()
+    await waitForExpectation(() => expect(currentState).not.toBeNull())
+    const submit = () => sendInput('', { ctrl: true, return: true })
+    await act(async () => { currentState.setCompose({ mode: 'reply', rootCommentId: 3, body: 'first' }) })
+    await submit()
+    await waitForExpectation(() => expect(currentState.commentStatus).toContain('Sending reply'))
+    await act(async () => { currentState.setCompose({ mode: 'reply', rootCommentId: 3, body: 'second' }) })
+    await submit()
+    await waitForExpectation(() => expect(currentState.commentStatus).toContain('still in progress'))
+    expect(replyToComment).toHaveBeenCalledTimes(1)
+    expect(currentState.compose?.body).toBe('second')
+    release()
+    await waitForExpectation(() => expect(currentState.commentStatus).toBe('Reply sent'))
+  })
+
+  it('guards comment delete and closes the confirm when ignored (#453)', async () => {
+    let release
+    deletePRComment.mockReturnValue(new Promise(r => { release = r }))
+    mountSession()
+    await waitForExpectation(() => expect(currentState).not.toBeNull())
+    await act(async () => { currentState.setCompose({ mode: 'delete', commentId: 9 }) })
+    await sendInput('y')
+    await waitForExpectation(() => expect(currentState.commentStatus).toContain('Deleting comment'))
+    await act(async () => { currentState.setCompose({ mode: 'delete', commentId: 10 }) })
+    await sendInput('y')
+    await waitForExpectation(() => expect(currentState.commentStatus).toContain('still in progress'))
+    expect(deletePRComment).toHaveBeenCalledTimes(1)
+    expect(currentState.compose).toBeNull()
+    release()
+    await waitForExpectation(() => expect(currentState.commentStatus).toBe('Deleted'))
   })
 
   it('shows a pending status and submits a review once (#453)', async () => {
