@@ -242,6 +242,21 @@ export const POPOVER_WIDTH = 52
 /** Height in rows: title(1) + meta(1) + divider(1) + body(6) + divider(1) + summary(1) + divider(1) + hint(1) + border(2) = 15 */
 export const POPOVER_HEIGHT = 15
 
+const MIN_TITLE_COLS = 24
+const MIN_PANEL_COLS = 36
+
+/**
+ * Where the preview panel goes: it takes the right-hand columns and the rows are narrowed
+ * to the rest, so it never covers a PR. `fits` is false when the pane cannot hold both.
+ * @param {{ listWidth: number, termRows: number, previewWidth?: number }} opts
+ * @returns {{ width: number, fits: boolean }}
+ */
+export function previewPanelLayout({ listWidth, termRows, previewWidth }) {
+  const wanted = Math.max(MIN_PANEL_COLS, Math.min(80, Number(previewWidth) || POPOVER_WIDTH))
+  const width = Math.min(wanted, listWidth - PR_ROW_FIXED_COLS - MIN_TITLE_COLS)
+  return { width, fits: termRows >= POPOVER_HEIGHT + 8 && width >= MIN_PANEL_COLS }
+}
+
 /**
  * Popover content component: shows PR title, meta, body excerpt, CI summary,
  * unresolved thread count, and action hints.
@@ -272,7 +287,7 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
     .filter(l => l.length > 0)
     .slice(0, 6)
   // The list row carries no body; it loads for the focused row (getPRPreview).
-  if (pr.body === undefined) bodyLines.push('loading…')
+  if (pr.body === undefined) bodyLines.push(pr.previewError ? 'preview unavailable' : 'loading…')
   while (bodyLines.length < 6) bodyLines.push('')
 
   // ── CI summary

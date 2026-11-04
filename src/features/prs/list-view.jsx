@@ -8,18 +8,17 @@ import { PRListSkeleton } from '../../components/Skeleton.jsx'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { EmptyState } from '../../components/EmptyState.jsx'
 import { classifyGhFailure } from '../../executor.js'
+import { sanitize } from '../../utils.js'
 import { firstActionKey } from '../../config/actions.js'
 import { Popover } from '../../ui/Popover.jsx'
 import {
   PRDetailPopoverContentMemo,
   PRRow,
   PR_ROW_FIXED_COLS,
+  previewPanelLayout,
   POPOVER_WIDTH,
   POPOVER_HEIGHT,
 } from './list-row.jsx'
-
-const MIN_TITLE_COLS = 24
-const MIN_PANEL_COLS = 36
 
 export function PRListView({
   items,
@@ -48,12 +47,12 @@ export function PRListView({
   expansionEnabled,
   scheme,
   paging,
+  previewWidth,
 }) {
   // The preview is a side panel: it takes the right-hand columns and the rows are narrowed
   // to the rest, so it never covers a PR. A pane too narrow for both shows rows only.
   const listWidth = innerWidth || termCols - 2
-  const panelWidth = Math.min(POPOVER_WIDTH, listWidth - PR_ROW_FIXED_COLS - MIN_TITLE_COLS)
-  const panelFits = termRows >= POPOVER_HEIGHT + 8 && panelWidth >= MIN_PANEL_COLS
+  const { width: panelWidth, fits: panelFits } = previewPanelLayout({ listWidth, termRows, previewWidth })
   const popoverVisible = !!selectedPR && !dialog && !popoverDismissed && panelFits
   const titleWidth = innerWidth ? innerWidth - PR_ROW_FIXED_COLS - (popoverVisible ? panelWidth : 0) : undefined
   const popoverAnchor = { x: listWidth - panelWidth, y: 1, width: 0, height: 1 }
@@ -85,11 +84,14 @@ export function PRListView({
         {loading && items.length > 0 && <Text color={t.ui.dim}>⟳</Text>}
         {statusMsg
           ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
-          : <Text color={t.ui.dim} wrap="truncate">
+          : !popoverVisible && selectedPR && !dialog
+            // The preview panel is not showing: keep the focused PR's full title readable here.
+            ? <Text color={t.ui.muted} wrap="truncate">#{selectedPR.number} {sanitize(selectedPR.title)}</Text>
+            : <Text color={t.ui.dim} wrap="truncate">
               {termCols >= 100 ? `[${filterKeys.filterOpen}]open [${filterKeys.filterClosed}]closed [${filterKeys.filterMerged}]merged ` : ''}[s]scope [@]author
             </Text>
         }
-        {panelFits && <Text color={t.ui.dim}> [p]review</Text>}
+        {panelFits && <Text color={t.ui.dim}> [{firstActionKey('pr.preview', 'p')}]review</Text>}
       </Box>
 
       {error && (
@@ -132,8 +134,8 @@ export function PRListView({
               ? `Could not load more PRs; showing ${items.length}${paging.total ? ` of ${paging.total}` : ''} [${firstActionKey('list.refresh', 'r')}] retry`
               : paging?.hasMore
                 ? (paging.total != null ? `${items.length} of ${paging.total}` : `${items.length} loaded`) + (paging.loadingMore ? ' · loading more…' : '')
-                : paging?.total > items.length
-                  ? `${items.length} of ${paging.total} (GitHub search returns at most ${paging.cap}; refine the filter to reach older PRs)`
+                : paging?.capped
+                  ? `${items.length}${paging.total != null ? ` of ${paging.total}` : ' loaded'} (GitHub search returns at most ${paging.cap}; refine the filter to reach older PRs)`
                   : `${items.length} of ${items.length} · end of list`}
           </Text>
           {items.length > effectiveHeight && (

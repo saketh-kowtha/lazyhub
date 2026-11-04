@@ -2,7 +2,7 @@ import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PRList } from './list.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { listPRsPage, getPRRow, reviewPR } from '../../executor.js'
+import { listPRsPage, getPRRow, getPRPreview, reviewPR, closePR } from '../../executor.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -18,7 +18,7 @@ vi.mock('ink', async () => {
 })
 vi.mock('../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
 vi.mock('../../executor.js', async (original) => ({
-  ...await original(), listPRsPage: vi.fn(), getPRRow: vi.fn(), reviewPR: vi.fn(),
+  ...await original(), listPRsPage: vi.fn(), getPRRow: vi.fn(), reviewPR: vi.fn(), closePR: vi.fn(),
 }))
 
 const mk = (number, over = {}) => ({
@@ -28,14 +28,22 @@ const mk = (number, over = {}) => ({
 const rows = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => mk(from + i))
 
 let refetchFirst
+let firstCursor
+let previewResult
+let previewOpts
+const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r }); return { promise, resolve } }
 beforeEach(() => {
   term.columns = 60
-  vi.clearAllMocks(); listPRsPage.mockReset(); getPRRow.mockReset(); reviewPR.mockReset()
+  vi.clearAllMocks(); listPRsPage.mockReset(); getPRRow.mockReset(); reviewPR.mockReset(); closePR.mockReset()
   listPRsPage.mockResolvedValue({ items: [], hasNextPage: false, endCursor: null, totalCount: 0 })
   refetchFirst = vi.fn()
-  useGh.mockImplementation((fn, deps) => {
+  firstCursor = 'c1'
+  previewResult = { data: {}, error: null }
+  previewOpts = []
+  useGh.mockImplementation((fn, deps, opts) => {
+    if (fn === getPRPreview) { previewOpts.push(opts); return { ...previewResult, loading: false, refetch: vi.fn() } }
     if (fn === listPRsPage) {
-      return { data: { items: rows(1, 30).map(r => ({ ...r, state: (deps[1]?.states?.[0] || 'open').toUpperCase() })), hasNextPage: true, endCursor: 'c1', totalCount: 75 }, loading: false, error: null, refetch: refetchFirst }
+      return { data: { items: rows(1, 30).map(r => ({ ...r, state: (deps[1]?.states?.[0] || 'open').toUpperCase() })), hasNextPage: true, endCursor: firstCursor, totalCount: 75 }, loading: false, error: null, refetch: refetchFirst }
     }
     return { data: {}, loading: false, error: null, refetch: vi.fn() }
   })
@@ -123,5 +131,113 @@ describe('PR list preview dismissal (#461)', () => {
     expect(view.lastFrame()).not.toContain('loading…')
     await sendInput('p')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('loading…'))
+  })
+})
+
+describe('PR list paging races (#508)', () => {
+  it('fetches a cursor page once however fast the cursor moves', async () => {
+    const page = deferred()
+    listPRsPage.mockReturnValue(page.promise)
+    const view = mount()
+    await flush(20)
+    await sendInput('G')
+    for (const key of ['k', 'j', 'G', 'k', 'G', 'j']) await sendInput(key)
+    await flush(30)
+    expect(listPRsPage).toHaveBeenCalledTimes(1)
+    page.resolve({ items: rows(31, 60), hasNextPage: false, endCursor: null, totalCount: 75 })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('60 of 75'))
+  })
+
+  it('drops a stale response after the filter went open -> closed -> merged -> open', async () => {
+    const stale = deferred()
+    listPRsPage.mockReturnValueOnce(stale.promise)
+    const view = mount()
+    await flush(20)
+    await sendInput('G')
+    await waitForExpectation(() => expect(listPRsPage).toHaveBeenCalledTimes(1))
+    for (let i = 0; i < 3; i++) { await sendInput('f'); await flush(20) }
+    // Back on the filter the request was made for: its key matches again, but the request is stale.
+    await waitForExpectation(() => expect(useGh.mock.calls.filter(c => c[0] === listPRsPage).at(-1)[1][1]).toMatchObject({ states: ['open'] }))
+    stale.resolve({ items: rows(31, 60), hasNextPage: false, endCursor: null, totalCount: 75 })
+    await flush(40)
+    expect(view.lastFrame()).toContain('30 of 75')
+    expect(view.lastFrame()).not.toContain('60 of 75')
+  })
+
+  it('drops appended pages when the first page is revalidated into a different page 1', async () => {
+    listPRsPage.mockResolvedValueOnce({ items: rows(31, 60), hasNextPage: true, endCursor: 'c2', totalCount: 75 })
+    const view = mount()
+    await flush(20)
+    await sendInput('G')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('60 of 75'))
+    firstCursor = 'c9' // a revalidation delivered a new page 1: the old c2 cursor hangs off the old one
+    listPRsPage.mockResolvedValueOnce({ items: rows(31, 40), hasNextPage: false, endCursor: null, totalCount: 75 })
+    await sendInput('k')
+    await waitForExpectation(() => expect(listPRsPage).toHaveBeenCalledTimes(2))
+    expect(listPRsPage.mock.calls[1][1]).toMatchObject({ after: 'c9' })
+  })
+})
+
+describe('PR list row refresh after a write (#508)', () => {
+  const approve = async (view) => {
+    await flush(20)
+    await sendInput('a')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Approve PR #1'))
+    await flush(20)
+    await sendInput('g', { ctrl: true })
+  }
+
+  it('keeps the old row and says so when the re-read fails; it never resets the pages', async () => {
+    reviewPR.mockResolvedValue(null)
+    getPRRow.mockRejectedValue(new Error('HTTP 502'))
+    const view = mount()
+    await approve(view)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Could not refresh #1: HTTP 502'))
+    expect(view.lastFrame()).toContain('PR number 1')
+    expect(refetchFirst).not.toHaveBeenCalled()
+  })
+
+  it('lowers the total when a close takes the PR out of the filter', async () => {
+    closePR.mockResolvedValue(null)
+    getPRRow.mockResolvedValue(mk(1, { state: 'CLOSED' }))
+    const view = mount()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('30 of 75'))
+    await flush(20)
+    await sendInput('X')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Close PR #1'))
+    await flush(20)
+    await sendInput('y')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('29 of 74'))
+    expect(view.lastFrame()).not.toContain('PR number 1 ')
+    expect(refetchFirst).not.toHaveBeenCalled()
+  })
+})
+
+describe('PR list preview fetch (#508)', () => {
+  const lastEnabled = () => previewOpts.at(-1)?.enabled
+
+  it('makes no preview call while the panel is hidden: too narrow, or dismissed', async () => {
+    const narrow = mount(80)
+    await flush(300)
+    expect(previewOpts.length).toBeGreaterThan(0)
+    expect(previewOpts.every(o => o.enabled === false)).toBe(true)
+    cleanup()
+
+    previewOpts = []
+    term.columns = 170
+    const wide = mount(170)
+    await waitForExpectation(() => expect(lastEnabled()).toBe(true))
+    await flush(20)
+    await sendInput('', { escape: true })
+    await waitForExpectation(() => expect(lastEnabled()).toBe(false))
+    expect(wide.lastFrame()).not.toContain('unresolved')
+  })
+
+  it('shows "preview unavailable", not "loading…" forever, when the preview fetch fails', async () => {
+    previewResult = { data: null, error: new Error('HTTP 500') }
+    term.columns = 170
+    const view = mount(170)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('preview unavailable'))
+    expect(view.lastFrame()).not.toContain('loading…')
   })
 })

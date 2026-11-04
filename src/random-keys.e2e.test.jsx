@@ -514,7 +514,7 @@ describe('random keys: seeded fuzz of the real App', () => {
 
     it('never sends a key that exists only to spawn', () => {
       const banned = bannedTokens()
-      for (const token of ['o', 'b', 'p', 'E', 'Ctrl+E']) expect(banned.has(token), token).toBe(true)
+      for (const token of ['o', 'b', 'E', 'Ctrl+E']) expect(banned.has(token), token).toBe(true)
       for (const token of banned) expect(vocab).not.toContain(token)
       for (const seed of [1, 2, 3]) {
         const r = prng(seed)

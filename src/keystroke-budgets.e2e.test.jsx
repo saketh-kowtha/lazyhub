@@ -195,6 +195,7 @@ const TASKS = [
 describe('keystroke budgets', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    executor.getPRRow.mockResolvedValue({ ...PR })
     useGh.mockImplementation((fn) => {
       if (fn === executor.listPRsPage) return ghResult({ items: [PR], hasNextPage: false, endCursor: null, totalCount: 1 })
       if (fn === executor.getPR) return ghResult(PR)
@@ -256,6 +257,7 @@ const WRITE_KEYS = [
 describe('write keys confirm first and cancel does nothing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    executor.getPRRow.mockResolvedValue({ ...PR })
     layoutState.cols = 120
     useGh.mockImplementation((fn) => {
       if (fn === executor.listPRsPage) return ghResult({ items: [PR], hasNextPage: false, endCursor: null, totalCount: 1 })

@@ -69,6 +69,35 @@ describe('PR list preview panel (#461)', () => {
   })
 })
 
+describe('PR list preview details (#461, #508)', () => {
+  it('shows the focused PR full title in the status line while the panel is hidden', () => {
+    const items = six()
+    items[1].title = 'A very descriptive title that the narrow row would cut off'
+    const frame = renderList(170, items, 1, { popoverDismissed: true })
+    expect(frame).toContain('#2 A very descriptive title that the narrow row would cut off')
+  })
+
+  it('says "preview unavailable" instead of loading forever when the preview fetch failed', () => {
+    const items = six()
+    const frame = renderList(170, items, 1, { selectedPR: { ...items[1], body: undefined, previewError: true } })
+    expect(frame).toContain('preview unavailable')
+    expect(frame).not.toContain('loading…')
+  })
+
+  it('shows loading… only while the preview is on its way', () => {
+    const items = six()
+    expect(renderList(170, items, 1, { selectedPR: { ...items[1], body: undefined } })).toContain('loading…')
+  })
+
+  it('honours [layout].preview_width for the panel', () => {
+    const narrow = renderList(170, six(), 1, { previewWidth: 40 })
+    const wide = renderList(170, six(), 1, { previewWidth: 70 })
+    const top = (frame) => frame.split('\n').map(l => (l.match(/╭─+╮/) || [''])[0].length).find(n => n > 0)
+    expect(top(narrow)).toBe(40)
+    expect(top(wide)).toBe(70)
+  })
+})
+
 describe('PR list paging footer (#508)', () => {
   const paging = (over) => ({ hasMore: true, total: 4321, loadingMore: false, error: null, cap: 1000, ...over })
 
@@ -77,9 +106,15 @@ describe('PR list paging footer (#508)', () => {
   })
 
   it('says so when GitHub search stops at its cap', () => {
-    const frame = renderList(120, six(), 0, { paging: paging({ hasMore: false, total: 4321 }), popoverDismissed: true })
+    const frame = renderList(120, six(), 0, { paging: paging({ hasMore: false, total: 4321, capped: true }), popoverDismissed: true })
     expect(frame).toContain('6 of 4321')
     expect(frame).toContain('at most 1000')
+  })
+
+  it('never claims the end of the list when the 1,000-result cap was reached with an unknown total', () => {
+    const frame = renderList(120, six(), 0, { paging: paging({ hasMore: false, total: null, capped: true }), popoverDismissed: true })
+    expect(frame).toContain('6 loaded (GitHub search returns at most 1000')
+    expect(frame).not.toContain('end of list')
   })
 
   it('names the retry key when a page failed, and keeps the rows', () => {
