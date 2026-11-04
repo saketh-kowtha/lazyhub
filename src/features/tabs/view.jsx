@@ -7,6 +7,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { openUrl } from '../../services/platform.js'
 import { Box, Text, useStdout } from 'ink'
 import { useTheme } from '../../theme.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -23,10 +24,7 @@ export function resetTabSelection() {
 
 function openInBrowser(url) {
   if (!url) return
-  import('execa').then(({ execa }) => {
-    const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
-    execa(cmd, [url]).catch(() => {})
-  })
+  openUrl(url)
 }
 
 export function TabView({ tab, repo, onOpenItem }) {

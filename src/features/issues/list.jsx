@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
+import { openUrl, copyToClipboard } from '../../services/platform.js'
 import { useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
@@ -254,14 +255,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
 
     // y — copy issue URL
     if (matchesAction('issue.copy-url', input, key, _actions) && issue?.url) {
-      import('execa').then(({ execa }) => {
-        const [cmd, args] = process.platform === 'darwin'
-          ? ['pbcopy', []]
-          : ['xclip', ['-selection', 'clipboard']]
-        const proc = execa(cmd, args)
-        proc.stdin?.end(issue.url)
-        proc.then(() => showStatus(`✓ Copied ${sanitize(issue.url)}`)).catch(() => showStatus('✗ Copy failed', true))
-      })
+      copyToClipboard(issue.url).then(ok => (ok ? showStatus(`✓ Copied ${sanitize(issue.url)}`) : showStatus('✗ Copy failed', true)))
       return
     }
 
@@ -281,10 +275,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
     }
 
     if (matchesAction('issue.open-browser', input, key, _actions) && issue?.url) {
-      import('execa').then(({ execa }) => {
-        const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
-        execa(cmd, [issue.url]).catch(() => {})
-      })
+      openUrl(issue.url)
       return
     }
   })

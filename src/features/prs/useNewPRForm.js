@@ -3,10 +3,7 @@
  * New PR form state, branch validation, editor, and submission lifecycle.
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { spawnSync } from 'child_process'
-import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
+import { editTextInEditor } from '../../services/platform.js'
 import { useKeymapInput } from '../../config/keymap.js'
 import {
   getRemoteBranch, compareBranches, getUnpushedCommits,
@@ -181,20 +178,8 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
   // ── Open editor ──────────────────────────────────────────────────────────────
 
   const openEditor = useCallback(() => {
-    const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
-    if (!raw || /[\0\n\r]/.test(raw)) return
-    const [editorBin, ...editorArgs] = raw.split(/\s+/).filter(Boolean)
-    let tmpDir
-    try {
-      tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
-      const tmp = join(tmpDir, 'pr-body.md')
-      writeFileSync(tmp, form.body || '', { mode: 0o600 })
-      const result = spawnSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
-      if (result.status !== 0) return
-      const content = readFileSync(tmp, 'utf8')
-      setForm(f => ({ ...f, body: content }))
-    } catch { /* ignore */ }
-    finally { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) } catch {} }
+    const { ok, text } = editTextInEditor(form.body || '', { filename: 'pr-body.md', altScreen: false })
+    if (ok) setForm(f => ({ ...f, body: text }))
   }, [form.body])
 
   const changeField = (name, value) => {

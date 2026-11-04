@@ -4,6 +4,7 @@
  */
 
 import { useState, useMemo, useContext, useEffect, useRef } from 'react'
+import { openUrl } from '../../../services/platform.js'
 import { useStdout } from 'ink'
 import { useActionResolver, useKeymapInput } from '../../../config/keymap.js'
 import { useGh } from '../../../hooks/useGh.js'
@@ -234,15 +235,12 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   }
 
   const openFilesInBrowser = () => {
-    import('execa').then(({ execa }) => {
-      const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
-      // prMeta.url comes from the GitHub API and already reflects the
-      // correct host (github.com or a GHES instance). Fall back to a
-      // GH_HOST-aware constructed URL if prMeta hasn't loaded yet.
-      const baseUrl = prMeta?.url
-        || `https://${process.env.GH_HOST || 'github.com'}/${repo}/pull/${prNumber}`
-      execa(cmd, [`${baseUrl}/files`]).catch(() => {})
-    })
+    // prMeta.url comes from the GitHub API and already reflects the
+    // correct host (github.com or a GHES instance). Fall back to a
+    // GH_HOST-aware constructed URL if prMeta hasn't loaded yet.
+    const baseUrl = prMeta?.url
+      || `https://${process.env.GH_HOST || 'github.com'}/${repo}/pull/${prNumber}`
+    openUrl(`${baseUrl}/files`)
   }
 
   useKeymapInput((input, key) => {
