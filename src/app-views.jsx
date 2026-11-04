@@ -27,6 +27,7 @@ import { TabView } from './features/tabs/view.jsx'
 import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 import { AIAssistant } from './components/AIAssistant.jsx'
 import { CommandPalette } from './components/CommandPalette.jsx'
+import { RepoSwitcher } from './features/onboarding/Onboarding.jsx'
 import { HelpOverlay, PaneHeader } from './app-panels.jsx'
 import { THEME_NAMES } from './theme.js'
 import { contextFooterHints } from './ui/actions.js'
@@ -39,6 +40,7 @@ export function renderAppView(ctx) {
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
     showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
+    showRepoPicker, setShowRepoPicker, onSwitchRepo,
   } = ctx
   // Items opened from a dashboard section keep that section's repository (#493).
   const itemRepo = selectedItem?._repo || repo
@@ -76,6 +78,25 @@ export function renderAppView(ctx) {
     )
   }
 
+  // ─── Repository picker (palette: Switch repository, #466) ───────────────
+  if (showRepoPicker) {
+    return (
+      <AppContext.Provider value={appCtx}>
+        <Box flexDirection="column" height={rows} overflow="hidden">
+          <Box flexDirection="row" flexGrow={1} overflow="hidden" justifyContent="center" alignItems="flex-start" paddingY={1}>
+            <ErrorBoundary>
+              <RepoSwitcher onDone={(result) => {
+                setShowRepoPicker(false)
+                if (result.status === 'completed' && result.repo.toLowerCase() !== String(repo).toLowerCase()) onSwitchRepo?.(result.repo)
+              }} />
+            </ErrorBoundary>
+          </Box>
+          <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={null} mode="COMMAND" ghHealth={ghHealth} />
+        </Box>
+      </AppContext.Provider>
+    )
+  }
+
   // ─── Command palette overlay ──────────────────────────────────────────────
   if (showPalette) {
     return (
@@ -84,7 +105,7 @@ export function renderAppView(ctx) {
           <Box flexDirection="row" flexGrow={1} overflow="hidden" justifyContent="center" alignItems="flex-start" paddingY={2}>
             <Box width={Math.min(columns - 4, 80)}>
               <CommandPalette
-                context={{ pane, view, selectedItem, repo: itemRepo, localGit: !itemIsForeign, themeName: _config.theme }}
+                context={{ pane, view, selectedItem, repo: itemRepo, localGit: !itemIsForeign, themeName: _config.theme, onSwitchRepo: () => setShowRepoPicker(true) }}
                 onClose={() => { setShowPalette(false); setAppMode('NORMAL') }}
                 onNavigate={(opts) => {
                   setShowPalette(false); setAppMode('NORMAL')

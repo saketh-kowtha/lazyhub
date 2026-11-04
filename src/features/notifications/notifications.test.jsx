@@ -2,6 +2,7 @@ import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NotificationList } from './index.jsx'
 import { useGh } from '../../hooks/useGh.js'
+import { markNotificationRead } from '../../executor.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -41,5 +42,24 @@ describe('notification list cursor after the list shrinks', () => {
     await flush(20)
     await sendInput('', { return: true })
     expect(onNavigateTo).toHaveBeenCalledWith(expect.objectContaining({ id: '1' }))
+  })
+})
+
+describe('notification mark-read write (#453)', () => {
+  it('shows a pending status and ignores a second mark-read while one is in flight', async () => {
+    let release
+    markNotificationRead.mockReturnValue(new Promise(r => { release = r }))
+    const n = { id: '1', unread: true, reason: 'mention', updatedAt: '2026-06-06T10:00:00Z', repository: { name: 'repo' }, subject: { title: 'Thread 1', type: 'Issue' } }
+    useGh.mockReturnValue({ data: [n], loading: false, error: null, refetch: vi.fn() })
+    const view = renderWithProviders(<NotificationList repo="owner/repo" onNavigateTo={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Thread 1'))
+    await flush(20)
+    await sendInput('u')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Marking as read'))
+    await sendInput('u')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('still in progress'))
+    expect(markNotificationRead).toHaveBeenCalledTimes(1)
+    release()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Marked as read'))
   })
 })

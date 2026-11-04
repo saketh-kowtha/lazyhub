@@ -155,7 +155,7 @@ function failure(kind, tone, cause, rest = {}) {
  * Classify a failed gh call.
  *
  * @param {any} err   - GhError (or any Error)
- * @param {{host?: string, now?: number, rateLimit?: Record<string, {limit?: number, remaining?: number, reset?: number}>}} [ctx]
+ * @param {{host?: string, cached?: boolean, now?: number, rateLimit?: Record<string, {limit?: number, remaining?: number, reset?: number}>}} [ctx]
  *   rateLimit is the `resources` object of a `gh api rate_limit` result the
  *   caller already has; it is never fetched here.
  * @returns {Failure}
@@ -248,7 +248,7 @@ export function classifyGhFailure(err, ctx = {}) {
 
   if (/error connecting to|dial tcp|no such host|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|i\/o timeout|network is unreachable|TLS handshake timeout|Client\.Timeout|timed out after/i.test(text)) {
     return failure('offline', 'offline', `Cannot reach ${host === 'github.com' ? 'api.github.com' : host}. Check your network or githubstatus.com.`, {
-      notes: ['Reading works from the cache. Anything that needs GitHub waits until you are back online.'],
+      notes: [offlineNote(ctx.cached)],
       subject: { host },
     })
   }
@@ -279,6 +279,18 @@ export function classifyGhFailure(err, ctx = {}) {
 
   const line = scrub(String(err?.message || 'unknown error').split('\n')[0]).slice(0, 160)
   return failure('unknown', 'blocked', `GitHub returned an error: ${line}`, { fix: 'gh auth status', fixHint: 'If it persists, check your login with:' })
+}
+
+/**
+ * Offline note (#469). Only claim a cached read when the caller knows something is
+ * cached (`cached === true`); say plainly when nothing is (`cached === false`).
+ * @param {boolean|undefined} cached
+ */
+function offlineNote(cached) {
+  const wait = 'Anything that needs GitHub waits until you are back online.'
+  if (cached === true) return `Showing the last loaded data. ${wait}`
+  if (cached === false) return `Nothing is cached yet, so there is nothing to show. ${wait}`
+  return wait
 }
 
 /** @param {string|undefined} s */

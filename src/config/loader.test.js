@@ -48,13 +48,13 @@ describe('loadConfig — merge semantics', () => {
   it('merges user overrides on top of defaults (per-key)', () => {
     const p = writeCfg(`
 [ui]
-density = "comfortable"
+icons = "ascii"
 
 [defaults]
 pr_scope = "all"
 `)
     const cfg = loadConfig({ configPath: p })
-    expect(cfg.ui.density).toBe('comfortable')
+    expect(cfg.ui.icons).toBe('ascii')
     expect(cfg.ui.show_hints).toBe(DEFAULT_CONFIG.ui.show_hints) // untouched default kept
     expect(cfg.defaults.pr_scope).toBe('all')
     expect(cfg.defaults.ai_provider).toBe(DEFAULT_CONFIG.defaults.ai_provider)
@@ -101,11 +101,11 @@ describe('loadConfig — schema_version handling (acceptance #7)', () => {
 schema_version = "2.0"
 
 [ui]
-density = "comfortable"
+icons = "ascii"
 `)
     const cfg = loadConfig({ configPath: p })
     expect(cfg.meta.schema_version).toBe('2.0')
-    expect(cfg.ui.density).toBe('comfortable') // rest of config still applied
+    expect(cfg.ui.icons).toBe('ascii') // rest of config still applied
     expect(cfg.ui.show_hints).toBe(DEFAULT_CONFIG.ui.show_hints)
     expect(warn.mock.calls.some(([m]) => /schema_version/.test(m))).toBe(true)
   })
@@ -151,7 +151,7 @@ describe('formatError', () => {
 // ── fetchRemoteConfig: HTTPS enforcement + cache fallback ───────────────────────
 
 describe('fetchRemoteConfig', () => {
-  const REMOTE = '[ui]\ndensity = "comfortable"\n'
+  const REMOTE = '[ui]\nicons = "ascii"\n'
 
   it('refuses a non-HTTPS url without calling fetch, returns cache if present', async () => {
     const cachePath = join(dir, '.config-cache.toml')
@@ -159,7 +159,7 @@ describe('fetchRemoteConfig', () => {
     const fetchImpl = vi.fn()
     const result = await fetchRemoteConfig('http://example.com/c.toml', { cachePath, fetchImpl })
     expect(fetchImpl).not.toHaveBeenCalled()
-    expect(result).toEqual({ ui: { density: 'comfortable' } })
+    expect(result).toEqual({ ui: { icons: 'ascii' } })
   })
 
   it('returns null for a non-HTTPS url with no cache', async () => {
@@ -175,14 +175,14 @@ describe('fetchRemoteConfig', () => {
     writeFileSync(cachePath, REMOTE, 'utf8')
     const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 503 })
     const result = await fetchRemoteConfig('https://example.com/c.toml', { cachePath, fetchImpl })
-    expect(result).toEqual({ ui: { density: 'comfortable' } })
+    expect(result).toEqual({ ui: { icons: 'ascii' } })
   })
 
   it('parses a 200 response and writes the cache', async () => {
     const cachePath = join(dir, '.config-cache.toml')
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => REMOTE })
     const result = await fetchRemoteConfig('https://example.com/c.toml', { cachePath, fetchImpl })
-    expect(result).toEqual({ ui: { density: 'comfortable' } })
+    expect(result).toEqual({ ui: { icons: 'ascii' } })
     expect(existsSync(cachePath)).toBe(true)
     expect(readFileSync(cachePath, 'utf8')).toBe(REMOTE)
   })
@@ -196,7 +196,7 @@ describe('fetchRemoteConfig', () => {
     })
     const result = await fetchRemoteConfig('https://example.com/c.toml', { cachePath, fetchImpl })
     expect(text).not.toHaveBeenCalled()
-    expect(result).toEqual({ ui: { density: 'comfortable' } }) // cache
+    expect(result).toEqual({ ui: { icons: 'ascii' } }) // cache
   })
 
   it('refuses an over-cap body (by actual size) and does not overwrite the cache', async () => {
@@ -205,7 +205,7 @@ describe('fetchRemoteConfig', () => {
     const huge = 'x = "' + 'y'.repeat(300 * 1024) + '"\n'
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => huge })
     const result = await fetchRemoteConfig('https://example.com/c.toml', { cachePath, fetchImpl })
-    expect(result).toEqual({ ui: { density: 'comfortable' } }) // cache
+    expect(result).toEqual({ ui: { icons: 'ascii' } }) // cache
     expect(readFileSync(cachePath, 'utf8')).toBe(REMOTE) // cache untouched
   })
 
@@ -214,7 +214,7 @@ describe('fetchRemoteConfig', () => {
     writeFileSync(cachePath, REMOTE, 'utf8')
     const fetchImpl = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'))
     const result = await fetchRemoteConfig('https://example.com/c.toml', { cachePath, fetchImpl })
-    expect(result).toEqual({ ui: { density: 'comfortable' } })
+    expect(result).toEqual({ ui: { icons: 'ascii' } })
   })
 })
 

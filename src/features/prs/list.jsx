@@ -58,7 +58,10 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   // Preserve filter/cursor/scroll across back-navigation from detail/diff.
   // Seed scope from persisted [state] so it survives across sessions;
   // fall back to config default (typically 'own') for first-ever launch.
-  const _persistedScope = loadState().prScope
+  // Read once per mount: loadState() is a synchronous file read, not for every render (#455).
+  const persistedScopeRef = useRef(undefined)
+  if (persistedScopeRef.current === undefined) persistedScopeRef.current = loadState().prScope ?? null
+  const _persistedScope = persistedScopeRef.current
   const [savedState, setSavedState] = usePaneState('prs', {
     filterStates: [_cfg.defaultFilter],
     scope: _persistedScope || _cfg.defaultScope,
@@ -328,7 +331,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       termRows={termRows}
       selectedPR={selectedPR}
       dialog={dialog}
-      popoverDismissed={popoverDismissed}
+      popoverDismissed={popoverDismissed || _appConfig.layout.previewPanel === false}
       setPopoverDismissed={setPopoverDismissed}
       expansionEnabled={expansionEnabled}
       scheme={scheme}

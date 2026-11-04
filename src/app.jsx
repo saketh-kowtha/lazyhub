@@ -54,7 +54,7 @@ const PANE_FOR_GO_ACTION = {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
-export function App({ repo }) {
+export function App({ repo, onSwitchRepo }) {
   const { t, setTheme } = useTheme()
   const { exit } = useApp()
   const ghHealth = useGhHealth()
@@ -114,11 +114,13 @@ export function App({ repo }) {
   const [toasts, setToasts]             = useState([])
   const [recentStatus, setRecentStatus] = useState([])
   const [showPalette, setShowPalette]   = useState(false)
+  const [showRepoPicker, setShowRepoPicker] = useState(false) // palette: Switch repository (#466)
   const [leaderActive, setLeaderActive] = useState(false)
   const leaderTimerRef = useRef(null)
   // Which-key popup for an armed prefix key such as `g` (#312)
   const [prefixPopup, setPrefixPopup] = useState(null)
   const prefixTimerRef = useRef(null)
+  const toastTimersRef = useRef(new Set())
 
   const addToast = useCallback(({ message, variant = 'info', durationMs }) => {
     const id = Date.now() + Math.random()
@@ -126,8 +128,18 @@ export function App({ repo }) {
     setToasts(prev => [...prev.slice(-2), { id, message, variant }])
     if (variant !== 'error') {
       const ttl = durationMs ?? (variant === 'success' ? 2500 : variant === 'warning' ? 4000 : 3000)
-      setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), ttl)
+      const timer = setTimeout(() => { toastTimersRef.current.delete(timer); setToasts(prev => prev.filter(t => t.id !== id)) }, ttl)
+      toastTimersRef.current.add(timer)
     }
+  }, [])
+
+  // A repository switch remounts App: no timer of the old instance may fire into the new one (#466).
+  useEffect(() => () => {
+    for (const timer of toastTimersRef.current) clearTimeout(timer)
+    toastTimersRef.current.clear()
+    clearTimeout(leaderTimerRef.current)
+    clearTimeout(prefixTimerRef.current)
+    disarmPrefix()
   }, [])
 
   // Unknown action ids in the user's keymaps used to land only in debug.log (#475).
@@ -439,6 +451,7 @@ export function App({ repo }) {
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
     showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
+    showRepoPicker, setShowRepoPicker, onSwitchRepo,
   })
 
   return (
@@ -453,6 +466,26 @@ export function App({ repo }) {
       )}
     </>
   )
+}
+
+/**
+ * Owns the repository. Switching sets GHUI_REPO (read by every gh call) and remounts the
+ * whole App via `key`, so no pane, cache key or selection from the old repo survives (#466).
+ *
+ * @param {{initialRepo: string}} props
+ * @returns {React.ReactElement}
+ */
+export function AppRoot({ initialRepo }) {
+  const [repo, setRepo] = useState(initialRepo)
+  const switchRepo = useCallback((next) => {
+    process.env.GHUI_REPO = next
+    // A launch like `lazyhub a/b#42` must not open #42 in the repo switched to.
+    delete process.env.GHUI_PR
+    delete process.env.GHUI_ISSUE
+    delete process.env.GHUI_VIEW
+    setRepo(next)
+  }, [])
+  return <App key={repo} repo={repo} onSwitchRepo={switchRepo} />
 }
 
 export function renderApp() {
@@ -470,7 +503,7 @@ export function renderApp() {
       <ConfigProvider>
         <ThemeProvider initialTheme={initialTheme}>
           <KeyScopeProvider>
-            <App repo={repo} />
+            <AppRoot initialRepo={repo} />
           </KeyScopeProvider>
         </ThemeProvider>
       </ConfigProvider>,

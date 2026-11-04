@@ -35,7 +35,9 @@ export class DaemonCache {
     const now = Date.now()
     const mem = this.memory.get(key)
     if (mem && now - mem.ts < ttl) return { payload: mem.payload, source: 'memory' }
-    const disk = readCache(key)
+    // Validate against the file, not the in-process mirror: a TUI process may have
+    // written a newer entry that a long-lived daemon's mirror would never see.
+    const disk = readCache(key, { bypassMirror: true })
     if (disk && now - disk.ts < ttl) {
       this.memory.set(key, { ts: disk.ts, payload: disk.payload })
       return { payload: disk.payload, source: 'disk' }

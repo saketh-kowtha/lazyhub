@@ -24,6 +24,19 @@ function firstActionKey(actions, id, fallback) {
   return typeof key === 'string' ? key : fallback
 }
 
+/**
+ * The PR list scope: `[features.prs].default_scope`. The retired `[defaults].pr_scope` still works as
+ * an alias while default_scope is untouched, so files written by older versions keep their choice.
+ * @param {Object} toml merged config
+ * @param {Object} prFeature the [features.prs] table
+ * @returns {string} scope as written in TOML
+ */
+function defaultPrScope(toml, prFeature) {
+  const alias = toml.defaults?.pr_scope
+  if (alias && prFeature.default_scope === DEFAULT_CONFIG.features.prs.default_scope) return alias
+  return prFeature.default_scope
+}
+
 function scopeFromToml(scope) {
   return scope === 'mine' ? 'own' : scope
 }
@@ -83,7 +96,12 @@ function tabsFromToml(toml) {
   return tabs
 }
 
-function legacyFromToml(toml) {
+/**
+ * Project the merged TOML config into the legacy camelCase shape the UI reads.
+ * @param {Object} toml merged config
+ * @returns {Object} legacy config
+ */
+export function legacyFromToml(toml) {
   const customPanes = customPanesFromToml(toml)
   const customTabs = tabsFromToml(toml)
   const knownPanes = [...Object.keys(customTabs), ...BUILTIN_PANES, ...Object.keys(customPanes)]
@@ -112,11 +130,12 @@ function legacyFromToml(toml) {
       previewPanel:  layout.preview_panel,
       previewWidth:  layout.preview_width,
       borderStyle:   layout.border_style,
-      compactFooter: layout.compact_footer,
+      // [ui].show_hints = false hides the footer key hints, which is what compact_footer does.
+      compactFooter: layout.compact_footer === true || toml.ui?.show_hints === false,
     },
     pr: {
       defaultFilter: prFeature.default_filter,
-      defaultScope:  scopeFromToml(prFeature.default_scope),
+      defaultScope:  scopeFromToml(defaultPrScope(toml, prFeature)),
       pageSize:      prFeature.page_size,
       keys: {
         filterOpen:   firstActionKey(toml.actions, 'pr.filter-open', 'O'),
@@ -136,7 +155,6 @@ function legacyFromToml(toml) {
     diff: {
       defaultView:     diff.default_view,
       syntaxHighlight: diff.syntax_highlight,
-      maxLines:        diff.max_lines,
     },
     editor: {
       command:       editor.command,

@@ -9,6 +9,7 @@ import {
   closeIssue,
   listBranches,
   listPRs,
+  listOpenPRBranches,
   deleteBranch,
   listRuns,
   getRunLogs,
@@ -65,6 +66,7 @@ vi.mock('./executor.js', () => ({
   deleteBranch: vi.fn(),
   findLocalCheckout: vi.fn(async () => ({ dir: process.cwd(), remote: 'origin' })),
   listPRs: vi.fn(),
+  listOpenPRBranches: vi.fn(),
   listRuns: vi.fn(),
   getRunLogs: vi.fn(),
   rerunRun: vi.fn(),
@@ -116,6 +118,8 @@ describe('Pane E2E user flows', () => {
           { name: 'main', protected: true, aheadBy: 0, behindBy: 0 },
         ])
       }
+
+      if (fn === listOpenPRBranches) return ghResult({ heads: ['feature-1'], truncated: false })
 
       if (fn === listPRs) {
         return ghResult([

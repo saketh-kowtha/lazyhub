@@ -1,9 +1,10 @@
 import assert from 'assert/strict'
 import { spawnSync } from 'child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join, delimiter } from 'path'
 import pty from 'node-pty'
+import { removeTempDir, stopTerminal, stopTmuxSession } from './cleanup.js'
 import { nodePtyProblem, skipOrFail, TerminalScreen } from './fixtures.js'
 import { installShim } from '../support/gh-shim/shim.mjs'
 import { GH_STDERR } from '../../src/executor/gh-stderr-fixtures.js'
@@ -49,7 +50,10 @@ function spawnTerminal(env, args = [], { cols = 80, rows = 24 } = {}) {
     cwd: ROOT,
     env,
   })
+  const exited = new Promise(resolve => term.onExit(resolve))
   return {
+    pid: term.pid,
+    exited,
     write: data => term.write(data),
     resize: (cols, rows) => term.resize(cols, rows),
     kill: () => term.kill(),
@@ -90,11 +94,13 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
   const stubBin = installGhStub(temp)
   let term
   let output = ''
+  let tmuxSession = null
   const env = childEnv(stubBin, temp)
 
   try {
     if (useTmux) {
       const session = `lazyhub-pty-${Date.now()}-${process.pid}`
+      tmuxSession = session
       // The tmux server inherits this process's env, and Ink renders only the final frame when CI is set.
       const command = `(unset CI GITHUB_ACTIONS; cd ${JSON.stringify(ROOT)} && PATH=${JSON.stringify(env.PATH)} HOME=${JSON.stringify(env.HOME)} USER=${JSON.stringify(env.USER)} GHUI_REPO=${env.GHUI_REPO} TERM=xterm-256color COLORTERM=truecolor NO_COLOR=1 LAZYHUB_NO_DAEMON=1 node ${JSON.stringify(BIN)} 2>${JSON.stringify(join(temp, 'tmux-stderr.log'))}); echo "lazyhub exited: $?"; sleep 60`
       const started = spawnSync('tmux', ['new-session', '-d', '-x', '80', '-y', '24', '-s', session, command])
@@ -116,7 +122,6 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
       spawnSync('tmux', ['send-keys', '-t', session, 'p'])
       await waitForScreen(capture, /Pull Requests|PTY harness fixture PR/, 'tmux pane switch')
       spawnSync('tmux', ['send-keys', '-t', session, 'q'])
-      spawnSync('tmux', ['kill-session', '-t', session])
       return
     }
 
@@ -151,8 +156,9 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
       term.onExit(() => { clearTimeout(done); resolve() })
     })
   } finally {
-    try { term?.kill() } catch {}
-    rmSync(temp, { recursive: true, force: true })
+    await stopTerminal(term)
+    if (tmuxSession) await stopTmuxSession(tmuxSession)
+    removeTempDir(temp)
   }
 }
 
@@ -197,8 +203,8 @@ async function runReferenceFlow() {
     assert.ok(calls.some(args => args[0] === 'pr' && args[1] === 'view'), 'PR detail was fetched')
     assert.deepEqual(calls.filter(args => classifyGh(args) === 'write'), [])
   } finally {
-    try { term?.kill() } catch {}
-    rmSync(temp, { recursive: true, force: true })
+    await stopTerminal(term)
+    removeTempDir(temp)
   }
 }
 
@@ -222,8 +228,8 @@ async function runFirstRunFlow() {
     term.write('q')
     await waitForExit(term)
   } finally {
-    try { term?.kill() } catch {}
-    rmSync(temp, { recursive: true, force: true })
+    await stopTerminal(term)
+    removeTempDir(temp)
   }
 }
 
@@ -243,8 +249,8 @@ async function runCrashFlow() {
     assert.match(output, /lazyhub --debug-state/)
     assert.match(output, /\x1b\[\?1049l/)
   } finally {
-    try { term?.kill() } catch {}
-    rmSync(temp, { recursive: true, force: true })
+    await stopTerminal(term)
+    removeTempDir(temp)
   }
 }
 
@@ -264,8 +270,8 @@ async function runDegradedFlow() {
     term.write('q')
     await waitForExit(term)
   } finally {
-    try { term?.kill() } catch {}
-    rmSync(temp, { recursive: true, force: true })
+    await stopTerminal(term)
+    removeTempDir(temp)
   }
 }
 
@@ -283,8 +289,8 @@ async function runDayOneErrorFlow({ name, env, expected }) {
     term.write('q')
     await waitForExit(term)
   } finally {
-    try { term?.kill() } catch {}
-    rmSync(temp, { recursive: true, force: true })
+    await stopTerminal(term)
+    removeTempDir(temp)
   }
 }
 
@@ -312,8 +318,8 @@ async function runPerfFlow() {
     const rows = readFileSync(perfPath, 'utf8').trim().split('\n').map(line => JSON.parse(line))
     assert.ok(rows.filter(row => row.type === 'input' && row.name === 'keypress-render').length >= 10)
   } finally {
-    try { term?.kill() } catch {}
-    rmSync(temp, { recursive: true, force: true })
+    await stopTerminal(term)
+    removeTempDir(temp)
   }
 }
 
@@ -340,9 +346,9 @@ async function runSwrCacheFlow() {
     second.write('q')
     await waitForExit(second)
   } finally {
-    try { first?.kill() } catch {}
-    try { second?.kill() } catch {}
-    rmSync(temp, { recursive: true, force: true })
+    await stopTerminal(first)
+    await stopTerminal(second)
+    removeTempDir(temp)
   }
 }
 
@@ -420,8 +426,8 @@ async function runResizeFlow() {
     term.write('q')
     await waitForExit(term)
   } finally {
-    try { term?.kill() } catch {}
-    rmSync(temp, { recursive: true, force: true })
+    await stopTerminal(term)
+    removeTempDir(temp)
   }
 }
 
@@ -458,8 +464,8 @@ async function runTmuxResizeFlow() {
     await waitUntil(() => frameFits(120, 40), 'tmux frame fits after a resize burst')
     spawnSync('tmux', ['send-keys', '-t', session, 'q'])
   } finally {
-    spawnSync('tmux', ['kill-session', '-t', session])
-    rmSync(temp, { recursive: true, force: true })
+    await stopTmuxSession(session)
+    removeTempDir(temp)
   }
 }
 

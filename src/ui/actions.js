@@ -423,6 +423,16 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
   })
 
   actions.push({
+    id:       'global.switch-repo',
+    label:    'Switch repository',
+    hint:     'Pick another repository to open in this session',
+    category: 'global',
+    context:  'global',
+    keys:     [],
+    run:      (ctx) => { onClose(); ctx.onSwitchRepo?.() },
+  })
+
+  actions.push({
     id:       'global.refresh',
     label:    'Refresh',
     hint:     'Refresh current view, bypass cache',

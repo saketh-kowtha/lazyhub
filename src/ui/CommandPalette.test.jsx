@@ -211,6 +211,18 @@ describe('buildActions — registry shape', () => {
     expect(closeFn).toHaveBeenCalled()
   })
 
+  it('global.switch-repo closes the palette and asks the app to open the repository picker (#466)', () => {
+    const closeFn = vi.fn()
+    const switchFn = vi.fn()
+    const action = buildActions({ ...callbacks, onClose: closeFn }).find(a => a.id === 'global.switch-repo')
+    expect(action).toBeDefined()
+    expect(action.label).toMatch(/repo/i)
+    expect(action.context).toBe('global')
+    action.run({ onSwitchRepo: switchFn })
+    expect(closeFn).toHaveBeenCalled()
+    expect(switchFn).toHaveBeenCalledTimes(1)
+  })
+
   it('theme action calls onTheme with correct name when run', () => {
     const themeFn = vi.fn()
     const closeFn = vi.fn()

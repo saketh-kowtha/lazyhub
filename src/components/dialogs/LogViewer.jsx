@@ -1,6 +1,7 @@
 /**
  * LogViewer.jsx — full-screen scrollable log viewer primitive.
- * Props: lines (string[]), onClose()
+ * Props: lines (string[]), onClose(), title (string, optional)
+ * Every line is untrusted: it is cleaned (ANSI, TABs, control chars) before it is drawn (#463).
  */
 
 import React, { useState, useMemo } from 'react'
@@ -8,6 +9,7 @@ import { Box, Text, useInput, useStdout } from 'ink'
 import { useTheme } from '../../theme.js'
 import { useKeyScope } from '../../keyscope.js'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
+import { cleanLogLine } from '../../utils.js'
 
 const STEP_HEADER_RE = /^(##\s+|Step \d+|^\d{4}-\d{2}-\d{2}.*\s+(##|step)|\s*\d+\.\d+\s)/i
 
@@ -15,7 +17,7 @@ function isStepHeader(line) {
   return STEP_HEADER_RE.test(line) || line.startsWith('##')
 }
 
-export function LogViewer({ lines = [], onClose }) {
+export function LogViewer({ lines: rawLines = [], onClose, title = 'Log Viewer' }) {
   useKeyScope('dialog')
   const { t } = useTheme()
   const { stdout } = useStdout()
@@ -24,6 +26,8 @@ export function LogViewer({ lines = [], onClose }) {
   const [filterQuery, setFilterQuery] = useState('')
   const [filtering, setFiltering] = useState(false)
   const [gPressed, setGPressed] = useState(false)
+
+  const lines = useMemo(() => rawLines.map(cleanLogLine), [rawLines])
 
   const filteredLines = useMemo(() => {
     if (!filterQuery) return lines
@@ -91,7 +95,7 @@ export function LogViewer({ lines = [], onClose }) {
   return (
     <Box flexDirection="column" height="100%">
       <Box borderStyle="single" borderColor={t.ui.border} paddingX={1} justifyContent="space-between">
-        <Text color={t.ui.selected} bold>Log Viewer</Text>
+        <Text color={t.ui.selected} bold wrap="truncate">{cleanLogLine(title)}</Text>
         <Text color={t.ui.muted}>
           {filterQuery ? `filter: ${filterQuery}  ` : ''}
           {scrollOffset + 1}-{Math.min(scrollOffset + visibleHeight, totalLines)}/{totalLines}

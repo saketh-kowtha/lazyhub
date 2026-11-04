@@ -7,6 +7,7 @@ import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
+import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { classifyGhFailure, listNotifications, markNotificationRead, markAllNotificationsRead } from '../../executor.js'
 import { sanitize } from '../../utils.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
@@ -67,9 +68,20 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
-  const showStatus = (msg, isError = false) => {
+  const statusTimer = useRef(null)
+  useEffect(() => () => { clearTimeout(statusTimer.current) }, [])
+  const showStatus = (msg, isError = false, sticky = false) => {
+    clearTimeout(statusTimer.current)
     setStatusMsg({ msg, isError, persist: isError })
-    if (!isError) setTimeout(() => setStatusMsg(null), 3000)
+    if (!isError && !sticky) statusTimer.current = setTimeout(() => setStatusMsg(null), 3000)
+  }
+  // Pending/double-submit guard for mark-read and mark-all (#453).
+  const { run: pendingRun } = usePendingWrite((msg) => showStatus(msg, false, true))
+  // Resolves true only when fn ran (false when ignored as a double submit).
+  const runWrite = async (label, fn) => {
+    let ran = false
+    await pendingRun(label, async () => { ran = true; return fn() })
+    return ran
   }
 
   const moveCursor = useCallback((delta) => {
@@ -128,8 +140,8 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
     if (matchesAction('notification.mark-read', input, key)) {
       const notif = items[cursor]
       if (notif) {
-        markNotificationRead(notif.id)
-          .then(() => { showStatus('Marked as read'); refetch() })
+        runWrite('Marking as read', () => markNotificationRead(notif.id))
+          .then(ran => { if (ran) { showStatus('Marked as read'); refetch() } })
           .catch(err => showStatus(`Failed: ${err.message}`, true))
       }
       return
@@ -169,7 +181,7 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
           onConfirm={async () => {
             setDialog(null)
             try {
-              await markAllNotificationsRead()
+              if (!await runWrite('Marking all as read', () => markAllNotificationsRead())) return
               showStatus('All marked as read')
               refetch()
             } catch (err) {

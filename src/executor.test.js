@@ -27,6 +27,12 @@ import {
   addLabels,
   removeLabels,
   listCollaborators,
+  editIssueMembers,
+  listOpenPRBranches,
+  gitAdd, gitUnstage, gitMergeAbort, gitCommit, gitMergeBranch, pushBranch, GIT_OP_TIMEOUT_MS,
+  OPEN_PR_HEADS_MAX_PAGES,
+  collaboratorsTruncated,
+  COLLAB_MAX_ROWS,
   requestReviewers,
   listBranches,
   checkoutBranch,
@@ -451,6 +457,42 @@ describe('listCollaborators()', () => {
     expect(args).toContain('api')
     expect(args.some(a => a.includes('collaborators'))).toBe(true)
   })
+
+  it('follows pages past the first 100 collaborators (#513)', async () => {
+    const page = n => Array.from({ length: n }, (_, i) => ({ login: `u${i}` }))
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(page(100)), stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(page(40)), stderr: '' })
+    const rows = await listCollaborators('owner/repo')
+    expect(rows).toHaveLength(140)
+    expect(execa.mock.calls[0][1].some(a => a.includes('per_page=100'))).toBe(true)
+    expect(execa.mock.calls[1][1].some(a => a.includes('page=2'))).toBe(true)
+    expect(execa).toHaveBeenCalledTimes(2)
+    expect(collaboratorsTruncated(rows)).toBe(false)
+  })
+
+  it('reports truncation when the page ceiling is reached (D16)', async () => {
+    const full = JSON.stringify(Array.from({ length: 100 }, (_, i) => ({ login: `u${i}` })))
+    execa.mockResolvedValue({ exitCode: 0, stdout: full, stderr: '' })
+    const rows = await listCollaborators('owner/repo')
+    expect(rows).toHaveLength(COLLAB_MAX_ROWS)
+    expect(collaboratorsTruncated(rows)).toBe(true)
+  })
+})
+
+describe('editIssueMembers()', () => {
+  it('adds and removes in one gh issue edit call', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+    await editIssueMembers('owner/repo', 7, 'label', { add: ['a', 'b'], remove: ['c'] })
+    expect(execa).toHaveBeenCalledTimes(1)
+    const [, args] = execa.mock.calls[0]
+    expect(args).toEqual(expect.arrayContaining(['issue', 'edit', '7', '--add-label', 'a,b', '--remove-label', 'c']))
+  })
+
+  it('does nothing for an empty change', async () => {
+    await editIssueMembers('owner/repo', 7, 'assignee', { add: [], remove: [] })
+    expect(execa).not.toHaveBeenCalled()
+  })
 })
 
 describe('requestReviewers()', () => {
@@ -472,6 +514,64 @@ describe('listBranches()', () => {
     const [, args] = execa.mock.calls[0]
     expect(args).toContain('api')
     expect(args.some(a => a.includes('branches'))).toBe(true)
+  })
+})
+
+describe('listOpenPRBranches() (#456)', () => {
+  const graph = (names, next) => JSON.stringify({ data: { repository: { pullRequests: {
+    pageInfo: { hasNextPage: !!next, endCursor: next || null },
+    nodes: names.map(n => (typeof n === 'string' ? { headRefName: n, isCrossRepository: false } : n)),
+  } } } })
+
+  it('asks GraphQL only for head branch names, never check contexts or bodies', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: graph(['feat/a', 'fix/b']), stderr: '' })
+    const rows = await listOpenPRBranches('owner/repo')
+    expect(rows).toEqual({ heads: ['feat/a', 'fix/b'], truncated: false })
+    const query = execa.mock.calls[0][1].find(a => a.startsWith('query='))
+    expect(query).toContain('headRefName')
+    expect(query).not.toMatch(/statusCheckRollup|contexts|body|reviewRequests|labels/)
+  })
+
+  it('follows the cursor to every open PR, fetching each page once', async () => {
+    execa
+      .mockResolvedValueOnce({ exitCode: 0, stdout: graph(['a'], 'c1'), stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: graph(['b']), stderr: '' })
+    expect((await listOpenPRBranches('owner/repo')).heads).toEqual(['a', 'b'])
+    expect(execa).toHaveBeenCalledTimes(2)
+    expect(execa.mock.calls[1][1]).toContain('after=c1')
+  })
+
+  it('ignores fork PRs that reuse a branch name that exists in this repo', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: graph([
+      { headRefName: 'main', isCrossRepository: true },
+      { headRefName: 'feat/a', isCrossRepository: false },
+    ]), stderr: '' })
+    const { heads } = await listOpenPRBranches('owner/repo')
+    expect(heads).toEqual(['feat/a'])
+    expect(execa.mock.calls[0][1].find(a => a.startsWith('query='))).toContain('isCrossRepository')
+  })
+
+  it('says so when the page ceiling stops the walk instead of truncating silently', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: graph(['x'], 'more'), stderr: '' })
+    const res = await listOpenPRBranches('owner/repo')
+    expect(execa).toHaveBeenCalledTimes(OPEN_PR_HEADS_MAX_PAGES)
+    expect(res.truncated).toBe(true)
+  })
+})
+
+describe('git write operations time out instead of hanging (#453)', () => {
+  it.each([
+    ['gitAdd', () => gitAdd(['a.js'])],
+    ['gitUnstage', () => gitUnstage(['a.js'])],
+    ['gitMergeAbort', () => gitMergeAbort()],
+    ['gitCommit', () => gitCommit('msg')],
+    ['gitMergeBranch', () => gitMergeBranch('main')],
+    ['pushBranch', () => pushBranch('feat')],
+  ])('%s passes a 60 s timeout to git and reports a timeout', async (_name, call) => {
+    expect(GIT_OP_TIMEOUT_MS).toBe(60_000)
+    execa.mockResolvedValue({ exitCode: undefined, timedOut: true, stdout: '', stderr: '' })
+    await expect(call()).rejects.toThrow(/timed out after 60 s/)
+    expect(execa.mock.calls[0][2]).toMatchObject({ timeout: 60_000 })
   })
 })
 
