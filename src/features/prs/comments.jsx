@@ -104,11 +104,14 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   dataRef.current = data
   const loadedRef = useRef(loaded)
   loadedRef.current = loaded
-  const seenFirst = useRef(firstPage)
+  const seenFirst = useRef(firstPage ? JSON.stringify(firstPage) : null)
   // A newer first page (background revalidation) is folded into what is loaded, not ignored until `r`.
+  // Compared by content: a new object with the same data must not trigger another state update.
   useEffect(() => {
-    if (!firstPage || seenFirst.current === firstPage) return
-    seenFirst.current = firstPage
+    if (!firstPage) return
+    const sig = JSON.stringify(firstPage)
+    if (seenFirst.current === sig) return
+    seenFirst.current = sig
     if (loadedRef.current) setLoaded(cur => (cur ? reconcile(cur, firstPage) : cur))
   }, [firstPage])
   const update = useCallback((fn) => setLoaded(prev => {
