@@ -198,6 +198,18 @@ export function useKeymap(scope, config) {
 const CHORD_WINDOW_MS = 400
 
 /**
+ * Resolve a two-key chord. Chords are declared either joined (`gg`) or spaced
+ * (`g l`, the form which-key shows); both spellings reach the same action.
+ * @param {{resolveToken: (token: string) => string|null}} keymap keymap from createKeymap
+ * @param {string} first first key of the chord
+ * @param {string} second second key of the chord
+ * @returns {string|null} action id
+ */
+export function resolveChord(keymap, first, second) {
+  return keymap.resolveToken(`${first}${second}`) ?? keymap.resolveToken(`${first} ${second}`)
+}
+
+/**
  * Resolve key events to registry action ids for one or more scopes, including
  * two-key chords bound as e.g. `gg` (cursor.top). A view calls the returned
  * function where its old `input === 'x'` chain began and branches on the action
@@ -219,8 +231,7 @@ export function useActionResolver(scopes, config) {
     const plain = input && input.length === 1 && !key.ctrl && !key.meta ? input : null
     last.current = { input: plain, at: now }
     if (plain && prev.input && now - prev.at <= CHORD_WINDOW_MS) {
-      // Chords are declared either joined (`gg`) or spaced (`g l`, the form which-key shows).
-      const chord = keymap.resolveToken(`${prev.input}${plain}`) ?? keymap.resolveToken(`${prev.input} ${plain}`)
+      const chord = resolveChord(keymap, prev.input, plain)
       if (chord) { last.current = { input: null, at: 0 }; return chord }
     }
     return keymap.resolve(input, key)

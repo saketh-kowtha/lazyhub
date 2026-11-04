@@ -137,7 +137,7 @@ function describeAction(id, config) {
   const action = config?.actions?.[id]
   const keys = boundKeys(id, config)
   if (!action || keys.length === 0) return null
-  return { key: action.hint && keys.length > 1 ? action.hint : keys[0], label: action.label || id, group: action.group || '' }
+  return { id, key: action.hint && keys.length > 1 ? action.hint : keys[0], label: action.label || id, group: action.group || '' }
 }
 
 /**
@@ -166,12 +166,12 @@ export function contextFooterHints(pane, view, ctx = {}, config = getActionConfi
     if (seen.has(sig)) continue
     seen.add(sig)
     // List footers are grouped: navigation | actions | meta (FooterKeys draws the separators).
-    const item = { key: hint.key, label: hint.label }
+    const item = { id, key: hint.key, label: hint.label }
     if (isList) item.group = FOOTER_GROUP[hint.group] ?? 2
     hints.push(item)
   }
   const help = describeAction('app.help', config)
-  if (help) hints.push({ key: help.key, label: help.label })
+  if (help) hints.push({ id: help.id, key: help.key, label: help.label })
   return hints
 }
 
@@ -196,7 +196,7 @@ export function contextHelpRows(pane, view, ctx = {}, config = getActionConfig()
     const sig = `${hint.key}:${hint.label}`
     if (seen.has(sig)) continue
     seen.add(sig)
-    rows.push({ key: hint.key, label: action.description || hint.label, group: hint.group })
+    rows.push({ id, key: hint.key, label: action.description || hint.label, group: hint.group })
   }
   return rows
 }
