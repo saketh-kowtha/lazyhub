@@ -39,6 +39,52 @@ const seedOf = (fp) => ({
   partial: Object.fromEntries((fp.partialThreads || []).map(p => [p.threadId, p])),
 })
 
+/**
+ * Keep a long thread's "N more replies" count right after a local add/remove.
+ * @param partial
+ * @param threadId
+ * @param delta
+ */
+function bumpPartial(partial, threadId, delta) {
+  return partial[threadId] ? { ...partial, [threadId]: { ...partial[threadId], total: partial[threadId].total + delta } } : partial
+}
+const omit = (obj, key) => Object.fromEntries(Object.entries(obj).filter(([k]) => k !== key))
+const isLocal = (c) => typeof c.id === 'string' && c.id.startsWith('local-')
+
+/**
+ * Merge incoming comments into the loaded ones: dedupe by id (an incoming copy replaces a changed one),
+ * and drop an optimistic `local-` row once the real comment with the same text has arrived.
+ * @param {any[]} existing
+ * @param {any[]} incoming
+ */
+function mergeById(existing, incoming) {
+  const incomingIds = new Set(incoming.map(c => c.id))
+  const known = new Set(existing.map(c => c.id))
+  const arrived = incoming.filter(c => !known.has(c.id))
+  const realBodies = new Set(arrived.map(c => (c.body || '').trim()))
+  const kept = existing
+    .filter(c => !(isLocal(c) && realBodies.has((c.body || '').trim())))
+    .map(c => (incomingIds.has(c.id) ? incoming.find(n => n.id === c.id) : c))
+  return [...kept, ...arrived]
+}
+
+/**
+ * Fold a newer first page (stale-while-revalidate) into the loaded state without dropping loaded pages.
+ * @param cur
+ * @param fp
+ */
+function reconcile(cur, fp) {
+  const next = seedOf(fp)
+  const threadsWithRows = new Set(cur.comments.map(c => c.threadId))
+  return {
+    comments: mergeById(cur.comments, next.comments),
+    conversation: mergeById(cur.conversation, next.conversation),
+    threads: cur.threads && next.threads ? { ...cur.threads, total: next.threads.total } : (cur.threads ?? next.threads),
+    conv: cur.conv && next.conv ? { ...cur.conv, total: next.conv.total } : (cur.conv ?? next.conv),
+    partial: { ...Object.fromEntries(Object.entries(next.partial).filter(([id]) => !threadsWithRows.has(id))), ...cur.partial },
+  }
+}
+
 export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   useKeyScope('view')
   const { t } = useTheme()
@@ -56,6 +102,15 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   const data = loaded ?? seeded
   const dataRef = useRef(data)
   dataRef.current = data
+  const loadedRef = useRef(loaded)
+  loadedRef.current = loaded
+  const seenFirst = useRef(firstPage)
+  // A newer first page (background revalidation) is folded into what is loaded, not ignored until `r`.
+  useEffect(() => {
+    if (!firstPage || seenFirst.current === firstPage) return
+    seenFirst.current = firstPage
+    if (loadedRef.current) setLoaded(cur => (cur ? reconcile(cur, firstPage) : cur))
+  }, [firstPage])
   const update = useCallback((fn) => setLoaded(prev => {
     const base = prev ?? (firstRef.current ? seedOf(firstRef.current) : null)
     return base ? fn(base) : prev
@@ -190,8 +245,8 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       })
       if (gen !== generation.current) return
       update(cur => ({
-        comments: [...cur.comments, ...page.comments],
-        conversation: [...cur.conversation, ...page.conversation],
+        comments: mergeById(cur.comments, page.comments),
+        conversation: mergeById(cur.conversation, page.conversation),
         threads: threads ? page.threads : cur.threads,
         conv: conversation ? page.conversationPage : cur.conv,
         partial: { ...cur.partial, ...Object.fromEntries((page.partialThreads || []).map(p => [p.threadId, p])) },
@@ -221,7 +276,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
         if (res.page.hasNextPage) partial[threadId] = { threadId, total: res.page.total, endCursor: res.page.endCursor, stalled: false }
         else if (res.page.stalled) partial[threadId] = { ...partial[threadId], stalled: true, endCursor: null }
         else delete partial[threadId]
-        return { ...cur, comments: [...cur.comments, ...res.comments], partial }
+        return { ...cur, comments: mergeById(cur.comments, res.comments), partial }
       })
     } catch (err) {
       failedReplies.current.add(threadId)
@@ -235,7 +290,11 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   // Section paging: conversation pages load near the end of the conversation block, thread pages near
   // the end of the threads. A list too short to scroll loads whatever is missing for the current filter.
   useEffect(() => {
-    if (!data || moreFailed || busy > 0) return
+    if (!data) return
+    // Loading a long thread's replies is independent of page loading: a failed page never blocks it.
+    const here = flatComments[cursor]
+    if (here?._more && !here.stalled) loadReplies(here.threadId)
+    if (moreFailed || busy > 0) return
     const wantsConv = filterMode === 'all' || filterMode === 'conversation'
     const wantsThreads = filterMode !== 'conversation'
     const short = visibleCount < visibleHeight
@@ -246,8 +305,6 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
     const needThreads = !!threadsPage?.hasNextPage && wantsThreads &&
       (short || cursor >= visibleCount - LOAD_MORE_MARGIN)
     if (needConv || needThreads) loadPage({ threads: needThreads, conversation: needConv })
-    const cur = flatComments[cursor]
-    if (cur?._more && !cur.stalled) loadReplies(cur.threadId)
   }, [data, cursor, visibleCount, visibleHeight, filterMode, busy, moreFailed, convPage, threadsPage, flatComments, loadPage, loadReplies])
 
   // ── Open $EDITOR for multiline edit ───────────────────────────────────────
@@ -298,11 +355,11 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       runWrite('Sending reply', () => replyToComment(repo, prNumber, rootId, body)
         .then((res) => {
           flash('Reply sent'); done()
-          update(d => ({ ...d, comments: [...d.comments, {
+          update(d => ({ ...d, comments: mergeById(d.comments, [{
             id: res?.id ?? `local-${Date.now()}`, body: res?.body ?? body, path: comment.path, line: comment.line, side: 'RIGHT',
             user: { login: res?.user?.login ?? 'you' }, createdAt: res?.created_at ?? new Date().toISOString(),
             inReplyToId: rootId, threadId: comment.threadId, threadResolved: comment.threadResolved,
-          }] }))
+          }]), partial: bumpPartial(d.partial, comment.threadId, 1) }))
         })
         .catch(err => flash(`Failed: ${err.message}`)))
     } else if (type === 'edit') {
@@ -318,7 +375,12 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
         .then(() => {
           flash('Comment deleted'); done()
           // Deleting a thread's first comment removes the whole thread from GitHub's view.
-          update(d => ({ ...d, comments: d.comments.filter(c => c.id !== comment.id && c.inReplyToId !== comment.id) }))
+          update(d => {
+            const comments = d.comments.filter(c => c.id !== comment.id && c.inReplyToId !== comment.id)
+            const removed = d.comments.length - comments.length
+            const partial = comment._isRoot ? omit(d.partial, comment.threadId) : bumpPartial(d.partial, comment.threadId, -removed)
+            return { ...d, comments, partial }
+          })
         })
         .catch(err => flash(`Failed: ${err.message}`)))
     }
@@ -367,6 +429,10 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       setAction({ type: 'reply', comment })
       // A conversation row has no thread to reply into: it posts a new PR comment, addressed to the author.
       setActionText(comment._conversation && comment.user?.login ? `@${comment.user.login} ` : '')
+      return
+    }
+    if (comment && isLocal(comment) && (id === 'comment.edit' || id === 'comment.delete')) {
+      flash(`Still syncing: refresh (${firstActionKey('list.refresh', 'r')}) to edit or delete this`)
       return
     }
     if (id === 'comment.edit' && comment) {

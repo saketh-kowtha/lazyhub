@@ -2,7 +2,8 @@ import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PRComments } from './comments.jsx'
 import { resetGhMemoryCache } from '../../hooks/useGh.js'
-import { listPRTimelinePage, listPRThreadReplies, resolveThread, addPRComment } from '../../executor.js'
+import { listPRTimelinePage, listPRThreadReplies, resolveThread, addPRComment, replyToComment, editPRComment, deletePRComment } from '../../executor.js'
+import { cacheKey, writeCache } from '../../cache.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -14,9 +15,11 @@ vi.mock('ink', async () => {
 vi.mock('../../executor.js', async (original) => ({
   ...await original(),
   listPRTimelinePage: vi.fn(), listPRThreadReplies: vi.fn(), resolveThread: vi.fn(), addPRComment: vi.fn(),
+  replyToComment: vi.fn(), editPRComment: vi.fn(), deletePRComment: vi.fn(),
 }))
+Object.defineProperty(listPRTimelinePage, 'name', { value: 'listPRTimelinePage' })
 
-beforeEach(() => { resetGhMemoryCache(); vi.clearAllMocks(); resolveThread.mockResolvedValue({}); addPRComment.mockResolvedValue('') })
+beforeEach(() => { resetGhMemoryCache(); vi.clearAllMocks(); resolveThread.mockResolvedValue({}); addPRComment.mockResolvedValue(''); replyToComment.mockResolvedValue({}); deletePRComment.mockResolvedValue(undefined) })
 afterEach(cleanup)
 
 const info = (over = {}) => ({ total: 0, hasNextPage: false, endCursor: null, stalled: false, ...over })
@@ -34,8 +37,16 @@ const defer = () => { let resolve; const promise = new Promise(r => { resolve = 
 
 // A distinct PR per test: useGh also seeds from a disk cache that survives resetGhMemoryCache.
 let nextPR = 100
+async function mountSeeded() {
+  const view = renderWithProviders(<PRComments prNumber={nextPR++} repo="o/r" onBack={() => {}} />)
+  await waitForExpectation(() => expect(view.lastFrame()).toContain('Conv 1'))
+  await flush(20)
+  return view
+}
+let lastPR = 0
 async function mount() {
   const prNumber = nextPR++
+  lastPR = prNumber
   const view = renderWithProviders(<PRComments prNumber={prNumber} repo="o/r" onBack={() => {}} />)
   await waitForExpectation(() => expect(view.lastFrame()).not.toContain('Loading comments'))
   await flush(20)
@@ -148,5 +159,100 @@ describe('conversation rows (#507)', () => {
     await sendInput('c')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('(posts a new PR comment)'))
     expect(view.lastFrame()).toContain('@u1')
+  })
+})
+
+describe('loaded state reconciles with refreshed and local data (#507)', () => {
+  it('folds a newer first page into what is loaded and swaps a local row for the real comment', async () => {
+    const fresh = defer()
+    listPRTimelinePage.mockReturnValue(fresh.promise)
+    // A stale disk-cache seed is shown first; the revalidation is still in flight.
+    const stale = JSON.parse(JSON.stringify(page({ conversation: range(1, 2), conversationPage: info({ total: 2 }), threads: info() })))
+    writeCache(cacheKey(['o/r', 'listPRTimelinePage', ['o/r', nextPR]]), stale, { repo: 'o/r' })
+    const view = await mountSeeded()
+    await sendInput('c')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('posts a new PR comment'))
+    await sendInput('hello there')
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(addPRComment).toHaveBeenCalledTimes(1))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('hello there'))
+    // The refresh arrives: Conv 1 was edited, Conv 3 is new, and the reply now exists on GitHub (id 77).
+    fresh.resolve(page({
+      conversation: [{ ...convo(1), body: 'Conv 1 EDITED' }, convo(2), convo(3), { ...convo(77), body: '@u1 hello there' }],
+      conversationPage: info({ total: 4 }), threads: info(),
+    }))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Conv 1 EDITED'))
+    expect(view.lastFrame()).toContain('conversation 4 of 4')
+    expect(view.lastFrame().match(/hello there/g)).toHaveLength(1)
+  })
+
+  it('dedupes by id when a loaded page overlaps rows already shown', async () => {
+    listPRTimelinePage
+      .mockResolvedValueOnce(page({ conversation: range(1, 3), conversationPage: info({ total: 4, hasNextPage: true, endCursor: 'C3' }) }))
+      .mockResolvedValueOnce(page({ conversation: range(3, 4), conversationPage: info({ total: 4 }) }))
+    const view = await mount()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('conversation 4 of 4'))
+  })
+
+  it('blocks edit and delete on a row that is only local so far', async () => {
+    listPRTimelinePage.mockResolvedValue(page({ comments: [review(900)] }))
+    replyToComment.mockResolvedValue({}) // no id back: the new reply stays a local row
+    const view = await mount()
+    await sendInput('c')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Reply to @rev'))
+    await sendInput('thanks')
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Reply sent'))
+    await sendInput('G')
+    await sendInput('e')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Still syncing'))
+    expect(editPRComment).not.toHaveBeenCalled()
+    await sendInput('x', { ctrl: true })
+    await flush(20)
+    expect(view.lastFrame()).not.toContain('Delete comment')
+  })
+
+  it('keeps the "N more replies" count right after a local reply or a delete', async () => {
+    const long = () => page({
+      comments: [review(900), review(901, { inReplyToId: 900, body: 'Reply 901' })],
+      partialThreads: [{ threadId: 'T1', total: 4, endCursor: 'R2', stalled: false }],
+    })
+    listPRTimelinePage.mockResolvedValue(long())
+    replyToComment.mockResolvedValue({ id: 555, body: 'mine' })
+    let view = await mount()
+    expect(view.lastFrame()).toContain('2 more replies')
+    await sendInput('c')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Reply to @rev'))
+    await sendInput('mine')
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Reply sent'))
+    expect(view.lastFrame()).toContain('2 more replies') // 5 in total, 3 shown
+    cleanup()
+
+    listPRTimelinePage.mockResolvedValue(long())
+    listPRThreadReplies.mockReturnValue(new Promise(() => {})) // the cursor lands on the more-row after the delete
+    view = await mount()
+    await sendInput('j') // the loaded reply
+    await sendInput('x', { ctrl: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Delete comment'))
+    await sendInput('y')
+    await waitForExpectation(() => expect(deletePRComment).toHaveBeenCalledWith('o/r', 901))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Comment deleted'))
+    expect(view.lastFrame()).toContain('2 more replies') // 3 in total, 1 shown
+  })
+
+  it('a failed page load does not block loading a long thread\'s replies', async () => {
+    listPRTimelinePage
+      .mockResolvedValueOnce(page({
+        conversation: range(1, 2), comments: [review(900)],
+        conversationPage: info({ total: 9, hasNextPage: true, endCursor: 'C2' }),
+        partialThreads: [{ threadId: 'T1', total: 3, endCursor: 'R1', stalled: false }],
+      }))
+      .mockRejectedValueOnce(new Error('boom'))
+    listPRThreadReplies.mockResolvedValue({ comments: [review(901, { inReplyToId: 900, body: 'Reply 901' })], page: info({ total: 3 }) })
+    const view = await mount()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Failed to load more'))
+    await sendInput('G')
+    await waitForExpectation(() => expect(listPRThreadReplies).toHaveBeenCalledWith('T1', 'R1'))
   })
 })
