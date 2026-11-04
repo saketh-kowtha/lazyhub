@@ -2,6 +2,7 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { useTheme } from '../theme.js'
+import { effectiveHintKey } from '../config/actions.js'
 import { displayWidth, truncateEllipsis } from '../utils.js'
 
 const BUILTIN_LABELS = {
@@ -89,7 +90,7 @@ export function Sidebar({ currentPane, onSelect, height, visiblePanes, paneLabel
 
       {/* Footer */}
       <Box paddingX={1}>
-        <Text color={t.ui.dim} wrap="truncate">? help · S cfg · E edit</Text>
+        <Text color={t.ui.dim} wrap="truncate">{[['app.help', 'help'], ['app.settings', 'settings']].map(([id, label]) => [effectiveHintKey(id), label]).filter(([key]) => key).map(([key, label]) => `${key} ${label}`).join(' · ')}</Text>
       </Box>
     </Box>
   )

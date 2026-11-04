@@ -53,3 +53,17 @@ describe('Sidebar width under a wide sibling', () => {
     expect(line).toContain('Pull Req…')
   })
 })
+
+describe('Sidebar footer key hints (#449)', () => {
+  it('only advertises keys that are bound in the default keymap', () => {
+    const { lastFrame } = renderWithProviders(
+      <Sidebar currentPane="focus" visiblePanes={['focus', 'prs']} paneLabels={LABELS} paneIcons={ICONS}
+        repo="acme/rocket" width={40} height={14} />,
+    )
+    const frame = lastFrame()
+    // Settings is `,`; nothing binds `S`, and `E` (editor) only exists in PR detail and diff.
+    expect(frame).toContain('? help')
+    expect(frame).toContain(', settings')
+    expect(frame).not.toMatch(/S cfg|E edit/)
+  })
+})

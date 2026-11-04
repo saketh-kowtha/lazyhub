@@ -87,14 +87,6 @@ export const LEGACY_ACTION_VALUES = {
     scope: ["global"],
     group: ["global"],
   },
-  "app.visual-toggle": {
-    keys: [["V"]],
-    hint: ["V"],
-    label: ["visual"],
-    description: ["Toggle visual selection mode"],
-    scope: ["global"],
-    group: ["global"],
-  },
   "app.logs": {
     keys: [["L"]],
     hint: ["L"],
@@ -140,14 +132,6 @@ export const LEGACY_ACTION_VALUES = {
     hint: ["?"],
     label: ["help"],
     description: ["Open help from leader mode"],
-    scope: ["leader", "global"],
-    group: ["leader"],
-  },
-  "app.leader-recent": {
-    keys: [["r"]],
-    hint: ["r"],
-    label: ["recent"],
-    description: ["Open recently viewed items from leader mode"],
     scope: ["leader", "global"],
     group: ["leader"],
   },
@@ -1014,6 +998,22 @@ export const LEGACY_ACTION_VALUES = {
     description: ["Comment on the issue"],
     scope: ["issue-detail"],
     group: ["action"],
+  },
+  "app.visual-toggle": {
+    keys: [["V"]],
+    hint: ["V"],
+    label: ["visual"],
+    description: ["Toggle visual selection mode"],
+    scope: ["global"],
+    group: ["global"],
+  },
+  "app.leader-recent": {
+    keys: [["r"]],
+    hint: ["r"],
+    label: ["recent"],
+    description: ["Open recently viewed items from leader mode"],
+    scope: ["leader", "global"],
+    group: ["leader"],
   },
 }
 

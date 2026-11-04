@@ -11,6 +11,7 @@ import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { classifyGhFailure, listRuns, getRunLogs, rerunRun, cancelRun } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
+import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { toLogLines, logTitle } from './log-lines.js'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -60,7 +61,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
   const { data: runs, loading, error, refetch, isStale } = useGh(listRuns, [repo, branchFilter ? { branch: branchFilter } : {}])
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
-  const [dialog, setDialog] = useState(null) // null | 'logs' | 'cancel'
+  const [dialog, setDialog] = useState(null) // null | 'logs' | 'cancel' | 'rerun' | 'fuzzy'
   const [logLines, setLogLines] = useState([])
   const [logTitleText, setLogTitle] = useState('Log Viewer')
   const [logLoading, setLogLoading] = useState(false)
@@ -138,6 +139,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
     if (matchesAction('cursor.down', input, key)) { moveCursor(1); return }
     if (matchesAction('cursor.up', input, key))  { moveCursor(-1); return }
     if (matchesAction('list.refresh', input, key)) { refetch(); return }
+    if (matchesAction('list.search', input, key)) { if (items.length > 0) setDialog('fuzzy'); return }
     if (matchesAction('workflow.clear-filter', input, key) && branchFilter) { setBranchFilter(null); setCursor(0); setScrollOffset(0); return }
 
     // gg → top
@@ -181,6 +183,23 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
   })
 
   const visibleRuns = items.slice(scrollOffset, scrollOffset + visibleHeight)
+
+  if (dialog === 'fuzzy') {
+    return (
+      <Box flexDirection="column" flexGrow={1}>
+        <FuzzySearch
+          items={items.map(run => ({ ...run, title: sanitize(`${run.workflowName || ''}  ${run.headBranch || ''}`) }))}
+          searchFields={['title']}
+          onSubmit={(item) => {
+            const idx = items.findIndex(run => run.databaseId === item.databaseId)
+            if (idx !== -1) { setCursor(idx); setScrollOffset(Math.max(0, idx - 2)) }
+            setDialog(null)
+          }}
+          onCancel={() => setDialog(null)}
+        />
+      </Box>
+    )
+  }
 
   if (dialog === 'logs') {
     if (logLoading) {

@@ -11,7 +11,7 @@ import { TextInput } from '../../utils.js'
 import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { useState } from 'react'
 import { useKeyScope } from '../../keyscope.js'
-import { matchesAction } from '../../config/actions.js'
+import { hintLine, matchesAction } from '../../config/actions.js'
 
 function matchesQuery(item, query, searchFields) {
   if (!query) return true
@@ -92,7 +92,7 @@ export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['t
       )}
 
       <Box marginTop={1}>
-        <Text color={t.ui.dim}>[↑↓ / Ctrl+jk] navigate  [Ctrl+g/G] top/bottom  [Enter] select  [Esc] cancel</Text>
+        <Text color={t.ui.dim} wrap="truncate">{hintLine([['dialog.filter-down', 'navigate'], ['dialog.filter-top', 'top'], ['dialog.filter-bottom', 'bottom'], ['dialog.confirm', 'select'], 'dialog.cancel'])}</Text>
       </Box>
     </Box>
   )

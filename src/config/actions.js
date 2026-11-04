@@ -66,6 +66,47 @@ export function actionHints(ids, config = getActionConfig()) {
   return hints
 }
 
+const effectiveKeyCache = new WeakMap()
+
+/**
+ * The key to show for an action: its effective binding after `[keymaps.*]`
+ * rebinds, or null when the action is unbound. This is what every hint line
+ * renders, so a hint can never name a key the keymap does not bind (#511).
+ * @param {string} id registry action id
+ * @param {object} [config] effective config
+ * @returns {string|null} key label, e.g. 'Ctrl+R'
+ */
+export function effectiveHintKey(id, config = getActionConfig()) {
+  let keys = effectiveKeyCache.get(config)
+  if (!keys) {
+    keys = buildEffectiveActionKeys(config)
+    effectiveKeyCache.set(config, keys)
+  }
+  const bound = keys[id] || []
+  if (bound.length === 0) return null
+  const action = getAction(id, config)
+  return action?.hint && bound.length > 1 ? action.hint : bound[0]
+}
+
+/**
+ * One hint line (`[j/k] nav  [Esc] exit`) generated from the registry.
+ * Unbound actions are left out. An entry is an action id, or `[id, label]` to
+ * override the registry label with a shorter one.
+ * @param {(string|[string, string])[]} entries action ids
+ * @param {object} [config] effective config
+ * @returns {string} hint line
+ */
+export function hintLine(entries, config = getActionConfig()) {
+  const parts = []
+  for (const entry of entries) {
+    const [id, label] = Array.isArray(entry) ? entry : [entry, null]
+    const key = effectiveHintKey(id, config)
+    if (!key) continue
+    parts.push(`[${key}] ${label ?? getAction(id, config)?.label ?? id}`)
+  }
+  return parts.join('  ')
+}
+
 function matchesKeyToken(token, input, key) {
   switch (token) {
     case 'Enter': return key.return

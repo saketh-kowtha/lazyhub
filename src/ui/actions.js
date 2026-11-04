@@ -109,7 +109,7 @@ const FOOTER_IDS = {
   'pr-list': ['cursor.down', 'pr.open-selected', 'pr.diff', 'pr.approve', 'pr.merge', 'pr.filter-cycle', 'list.search'],
   'issue-list': ['cursor.down', 'issue.open-selected', 'issue.new', 'issue.filter-cycle', 'list.search'],
   'branch-list': ['cursor.down', 'branch.checkout', 'branch.new', 'branch.delete', 'branch.push'],
-  'workflow-list': ['cursor.down', 'workflow.logs', 'workflow.rerun', 'workflow.cancel'],
+  'workflow-list': ['cursor.down', 'workflow.logs', 'workflow.rerun', 'workflow.cancel', 'list.search'],
   'notification-list': ['cursor.down', 'notification.open', 'notification.mark-read', 'notification.mark-all'],
   'tab-list': ['cursor.down', 'tab.open-selected', 'tab.open-browser', 'tab.next-section'],
   'pr-detail': ['cursor.down', 'pr.diff', 'pr.checks', 'pr.approve', 'pr.merge', 'pr.comments', 'pr.open-browser', 'app.back'],
@@ -331,6 +331,20 @@ export function fuzzyScore(label, query) {
   return -1
 }
 
+// Palette context -> keymap scope, for the contexts that have their own bindings.
+const PALETTE_SCOPE = {
+  'pr-list': 'pr-list', 'pr-detail': 'pr-detail', diff: 'diff', issues: 'issue-list',
+  'issues-detail': 'issue-detail', branches: 'branch-list', actions: 'workflow-list',
+  notifications: 'notification-list',
+}
+
+function keyLiveIn(action, context) {
+  const scope = action.registryScope
+  const keymapScope = PALETTE_SCOPE[context]
+  if (!scope || !keymapScope) return true
+  return String(scope).split(',').includes('global') || actionScopeMatches(scope, keymapScope)
+}
+
 /**
  * Filter and rank actions for the given query and current context.
  *
@@ -343,12 +357,15 @@ export function fuzzyScore(label, query) {
 export function filterActions(actions, query, context, limit = 8) {
   const results = []
 
-  for (const action of actions) {
+  for (let action of actions) {
     // Context gate: skip actions not relevant to current view
     const ctx = Array.isArray(action.context) ? action.context : [action.context]
     if (!ctx.includes('global') && !ctx.includes(context) && !ctx.includes('*')) {
       continue
     }
+
+    // Show a key only where it is bound: `Checkout [b]` is a PR-list key, not a PR-detail one (#449).
+    if (action.keys?.length && !keyLiveIn(action, context)) action = { ...action, keys: [] }
 
     const labelScore = fuzzyScore(action.label, query)
     const hintScore  = action.hint ? fuzzyScore(action.hint, query) : -1
@@ -785,5 +802,5 @@ function withRegistryKeys(action) {
   const config = getActionConfig()
   const id = REGISTRY_ID[action.id] || action.id
   if (!config?.actions?.[id]) return action
-  return { ...action, keys: boundKeys(id, config) }
+  return { ...action, keys: boundKeys(id, config), registryScope: config.actions[id].scope }
 }

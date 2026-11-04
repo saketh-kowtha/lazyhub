@@ -219,7 +219,8 @@ export function useActionResolver(scopes, config) {
     const plain = input && input.length === 1 && !key.ctrl && !key.meta ? input : null
     last.current = { input: plain, at: now }
     if (plain && prev.input && now - prev.at <= CHORD_WINDOW_MS) {
-      const chord = keymap.resolveToken(`${prev.input}${plain}`)
+      // Chords are declared either joined (`gg`) or spaced (`g l`, the form which-key shows).
+      const chord = keymap.resolveToken(`${prev.input}${plain}`) ?? keymap.resolveToken(`${prev.input} ${plain}`)
       if (chord) { last.current = { input: null, at: 0 }; return chord }
     }
     return keymap.resolve(input, key)
