@@ -15,7 +15,8 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { render, useInput, useApp } from 'ink'
+import { render, useApp } from 'ink'
+import { useInput } from './hooks/useSafeInput.js'
 import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
 import { terminalStdout } from './theme/terminal.js'
 import { KeyScopeProvider, useActiveScope, useKeyScope } from './keyscope.js'

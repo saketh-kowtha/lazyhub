@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { Box, Text, useStdout } from 'ink'
+import { useInput } from '../../hooks/useSafeInput.js'
 import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
 import { useVirtualList } from '../../hooks/useVirtualList.js'

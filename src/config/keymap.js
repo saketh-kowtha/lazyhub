@@ -2,7 +2,7 @@
  * config/keymap.js — TOML-backed keymap resolution.
  */
 
-import { useInput } from 'ink'
+import { useInput } from '../hooks/useSafeInput.js'
 import { useCallback, useMemo, useRef } from 'react'
 import { loadConfig } from './loader.js'
 import { getActionConfig } from './actions.js'

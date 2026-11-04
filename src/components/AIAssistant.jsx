@@ -7,7 +7,8 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text } from 'ink'
+import { useInput } from '../hooks/useSafeInput.js'
 import { useTheme } from '../theme.js'
 import { useKeyScope } from '../keyscope.js'
 import { AppContext } from '../context.js'

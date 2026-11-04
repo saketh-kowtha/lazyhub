@@ -1,5 +1,6 @@
 import React from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { Box, Text, useStdout } from 'ink'
+import { useInput } from './hooks/useSafeInput.js'
 import { useTheme } from './theme.js'
 import { useKeyScope } from './keyscope.js'
 import { matchesAction } from './config/actions.js'

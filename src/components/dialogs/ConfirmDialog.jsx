@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text } from 'ink'
+import { useInput } from '../../hooks/useSafeInput.js'
 import { useTheme } from '../../theme.js'
 import { useKeyScope } from '../../keyscope.js'
 import { matchesAction } from '../../config/actions.js'

@@ -9,7 +9,8 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { Box, Text, render, useApp, useInput, useStdout } from 'ink'
+import { Box, Text, render, useApp, useStdout } from 'ink'
+import { useInput } from '../../hooks/useSafeInput.js'
 import { ThemeProvider, useTheme, readRawThemeCfg } from '../../theme.js'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { Spinner } from '../../components/Spinner.jsx'

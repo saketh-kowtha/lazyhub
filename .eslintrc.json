@@ -55,6 +55,13 @@
           {
             "name": "execa",
             "message": "Use src/executor.js for all gh CLI calls to ensure consistent error handling and redacting."
+          },
+          {
+            "name": "ink",
+            "importNames": [
+              "useInput"
+            ],
+            "message": "Import useInput from src/hooks/useSafeInput.js so handler errors are contained (#490)."
           }
         ]
       }
@@ -70,7 +77,8 @@
         "src/bootstrap.js",
         "src/**/*.test.js",
         "build.js",
-        "bin/*.js"
+        "bin/*.js",
+        "src/hooks/useSafeInput.js"
       ],
       "rules": {
         "no-restricted-imports": "off"
@@ -102,6 +110,13 @@
               {
                 "name": "node:child_process",
                 "message": "Do not spawn processes from UI code: use src/services/platform.js or src/services/git.js so tests can mock them (#470, #489)."
+              },
+              {
+                "name": "ink",
+                "importNames": [
+                  "useInput"
+                ],
+                "message": "Import useInput from src/hooks/useSafeInput.js so handler errors are contained (#490)."
               }
             ]
           }

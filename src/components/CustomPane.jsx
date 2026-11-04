@@ -33,7 +33,8 @@
 
 import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
 import { openUrl, copyToClipboard, runConfiguredCommand } from '../services/platform.js'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { Box, Text, useStdout } from 'ink'
+import { useInput } from '../hooks/useSafeInput.js'
 import { format } from 'timeago.js'
 import { FuzzySearch } from './dialogs/FuzzySearch.jsx'
 import { AppContext } from '../context.js'

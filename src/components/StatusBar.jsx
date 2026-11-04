@@ -70,8 +70,9 @@ export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode
   // A non-error notice (e.g. running without the background helper) takes the banner slot only
   // while no call is failing, so it can never hide a real error.
   const noticeRoom = inner - labelW - 2 - modeW - scopeW
-  const noticeText = !degraded && ghHealth?.notice && noticeRoom >= 12
-    ? truncateEllipsis(sanitize(String(ghHealth.notice)), noticeRoom - 2)
+  const bannerNotice = ghHealth?.toast || ghHealth?.notice
+  const noticeText = !degraded && bannerNotice && noticeRoom >= 12
+    ? truncateEllipsis(sanitize(String(bannerNotice)), noticeRoom - 2)
     : null
   const showAge = !narrow && !errorText && !noticeText
   const showContext = !errorText || cols >= 140
@@ -91,7 +92,7 @@ export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode
       {/* Right zone: banner · mode chip · scope · refresh age */}
       <Box gap={1} flexShrink={0}>
         {errorText && <Text color={t.ci?.fail || t.ui.selected} bold wrap="truncate">{errorText}</Text>}
-        {noticeText && <Text color={t.ui.dim} wrap="truncate">{noticeText}</Text>}
+        {noticeText && <Text color={ghHealth?.toast ? (t.ci?.fail || t.ui.selected) : t.ui.dim} wrap="truncate">{noticeText}</Text>}
         {mode !== 'NORMAL' && (
           <Text color={chipClr} bold>{mode}</Text>
         )}

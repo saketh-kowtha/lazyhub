@@ -17,7 +17,7 @@
  */
 
 import React, { createContext, useContext, useState, useRef, useCallback, useMemo, useEffect } from 'react'
-import { useInput } from 'ink'
+import { useInput } from './hooks/useSafeInput.js'
 
 export const SCOPE_LEVEL = {
   global:  0,

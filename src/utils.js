@@ -6,7 +6,8 @@
 
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text } from 'ink'
+import { useInput } from './hooks/useSafeInput.js'
 /* eslint-enable no-unused-vars */
 import chalk from 'chalk'
 import { getHljs } from './highlight.js'

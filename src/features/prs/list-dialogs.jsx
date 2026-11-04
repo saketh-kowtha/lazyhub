@@ -2,7 +2,8 @@
 
 /** PR label, collaborator and author pickers used by the list pane. */
 import React, { useState, useRef } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text } from 'ink'
+import { useInput } from '../../hooks/useSafeInput.js'
 import { useGh } from '../../hooks/useGh.js'
 import { classifyGhFailure, listLabels, listCollaborators, editPRMembers } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
