@@ -64,6 +64,7 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
             { name: 'title', label: 'Title', type: 'text' },
             { name: 'body', label: 'Body', type: 'multiline' },
           ]}
+          validate={(values) => ((values.title || '').trim() ? null : 'a title is required')}
           onSubmit={async (values) => {
             onClose()
             try {

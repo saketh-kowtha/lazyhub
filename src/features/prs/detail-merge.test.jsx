@@ -130,6 +130,7 @@ describe('merge flow wording and keystrokes (#468)', () => {
     for (let i = 0; i < 3; i++) await sendInput('j')
     await sendInput(...ENTER)
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Type 42 to confirm'))
+    expect(view.lastFrame()).toContain('Type 42, then ←, then Enter')
     await sendInput('y')
     await flush(20)
     expect(mergePR).not.toHaveBeenCalled()

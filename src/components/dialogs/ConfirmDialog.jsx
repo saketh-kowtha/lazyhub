@@ -93,7 +93,11 @@ export function ConfirmDialog({ message, destructive = false, onConfirm, onCance
         </Box>
       </Box>
       <Box marginTop={1}>
-        <Text color={t.ui.dim}>[←→ / j/k] choose  [Enter] confirm  [Esc] cancel</Text>
+        <Text color={t.ui.dim}>
+          {requireText
+            ? `Type ${requireText}, then ←, then Enter  [Esc] cancel`
+            : '[←→ / j/k] choose  [Enter] confirm  [Esc] cancel'}
+        </Text>
       </Box>
     </Box>
   )
