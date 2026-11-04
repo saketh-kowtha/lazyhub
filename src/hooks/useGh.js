@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { logger } from '../utils.js'
-import { cacheKey as makeDiskCacheKey, approxBytes, createLruCache, peekCache, readCacheAsync, warmCache, writeCache } from '../cache.js'
+import { scopedCacheKey as makeDiskCacheKey, cacheIdentity, approxBytes, createLruCache, peekCache, readCacheAsync, warmCache, writeCache } from '../cache.js'
 import { recordGhFailure, recordGhSuccess } from './useGhHealth.js'
 
 // In-memory cache: key → { data, timestamp }, LRU-capped by entry count AND by
@@ -42,7 +42,8 @@ const DEFAULT_TTL = 30_000 // 30 seconds
  * @returns {{ data, loading, error, refetch, mutate, isStale }}
  */
 export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } = {}) {
-  const cacheKey = JSON.stringify([fetchFn.name, ...deps])
+  const { host, account } = cacheIdentity()
+  const cacheKey = JSON.stringify([host, account, fetchFn.name, ...deps])
   const repo = typeof deps[0] === 'string' ? deps[0] : process.env.GHUI_REPO
   const diskCacheKey = makeDiskCacheKey([repo, fetchFn.name, deps])
   // Stale-while-revalidate (#454): seed from the memory/disk cache synchronously so a
@@ -131,7 +132,7 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
       settled = true
       if (!isCurrent()) return
       cache.set(cacheKey, { data: result, timestamp: Date.now() })
-      writeCache(diskCacheKey, result, { repo, op: fetchFn.name || 'unnamed' })
+      writeCache(diskCacheKey, result, { repo, host, op: fetchFn.name || 'unnamed' })
       setData(result)
       setError(null)
       setIsStale(false)
@@ -150,7 +151,7 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
         setLoading(false)
       }
     }
-  }, [cacheKey, diskCacheKey, fetchFn, repo, ttl]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cacheKey, diskCacheKey, fetchFn, repo, host, ttl]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const refetch = useCallback(() => {
     fetchData(true)
@@ -167,13 +168,13 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
       // Keep cache in sync so refetch doesn't overwrite our optimistic state
       const cached = cache.get(cacheKey)
       if (cached) cache.set(cacheKey, { data: next, timestamp: cached.timestamp })
-      writeCache(diskCacheKey, next, { repo, op: fetchFn.name || 'unnamed' })
+      writeCache(diskCacheKey, next, { repo, host, op: fetchFn.name || 'unnamed' })
       return next
     })
     if (opts.revalidate) {
       setTimeout(() => fetchData(true), 0)
     }
-  }, [cacheKey, diskCacheKey, fetchData, fetchFn, repo])
+  }, [cacheKey, diskCacheKey, fetchData, fetchFn, repo, host])
 
   useEffect(() => {
     mountedRef.current = true

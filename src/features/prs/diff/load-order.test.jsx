@@ -2,7 +2,7 @@ import React, { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { rmSync } from 'node:fs'
 import { cleanup, renderWithProviders, waitForExpectation } from '../../../test/test-helpers.jsx'
-import { cacheKey as mkDiskKey, writeCache } from '../../../cache.js'
+import { scopedCacheKey as mkDiskKey, writeCache } from '../../../cache.js'
 import { sendInput } from '../../../test/input-bus.js'
 import { firstActionKey } from '../../../config/actions.js'
 

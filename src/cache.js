@@ -132,6 +132,49 @@ export function cacheKey(parts) {
   return createHash('sha256').update(JSON.stringify(parts)).digest('hex')
 }
 
+// ---------------------------------------------------------------------------
+// Identity scope (#520)
+// ---------------------------------------------------------------------------
+
+/** Opaque, non-reversible fingerprint of the authenticated account, set once by the auth preflight. */
+let identityAccount = null
+
+/**
+ * Record which account this process is authenticated as. Pass an opaque string
+ * (see accountFingerprint) or null. Called by the auth preflight, which has
+ * already fetched the credential, so no extra lookup is needed per read.
+ * @param {{account?: string|null}} identity
+ */
+export function setCacheIdentity({ account = null } = {}) {
+  identityAccount = account || null
+}
+
+/**
+ * Non-reversible fingerprint for an account credential. The raw value is never
+ * stored, logged or written to the cache directory.
+ * @param {string} secret
+ */
+export function accountFingerprint(secret) {
+  if (!secret) return null
+  return createHash('sha256').update(`lazyhub-cache-account:${secret}`).digest('hex').slice(0, 16)
+}
+
+/** The host and account every shared cache key is scoped to. Host is read live from GH_HOST. */
+export function cacheIdentity() {
+  return { host: (process.env.GH_HOST || 'github.com').toLowerCase(), account: identityAccount }
+}
+
+/**
+ * Cache key scoped to the current host and account, so an entry written for one
+ * identity can never be served to another (same owner/repo on github.com and a
+ * GHES host, or after `gh auth switch`).
+ * @param {unknown[]} parts
+ */
+export function scopedCacheKey(parts) {
+  const { host, account } = cacheIdentity()
+  return cacheKey(['scope', host, account, ...parts])
+}
+
 function pathFor(key) {
   return join(CACHE_DIR, `${key}.json`)
 }

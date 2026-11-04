@@ -1,11 +1,11 @@
 import React from 'react'
 import { Text } from 'ink'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { render, cleanup } from 'ink-testing-library'
 import { useGh, resetGhMemoryCache, ghMemoryCacheStats, GH_MEMORY_MAX_BYTES } from './useGh.js'
 import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { CACHE_DIR, cacheKey as mkDiskKey, writeCache } from '../cache.js'
+import { CACHE_DIR, scopedCacheKey as mkDiskKey, setCacheIdentity, writeCache } from '../cache.js'
 import { flush, waitForExpectation } from '../test/test-helpers.jsx'
 
 function defer() {
@@ -224,5 +224,74 @@ describe('useGh in-memory cache is bounded by bytes (#457)', () => {
     expect(stats.bytes).toBeLessThanOrEqual(GH_MEMORY_MAX_BYTES)
     resetGhMemoryCache()
     cleanup()
+  })
+})
+
+describe('useGh cache is isolated per host and account (#520)', () => {
+  const prevHost = process.env.GH_HOST
+  afterEach(() => {
+    if (prevHost === undefined) delete process.env.GH_HOST
+    else process.env.GH_HOST = prevHost
+    setCacheIdentity({ account: null })
+    resetGhMemoryCache()
+    cleanup()
+  })
+
+  async function leakProbe(host, account, name) {
+    // Run 1 (github.com / acct-a) fills the memory and disk caches for one repo, fn and deps.
+    const d = defer()
+    let phase = 'first'
+    const fn = { [name]: () => (phase === 'first' ? Promise.resolve('FROM-A') : d.promise) }[name]
+    function View() {
+      const { data, loading } = useGh(fn, ['same/repo', 1])
+      return <Text>{`data=${data ?? 'none'} loading=${loading}`}</Text>
+    }
+    process.env.GH_HOST = 'github.com'
+    setCacheIdentity({ account: 'acct-a' })
+    const first = render(<View />)
+    await waitForExpectation(() => expect(first.lastFrame()).toContain('data=FROM-A'))
+    first.unmount()
+    // Run 2: another host and/or account, same owner/repo.
+    phase = 'second'
+    process.env.GH_HOST = host
+    setCacheIdentity({ account })
+    resetGhMemoryCache() // a new launch: only the disk mirror survives
+    const second = render(<View />)
+    return second.lastFrame()
+  }
+
+  it('never serves a github.com cache entry to a GHES host with the same owner/repo', async () => {
+    const frame = await leakProbe('ghe.example.com', 'acct-a', 'hostLeakFetch')
+    expect(frame).not.toContain('FROM-A')
+    expect(frame).toContain('data=none loading=true')
+  })
+
+  it('never serves account A cache entry to account B on the same host', async () => {
+    const frame = await leakProbe('github.com', 'acct-b', 'acctLeakFetch')
+    expect(frame).not.toContain('FROM-A')
+    expect(frame).toContain('data=none loading=true')
+  })
+
+  it('still serves the entry back to the same host and account', async () => {
+    const frame = await leakProbe('github.com', 'acct-a', 'sameIdFetch')
+    expect(frame).toContain('data=FROM-A')
+  })
+
+  it('does not reuse the in-memory entry when the host changes mid-session', async () => {
+    const d = defer()
+    let phase = 'first'
+    const fn = { memHostFetch: () => (phase === 'first' ? Promise.resolve('MEM-A') : d.promise) }.memHostFetch
+    function View() {
+      const { data } = useGh(fn, ['same/repo'])
+      return <Text>{`data=${data ?? 'none'}`}</Text>
+    }
+    process.env.GH_HOST = 'github.com'
+    const first = render(<View />)
+    await waitForExpectation(() => expect(first.lastFrame()).toContain('data=MEM-A'))
+    first.unmount()
+    phase = 'second'
+    process.env.GH_HOST = 'ghe.example.com'
+    const second = render(<View />)
+    expect(second.lastFrame()).toContain('data=none')
   })
 })

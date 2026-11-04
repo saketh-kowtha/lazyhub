@@ -12,7 +12,7 @@ describe('ambient status', () => {
     const summary = summarizeStatus([
       {
         ts: NOW - 30_000,
-        meta: { op: 'listPRs' },
+        meta: { op: 'listPRs', host: 'github.com' },
         payload: [
           { reviewDecision: 'REVIEW_REQUIRED', statusCheckRollup: [] },
           { reviewDecision: 'APPROVED', statusCheckRollup: [{ conclusion: 'FAILURE' }] },
@@ -20,7 +20,7 @@ describe('ambient status', () => {
       },
       {
         ts: NOW - 20_000,
-        meta: { op: 'listNotifications' },
+        meta: { op: 'listNotifications', host: 'github.com' },
         payload: [{ unread: true }, { unread: false }, { unread: true }],
       },
     ], NOW)
@@ -69,5 +69,26 @@ describe('ambient status', () => {
       cache_age_seconds: 5,
     }
     expect(JSON.parse(formatStatus(summary, 'json'))).toEqual(summary)
+  })
+})
+
+describe('ambient status host isolation (#520)', () => {
+  it('ignores entries cached for another host or recorded before hosts were stored', () => {
+    const prev = process.env.GH_HOST
+    delete process.env.GH_HOST
+    try {
+      const prs = [{ reviewDecision: 'REVIEW_REQUIRED', statusCheckRollup: [] }]
+      expect(summarizeStatus([
+        { ts: NOW, meta: { op: 'listPRs', host: 'ghe.example.com' }, payload: prs },
+        { ts: NOW, meta: { op: 'listPRs' }, payload: prs },
+      ], NOW)).toBeNull()
+      process.env.GH_HOST = 'ghe.example.com'
+      expect(summarizeStatus([
+        { ts: NOW, meta: { op: 'listPRs', host: 'ghe.example.com' }, payload: prs },
+      ], NOW).counts.review_requested).toBe(1)
+    } finally {
+      if (prev === undefined) delete process.env.GH_HOST
+      else process.env.GH_HOST = prev
+    }
   })
 })

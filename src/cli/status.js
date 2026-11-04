@@ -1,10 +1,13 @@
-import { listCacheEntries } from '../cache.js'
+import { cacheIdentity, listCacheEntries } from '../cache.js'
 
 const STALE_AFTER_SECONDS = 10 * 60
 
 function newest(entries, op) {
+  // Only entries recorded for this host: the same owner/repo on another host (or an
+  // entry from before hosts were recorded) must never feed this status line (#520).
+  const { host } = cacheIdentity()
   return entries
-    .filter(entry => entry?.meta?.op === op)
+    .filter(entry => entry?.meta?.op === op && entry.meta.host === host)
     .sort((a, b) => b.ts - a.ts)[0] || null
 }
 

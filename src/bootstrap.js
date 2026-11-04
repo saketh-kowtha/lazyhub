@@ -9,6 +9,7 @@
 
 import { execa } from 'execa'
 import { loadSavedRepo, saveDefaultRepo, writeDefaultConfig } from './config.js'
+import { accountFingerprint, setCacheIdentity } from './cache.js'
 import { runGh } from './executor/core.js'
 import { classifyHostMismatch } from './executor/classify.js'
 import readline from 'readline'
@@ -143,7 +144,11 @@ export async function checkAuth() {
     : ['auth', 'token']
   try {
     // runGh throws on non-zero exit and returns null on empty output.
-    return !!(await runGh(args, { json: false }))
+    const token = await runGh(args, { json: false })
+    // Scope shared caches to this account (#520) without another lookup: only a
+    // one-way fingerprint is kept, never the credential itself.
+    setCacheIdentity({ account: accountFingerprint(typeof token === 'string' ? token.trim() : '') })
+    return !!token
   } catch {
     return false
   }
