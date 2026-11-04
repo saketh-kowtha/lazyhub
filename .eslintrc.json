@@ -11,9 +11,18 @@
       "jsx": true
     }
   },
-  "plugins": ["react-hooks", "jsdoc"],
+  "plugins": [
+    "react-hooks",
+    "jsdoc"
+  ],
   "rules": {
-    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
     "no-undef": "error",
     "no-constant-condition": "error",
     "no-duplicate-case": "error",
@@ -53,9 +62,65 @@
   },
   "overrides": [
     {
-      "files": ["src/executor.js", "src/executor/**/*.js", "src/editor.js", "src/services/**/*.js", "src/bootstrap.js", "src/**/*.test.js", "build.js", "bin/*.js"],
+      "files": [
+        "src/executor.js",
+        "src/executor/**/*.js",
+        "src/editor.js",
+        "src/services/**/*.js",
+        "src/bootstrap.js",
+        "src/**/*.test.js",
+        "build.js",
+        "bin/*.js"
+      ],
       "rules": {
         "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": [
+        "src/features/**/*.js",
+        "src/components/**/*.js",
+        "src/ui/**/*.js"
+      ],
+      "excludedFiles": [
+        "**/*.test.js",
+        "**/*.test.jsx"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "execa",
+                "message": "Do not spawn processes from UI code: use src/services/platform.js or src/services/git.js so tests can mock them (#470, #489)."
+              },
+              {
+                "name": "child_process",
+                "message": "Do not spawn processes from UI code: use src/services/platform.js or src/services/git.js so tests can mock them (#470, #489)."
+              },
+              {
+                "name": "node:child_process",
+                "message": "Do not spawn processes from UI code: use src/services/platform.js or src/services/git.js so tests can mock them (#470, #489)."
+              }
+            ]
+          }
+        ],
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "ImportExpression[source.value=/^(execa|child_process|node:child_process)$/]",
+            "message": "Do not spawn processes from UI code: use src/services/platform.js or src/services/git.js so tests can mock them (#470, #489)."
+          },
+          {
+            "selector": "CallExpression[callee.name='require'][arguments.0.value=/^(execa|child_process|node:child_process)$/]",
+            "message": "Do not spawn processes from UI code: use src/services/platform.js or src/services/git.js so tests can mock them (#470, #489)."
+          },
+          {
+            "selector": "ImportDeclaration[source.value=/(^|\\/)theme(\\.js)?$/] > ImportSpecifier[imported.name='t']",
+            "message": "Use the useTheme() hook, never the static `t` constant, in UI code (AGENTS.md invariant 7)."
+          }
+        ]
       }
     }
   ]
