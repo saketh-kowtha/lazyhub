@@ -16,6 +16,9 @@ function prSearchQuery(repo, filter) {
   const parts = [`repo:${repo}`, 'is:pr']
   if (state === 'merged') {
     parts.push('is:merged')
+  } else if (state === 'closed') {
+    // GitHub search counts merged PRs as closed; `gh pr list --state closed` does not (#425).
+    parts.push('is:closed', '-is:merged')
   } else if (state !== 'all') {
     parts.push(`state:${state}`)
   }

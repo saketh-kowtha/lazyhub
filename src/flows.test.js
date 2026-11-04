@@ -83,10 +83,12 @@ describe('PR list — fetch flows', () => {
     expect(args().find(arg => String(arg).startsWith('searchQuery='))).toContain('state:open')
   })
 
-  it('fetches closed PRs when state=closed', async () => {
+  it('fetches closed PRs when state=closed, without spending the page on merged ones (#425)', async () => {
     ok({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { state: 'closed' })
-    expect(args().find(arg => String(arg).startsWith('searchQuery='))).toContain('state:closed')
+    const query = args().find(arg => String(arg).startsWith('searchQuery='))
+    expect(query).toContain('is:closed -is:merged')
+    expect(query).not.toContain('state:closed')
   })
 
   it('fetches merged PRs when state=merged', async () => {
