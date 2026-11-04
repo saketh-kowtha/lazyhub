@@ -1,6 +1,10 @@
 /**
  * OptionPicker.jsx — single-select option picker with virtual scrolling.
  * Props: options ([{value, label, description?}]), onSubmit(value), onCancel(), title?, promptText?
+ *   initialIndex? - option under the cursor when the picker opens (the safe default).
+ *   promptKey?    - with promptText: Enter submits the highlighted option at once, and this key
+ *                   opens the optional text prompt first (e.g. a merge commit message).
+ *                   Without it, Enter on any option opens the prompt (older behaviour).
  */
 
 import React, { useState } from 'react'
@@ -11,7 +15,7 @@ import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { useKeyScope } from '../../keyscope.js'
 import { matchesAction } from '../../config/actions.js'
 
-export function OptionPicker({ options = [], onSubmit, onCancel, title, promptText }) {
+export function OptionPicker({ options = [], onSubmit, onCancel, title, promptText, initialIndex = 0, promptKey = '' }) {
   useKeyScope('dialog')
   const { t } = useTheme()
   const { stdout } = useStdout()
@@ -26,7 +30,7 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
 
   const { cursor, scrollOffset, visibleItems, moveCursor, jumpTop, jumpBottom,
           canScrollUp, canScrollDown } =
-    useVirtualList({ items: options, height: listHeight })
+    useVirtualList({ items: options, height: listHeight, initialCursor: initialIndex })
 
   useInput((input, key) => {
     if (step === 'pick') {
@@ -35,10 +39,16 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
       if (matchesAction('dialog.down', input, key)) { moveCursor(cursor + 1); return }
       if (matchesAction('dialog.top', input, key)) { jumpTop();    return }
       if (matchesAction('dialog.bottom', input, key)) { jumpBottom(); return }
+      if (promptKey && promptText && input === promptKey) {
+        const val = options[cursor]?.value
+        if (val == null || options[cursor]?.skipPrompt) return
+        setPickedValue(val); setStep('text')
+        return
+      }
       if (matchesAction('dialog.confirm', input, key)) {
         const val = options[cursor]?.value
         if (val == null) return
-        if (promptText && !options[cursor]?.skipPrompt) { setPickedValue(val); setStep('text') }
+        if (promptText && !promptKey && !options[cursor]?.skipPrompt) { setPickedValue(val); setStep('text') }
         else            { onSubmit(val) }
         return
       }
@@ -49,13 +59,18 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
 
   if (step === 'text') {
     return (
-      <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
+      <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
+        {title && (
+          <Box marginBottom={1}>
+            <Text color={t.ui.selected} bold>{title}</Text>
+          </Box>
+        )}
         <Box marginBottom={1}>
           <Text color={t.ui.selected} bold>Selected: </Text>
           <Text>{options.find(o => o.value === pickedValue)?.label ?? pickedValue}</Text>
         </Box>
-        <Box>
-          <Text color={t.ui.muted}>{promptText}: </Text>
+        <Text color={t.ui.muted}>{promptText}:</Text>
+        <Box borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
           <TextInput
             value={textInput}
             onChange={setTextInput}
@@ -103,7 +118,11 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
       })}
 
       <Box marginTop={1}>
-        <Text color={t.ui.dim}>[j/k] navigate  [g/G] top/bottom  [Enter] select  [Esc] cancel</Text>
+        <Text color={t.ui.dim}>
+          {promptKey && promptText
+            ? `[j/k] choose  [Enter] ${options[cursor]?.label ?? 'select'}  [${promptKey}] add message  [Esc] cancel`
+            : '[j/k] navigate  [g/G] top/bottom  [Enter] select  [Esc] cancel'}
+        </Text>
       </Box>
     </Box>
   )

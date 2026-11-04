@@ -51,11 +51,15 @@ import {
   addPRComment,
   addPRLineComment,
   listPRComments,
+  listPRCommentsPage,
+  listPRTimelinePage,
+  listPRThreadReplies,
   resolveThread,
   createPR,
   getGist,
   deleteGist,
   getPRReviewComments,
+  getPRReviewCommentsPage,
   addPRReviewThreadReply,
   resolvePRReviewThread,
   getPRStateForBranch,
@@ -822,6 +826,86 @@ describe('listPRComments()', () => {
     expect(args).toContain('graphql')
     expect(args.some(a => a.includes('reviewThreads'))).toBe(true)
     expect(args.some(a => a === 'owner=owner' || a === 'name=repo' || a === 'number=5')).toBe(true)
+  })
+})
+
+describe('PR timeline paging (#507)', () => {
+  const ok = (data) => ({ exitCode: 0, stdout: JSON.stringify(data), stderr: '' })
+  const node = (id, extra = {}) => ({ databaseId: id, body: `b${id}`, path: 'a.js', line: 1, author: { login: 'u' }, createdAt: '2026-01-01T00:00:00Z', ...extra })
+  const wrap = (pr) => ({ data: { repository: { pullRequest: pr } } })
+
+  it('listPRTimelinePage returns conversation comments and page info', async () => {
+    execa.mockResolvedValueOnce(ok(wrap({
+      reviewThreads: { totalCount: 0, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+      comments: { totalCount: 350, pageInfo: { hasNextPage: true, endCursor: 'C50' }, nodes: [node(1), node(2)] },
+    })))
+    const page = await listPRTimelinePage('owner/repo', 5)
+    const [, args] = execa.mock.calls[0]
+    expect(args.some(a => a.includes('comments(first: $size, after: $cAfter)'))).toBe(true)
+    expect(page.conversation.map(c => c.id)).toEqual([1, 2])
+    expect(page.conversation[0].kind).toBe('conversation')
+    expect(page.conversationPage).toMatchObject({ total: 350, hasNextPage: true, endCursor: 'C50' })
+  })
+
+  it('passes the cursor for the next page', async () => {
+    execa.mockResolvedValueOnce(ok(wrap({ comments: { totalCount: 3, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [node(3)] } })))
+    await listPRTimelinePage('owner/repo', 5, { conversationAfter: 'C50', threads: false })
+    const [, args] = execa.mock.calls[0]
+    expect(args).toContain('cAfter=C50')
+    expect(args).toContain('withThreads=false')
+  })
+
+  const thread = (id, extra = {}) => ({ id: `T${id}`, isResolved: false, comments: { totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [node(id)] }, ...extra })
+
+  it('listPRComments makes one request and flags that threads were left out', async () => {
+    execa.mockResolvedValueOnce(ok(wrap({ reviewThreads: { totalCount: 150, pageInfo: { hasNextPage: true, endCursor: 'T100' }, nodes: [thread(1)] } })))
+    const res = await listPRCommentsPage('owner/repo', 5)
+    expect(res.comments.map(c => c.id)).toEqual([1])
+    expect(execa).toHaveBeenCalledTimes(1)
+    // An explicit field of the payload, so it survives JSON (the disk cache) and list edits.
+    expect(JSON.parse(JSON.stringify(res)).truncated).toEqual({ threads: true, replies: false })
+  })
+
+  it('listPRComments reports no truncation when everything fits', async () => {
+    execa.mockResolvedValueOnce(ok(wrap({ reviewThreads: { totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [thread(1)] } })))
+    expect((await listPRCommentsPage('owner/repo', 5)).truncated).toBe(false)
+  })
+
+  it('a thread with more than 50 comments is listed as partial without a per-thread request', async () => {
+    const first = thread(1, { comments: { totalCount: 80, pageInfo: { hasNextPage: true, endCursor: 'R50' }, nodes: [node(1), node(2, { replyTo: { databaseId: 1 } })] } })
+    execa.mockResolvedValueOnce(ok(wrap({ reviewThreads: { totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [first] } })))
+    const page = await listPRTimelinePage('owner/repo', 5)
+    expect(execa).toHaveBeenCalledTimes(1)
+    expect(page.partialThreads).toEqual([{ threadId: 'T1', total: 80, endCursor: 'R50', stalled: false }])
+  })
+
+  it('listPRThreadReplies fetches the next page of one thread by cursor', async () => {
+    execa.mockResolvedValueOnce(ok({ data: { node: { id: 'T1', isResolved: true, comments: { totalCount: 80, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [node(3, { replyTo: { databaseId: 1 } })] } } } }))
+    const res = await listPRThreadReplies('T1', 'R50')
+    expect(execa.mock.calls[0][1]).toContain('after=R50')
+    expect(res.comments.map(c => [c.id, c.threadId, c.threadResolved])).toEqual([[3, 'T1', true]])
+    expect(res.page.hasNextPage).toBe(false)
+  })
+
+  it('a cursor that does not advance is reported as stalled, not retried', async () => {
+    execa.mockResolvedValueOnce(ok(wrap({ comments: { totalCount: 9, pageInfo: { hasNextPage: true, endCursor: 'C50' }, nodes: [node(1)] } })))
+    const page = await listPRTimelinePage('owner/repo', 5, { conversationAfter: 'C50', threads: false })
+    expect(page.conversationPage).toMatchObject({ hasNextPage: false, stalled: true })
+  })
+
+  it('getPRReviewComments walks every thread page and reply page, and flags a stalled cursor', async () => {
+    const partial = thread(1, { comments: { totalCount: 3, pageInfo: { hasNextPage: true, endCursor: 'R50' }, nodes: [node(1), node(2, { replyTo: { databaseId: 1 } })] } })
+    execa.mockResolvedValueOnce(ok(wrap({ reviewThreads: { totalCount: 2, pageInfo: { hasNextPage: true, endCursor: 'T1' }, nodes: [partial] } })))
+    execa.mockResolvedValueOnce(ok({ data: { node: { id: 'T1', isResolved: false, comments: { totalCount: 3, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [node(3, { replyTo: { databaseId: 1 } })] } } } }))
+    execa.mockResolvedValueOnce(ok(wrap({ reviewThreads: { totalCount: 2, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [thread(4)] } })))
+    const all = await getPRReviewCommentsPage('owner/repo', 5)
+    expect(all.comments.map(c => c.id)).toEqual([1, 2, 3, 4])
+    expect(all.truncated).toBe(false)
+    execa.mockReset()
+    execa.mockResolvedValue(ok(wrap({ reviewThreads: { totalCount: 9, pageInfo: { hasNextPage: true, endCursor: 'SAME' }, nodes: [thread(5)] } })))
+    const stalled = await getPRReviewCommentsPage('owner/repo', 5)
+    expect(stalled.truncated).toBe(true) // the second page sent SAME and got SAME back: stop and say so
+    expect(execa).toHaveBeenCalledTimes(2)
   })
 })
 

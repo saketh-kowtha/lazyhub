@@ -12,7 +12,7 @@
 
 import {
   listPRs, getPR, getPRDiff, getPRChecks, listIssues, getIssue,
-  listBranches, listRuns, getRepoInfo, listNotifications, listPRComments,
+  listBranches, listRuns, getRepoInfo, listNotifications, listPRCommentsPage,
 } from './executor.js'
 import { runAIChat } from './ai/index.js'
 
@@ -227,7 +227,13 @@ async function callReadOnlyTool(toolName, toolInput, repo) {
     case 'list_runs':          return listRuns(repo, { branch: toolInput.branch, status: toolInput.status })
     case 'get_repo_info':      return getRepoInfo(repo)
     case 'list_notifications': return listNotifications()
-    case 'list_pr_comments':   return listPRComments(repo, toolInput.number)
+    case 'list_pr_comments': {
+      const { comments, truncated } = await listPRCommentsPage(repo, toolInput.number)
+      // Say so when GitHub has more than this first page, so the model does not treat it as complete.
+      return truncated
+        ? { comments, truncated, note: 'Incomplete: only the first page of review threads (and first replies per thread) is listed.' }
+        : comments
+    }
     default:
       throw new Error(`Unknown read-only tool: ${toolName}`)
   }

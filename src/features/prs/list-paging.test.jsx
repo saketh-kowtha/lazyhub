@@ -109,6 +109,10 @@ describe('PR list writes patch the row (#439)', () => {
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Approve PR #1'))
     await flush(20)
     await sendInput('g', { ctrl: true })
+    // Approve asks before submitting (#468).
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Approve PR #1?'))
+    await flush(20)
+    await sendInput('y')
     await waitForExpectation(() => expect(reviewPR).toHaveBeenCalledWith('o/r', 1, 'approve', ''))
     await waitForExpectation(() => expect(getPRRow).toHaveBeenCalledWith('o/r', 1))
     await waitForExpectation(() => expect(view.lastFrame()).toContain('PR number 1 patched'))
@@ -185,6 +189,10 @@ describe('PR list row refresh after a write (#508)', () => {
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Approve PR #1'))
     await flush(20)
     await sendInput('g', { ctrl: true })
+    // Approve asks before submitting (#468).
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Approve PR #1?'))
+    await flush(20)
+    await sendInput('y')
   }
 
   it('keeps the old row and says so when the re-read fails; it never resets the pages', async () => {

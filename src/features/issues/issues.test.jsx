@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IssueList } from './list.jsx'
 import { IssueDetail } from './detail.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { getIssue, getIssueRow, closeIssue, listIssuesPage, listLabels, listCollaborators, editIssueMembers, addIssueComment } from '../../executor.js'
+import { getIssue, getIssueRow, closeIssue, createIssue, listIssuesPage, listLabels, listCollaborators, editIssueMembers, addIssueComment } from '../../executor.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -372,5 +372,19 @@ describe('issue list load-more (#506)', () => {
     expect(closeIssue).toHaveBeenCalledTimes(1)
     release()
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Closed #1'))
+  })
+})
+
+describe('new issue form (#468)', () => {
+  it('does not submit without a title and says why', async () => {
+    const view = await renderIssue(<IssueList repo="owner/repo" onSelectIssue={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
+    await flush(20)
+    await sendInput('n')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('New Issue'))
+    await flush(20)
+    await sendInput('g', { ctrl: true }) // Ctrl+G submits from any field
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('a title is required'))
+    expect(createIssue).not.toHaveBeenCalled()
   })
 })

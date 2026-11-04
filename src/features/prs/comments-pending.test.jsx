@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PRComments } from './comments.jsx'
 import { useGh } from '../../hooks/useGh.js'
 import { resolveThread } from '../../executor.js'
+import { timelinePage } from '../../test/timeline.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -20,7 +21,7 @@ describe('PR comments pending status (#453)', () => {
     let release
     resolveThread.mockImplementation(() => new Promise(resolve => { release = resolve }))
     const comment = { id: 1, body: 'Body 1', path: 'a.js', line: 1, user: { login: 'user1' }, threadId: 'T1', threadResolved: false }
-    useGh.mockImplementation(() => ({ data: [comment], loading: false, error: null, refetch: vi.fn() }))
+    useGh.mockImplementation(() => ({ data: timelinePage([comment]), loading: false, error: null, refetch: vi.fn() }))
     const view = renderWithProviders(<PRComments prNumber={5} repo="o/r" onBack={() => {}} />)
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Body 1'))
     await flush(20)

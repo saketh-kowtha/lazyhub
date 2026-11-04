@@ -283,7 +283,7 @@ export function renderAppView(ctx) {
               <DetailPane
                 {...(detailKind === 'issues'
                   ? { issueNumber: selectedItem.number }
-                  : { prNumber: selectedItem.number })}
+                  : { prNumber: selectedItem.number, baseRefName: selectedItem.baseRefName })}
                 repo={itemRepo}
                 onBack={goBack}
                 onOpenDiff={goToDiff}

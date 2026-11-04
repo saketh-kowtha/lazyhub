@@ -1,7 +1,7 @@
 import React, { act, useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useGh } from '../../../hooks/useGh.js'
-import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRComments, mergePR, reviewPR, replyToComment, deletePRComment } from '../../../executor.js'
+import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRCommentsPage, mergePR, reviewPR, replyToComment, deletePRComment } from '../../../executor.js'
 import { firstActionKey } from '../../../config/actions.js'
 import { sendInput } from '../../../test/input-bus.js'
 import { cleanup, renderWithProviders, waitForExpectation } from '../../../test/test-helpers.jsx'
@@ -16,7 +16,7 @@ vi.mock('ink', async () => ({
 vi.mock('../../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
 vi.mock('../../../executor.js', () => ({
   getPR: vi.fn(), getRepoInfo: vi.fn(), getPRDiffStats: vi.fn(), getPRDiff: vi.fn(),
-  listPRComments: vi.fn(), mergePR: vi.fn(), addPRLineComment: vi.fn(),
+  listPRCommentsPage: vi.fn(), mergePR: vi.fn(), addPRLineComment: vi.fn(),
   replyToComment: vi.fn(), editPRComment: vi.fn(), deletePRComment: vi.fn(), reviewPR: vi.fn(),
 }))
 
@@ -56,7 +56,7 @@ beforeEach(() => {
       : fn === getPR ? { title: 'Diff contracts', state: 'OPEN', headRefOid: 'a'.repeat(40) }
       : fn === getRepoInfo ? { viewerPermission: 'ADMIN' }
       : fn === getPRDiffStats ? { additions: 2, deletions: 1, changedFiles: 2 }
-      : fn === listPRComments ? [] : null,
+      : fn === listPRCommentsPage ? { comments: [], truncated: false } : null,
     loading: false, error: null, refetch: vi.fn(), mutate: vi.fn(),
   }))
 })
@@ -76,6 +76,14 @@ describe('diff state and render contracts', () => {
     expect(view.lastFrame()).toContain('unified')
   })
 
+  it('says so when the inline comments are only the first page (#507)', async () => {
+    const partial = { comments: [], truncated: { threads: true, replies: false } }
+    const base = useGh.getMockImplementation()
+    useGh.mockImplementation(fn => (fn === listPRCommentsPage ? { ...base(fn), data: partial } : base(fn)))
+    const { view } = mountSession()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('inline comments incomplete'))
+  })
+
   it('maps the file tree back to diff rows and releases overlay scope on selection', async () => {
     const { view, notifyDialog } = mountSession()
     await waitForExpectation(() => expect(currentState?.rows).toHaveLength(7))
@@ -90,19 +98,44 @@ describe('diff state and render contracts', () => {
     expect(notifyDialog).toHaveBeenLastCalledWith(false)
   })
 
-  it('preserves the admin merge message across method selection and waits for confirmation', async () => {
+  it('admin bypass keeps the message, waits for a confirm and needs the PR number typed', async () => {
     const { view, onBack } = mountSession()
     await waitForExpectation(() => expect(currentState).not.toBeNull())
-    currentState.submitMerge({ value: 'admin', text: 'reviewed change' })
-    await waitForExpectation(() => expect(currentState.dialog).toBe('merge-admin'))
-    currentState.selectAdminMethod('squash')
+    currentState.submitMerge({ value: 'admin-squash', text: 'reviewed change' })
     await waitForExpectation(() => expect(view.lastFrame()).toContain('ADMIN BYPASS'))
+    expect(view.lastFrame()).toContain('Type 42 to confirm')
+    expect(view.lastFrame()).not.toMatch(/--admin|--squash/)
     expect(mergePR).not.toHaveBeenCalled()
-    expect(currentState.adminMergeMsg).toEqual({ strategy: 'admin-squash', msg: 'reviewed change' })
+    expect(currentState.mergeChoice).toEqual({ strategy: 'admin-squash', msg: 'reviewed change' })
 
-    currentState.confirmAdminMerge()
+    currentState.confirmMerge()
     await waitForExpectation(() => expect(onBack).toHaveBeenCalledOnce())
     expect(mergePR).toHaveBeenCalledExactlyOnceWith('owner/repo', 42, 'admin-squash', 'reviewed change', { allowAdmin: true })
+  })
+
+  it('m then Enter then Enter never merges: the confirm defaults to No (#468)', async () => {
+    const { view } = mountSession()
+    await waitForExpectation(() => expect(currentState?.rows).toHaveLength(7))
+    await sendInput('m')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Merge PR #42'))
+    expect(view.lastFrame()).toContain('Squash and merge')
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Merge PR #42 via Squash and merge?'))
+    await sendInput('', { return: true })
+    await sendInput('', { return: true })
+    expect(mergePR).not.toHaveBeenCalled()
+  })
+
+  it('m, Enter, y merges with the preferred method (#468)', async () => {
+    const { view, onBack } = mountSession()
+    await waitForExpectation(() => expect(currentState?.rows).toHaveLength(7))
+    await sendInput('m')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Merge PR #42'))
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('via Squash and merge?'))
+    await sendInput('y')
+    await waitForExpectation(() => expect(onBack).toHaveBeenCalledOnce())
+    expect(mergePR).toHaveBeenCalledExactlyOnceWith('owner/repo', 42, 'squash', undefined, undefined)
   })
 
   it('shows a pending status and ignores a second merge while one is in flight (#453)', async () => {
@@ -111,8 +144,12 @@ describe('diff state and render contracts', () => {
     const { onBack } = mountSession()
     await waitForExpectation(() => expect(currentState).not.toBeNull())
     currentState.submitMerge('squash')
+    await waitForExpectation(() => expect(currentState.mergeChoice).toEqual({ strategy: 'squash', msg: undefined }))
+    currentState.confirmMerge()
     await waitForExpectation(() => expect(currentState.commentStatus).toContain('Merging #42'))
     currentState.submitMerge('squash')
+    await waitForExpectation(() => expect(currentState.mergeChoice).toBeTruthy())
+    currentState.confirmMerge()
     await waitForExpectation(() => expect(currentState.commentStatus).toContain('still in progress'))
     expect(mergePR).toHaveBeenCalledTimes(1)
     release()
