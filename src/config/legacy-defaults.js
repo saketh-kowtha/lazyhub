@@ -495,6 +495,14 @@ export const LEGACY_ACTION_VALUES = {
     scope: ["pr-list"],
     group: ["filter"],
   },
+  "pr.preview": {
+    keys: [["p"]],
+    hint: ["p"],
+    label: ["preview"],
+    description: ["Show or hide the PR preview panel"],
+    scope: ["pr-list"],
+    group: ["action"],
+  },
   "pr.new": {
     keys: [["n"], ["N"]],
     hint: ["n", "N"],

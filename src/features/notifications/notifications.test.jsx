@@ -25,6 +25,23 @@ describe('notification list failures', () => {
   })
 })
 
+describe('notification list paging notices (#440)', () => {
+  const mk = (id) => ({ id, unread: true, reason: 'mention', updatedAt: '2026-06-06T10:00:00Z', repository: { name: 'repo' }, subject: { title: `Thread ${id}`, type: 'Issue' } })
+
+  it('says so when the page ceiling cut the list off', async () => {
+    useGh.mockReturnValue({ data: Object.assign([mk('1')], { truncated: true }), loading: false, error: null, refetch: vi.fn() })
+    const view = renderWithProviders(<NotificationList repo="owner/repo" onNavigateTo={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('older notifications are not loaded'))
+  })
+
+  it('keeps the rows and names the retry key when a later page failed', async () => {
+    useGh.mockReturnValue({ data: Object.assign([mk('1')], { partialError: 'HTTP 502' }), loading: false, error: null, refetch: vi.fn() })
+    const view = renderWithProviders(<NotificationList repo="owner/repo" onNavigateTo={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Thread 1'))
+    expect(view.lastFrame()).toMatch(/a later page failed \(HTTP 502\).*retry/)
+  })
+})
+
 describe('notification list cursor after the list shrinks', () => {
   it('keeps a valid selection when a refetch returns fewer notifications', async () => {
     const mk = (id) => ({ id, unread: true, reason: 'mention', updatedAt: '2026-06-06T10:00:00Z', repository: { name: 'repo' }, subject: { title: `Thread ${id}`, type: 'Issue' } })

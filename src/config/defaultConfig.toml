@@ -607,6 +607,14 @@ description = "Filter PRs by author"
 scope = "pr-list"
 group = "filter"
 
+[actions."pr.preview"]
+keys = ["p"]
+hint = "p"
+label = "preview"
+description = "Show or hide the PR preview panel"
+scope = "pr-list"
+group = "action"
+
 [actions."pr.new"]
 keys = ["n"]
 hint = "n"

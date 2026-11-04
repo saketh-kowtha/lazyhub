@@ -62,29 +62,53 @@ export async function cancelRun(repo, runId) {
 
 // ─── Notification functions ───────────────────────────────────────────────────
 
+const CHECK_PAGE_SIZE = 100
+// 2,000 check runs on one commit is far past anything real; the ceiling only bounds a runaway walk.
+const CHECK_MAX_PAGES = 20
+
 /**
- * Get check runs / status checks for a PR.
+ * Get check runs / status checks for a PR. Pages through every check-run page by hand
+ * (no gh version floor). When the page ceiling is hit, or a later page fails, the checks
+ * already fetched are kept and a trailing "incomplete" row is added, so CI never looks
+ * empty or complete when it is not. The array also carries `truncated` / `error`.
  * @param repo
  * @param number
  */
 export async function getPRChecks(repo, number) {
   const r = getRepo(repo)
   // Use the PR view to get the head SHA first, then fetch checks
+  let pr
   try {
-    const pr = await runGh([
-      'pr', 'view', String(number),
-      '--repo', r,
-      '--json', 'headRefOid',
-    ])
-    if (!pr?.headRefOid) return []
-    const checkArgs = [
-      'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/commits/${encodeURIComponent(pr.headRefOid)}/check-runs`,
-      '--jq', '[.check_runs[] | {id: .id, name: .name, status: .status, conclusion: .conclusion, appName: .app.name, url: .html_url}]',
-    ]
-    return await runGh(checkArgs)
+    pr = await runGh(['pr', 'view', String(number), '--repo', r, '--json', 'headRefOid'])
   } catch {
     return []
   }
+  if (!pr?.headRefOid) return []
+  const base = `repos/${encodeURIComponent(r).replace('%2F', '/')}/commits/${encodeURIComponent(pr.headRefOid)}/check-runs`
+  const jq = '[.check_runs[] | {id: .id, name: .name, status: .status, conclusion: .conclusion, appName: .app.name, url: .html_url}]'
+  const checks = []
+  let truncated = false
+  let error = null
+  for (let page = 1; ; page++) {
+    let rows
+    try {
+      rows = await runGh(['api', `${base}?per_page=${CHECK_PAGE_SIZE}&page=${page}`, '--jq', jq])
+    } catch (err) {
+      // Nothing fetched yet: keep the long-standing "no checks" fallback. Otherwise keep the pages we have.
+      if (page === 1) return []
+      error = err
+      break
+    }
+    const list = Array.isArray(rows) ? rows : []
+    checks.push(...list)
+    if (list.length < CHECK_PAGE_SIZE) break
+    if (page >= CHECK_MAX_PAGES) { truncated = true; break }
+  }
+  if (truncated || error) {
+    const why = error ? `a page failed: ${String(error.message || error).split('\n')[0].slice(0, 60)}` : `page limit ${CHECK_MAX_PAGES * CHECK_PAGE_SIZE}`
+    checks.push({ name: `⚠ checks incomplete (${why})`, status: 'incomplete' })
+  }
+  return Object.assign(checks, { truncated, error: error ? String(error.message || error) : null })
 }
 
 /**
