@@ -10,6 +10,7 @@ import { execa } from 'execa'
 import { GhError } from './gh-error.js'
 import { recordDuration } from '../perf.js'
 import { invalidateRepoCache } from '../cache.js'
+import { DAEMON_RETRY_AFTER_MS, clearDaemonFallback, daemonReadsSuspended, noteDaemonFallback } from '../daemon/fallback.js'
 import { requestDaemon } from '../daemon/lifecycle.js'
 import { classifyGh, toTypedRead } from '../daemon/protocol.js'
 import { hashArgs, writeAuditEntry } from '../daemon/audit.js'
@@ -109,7 +110,7 @@ export async function runGh(args, opts = {}) {
   if (opts.combine && !(args[0] === 'auth' && args[1] === 'status')) {
     throw new TypeError('runGh: combine is only allowed for `gh auth status`')
   }
-  const typed = kind === 'read' && !skipDaemon && process.env.LAZYHUB_DAEMON_SOCKET && stdin === undefined && json !== false
+  const typed = kind === 'read' && !skipDaemon && process.env.LAZYHUB_DAEMON_SOCKET && stdin === undefined && json !== false && !daemonReadsSuspended()
     ? toTypedRead(args)
     : null
   if (typed) {
@@ -119,9 +120,13 @@ export async function runGh(args, opts = {}) {
         ...typed,
         ttl,
       }, Math.min(timeout, 5000))
+      clearDaemonFallback()
       return response.payload
     } catch {
-      // Reads only: fall back to direct gh if the daemon vanished or is stale.
+      // Reads only: fall back to direct gh if the daemon vanished or is stale, say so
+      // in the status bar, and leave the daemon alone for a while so a hung one cannot
+      // add its timeout to every read (#491).
+      noteDaemonFallback('read-failed', { retryAfterMs: DAEMON_RETRY_AFTER_MS })
     }
   }
   if (kind === 'read') return spawnGh(args, opts)

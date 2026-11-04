@@ -59,7 +59,8 @@ describe.skipIf(!posix)('startIPC endpoint hardening', () => {
       expect(readFileSync(join(root, 'home', '.lazyhub-socket'), 'utf8')).toBe(path)
 
       const reply = await new Promise(resolve => {
-        const c = connect(path, () => c.write('{"id":"1","type":"ping"}\n'))
+        const auth = readFileSync(`${path}.token`, 'utf8').trim()
+        const c = connect(path, () => c.write(JSON.stringify({ id: '1', v: 1, auth, type: 'ping' }) + '\n'))
         c.once('data', d => { c.destroy(); resolve(JSON.parse(d.toString())) })
       })
       expect(reply.pong).toBe(true)
@@ -155,7 +156,8 @@ describe.skipIf(!posix)('IDE socket GitHub writes', () => {
   const request = (path, msg) => new Promise((resolve, reject) => {
     const sock = connect(path)
     let buf = ''
-    sock.on('connect', () => sock.write(JSON.stringify(msg) + '\n'))
+    const auth = readFileSync(`${path}.token`, 'utf8').trim()
+    sock.on('connect', () => sock.write(JSON.stringify({ v: 1, auth, ...msg }) + '\n'))
     sock.on('data', (d) => {
       buf += d.toString()
       if (buf.includes('\n')) { sock.end(); resolve(JSON.parse(buf.split('\n')[0])) }
@@ -228,4 +230,95 @@ describe.skipIf(!posix)('IPC message validation', () => {
       expect(uncaught.map(e => e.message)).toEqual([])
     },
   )
+})
+
+describe.skipIf(!posix)('IPC session token (#491)', () => {
+  const tokenPath = path => `${path}.token`
+  const readToken = path => readFileSync(tokenPath(path), 'utf8').trim()
+  const request = (path, msg, { keepOpen = false } = {}) => new Promise((resolve, reject) => {
+    const sock = connect(path)
+    let buf = ''
+    sock.on('connect', () => sock.write(JSON.stringify(msg) + '\n'))
+    sock.on('data', (d) => {
+      buf += d.toString()
+      if (buf.includes('\n')) {
+        const reply = JSON.parse(buf.split('\n')[0])
+        if (keepOpen) resolve({ reply, sock })
+        else { sock.end(); resolve(reply) }
+      }
+    })
+    sock.on('error', reject)
+  })
+  const start = async (opts) => {
+    const handlers = { getState: vi.fn(() => ({ view: 'prs' })), onNavigate: vi.fn() }
+    const path = ipc.startIPC({ ...handlers, ...opts })
+    await waitFor(() => existsSync(path))
+    return { path, ...handlers }
+  }
+
+  it('issues a 0600 token beside the socket and removes it on stop', async () => {
+    const { path } = await start()
+    expect(mode(tokenPath(path))).toBe(0o600)
+    expect(readToken(path)).toMatch(/^[0-9a-f]{64}$/)
+    ipc.stopIPC()
+    expect(existsSync(tokenPath(path))).toBe(false)
+  })
+
+  it('rejects every request type that carries no token, without running any handler', async () => {
+    const { path, getState, onNavigate } = await start()
+    for (const msg of [
+      { id: 1, v: 1, type: 'ping' },
+      { id: 2, v: 1, type: 'state' },
+      { id: 3, v: 1, type: 'navigate', view: 'prs' },
+      { id: 4, v: 1, type: 'open-file', file: 'a.js' },
+      { id: 5, v: 1, type: 'reply-thread', threadId: 'T', body: 'x' },
+      { id: 6, v: 1, type: 'invalidate' },
+    ]) {
+      expect(await request(path, msg)).toMatchObject({ id: msg.id, ok: false, code: 'E_UNAUTHENTICATED' })
+    }
+    expect(getState).not.toHaveBeenCalled()
+    expect(onNavigate).not.toHaveBeenCalled()
+  })
+
+  it('rejects a wrong token and a request without the protocol version', async () => {
+    const { path, getState } = await start()
+    expect(await request(path, { id: 1, v: 1, auth: 'f'.repeat(64), type: 'state' })).toMatchObject({ ok: false, code: 'E_UNAUTHENTICATED' })
+    expect(await request(path, { id: 2, auth: readToken(path), type: 'state' })).toMatchObject({ ok: false, code: 'E_VERSION' })
+    expect(getState).not.toHaveBeenCalled()
+  })
+
+  it('serves a client that presents the token', async () => {
+    const { path } = await start()
+    const auth = readToken(path)
+    expect(await request(path, { id: 1, v: 1, auth, type: 'ping' })).toMatchObject({ id: 1, pong: true })
+    expect(await request(path, { id: 2, v: 1, auth, type: 'state' })).toMatchObject({ id: 2, state: { view: 'prs' } })
+  })
+
+  it('pushes events only to authenticated connections', async () => {
+    const { path } = await start()
+    const stranger = connect(path)
+    await new Promise(resolve => stranger.once('connect', resolve))
+    const heard = []
+    stranger.on('data', d => heard.push(d.toString()))
+    const { sock: friend, reply } = await request(path, { id: 1, v: 1, auth: readToken(path), type: 'ping' }, { keepOpen: true })
+    expect(reply.pong).toBe(true)
+    const got = new Promise(resolve => friend.once('data', d => resolve(JSON.parse(d.toString()))))
+    ipc.emitIPC('view-changed', { view: 'issues' })
+    expect(await got).toMatchObject({ type: 'event', event: 'view-changed' })
+    await new Promise(r => setTimeout(r, 50))
+    expect(heard.join('')).toBe('')
+    stranger.destroy()
+    friend.destroy()
+  })
+
+  it('drops a connection that sends an oversized line', async () => {
+    const { path } = await start()
+    const sock = connect(path)
+    await new Promise(resolve => sock.once('connect', resolve))
+    const closed = new Promise(resolve => sock.once('close', resolve))
+    sock.on('error', () => {})
+    sock.resume()
+    sock.write('x'.repeat(70 * 1024))
+    await closed
+  })
 })

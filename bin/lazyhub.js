@@ -90,7 +90,7 @@ const { installCrashHandlers } = await import('../src/crash.js')
 const { renderApp } = await import('../src/app.jsx')
 const { loadConfig } = await import('../src/config.js')
 const { startIPC } = await import('../src/ipc.js')
-const { ensureDaemon } = await import('../src/daemon/lifecycle.js')
+const { scheduleDaemon } = await import('../src/daemon/lifecycle.js')
 
 // First run: read-only watch-only onboarding, before anything is created on
 // disk (config, daemon files). Quitting exits here and leaves nothing behind.
@@ -106,7 +106,6 @@ if (!parsedArgs.ref && !parsedArgs.repo && shouldOnboard()) { // an explicit ref
 const cfg = loadConfig()
 installCrashHandlers()
 
-await ensureDaemon(cfg, new URL('./lazyhub.js', import.meta.url).pathname)
 
 // Start IPC server for IDE integrations (unless disabled in config)
 if (cfg.ipc?.enabled !== false) {
@@ -114,4 +113,11 @@ if (cfg.ipc?.enabled !== false) {
   if (socketPath) process.env.LAZYHUB_SOCKET = socketPath
 }
 
-await bootstrap(renderApp, { repo: onboardedRepo, repoOverride: parsedArgs.repo, open: parsedArgs.ref })
+// The daemon starts after the first frame is drawn, never before it (#491).
+const renderThenStartDaemon = () => {
+  const unmount = renderApp()
+  scheduleDaemon(cfg, new URL('./lazyhub.js', import.meta.url).pathname)
+  return unmount
+}
+
+await bootstrap(renderThenStartDaemon, { repo: onboardedRepo, repoOverride: parsedArgs.repo, open: parsedArgs.ref })

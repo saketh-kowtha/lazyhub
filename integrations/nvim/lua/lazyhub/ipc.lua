@@ -14,15 +14,20 @@ local M = {}
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
 local function socket_path()
-  local daemon = vim.fn.expand('~/.config/lazyhub/daemon.sock')
-  if vim.fn.filereadable(daemon) == 1 then
-    return daemon
-  end
+  -- The TUI's IDE socket, found through the pointer file. (The background helper's
+  -- socket speaks a different protocol and is not an IDE endpoint.)
   local pointer = vim.fn.expand('~/.lazyhub-socket')
   if vim.fn.filereadable(pointer) == 1 then
     return vim.fn.readfile(pointer)[1]
   end
   return nil
+end
+
+-- The session secret the TUI wrote next to its socket for this run (0600).
+local function session_token(path)
+  local file = path .. '.token'
+  if vim.fn.filereadable(file) ~= 1 then return nil end
+  return vim.fn.readfile(file)[1]
 end
 
 -- ─── Reconnect state ─────────────────────────────────────────────────────────
@@ -67,6 +72,8 @@ function M.request(msg, cb)
   end
 
   msg.id = tostring(math.random(1e9))
+  msg.v = 1
+  msg.auth = session_token(path)
   local json = vim.json.encode(msg) .. '\n'
 
   local ok, uv = pcall(require, 'luv')

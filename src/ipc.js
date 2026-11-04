@@ -16,11 +16,18 @@
  * Also writes the socket path to ~/.lazyhub-socket (0600) so clients can
  * discover the most recent instance without knowing the PID.
  *
+ * Authentication (#491): the same session-token model the daemon uses. Each run
+ * writes a random secret to `<socket path>.token` (0600, next to the socket; on
+ * Windows in the private run dir) and removes it on exit. Every request must carry
+ * the protocol version `v` and the secret as `auth`; anything else is answered with
+ * { id, ok: false, code, error } and no handler runs. Connections only receive
+ * pushed events after their first authenticated request.
+ *
  * Protocol: newline-delimited JSON (NDJSON)
  *
- * Requests  → { id, type, ...params }
+ * Requests  → { id, v: 1, auth, type, ...params }
  * Responses → { id, type, ...result }
- * Events    → { type: "event", event, data }   (pushed to all clients)
+ * Events    → { type: "event", event, data }   (pushed to authenticated clients)
  *
  * Request types:
  *   ping                           → { pong: true }
@@ -58,6 +65,7 @@ import { randomBytes } from 'crypto'
 import { chmodSync, mkdirSync, readFileSync, unlinkSync } from 'fs'
 import { assertPrivateDir, prepareSocketPath, writePrivateFile } from './secure-fs.js'
 import { logger } from './utils-core.js'
+import { ERR, MAX_MESSAGE_BYTES, PROTOCOL_VERSION, checkSession, issueSession } from './daemon/protocol.js'
 import {
   getPRStateForBranch as _defaultGetPRStateForBranch,
   getPRReviewComments as _defaultGetPRReviewComments,
@@ -77,6 +85,9 @@ let _reviewCommentsHandler = _defaultGetPRReviewComments
 let _replyThreadHandler = _defaultAddPRReviewThreadReply
 let _resolveThreadHandler = _defaultResolvePRReviewThread
 let _allowWrites = false
+/** @type {{token:string, expiresAt:number, revoked:boolean}|null} */
+let _session = null
+let _tokenPath = null
 
 const WRITES_DISABLED = {
   ok: false,
@@ -120,6 +131,14 @@ function prepareEndpoint(path) {
   prepareSocketPath(path)
 }
 
+/**
+ * Where the session secret lives: beside the socket, or in the private run dir for a named pipe.
+ * @param {string} path
+ */
+function tokenPathFor(path) {
+  return process.platform === 'win32' ? join(socketDir(), `ipc-${process.pid}.token`) : `${path}.token`
+}
+
 function reportIPCError(err, onError) {
   logger.error(`ipc: ${err.message}`)
   if (onError) { try { onError(err) } catch { /* caller bug must not mask the IPC error */ } }
@@ -144,11 +163,24 @@ function sendResponse(socket, id, payload) {
   } catch { /* client disconnected */ }
 }
 
+function deny(socket, id, code, message) {
+  sendResponse(socket, id, { ok: false, code, error: message })
+}
+
 function handleMessage(socket, raw) {
   let msg
   try { msg = JSON.parse(raw) } catch { return }
   if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return
-  const { id, type } = msg
+  const id = typeof msg.id === 'string' || typeof msg.id === 'number' ? msg.id : null
+  if (msg.v !== PROTOCOL_VERSION) return deny(socket, id, ERR.VERSION, 'unsupported protocol version')
+  // Rotate an expired secret in place so a long-running TUI stays reachable for clients that re-read the file.
+  if (_session && !_session.revoked && Date.now() > _session.expiresAt && _tokenPath) {
+    try { _session = issueSession(_tokenPath) } catch { /* keep the expired one: clients are refused */ }
+  }
+  const denied = _session ? checkSession(_session, msg.auth) : ERR.UNAUTHENTICATED
+  if (denied) return deny(socket, id, denied, 'request denied')
+  _clients.add(socket) // only authenticated connections receive pushed events
+  const { type } = msg
 
   switch (type) {
     case 'ping':
@@ -307,14 +339,31 @@ export function startIPC({ getState, onNavigate, onPRForBranch, onReviewComments
     return null
   }
 
+  // Issue the session secret before the socket exists, so a client that finds the socket can read it.
+  try {
+    _tokenPath = tokenPathFor(path)
+    if (process.platform === 'win32') mkdirSync(socketDir(), { recursive: true, mode: 0o700 })
+    _session = issueSession(_tokenPath)
+  } catch (err) {
+    _session = null
+    _tokenPath = null
+    reportIPCError(err, onError)
+    process.stderr.write(`lazyhub: IPC disabled: ${err.message}\n`)
+    return null
+  }
+
   _server = createServer((socket) => {
-    _clients.add(socket)
     let buf = ''
 
     socket.on('data', (chunk) => {
       buf += chunk.toString()
       const lines = buf.split('\n')
       buf = lines.pop() // last element may be incomplete
+      if (buf.length > MAX_MESSAGE_BYTES || lines.some(l => l.length > MAX_MESSAGE_BYTES)) {
+        deny(socket, null, ERR.TOO_LARGE, 'message too large')
+        socket.destroy()
+        return
+      }
       for (const line of lines) {
         if (line.trim()) handleMessage(socket, line.trim())
       }
@@ -334,7 +383,9 @@ export function startIPC({ getState, onNavigate, onPRForBranch, onReviewComments
   // handler at all (raw mode never restored).  Instead, just clean up the
   // socket files on exit and rely on app.jsx to handle the signal exit.
   let bound = false // only unlink a socket this process actually bound
+  const sessionFile = _tokenPath
   const cleanup = () => {
+    removeIfPresent(sessionFile)
     if (bound && process.platform !== 'win32') removeIfPresent(path)
     // Only drop the pointer if it still names this instance.
     if (!bound) return
@@ -386,6 +437,8 @@ export function stopIPC() {
   _cleanup = null
   _defaultPath = null
   _allowWrites = false
+  _session = null
+  _tokenPath = null
   process.off('exit', cleanup)
   process.off('SIGINT', cleanup)
   process.off('SIGTERM', cleanup)
