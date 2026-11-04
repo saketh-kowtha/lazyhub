@@ -18,7 +18,7 @@ describe('validateConfig — valid input', () => {
   it('passes a well-formed partial config through untouched', () => {
     const raw = {
       defaults: { pr_scope: 'reviewing', ai_provider: 'codex' },
-      ui: { density: 'comfortable', show_hints: false },
+      ui: { icons: 'ascii', show_hints: false },
     }
     const { config, warnings } = validateConfig(raw)
     expect(warnings).toEqual([])
@@ -48,8 +48,8 @@ describe('validateConfig — unknown keys (warn, do not crash)', () => {
 
 describe('validateConfig — invalid types (warn + ignore that key)', () => {
   it('drops a wrong-typed scalar but keeps siblings', () => {
-    const { config, warnings } = validateConfig({ ui: { show_hints: 'yes', density: 'compact' } })
-    expect(config.ui).toEqual({ density: 'compact' })
+    const { config, warnings } = validateConfig({ ui: { show_hints: 'yes', icons: 'unicode' } })
+    expect(config.ui).toEqual({ icons: 'unicode' })
     expect(warnings.some((w) => w.includes('show_hints'))).toBe(true)
   })
 

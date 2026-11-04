@@ -143,6 +143,18 @@ describe('flattenFiles', () => {
     expect(rows[0].filename).toBe('a.js')
   })
 
+  it('shares the parsed line objects instead of copying each line (#457)', () => {
+    const files = parseDiff([
+      'diff --git a/a.js b/a.js',
+      '+++ b/a.js',
+      '@@ -1,1 +1,1 @@',
+      '+line',
+    ].join('\n'))
+    const rows = flattenFiles(files)
+    expect(rows[1]).toBe(files[0].lines[0])
+    expect(rows[1].filename).toBe('a.js')
+  })
+
   it('assigns filename to every row', () => {
     const files = parseDiff([
       'diff --git a/a.js b/a.js',

@@ -12,6 +12,7 @@ import chalk from 'chalk'
 import { getHljs } from './highlight.js'
 import stringWidth from 'string-width'
 import { useTheme } from './theme.js'
+import { stripAnsi } from './utils-core.js'
 
 export { logger, getLogs, resolvePath, stripAnsi, decodeHtmlEntities, sanitize } from './utils-core.js'
 
@@ -394,6 +395,29 @@ export function displayWidth(str) {
 }
 
 /**
+ * Expand TAB characters to spaces at tab stops (no config key exists, default 4),
+ * so width math and the terminal agree. Display-width aware for wide characters.
+ * @param {string} text
+ * @param {number} [width]
+ */
+export function expandTabs(text, width = 4) {
+  if (typeof text !== 'string' || !text.includes('\t')) return text
+  let out = ''
+  let col = 0
+  for (const ch of text) {
+    if (ch === '\t') {
+      const n = width - (col % width)
+      out += ' '.repeat(n)
+      col += n
+    } else {
+      out += ch
+      col += stringWidth(ch)
+    }
+  }
+  return out
+}
+
+/**
  * Truncate a string to at most `maxWidth` display columns, accounting for
  * wide characters.  Does NOT add ellipsis — callers can append if needed.
  * @param {string} str
@@ -478,4 +502,21 @@ export function authorColor(login) {
   if (!login) return undefined
   const h = [...String(login)].reduce((a, c) => a + c.charCodeAt(0), 0)
   return _AUTHOR_COLOR_PALETTE[h % _AUTHOR_COLOR_PALETTE.length]
+}
+
+// C0, DEL, C1 (includes the 8-bit CSI), zero-width and bidi controls.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS_RE = /[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g
+
+/**
+ * Make one line of log text safe to draw (#463). Log text is raw, not HTML, so it
+ * is NOT entity-decoded. ANSI sequences are stripped, a CR-overwrite keeps only the
+ * text after the last CR, TABs expand to tab stops, and control characters are dropped.
+ * @param {string} line
+ * @returns {string}
+ */
+export function cleanLogLine(line) {
+  const text = String(line ?? '')
+  const shown = text.slice(text.lastIndexOf('\r') + 1)
+  return expandTabs(stripAnsi(shown)).replace(CONTROL_CHARS_RE, '')
 }

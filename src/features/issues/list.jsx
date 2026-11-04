@@ -8,6 +8,7 @@ import React, { useState, useCallback, useEffect, useContext, useRef } from 'rea
 import { useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
+import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { listIssuesPage, getIssueRow } from '../../executor.js'
 import { sanitize } from '../../utils.js'
 import { AppContext } from '../../context.js'
@@ -158,9 +159,21 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 
-  const showStatus = (msg, isError = false) => {
+  const statusTimer = useRef(null)
+  useEffect(() => () => { clearTimeout(statusTimer.current) }, [])
+  const showStatus = (msg, isError = false, sticky = false) => {
+    clearTimeout(statusTimer.current)
     setStatusMsg({ msg, isError, persist: isError })
-    if (!isError) setTimeout(() => setStatusMsg(null), 3000)
+    if (!isError && !sticky) statusTimer.current = setTimeout(() => setStatusMsg(null), 3000)
+  }
+  // Pending/double-submit guard for close and create (#453). Lives here, not in
+  // the dialogs, because the dialogs unmount as soon as they close.
+  const { run: pendingRun } = usePendingWrite((msg) => showStatus(msg, false, true))
+  // Resolves true only when fn ran (false when ignored as a double submit).
+  const runWrite = async (label, fn) => {
+    let ran = false
+    const result = await pendingRun(label, async () => { ran = true; return fn() })
+    return { ran, result }
   }
 
   const moveCursor = useCallback((delta) => {
@@ -290,6 +303,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
         setScrollOffset={setScrollOffset}
         onClose={() => setDialog(null)}
         showStatus={showStatus}
+        runWrite={runWrite}
         refetch={refetch}
         refreshIssue={refreshIssue}
       />

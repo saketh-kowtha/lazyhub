@@ -17,6 +17,7 @@ import { sanitize } from '../../utils.js'
 import { selectGhHost } from '../../bootstrap.js'
 import { classifyFailure, isOwnerName, listWindowSize, lookupRepo, loadSession, repoKey, windowStart } from './flow.js'
 import { classifyGhFailure } from '../../executor.js'
+import { useKeyScope } from '../../keyscope.js'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 
 const LOOKUP_KEY = 'lookup:'
@@ -41,7 +42,14 @@ function Line({ children, color, bold = false }) {
   return <Text color={color ?? t.ui.muted} bold={bold} wrap="truncate-end">{children}</Text>
 }
 
-export function Onboarding({ onDone, loadSessionFn = loadSession, lookupRepoFn = lookupRepo }) {
+/**
+ * @param {object} props
+ * @param {(result: {status: 'completed', repo: string}|{status: 'cancelled'}) => void} props.onDone
+ * @param {boolean} [props.embedded]  rendered inside the running app (repo switcher, #466): never exits the app
+ * @param {Function} [props.loadSessionFn]
+ * @param {Function} [props.lookupRepoFn]
+ */
+export function Onboarding({ onDone, embedded = false, loadSessionFn = loadSession, lookupRepoFn = lookupRepo }) {
   const { t } = useTheme()
   const { exit } = useApp()
   const { stdout } = useStdout()
@@ -55,7 +63,7 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, lookupRepoFn =
   const [attempt, setAttempt] = useState(0)
   const request = useRef(0)
 
-  const finish = result => { request.current += 1; onDone(result); exit() }
+  const finish = result => { request.current += 1; onDone(result); if (!embedded) exit() }
 
   useEffect(() => {
     const id = ++request.current
@@ -133,12 +141,13 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, lookupRepoFn =
     }
   })
 
+  const quitLabel = embedded ? 'cancel' : 'quit (nothing is written)'
   const keys = {
-    session: [{ key: 'q', label: 'quit (nothing is written)' }],
+    session: [{ key: 'q', label: quitLabel }],
     repos: searching
       ? [{ key: 'Up/Down', label: 'move' }, { key: 'Enter', label: 'open' }, { key: 'Esc', label: lookup?.status === 'checking' ? 'cancel lookup' : 'clear search' }]
-      : [{ key: '/', label: 'search' }, { key: 'j/k', label: 'move' }, { key: 'Enter', label: 'open' }, { key: 'q', label: 'quit (nothing is written)' }],
-    error: [{ key: 'r', label: 'retry' }, { key: 'q', label: 'quit (nothing is written)' }],
+      : [{ key: '/', label: 'search' }, { key: 'j/k', label: 'move' }, { key: 'Enter', label: 'open' }, { key: 'q', label: quitLabel }],
+    error: [{ key: 'r', label: 'retry' }, { key: 'q', label: quitLabel }],
   }[phase]
 
   const extraLines = (session?.listError ? 1 : 0) + (lookup ? 1 : 0)
@@ -150,8 +159,8 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, lookupRepoFn =
     <Box flexDirection="column" width={Math.min(stdout?.columns || 80, 100)}>
       <Box flexDirection="column" borderStyle="round" borderColor={t.ui.border} paddingX={1}>
         <Box justifyContent="space-between">
-          <Text bold color={t.ui.selected} wrap="truncate-end">{`lazyhub · first run${session?.login ? ` · ${sanitize(session.login)}` : ''}`}</Text>
-          <Text color={t.ui.muted}>watch-only · read-only</Text>
+          <Text bold color={t.ui.selected} wrap="truncate-end">{`lazyhub · ${embedded ? 'switch repository' : 'first run'}${session?.login ? ` · ${sanitize(session.login)}` : ''}`}</Text>
+          {!embedded && <Text color={t.ui.muted}>watch-only · read-only</Text>}
         </Box>
         {phase === 'session' && <Spinner label="Checking your gh login..." />}
         {phase === 'error' && (
@@ -177,7 +186,7 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, lookupRepoFn =
             ))}
             {!text && repos.length === 0 && <Line color={t.ui.dim}>No repositories found for this account.</Line>}
             {text && rows.length === 0 && <Line color={t.ui.dim}>{`No loaded repository matches "${sanitize(query.trim())}". Try owner/name to look one up.`}</Line>}
-            <Line color={t.ui.dim}>Tip: run `lazyhub watch-only` any time for the review-coverage report.</Line>
+            {!embedded && <Line color={t.ui.dim}>Tip: run `lazyhub watch-only` any time for the review-coverage report.</Line>}
             {searching
               ? <Line>{`Search: ${sanitize(query)}_`}</Line>
               : <Line color={t.ui.dim}>/ search · type owner/name to look up any repository</Line>}
@@ -190,6 +199,19 @@ export function Onboarding({ onDone, loadSessionFn = loadSession, lookupRepoFn =
       <FooterKeys keys={keys} />
     </Box>
   )
+}
+
+/**
+ * The repository picker inside the running app (palette: "Switch repository", #466).
+ * Same list, search and owner/name lookup as first run; owns the dialog key scope so
+ * app-level keys stay quiet while it is open.
+ *
+ * @param {{onDone: (result: {status: 'completed', repo: string}|{status: 'cancelled'}) => void, loadSessionFn?: Function, lookupRepoFn?: Function}} props
+ * @returns {React.ReactElement}
+ */
+export function RepoSwitcher(props) {
+  useKeyScope('dialog')
+  return <Onboarding {...props} embedded />
 }
 
 /**

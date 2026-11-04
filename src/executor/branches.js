@@ -1,5 +1,6 @@
 import { execa } from 'execa'
 import { getRepo, runGh } from './core.js'
+import { GIT_OP_TIMEOUT_MS, assertGitOk } from './misc.js'
 import { logger } from '../utils-core.js'
 
 /**
@@ -65,6 +66,50 @@ export async function listBranches(repo) {
     if (rows.length < BRANCH_PAGE_SIZE) break
   }
   return all
+}
+
+const OPEN_PR_HEADS_QUERY = `
+  query($owner: String!, $name: String!, $after: String) {
+    repository(owner: $owner, name: $name) {
+      pullRequests(states: OPEN, first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes { headRefName isCrossRepository }
+      }
+    }
+  }
+`
+/** Safety ceiling on open-PR head pages (5000 open PRs); each page is fetched once. */
+export const OPEN_PR_HEADS_MAX_PAGES = 50
+
+/**
+ * Head branch names of every open PR, for the Branches pane's "PR" marker.
+ * Slim on purpose (#456): no check contexts, bodies, labels or reviewers; the
+ * pane shows only whether a PR exists. Follows the cursor to the last page.
+ * `truncated` is true when the page ceiling stopped the walk, so the markers may be incomplete.
+ * @param repo
+ * @returns {Promise<{ heads: string[], truncated: boolean }>}
+ */
+export async function listOpenPRBranches(repo) {
+  const [owner, name] = getRepo(repo).split('/')
+  const heads = []
+  let after = null
+  let truncated = false
+  for (let page = 0; page < OPEN_PR_HEADS_MAX_PAGES; page++) {
+    const result = await runGh([
+      'api', 'graphql',
+      '-f', `query=${OPEN_PR_HEADS_QUERY}`,
+      '-f', `owner=${owner}`,
+      '-f', `name=${name}`,
+      ...(after ? ['-f', `after=${after}`] : []),
+    ])
+    const conn = result?.data?.repository?.pullRequests
+    // A fork PR can reuse a branch name that exists here; only same-repo PRs mark a branch.
+    for (const node of conn?.nodes || []) if (node?.headRefName && !node.isCrossRepository) heads.push(node.headRefName)
+    if (!conn?.pageInfo?.hasNextPage || !conn.pageInfo.endCursor) break
+    after = conn.pageInfo.endCursor
+    if (page === OPEN_PR_HEADS_MAX_PAGES - 1) truncated = true
+  }
+  return { heads, truncated }
 }
 
 /**
@@ -300,7 +345,7 @@ async function lookupLocalCheckout(cwd, repo) {
  * @param {string} branch
  */
 export async function checkoutRemoteBranch(local, branch) {
-  const run = (args) => execa('git', args, { cwd: local.dir })
+  const run = (args) => execa('git', args, { cwd: local.dir, timeout: GIT_OP_TIMEOUT_MS })
   if (local.remote === 'origin') return run(['checkout', branch])
   await run(['fetch', local.remote, branch])
   const exists = await execa('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { cwd: local.dir, reject: false })
@@ -329,9 +374,8 @@ export async function pushBranch(branch) {
   const result = await execa('git', ['push', 'origin', branch], {
     cwd: process.cwd(),
     reject: false,
+    timeout: GIT_OP_TIMEOUT_MS,
   })
-  if (result.exitCode !== 0) {
-    throw new Error((result.stderr || 'git push failed').split('\n')[0].trim())
-  }
+  assertGitOk(result, 'git push')
   return result.stdout
 }

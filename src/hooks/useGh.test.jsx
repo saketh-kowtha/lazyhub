@@ -2,9 +2,11 @@ import React from 'react'
 import { Text } from 'ink'
 import { describe, expect, it } from 'vitest'
 import { render, cleanup } from 'ink-testing-library'
-import { useGh } from './useGh.js'
-import { cacheKey as mkDiskKey, writeCache } from '../cache.js'
-import { flush } from '../test/test-helpers.jsx'
+import { useGh, resetGhMemoryCache, ghMemoryCacheStats, GH_MEMORY_MAX_BYTES } from './useGh.js'
+import { mkdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
+import { CACHE_DIR, cacheKey as mkDiskKey, writeCache } from '../cache.js'
+import { flush, waitForExpectation } from '../test/test-helpers.jsx'
 
 function defer() {
   let resolve
@@ -154,21 +156,73 @@ describe('useGh seeding (#454)', () => {
   it('re-seeds when the key changes so the previous key data is never shown', async () => {
     const d = defer()
     async function reseedFetch(id) { return id === 'a' ? 'DATA-A' : d.promise }
-    const frames = []
+    // Recorded in the render body (not an effect): this is every frame the hook
+    // returned, in order, so a one-render stale seed cannot hide (#548).
+    const renders = []
     function View({ id }) {
       const { data, loading } = useGh(reseedFetch, [id])
       const line = `${id}:data=${data ?? 'none'} loading=${loading}`
-      React.useEffect(() => { frames.push(line) })
+      renders.push(line)
       return <Text>{line}</Text>
     }
     const view = render(<View id="a" />)
-    await flush(20)
-    expect(view.lastFrame()).toContain('a:data=DATA-A')
-    frames.length = 0
+    // Wait for A to fully settle (data AND loading=false) instead of a fixed sleep:
+    // under coverage the trailing loading=false render used to land after the reset
+    // below and be mistaken for the first frame of key B.
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('a:data=DATA-A loading=false'))
+    renders.length = 0
     view.rerender(<View id="b" />)
-    await flush(20)
-    expect(frames.filter(f => f.startsWith('b:')).every(f => !f.includes('DATA-A'))).toBe(true)
-    expect(frames[0]).toBe('b:data=none loading=true')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('b:data=none loading=true'))
+    const bRenders = renders.filter(f => f.startsWith('b:'))
+    expect(bRenders.length).toBeGreaterThan(0)
+    expect(bRenders[0]).toBe('b:data=none loading=true')
+    expect(bRenders.every(f => !f.includes('DATA-A'))).toBe(true)
+    // The key changed in one step: no render pairs key b with key a's data.
+    expect(renders.some(f => f.startsWith('b:') && f.includes('DATA-A'))).toBe(false)
+    cleanup()
+  })
+})
+
+describe('useGh disk cache off the input path (#455)', () => {
+  it('a mount never reads the cache file synchronously: a cold entry arrives via the async read while the fetch is in flight', async () => {
+    mkdirSync(CACHE_DIR, { recursive: true })
+    const key = mkDiskKey(['o/cold', 'coldFetch', ['o/cold', 7]])
+    // Written by an earlier session / another process: not in the in-memory mirror.
+    writeFileSync(join(CACHE_DIR, `${key}.json`), JSON.stringify({ meta: { repo: 'o/cold' }, ts: 1, payload: 'COLD-DISK' }))
+    const d = defer()
+    async function coldFetch() { return d.promise }
+    const frames = []
+    function View() {
+      const { data, loading, isStale } = useGh(coldFetch, ['o/cold', 7])
+      frames.push(`data=${data ?? 'none'} loading=${loading} stale=${isStale}`)
+      return <Text>{frames[frames.length - 1]}</Text>
+    }
+    const view = render(<View />)
+    // First frame is memory-only: a skeleton, not a blocking file read.
+    expect(frames[0]).toBe('data=none loading=true stale=false')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('data=COLD-DISK loading=false stale=true'))
+    d.resolve('NET')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('data=NET loading=false stale=false'))
+    cleanup()
+  })
+})
+
+describe('useGh in-memory cache is bounded by bytes (#457)', () => {
+  it('evicts old large payloads instead of holding every one', async () => {
+    resetGhMemoryCache()
+    const big = 'd'.repeat(Math.floor(GH_MEMORY_MAX_BYTES * 0.4))
+    for (let i = 0; i < 5; i++) {
+      const fetchBig = async () => big + i
+      Object.defineProperty(fetchBig, 'name', { value: `fetchBig${i}` })
+      function View() { const { data } = useGh(fetchBig, [`o/big${i}`]); return <Text>{data ? 'ok' : 'wait'}</Text> }
+      const v = render(<View />)
+      await waitForExpectation(() => expect(v.lastFrame()).toBe('ok'))
+      v.unmount()
+    }
+    const stats = ghMemoryCacheStats()
+    expect(stats.size).toBeLessThan(5)
+    expect(stats.bytes).toBeLessThanOrEqual(GH_MEMORY_MAX_BYTES)
+    resetGhMemoryCache()
     cleanup()
   })
 })

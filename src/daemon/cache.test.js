@@ -25,6 +25,40 @@ describe('daemon cache', () => {
     expect(cache.get(key)).toBeNull()
   })
 
+  it('get, write, invalidate, get never serves the pre-write payload (#455 review)', async () => {
+    vi.resetModules()
+    const dir = mkdtempSync(join(tmpdir(), 'lazyhub-daemon-cache-test-'))
+    dirs.push(dir)
+    process.env.LAZYHUB_CACHE_DIR = dir
+    const { DaemonCache } = await import('./cache.js')
+    const { flushCache } = await import('../cache.js')
+    const cache = new DaemonCache()
+    const key = cache.key(['gh', ['pr', 'list']])
+    cache.set(key, 'PRE-WRITE', { repo: 'owner/repo', op: 'issue.list' })
+    await flushCache()
+    expect(new DaemonCache().get(key)?.payload).toBe('PRE-WRITE')
+    cache.invalidate('owner/repo') // not awaited
+    expect(cache.get(key)).toBeNull()
+    expect(new DaemonCache().get(key)).toBeNull()
+  })
+
+  it('validates against the disk file, not a stale in-process mirror (#455 review)', async () => {
+    vi.resetModules()
+    const dir = mkdtempSync(join(tmpdir(), 'lazyhub-daemon-cache-test-'))
+    dirs.push(dir)
+    process.env.LAZYHUB_CACHE_DIR = dir
+    const { DaemonCache } = await import('./cache.js')
+    const { flushCache } = await import('../cache.js')
+    const { writeFileSync } = await import('fs')
+    const cache = new DaemonCache()
+    const key = cache.key(['gh', ['pr', 'list']])
+    cache.set(key, 'OLD', { repo: 'owner/repo', op: 'issue.list' })
+    await flushCache()
+    // The TUI process writes a newer entry for the same key.
+    writeFileSync(join(dir, `${key}.json`), JSON.stringify({ meta: { repo: 'owner/repo' }, ts: Date.now() + 1, payload: 'NEWER' }))
+    expect(new DaemonCache().get(key)?.payload).toBe('NEWER')
+  })
+
   it('only caches allowlisted ops and keeps keys distinct per op, params, and identity', async () => {
     vi.resetModules()
     const dir = mkdtempSync(join(tmpdir(), 'lazyhub-daemon-cache-test-'))
