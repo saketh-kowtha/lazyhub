@@ -218,6 +218,7 @@ export const DEFAULT_CONFIG = {
     'pr.filter-merged':      { keys: ['M'], hint: 'M', label: 'merged', description: 'Toggle merged PRs', scope: 'pr-list', group: 'filter' },
     'pr.scope-cycle':        { keys: ['s'], hint: 's', label: 'scope', description: 'Cycle PR list scope', scope: 'pr-list', group: 'filter' },
     'pr.author-filter':      { keys: ['@'], hint: '@', label: 'author', description: 'Filter PRs by author', scope: 'pr-list', group: 'filter' },
+    'pr.preview':            { keys: ['p'], hint: 'p', label: 'preview', description: 'Show or hide the PR preview panel', scope: 'pr-list', group: 'action' },
     'pr.new':                { keys: ['n'], hint: 'n', label: 'new PR', description: 'Create a new PR', scope: 'pr-list', group: 'action' },
     'issue.open-selected':   { keys: ['Enter'], hint: 'Enter', label: 'open', description: 'Open issue detail', scope: 'issue-list', group: 'action' },
     'issue.new':             { keys: ['n'], hint: 'n', label: 'new', description: 'Create an issue', scope: 'issue-list', group: 'action' },

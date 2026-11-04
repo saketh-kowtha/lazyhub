@@ -17,11 +17,11 @@ beforeEach(() => vi.resetModules())
 async function renderList(previewPanel) {
   layout.previewPanel = previewPanel
   const { useGh } = await import('../../hooks/useGh.js')
-  const { listPRs } = await import('../../executor.js')
+  const { listPRsPage } = await import('../../executor.js')
   const { PRList } = await import('./list.jsx')
   const pr = { number: 1, title: 'Popover subject', state: 'OPEN', updatedAt: new Date().toISOString(), author: { login: 'maria' }, body: 'body' }
-  useGh.mockImplementation(fn => ({ data: fn === listPRs ? [pr] : {}, loading: false, refetch: vi.fn() }))
-  return renderWithProviders(<PRList repo="o/r" listHeight={10} innerWidth={90} onSelectPR={() => {}} onOpenDiff={() => {}} />)
+  useGh.mockImplementation(fn => ({ data: fn === listPRsPage ? { items: [pr], hasNextPage: false, endCursor: null, totalCount: 1 } : {}, loading: false, refetch: vi.fn() }))
+  return renderWithProviders(<PRList repo="o/r" listHeight={10} innerWidth={170} onSelectPR={() => {}} onOpenDiff={() => {}} />)
 }
 
 describe('[layout].preview_panel', () => {

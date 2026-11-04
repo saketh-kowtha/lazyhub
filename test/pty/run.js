@@ -144,7 +144,7 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
     await waitForScreen(() => output, /Fixture body/, 'Enter detail')
     output = ''
     term.write('\x1b')
-    await waitForScreen(() => output, /open.*closed.*merged.*scope/, 'Esc back')
+    await waitForScreen(() => output, /open.*closed.*merged/, 'Esc back')
     for (const [key, label] of [['gi', 'issues'], ['gb', 'branches'], ['ga', 'actions']]) {
       output = ''
       await writeChord(term, key)
@@ -195,7 +195,7 @@ async function runReferenceFlow() {
     await waitForScreen(() => output, /Fixture body/, 'PR detail opened by reference')
     output = ''
     term.write('\x1b')
-    await waitForScreen(() => output, /open.*closed.*merged.*scope/, 'Esc back to the PR list')
+    await waitForScreen(() => output, /open.*closed.*merged/, 'Esc back to the PR list')
     term.write('q')
     await waitForExit(term)
     const { classifyGh } = await import(new URL('../../src/daemon/protocol.js', import.meta.url).href)

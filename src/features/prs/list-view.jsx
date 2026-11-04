@@ -8,12 +8,14 @@ import { PRListSkeleton } from '../../components/Skeleton.jsx'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { EmptyState } from '../../components/EmptyState.jsx'
 import { classifyGhFailure } from '../../executor.js'
+import { sanitize } from '../../utils.js'
 import { firstActionKey } from '../../config/actions.js'
-import { Popover, calcPopoverPosition } from '../../ui/Popover.jsx'
+import { Popover } from '../../ui/Popover.jsx'
 import {
   PRDetailPopoverContentMemo,
   PRRow,
   PR_ROW_FIXED_COLS,
+  previewPanelLayout,
   POPOVER_WIDTH,
   POPOVER_HEIGHT,
 } from './list-row.jsx'
@@ -44,34 +46,16 @@ export function PRListView({
   setPopoverDismissed,
   expansionEnabled,
   scheme,
+  paging,
+  previewWidth,
 }) {
-  const popoverRowIndex = cursor - scrollOffset
-  const popoverAnchor = {
-    x: 1,
-    y: 1 + popoverRowIndex,
-    width: innerWidth ? innerWidth - 2 : termCols - 2,
-    height: 1,
-  }
-  const effectivePopoverWidth = Math.min(POPOVER_WIDTH, termCols - 4)
-  // Rows the popover floats over (list-relative y = 1 + row index).  Their titles
-  // are blanked so no orphan fragments show to the popover's right.
-  // The preview collapses when the pane cannot hold it (responsive layout): it needs
-  // the list's chrome (header, status, footer) plus its own height, and 70+ columns.
-  const popoverFits = termRows >= POPOVER_HEIGHT + 8 && termCols >= 70
-  const popoverVisible = !!selectedPR && !dialog && !popoverDismissed && popoverFits
-  const popoverTop = popoverVisible
-    ? calcPopoverPosition({
-        anchor: popoverAnchor,
-        popoverWidth: effectivePopoverWidth,
-        popoverHeight: POPOVER_HEIGHT,
-        termCols,
-        termRows,
-        preferredSide: 'right',
-      }).top
-    : 0
-  const isCovered = (rowIndex) =>
-    popoverVisible && rowIndex !== popoverRowIndex &&
-    1 + rowIndex >= popoverTop && 1 + rowIndex < popoverTop + POPOVER_HEIGHT
+  // The preview is a side panel: it takes the right-hand columns and the rows are narrowed
+  // to the rest, so it never covers a PR. A pane too narrow for both shows rows only.
+  const listWidth = innerWidth || termCols - 2
+  const { width: panelWidth, fits: panelFits } = previewPanelLayout({ listWidth, termRows, previewWidth })
+  const popoverVisible = !!selectedPR && !dialog && !popoverDismissed && panelFits
+  const titleWidth = innerWidth ? innerWidth - PR_ROW_FIXED_COLS - (popoverVisible ? panelWidth : 0) : undefined
+  const popoverAnchor = { x: listWidth - panelWidth, y: 1, width: 0, height: 1 }
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -100,11 +84,14 @@ export function PRListView({
         {loading && items.length > 0 && <Text color={t.ui.dim}>⟳</Text>}
         {statusMsg
           ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
-          : <Text color={t.ui.dim} wrap="truncate">
+          : !popoverVisible && selectedPR && !dialog
+            // The preview panel is not showing: keep the focused PR's full title readable here.
+            ? <Text color={t.ui.muted} wrap="truncate">#{selectedPR.number} {sanitize(selectedPR.title)}</Text>
+            : <Text color={t.ui.dim} wrap="truncate">
               {termCols >= 100 ? `[${filterKeys.filterOpen}]open [${filterKeys.filterClosed}]closed [${filterKeys.filterMerged}]merged ` : ''}[s]scope [@]author
             </Text>
         }
-        {items.length >= config.pageSize && <Text color={t.ui.dim}> ({items.length})</Text>}
+        {panelFits && <Text color={t.ui.dim}> [{firstActionKey('pr.preview', 'p')}]review</Text>}
       </Box>
 
       {error && (
@@ -134,26 +121,33 @@ export function PRListView({
             pr={pr}
             isSelected={idx === cursor}
             t={t}
-            titleWidth={innerWidth ? innerWidth - PR_ROW_FIXED_COLS : undefined}
+            titleWidth={titleWidth}
             expanded={expansionEnabled && idx === cursor}
-            maskTitle={isCovered(i)}
           />
         )
       })}
 
-      {(items.length > effectiveHeight || items.length >= 100) && (
+      {!error && items.length > 0 && (
         <Box paddingX={1} justifyContent="space-between">
-          <Text color={t.ui.dim}>
-            {scrollOffset + 1}–{Math.min(scrollOffset + effectiveHeight, items.length)} / {items.length}
+          <Text color={paging?.error ? t.ci.fail : t.ui.dim}>
+            {paging?.error
+              ? `Could not load more PRs; showing ${items.length}${paging.total ? ` of ${paging.total}` : ''} [${firstActionKey('list.refresh', 'r')}] retry`
+              : paging?.hasMore
+                ? (paging.total != null ? `${items.length} of ${paging.total}` : `${items.length} loaded`) + (paging.loadingMore ? ' · loading more…' : '')
+                : paging?.capped
+                  ? `${items.length}${paging.total != null ? ` of ${paging.total}` : ' loaded'} (GitHub search returns at most ${paging.cap}; refine the filter to reach older PRs)`
+                  : `${items.length} of ${items.length} · end of list`}
           </Text>
-          {items.length >= 100 && !loading && <Text color={t.ui.dim}>scroll down for more</Text>}
+          {items.length > effectiveHeight && (
+            <Text color={t.ui.dim}>{scrollOffset + 1}–{Math.min(scrollOffset + effectiveHeight, items.length)}</Text>
+          )}
         </Box>
       )}
 
       {popoverVisible && (
         <Popover
           anchor={popoverAnchor}
-          popoverWidth={effectivePopoverWidth}
+          popoverWidth={panelWidth}
           popoverHeight={POPOVER_HEIGHT}
           termCols={termCols}
           termRows={termRows}
@@ -164,7 +158,7 @@ export function PRListView({
             pr={selectedPR}
             t={t}
             scheme={scheme}
-            width={effectivePopoverWidth}
+            width={panelWidth}
           />
         </Popover>
       )}

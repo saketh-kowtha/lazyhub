@@ -174,6 +174,186 @@ export async function listPRs(repo, filter = {}) {
   return normalizePRListGraphQL({ data: { search: { nodes } } })
 }
 
+// ─── Cursor pages for the PR list (#508) ─────────────────────────────────────
+
+const PR_PAGE_STATES = ['open', 'closed', 'merged']
+
+/**
+ * Search qualifiers for a set of list states. Closed means closed-and-unmerged (the
+ * list's own meaning), so the server returns exactly the rows the list shows and
+ * `issueCount` is a true total. `exact` is false for open+merged, which search cannot
+ * express, so the list filters client-side there.
+ * @param {string[]} states
+ */
+function stateQualifiers(states) {
+  const set = new Set((states || []).filter(s => PR_PAGE_STATES.includes(s)))
+  if (set.size === 0) set.add('open')
+  const has = s => set.has(s)
+  if (set.size === 3) return { qualifiers: [], exact: true }
+  if (set.size === 1) {
+    if (has('open')) return { qualifiers: ['state:open'], exact: true }
+    if (has('merged')) return { qualifiers: ['is:merged'], exact: true }
+    return { qualifiers: ['is:closed', '-is:merged'], exact: true }
+  }
+  if (has('open') && has('closed')) return { qualifiers: ['-is:merged'], exact: true }
+  if (has('closed') && has('merged')) return { qualifiers: ['is:closed'], exact: true }
+  return { qualifiers: [], exact: false }
+}
+
+function prPageSearchQuery(repo, filter) {
+  const parts = [`repo:${repo}`, 'is:pr', filter.sort === 'oldest' ? 'sort:updated-asc' : 'sort:updated-desc']
+  parts.push(...stateQualifiers(filter.states || (filter.state ? [filter.state] : ['open'])).qualifiers)
+  if (filter.author) {
+    const login = String(filter.author).trim()
+    // An unquoted qualifier value: spaces, quotes or colons could add extra qualifiers.
+    if (!/^(?:@me|[A-Za-z0-9][A-Za-z0-9_.-]*(?:\[bot\])?)$/.test(login)) throw new Error(`Invalid login for a PR search: ${JSON.stringify(login)}`)
+    parts.push(`author:${login}`)
+  } else {
+    if (filter.scope === 'own') parts.push('author:@me')
+    if (filter.scope === 'reviewing') parts.push('review-requested:@me')
+  }
+  return parts.join(' ')
+}
+
+// Slim row: the list never needs check contexts, files or a full body. CI is a few
+// counters; the heavy fields load on demand for the preview (getPRPreview).
+const PR_ROW_FIELDS = `
+  number title state url updatedAt isDraft headRefName baseRefName
+  reviewDecision mergeable
+  author { login }
+  labels(first: 20) { nodes { name color } }
+  reviewRequests(first: 10) {
+    nodes {
+      requestedReviewer {
+        __typename
+        ... on User { login name }
+        ... on Team { name slug organization { login } }
+      }
+    }
+  }
+  assignees(first: 10) { nodes { login name } }
+  autoMergeRequest { enabledAt }
+  statusCheckRollup {
+    state
+    contexts(first: 1) {
+      checkRunCountsByState { state count }
+      statusContextCountsByState { state count }
+    }
+  }
+`
+
+function checkSummaryOf(rollup) {
+  if (!rollup) return null
+  const counts = [
+    ...(rollup.contexts?.checkRunCountsByState || []),
+    ...(rollup.contexts?.statusContextCountsByState || []),
+  ]
+  let total = 0
+  let failing = 0
+  let pending = 0
+  for (const { state, count } of counts) {
+    total += count
+    if (/failure|error/i.test(state)) failing += count
+    else if (/pending|in_progress|queued/i.test(state)) pending += count
+  }
+  if (total === 0) return null
+  return { total, failing, pending }
+}
+
+/**
+ * Normalize one slim GraphQL pull request node to a list row.
+ * @param {object} pr
+ */
+export function normalizePRRow(pr) {
+  return {
+    number: pr.number,
+    title: pr.title,
+    state: pr.state,
+    author: pr.author ? { login: pr.author.login } : null,
+    labels: pr.labels?.nodes || [],
+    reviewRequests: normalizeReviewRequests(pr.reviewRequests),
+    checkSummary: checkSummaryOf(pr.statusCheckRollup),
+    reviewDecision: pr.reviewDecision,
+    updatedAt: pr.updatedAt,
+    isDraft: Boolean(pr.isDraft),
+    headRefName: pr.headRefName,
+    baseRefName: pr.baseRefName,
+    assignees: pr.assignees?.nodes || [],
+    mergeable: pr.mergeable,
+    autoMergeRequest: pr.autoMergeRequest,
+    url: pr.url,
+  }
+}
+
+/**
+ * One cursor page of PR list rows (GraphQL search). Never refetches earlier pages:
+ * pass the previous page's `endCursor` as `filter.after`.
+ * @param {string} repo
+ * @param {object} filter  states[], scope, author, sort, limit, after
+ * @returns {Promise<{items: object[], hasNextPage: boolean, endCursor: string|null, totalCount: number, exactTotal: boolean}>}
+ */
+export async function listPRsPage(repo, filter = {}) {
+  const r = getRepo(repo)
+  const limit = Math.max(1, Math.min(Number(filter.limit || 50), PR_LIST_MAX_GRAPHQL_NODES))
+  const query = `
+    query($searchQuery: String!, $limit: Int!, $after: String) {
+      search(type: ISSUE, first: $limit, after: $after, query: $searchQuery) {
+        issueCount
+        pageInfo { hasNextPage endCursor }
+        nodes { __typename ... on PullRequest { ${PR_ROW_FIELDS} } }
+      }
+    }
+  `
+  const result = await runGh([
+    'api', 'graphql',
+    '-f', `query=${query}`,
+    '-f', `searchQuery=${prPageSearchQuery(r, filter)}`,
+    '-F', `limit=${limit}`,
+    ...(filter.after ? ['-f', `after=${filter.after}`] : []),
+  ])
+  const search = result?.data?.search
+  const items = (search?.nodes || []).filter(n => n?.__typename === 'PullRequest').map(normalizePRRow)
+  return {
+    items,
+    hasNextPage: Boolean(search?.pageInfo?.hasNextPage && search.pageInfo.endCursor),
+    endCursor: search?.pageInfo?.endCursor || null,
+    totalCount: Number(search?.issueCount ?? items.length),
+    // False when the states cannot be expressed as one search (open+merged): the total then counts more than the list shows.
+    exactTotal: stateQualifiers(filter.states || (filter.state ? [filter.state] : ['open'])).exact,
+  }
+}
+
+/**
+ * One PR as a list row (the listPRsPage shape), so the list can patch a row after a
+ * write instead of resetting its pages (D16).
+ * @param {string} repo
+ * @param {number} number
+ */
+export async function getPRRow(repo, number) {
+  const [owner, name] = getRepo(repo).split('/')
+  const result = await runGh([
+    'api', 'graphql',
+    '-f', `query=query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { ${PR_ROW_FIELDS} } } }`,
+    '-f', `owner=${owner}`,
+    '-f', `name=${name}`,
+    '-F', `number=${Number(number)}`,
+  ])
+  const pr = result?.data?.repository?.pullRequest
+  if (!pr) throw new Error(`Pull request #${number} not found`)
+  return normalizePRRow(pr)
+}
+
+/**
+ * Heavy fields for the list preview, loaded for the selected row only.
+ * @param {string} repo
+ * @param {number} number
+ * @returns {Promise<{body: string, statusCheckRollup: object[]}>}
+ */
+export async function getPRPreview(repo, number) {
+  const pr = await runGh(['pr', 'view', String(number), '--repo', getRepo(repo), '--json', 'body,statusCheckRollup'])
+  return { body: pr?.body || '', statusCheckRollup: pr?.statusCheckRollup || [] }
+}
+
 /**
  * Get a single PR by number.
  * @param repo

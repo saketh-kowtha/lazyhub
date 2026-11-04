@@ -65,7 +65,7 @@ vi.mock('./features/tabs/view.jsx', () => ({ TabView: () => <Text>TAB VIEW</Text
 
 vi.mock('./executor.js', () => {
   const fns = [
-    'listPRs', 'getPR', 'getRepoInfo', 'getPRChecks', 'getBranchProtection', 'getPRDiffStats', 'getPRDiff',
+    'listPRs', 'listPRsPage', 'getPRRow', 'getPRPreview', 'getPR', 'getRepoInfo', 'getPRChecks', 'getBranchProtection', 'getPRDiffStats', 'getPRDiff',
     'listPRComments', 'listPRCommentsPage', 'listPRTimelinePage', 'resolveThread', 'replyToComment', 'editPRComment', 'deletePRComment', 'addPRLineComment',
     'reviewPR', 'mergePR', 'closePR', 'checkoutBranch', 'enableAutoMerge', 'disableAutoMerge', 'markPRReady',
     'convertPRToDraft', 'editPRBase', 'requestReviewers', 'removeReviewers', 'addPRAssignees', 'removePRAssignees',
@@ -197,8 +197,9 @@ const TASKS = [
 describe('keystroke budgets', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    executor.getPRRow.mockResolvedValue({ ...PR })
     useGh.mockImplementation((fn) => {
-      if (fn === executor.listPRs) return ghResult([PR])
+      if (fn === executor.listPRsPage) return ghResult({ items: [PR], hasNextPage: false, endCursor: null, totalCount: 1 })
       if (fn === executor.getPR) return ghResult(PR)
       if (fn === executor.getRepoInfo) return ghResult({ squashMergeAllowed: true, viewerPermission: 'WRITE' })
       if (fn === executor.getPRChecks) return ghResult(PR.statusCheckRollup)
@@ -259,9 +260,10 @@ const WRITE_KEYS = [
 describe('write keys confirm first and cancel does nothing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    executor.getPRRow.mockResolvedValue({ ...PR })
     layoutState.cols = 120
     useGh.mockImplementation((fn) => {
-      if (fn === executor.listPRs) return ghResult([PR])
+      if (fn === executor.listPRsPage) return ghResult({ items: [PR], hasNextPage: false, endCursor: null, totalCount: 1 })
       if (fn === executor.getPR) return ghResult(PR)
       if (fn === executor.getRepoInfo) return ghResult({ squashMergeAllowed: true, viewerPermission: 'WRITE' })
       if (fn === executor.getPRChecks) return ghResult(PR.statusCheckRollup)

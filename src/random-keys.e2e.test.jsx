@@ -121,8 +121,6 @@ const SIZES = [[80, 24], [120, 40], [60, 18], [200, 50], [50, 15]]
  * @type {Array<{ size: number[], keys: string[], reason: RegExp, issue: string }>}
  */
 const KNOWN_FAILURES = [
-  // G (cursor.bottom) on the PR list at 80x24: the peek panel draws past the right edge (frame line 13 is 105 columns wide).
-  { size: [80, 24], keys: ['2', 'G'], reason: /is \d+ wide \(max 80\)/, issue: 'not yet filed (see PR description)' },
 ]
 
 function positiveInt(raw, fallback) {
@@ -538,7 +536,7 @@ describe('random keys: seeded fuzz of the real App', () => {
 
     it('never sends a key that exists only to spawn', () => {
       const banned = bannedTokens()
-      for (const token of ['o', 'b', 'p', 'E', 'Ctrl+E']) expect(banned.has(token), token).toBe(true)
+      for (const token of ['o', 'b', 'E', 'Ctrl+E']) expect(banned.has(token), token).toBe(true)
       for (const token of banned) expect(vocab).not.toContain(token)
       for (const seed of [1, 2, 3]) {
         const r = prng(seed)

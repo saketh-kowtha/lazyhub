@@ -90,7 +90,7 @@ try {
   const plain = output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
   assert.match(plain, /src\/(alpha|beta|gamma|file\d{4})\.js/, 'journey never reached the diff view; the measurement would be meaningless')
   // Scale: the list must have paged past the first 100 rows (numbers count down from 1200).
-  const lowestPr = Math.min(...[...plain.matchAll(/Scale PR #(\d+)/g)].map(m => Number(m[1])))
+  const lowestPr = Math.min(...[...plain.matchAll(/(?:Scale PR #|#)(\d+)(?:\s+Scale| fixture)/g)].map(m => Number(m[1])))
   const gh = maxConcurrentGh(traceFile)
   const result = { peakRssMb: Math.round(peak * 10) / 10, budgetMb: BUDGET_MB, maxConcurrentGh: gh.max, ghCalls: gh.total, ...(SCALE ? { scale: true, lowestPrSeen: lowestPr } : {}) }
   process.stdout.write(`${JSON.stringify(result)}\n`)
