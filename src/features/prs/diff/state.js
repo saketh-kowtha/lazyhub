@@ -88,7 +88,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
-  const [adminMergeMsg, setAdminMergeMsg] = useState('')
+  const [mergeChoice, setMergeChoice] = useState(null) // { strategy, msg } awaiting the merge confirm
   const [compose, setCompose] = useState(null)
   // compose types:
   //   new comment: { mode: 'new', commentType, body }
@@ -441,7 +441,11 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
 
     if (dialog) return
 
-    if (id === 'pr.merge' && prMeta?.state === 'OPEN') { setDialog('merge'); return }
+    if (id === 'pr.merge' && prMeta?.state === 'OPEN') {
+      // The picker is built from repoInfo (allowed methods, admin rights): never open it before that loads.
+      if (!repoInfo) { flash('Loading repository settings… try again in a moment', 3000); return }
+      setDialog('merge'); return
+    }
     if (id === 'pr.approve' && prMeta?.state === 'OPEN') { setDialog('approve-body'); return }
     if (id === 'pr.request-changes' && prMeta?.state === 'OPEN') { setDialog('reqchanges-body'); return }
 
@@ -606,37 +610,21 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
       })
   }
 
+  // Choosing a method never merges by itself: a confirm (default No; an admin bypass also needs the PR
+  // number typed) always follows, then the write runs through runWrite as before.
   const submitMerge = (val) => {
     const strategy = typeof val === 'object' ? val.value : val
     const msg = typeof val === 'object' ? val.text : undefined
-    if (strategy === 'admin') {
-      setAdminMergeMsg(msg || '')
-      setDialog('merge-admin')
-    } else {
-      setDialog(null)
-      runWrite(`Merging #${prNumber}`, () => mergePR(repo, prNumber, strategy, msg))
-        .then(ran => { if (ran) onBack() })
-        .catch(err => {
-          flash(`✗ Merge failed: ${err.message}`, 5000)
-        })
-    }
+    setMergeChoice({ strategy, msg })
+    setDialog('merge-confirm')
   }
 
-  const selectAdminMethod = (val) => {
-    const method = typeof val === 'object' ? val.value : val
-    // Preserve the commit message the user typed in the prior picker,
-    // whether it's still the raw string or was already wrapped into
-    // {strategy, msg} by an earlier pass through this dialog.
-    const priorMsg = typeof adminMergeMsg === 'object' ? adminMergeMsg.msg : adminMergeMsg
-    const nextMsg  = (typeof val === 'object' && val.text) ? val.text : priorMsg
-    setAdminMergeMsg({ strategy: `admin-${method}`, msg: nextMsg })
-    setDialog('merge-admin-confirm')
-  }
-
-  const confirmAdminMerge = () => {
-    const pending = typeof adminMergeMsg === 'object' ? adminMergeMsg : { strategy: 'admin-merge', msg: adminMergeMsg }
+  const confirmMerge = () => {
+    if (!mergeChoice) return
+    const { strategy, msg } = mergeChoice
+    const admin = strategy.startsWith('admin-')
     setDialog(null)
-    runWrite(`Merging #${prNumber}`, () => mergePR(repo, prNumber, pending.strategy, pending.msg || undefined, { allowAdmin: true }))
+    runWrite(`Merging #${prNumber}`, () => mergePR(repo, prNumber, strategy, msg || undefined, admin ? { allowAdmin: true } : undefined))
       .then(ran => { if (ran) onBack() })
       .catch(err => {
         flash(`✗ Merge failed: ${err.message}`, 5000)
@@ -667,12 +655,12 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
     stdout, visibleHeight, diffStats, isLargeDiff, diffTooLarge, diffWarningAck,
     commentsTruncated: !!comments?.truncated,
     prMeta, repoInfo, loading: loading && !hasDiff, error: diffError, diffRefreshError, cursor, scrollOffset, dialog, setDialog,
-    adminMergeMsg, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
+    mergeChoice, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
     footerKeys, showTree, treeCursor, findQuery, setFindQuery, findActive,
     findMatches, gotoActive, gotoInput, setGotoInput, fileJumpActive, setFileJumpActive,
     aiReview, setAiReview, aiReviewLoading, aiReviewError, setAiReviewError,
     aiPostStatus, setAiPostStatus, files, rows, langCache, fileStartIndices,
     treeRows, commentsByLine, jumpTo, handleAiJumpTo, handleAiPost,
-    submitMerge, selectAdminMethod, confirmAdminMerge, submitApproval, submitChanges
+    submitMerge, confirmMerge, submitApproval, submitChanges
   }
 }

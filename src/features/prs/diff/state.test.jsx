@@ -98,19 +98,44 @@ describe('diff state and render contracts', () => {
     expect(notifyDialog).toHaveBeenLastCalledWith(false)
   })
 
-  it('preserves the admin merge message across method selection and waits for confirmation', async () => {
+  it('admin bypass keeps the message, waits for a confirm and needs the PR number typed', async () => {
     const { view, onBack } = mountSession()
     await waitForExpectation(() => expect(currentState).not.toBeNull())
-    currentState.submitMerge({ value: 'admin', text: 'reviewed change' })
-    await waitForExpectation(() => expect(currentState.dialog).toBe('merge-admin'))
-    currentState.selectAdminMethod('squash')
+    currentState.submitMerge({ value: 'admin-squash', text: 'reviewed change' })
     await waitForExpectation(() => expect(view.lastFrame()).toContain('ADMIN BYPASS'))
+    expect(view.lastFrame()).toContain('Type 42 to confirm')
+    expect(view.lastFrame()).not.toMatch(/--admin|--squash/)
     expect(mergePR).not.toHaveBeenCalled()
-    expect(currentState.adminMergeMsg).toEqual({ strategy: 'admin-squash', msg: 'reviewed change' })
+    expect(currentState.mergeChoice).toEqual({ strategy: 'admin-squash', msg: 'reviewed change' })
 
-    currentState.confirmAdminMerge()
+    currentState.confirmMerge()
     await waitForExpectation(() => expect(onBack).toHaveBeenCalledOnce())
     expect(mergePR).toHaveBeenCalledExactlyOnceWith('owner/repo', 42, 'admin-squash', 'reviewed change', { allowAdmin: true })
+  })
+
+  it('m then Enter then Enter never merges: the confirm defaults to No (#468)', async () => {
+    const { view } = mountSession()
+    await waitForExpectation(() => expect(currentState?.rows).toHaveLength(7))
+    await sendInput('m')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Merge PR #42'))
+    expect(view.lastFrame()).toContain('Squash and merge')
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Merge PR #42 via Squash and merge?'))
+    await sendInput('', { return: true })
+    await sendInput('', { return: true })
+    expect(mergePR).not.toHaveBeenCalled()
+  })
+
+  it('m, Enter, y merges with the preferred method (#468)', async () => {
+    const { view, onBack } = mountSession()
+    await waitForExpectation(() => expect(currentState?.rows).toHaveLength(7))
+    await sendInput('m')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Merge PR #42'))
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('via Squash and merge?'))
+    await sendInput('y')
+    await waitForExpectation(() => expect(onBack).toHaveBeenCalledOnce())
+    expect(mergePR).toHaveBeenCalledExactlyOnceWith('owner/repo', 42, 'squash', undefined, undefined)
   })
 
   it('shows a pending status and ignores a second merge while one is in flight (#453)', async () => {
@@ -119,8 +144,12 @@ describe('diff state and render contracts', () => {
     const { onBack } = mountSession()
     await waitForExpectation(() => expect(currentState).not.toBeNull())
     currentState.submitMerge('squash')
+    await waitForExpectation(() => expect(currentState.mergeChoice).toEqual({ strategy: 'squash', msg: undefined }))
+    currentState.confirmMerge()
     await waitForExpectation(() => expect(currentState.commentStatus).toContain('Merging #42'))
     currentState.submitMerge('squash')
+    await waitForExpectation(() => expect(currentState.mergeChoice).toBeTruthy())
+    currentState.confirmMerge()
     await waitForExpectation(() => expect(currentState.commentStatus).toContain('still in progress'))
     expect(mergePR).toHaveBeenCalledTimes(1)
     release()
