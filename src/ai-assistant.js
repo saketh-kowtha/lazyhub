@@ -12,7 +12,7 @@
 
 import {
   listPRs, getPR, getPRDiff, getPRChecks, listIssues, getIssue,
-  listBranches, listRuns, getRepoInfo, listNotifications, listPRComments,
+  listBranches, listRuns, getRepoInfo, listNotifications, listPRCommentsPage,
 } from './executor.js'
 import { runAIChat } from './ai/index.js'
 
@@ -228,10 +228,10 @@ async function callReadOnlyTool(toolName, toolInput, repo) {
     case 'get_repo_info':      return getRepoInfo(repo)
     case 'list_notifications': return listNotifications()
     case 'list_pr_comments': {
-      const comments = /** @type {any} */ (await listPRComments(repo, toolInput.number))
+      const { comments, truncated } = await listPRCommentsPage(repo, toolInput.number)
       // Say so when GitHub has more than this first page, so the model does not treat it as complete.
-      return comments.truncated
-        ? { comments, truncated: comments.truncated, note: 'Incomplete: only the first page of review threads (and first replies per thread) is listed.' }
+      return truncated
+        ? { comments, truncated, note: 'Incomplete: only the first page of review threads (and first replies per thread) is listed.' }
         : comments
     }
     default:

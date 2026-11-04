@@ -16,7 +16,7 @@ import {
   rerunCheckRun,
   getPRDiffStats,
   getPRDiff,
-  listPRComments,
+  listPRCommentsPage,
   listPRTimelinePage,
   getPR as getPRMeta,
 } from './executor.js'
@@ -64,7 +64,7 @@ vi.mock('./executor.js', () => ({
   getCheckRunAnnotations: vi.fn(),
   getPRDiffStats: vi.fn(),
   getPRDiff: vi.fn(),
-  listPRComments: vi.fn(),
+  listPRCommentsPage: vi.fn(),
   listPRTimelinePage: vi.fn(),
   addPRLineComment: vi.fn(),
   replyToComment: vi.fn(),
@@ -170,7 +170,7 @@ describe('PR detail and diff E2E flows', () => {
       if (fn === getBranchProtection) return ghResult(currentProtection)
       if (fn === getPRDiffStats) return ghResult(currentDiffStats)
       if (fn === getPRDiff) return ghResult(currentDiffText)
-      if (fn === listPRComments) return ghResult(currentComments, { mutate: vi.fn(), refetch: vi.fn() })
+      if (fn === listPRCommentsPage) return ghResult({ comments: currentComments, truncated: false }, { mutate: vi.fn(), refetch: vi.fn() })
       if (fn === getPRMeta) return ghResult(currentPR)
       return ghResult(null)
     })

@@ -241,20 +241,28 @@ export async function listPRTimelinePage(repo, number, {
 
 /**
  * Review comments for the diff view and the AI tool: the first page of threads (100) with each
- * thread's first 50 comments, in one request. Never walks every thread. When GitHub has more, the
- * returned array carries `truncated` ({ threads, replies }) so callers can say so; the comments
- * view pages through the rest.
+ * thread's first 50 comments, in one request. Never walks every thread. `truncated` is an explicit
+ * field of the payload (`{ threads, replies }` or `false`) so it survives the JSON disk cache and
+ * list edits; the comments view pages through the rest.
+ * @param repo
+ * @param number
+ * @returns {Promise<{ comments: any[], truncated: false | { threads: boolean, replies: boolean } }>}
+ */
+export async function listPRCommentsPage(repo, number) {
+  const page = await listPRTimelinePage(repo, number, { conversation: false, pageSize: 100 })
+  const truncated = page.threads.hasNextPage || page.threads.stalled || page.partialThreads.length > 0
+    ? { threads: page.threads.hasNextPage || page.threads.stalled, replies: page.partialThreads.length > 0 }
+    : false
+  return { comments: page.comments, truncated }
+}
+
+/**
+ * The comments of `listPRCommentsPage`, as a plain array.
  * @param repo
  * @param number
  */
 export async function listPRComments(repo, number) {
-  const page = await listPRTimelinePage(repo, number, { conversation: false, pageSize: 100 })
-  const out = page.comments
-  const truncated = page.threads.hasNextPage || page.threads.stalled || page.partialThreads.length > 0
-    ? { threads: page.threads.hasNextPage || page.threads.stalled, replies: page.partialThreads.length > 0 }
-    : false
-  Object.defineProperty(out, 'truncated', { value: truncated, enumerable: false })
-  return out
+  return (await listPRCommentsPage(repo, number)).comments
 }
 
 /**
@@ -314,13 +322,14 @@ export async function resolveThread(threadId) {
 }
 
 /**
- * Get every PR review comment shaped for IPC: all thread pages and all replies, by cursor. The
- * returned array carries `truncated: true` if GitHub returned a cursor that does not advance, so
- * the caller can say the list is incomplete instead of looping forever or hiding it.
+ * Get every PR review comment shaped for IPC: all thread pages and all replies, by cursor.
+ * `truncated` is true if GitHub returned a cursor that does not advance, so the caller can say the
+ * list is incomplete instead of looping forever or hiding it.
  * @param repo
  * @param prNumber
+ * @returns {Promise<{ comments: any[], truncated: boolean }>}
  */
-export async function getPRReviewComments(repo, prNumber) {
+export async function getPRReviewCommentsPage(repo, prNumber) {
   const all = []
   let after = null
   let stalled = false
@@ -350,8 +359,16 @@ export async function getPRReviewComments(repo, prNumber) {
     user: c.user?.login || null,
     resolved: c.threadResolved,
   }))
-  Object.defineProperty(shaped, 'truncated', { value: stalled, enumerable: false })
-  return shaped
+  return { comments: shaped, truncated: stalled }
+}
+
+/**
+ * The comments of `getPRReviewCommentsPage`, as a plain array.
+ * @param repo
+ * @param prNumber
+ */
+export async function getPRReviewComments(repo, prNumber) {
+  return (await getPRReviewCommentsPage(repo, prNumber)).comments
 }
 
 /**

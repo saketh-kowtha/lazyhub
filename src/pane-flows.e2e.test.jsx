@@ -17,7 +17,7 @@ import {
   listNotifications,
   markNotificationRead,
   markAllNotificationsRead,
-  listPRComments,
+  listPRCommentsPage,
   listPRTimelinePage,
   resolveThread,
 } from './executor.js'
@@ -74,7 +74,7 @@ vi.mock('./executor.js', () => ({
   listNotifications: vi.fn(),
   markNotificationRead: vi.fn(),
   markAllNotificationsRead: vi.fn(),
-  listPRComments: vi.fn(),
+  listPRCommentsPage: vi.fn(),
   listPRTimelinePage: vi.fn(),
   resolveThread: vi.fn(),
   replyToComment: vi.fn(),
@@ -153,7 +153,7 @@ describe('Pane E2E user flows', () => {
         ])
       }
 
-      if (fn === listPRComments || fn === listPRTimelinePage) {
+      if (fn === listPRCommentsPage || fn === listPRTimelinePage) {
         const reviewComments = ([
           {
             id: 'c1',
@@ -177,7 +177,7 @@ describe('Pane E2E user flows', () => {
             threadResolved: false,
           },
         ])
-        return ghResult(fn === listPRTimelinePage ? timelinePage(reviewComments) : reviewComments)
+        return ghResult(fn === listPRTimelinePage ? timelinePage(reviewComments) : { comments: reviewComments, truncated: false })
       }
 
       return ghResult(null)

@@ -1,7 +1,7 @@
 import React, { act, useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useGh } from '../../../hooks/useGh.js'
-import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRComments, mergePR, reviewPR, replyToComment, deletePRComment } from '../../../executor.js'
+import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRCommentsPage, mergePR, reviewPR, replyToComment, deletePRComment } from '../../../executor.js'
 import { firstActionKey } from '../../../config/actions.js'
 import { sendInput } from '../../../test/input-bus.js'
 import { cleanup, renderWithProviders, waitForExpectation } from '../../../test/test-helpers.jsx'
@@ -16,7 +16,7 @@ vi.mock('ink', async () => ({
 vi.mock('../../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
 vi.mock('../../../executor.js', () => ({
   getPR: vi.fn(), getRepoInfo: vi.fn(), getPRDiffStats: vi.fn(), getPRDiff: vi.fn(),
-  listPRComments: vi.fn(), mergePR: vi.fn(), addPRLineComment: vi.fn(),
+  listPRCommentsPage: vi.fn(), mergePR: vi.fn(), addPRLineComment: vi.fn(),
   replyToComment: vi.fn(), editPRComment: vi.fn(), deletePRComment: vi.fn(), reviewPR: vi.fn(),
 }))
 
@@ -56,7 +56,7 @@ beforeEach(() => {
       : fn === getPR ? { title: 'Diff contracts', state: 'OPEN', headRefOid: 'a'.repeat(40) }
       : fn === getRepoInfo ? { viewerPermission: 'ADMIN' }
       : fn === getPRDiffStats ? { additions: 2, deletions: 1, changedFiles: 2 }
-      : fn === listPRComments ? [] : null,
+      : fn === listPRCommentsPage ? { comments: [], truncated: false } : null,
     loading: false, error: null, refetch: vi.fn(), mutate: vi.fn(),
   }))
 })
@@ -77,9 +77,9 @@ describe('diff state and render contracts', () => {
   })
 
   it('says so when the inline comments are only the first page (#507)', async () => {
-    const partial = Object.defineProperty([], 'truncated', { value: { threads: true, replies: false } })
+    const partial = { comments: [], truncated: { threads: true, replies: false } }
     const base = useGh.getMockImplementation()
-    useGh.mockImplementation(fn => (fn === listPRComments ? { ...base(fn), data: partial } : base(fn)))
+    useGh.mockImplementation(fn => (fn === listPRCommentsPage ? { ...base(fn), data: partial } : base(fn)))
     const { view } = mountSession()
     await waitForExpectation(() => expect(view.lastFrame()).toContain('inline comments incomplete'))
   })

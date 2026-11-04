@@ -10,7 +10,7 @@ vi.mock('./ai/usage.js', () => ({ logAiUsage: vi.fn() }))
 vi.mock('./executor.js', () => ({
   listPRs: vi.fn(async () => [{ number: 7 }]),
   getPR: vi.fn(), getPRDiff: vi.fn(), getPRChecks: vi.fn(), listIssues: vi.fn(), getIssue: vi.fn(),
-  listBranches: vi.fn(), listRuns: vi.fn(), getRepoInfo: vi.fn(), listNotifications: vi.fn(), listPRComments: vi.fn(),
+  listBranches: vi.fn(), listRuns: vi.fn(), getRepoInfo: vi.fn(), listNotifications: vi.fn(), listPRCommentsPage: vi.fn(),
   mergePR: vi.fn(), closePR: vi.fn(), closeIssue: vi.fn(), addPRComment: vi.fn(),
   addLabels: vi.fn(), reviewPR: vi.fn(), rerunRun: vi.fn(), cancelRun: vi.fn(),
 }))
@@ -130,8 +130,8 @@ describe('assistant mutation containment (B-64: model writes disabled, even if h
   })
 
   it('tells the model when list_pr_comments returned only part of the comments (#507)', async () => {
-    const partial = Object.defineProperty([{ id: 1 }], 'truncated', { value: { threads: true, replies: false } })
-    executor.listPRComments.mockResolvedValueOnce(partial)
+    const partial = { comments: [{ id: 1 }], truncated: { threads: true, replies: false } }
+    executor.listPRCommentsPage.mockResolvedValueOnce(partial)
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(json({ content: [{ type: 'tool_use', id: 'tu3', name: 'list_pr_comments', input: { number: 5 } }] }))
       .mockResolvedValueOnce(json({ content: [{ type: 'text', text: 'done' }] }))

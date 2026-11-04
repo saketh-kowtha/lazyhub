@@ -186,7 +186,7 @@ describe.skipIf(!posix)('IDE socket GitHub writes', () => {
   })
 
   it('review-comments tells the editor when the list is incomplete (#507)', async () => {
-    const partial = Object.defineProperty([{ id: 1 }], 'truncated', { value: true })
+    const partial = { comments: [{ id: 1 }], truncated: true }
     const { path } = await start({ onReviewComments: vi.fn(async () => partial) })
     expect(await request(path, { id: 1, type: 'review-comments', prNumber: 5, repo: 'o/r' })).toMatchObject({ comments: [{ id: 1 }], truncated: true })
   })

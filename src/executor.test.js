@@ -51,6 +51,7 @@ import {
   addPRComment,
   addPRLineComment,
   listPRComments,
+  listPRCommentsPage,
   listPRTimelinePage,
   listPRThreadReplies,
   resolveThread,
@@ -58,6 +59,7 @@ import {
   getGist,
   deleteGist,
   getPRReviewComments,
+  getPRReviewCommentsPage,
   addPRReviewThreadReply,
   resolvePRReviewThread,
   getPRStateForBranch,
@@ -783,15 +785,16 @@ describe('PR timeline paging (#507)', () => {
 
   it('listPRComments makes one request and flags that threads were left out', async () => {
     execa.mockResolvedValueOnce(ok(wrap({ reviewThreads: { totalCount: 150, pageInfo: { hasNextPage: true, endCursor: 'T100' }, nodes: [thread(1)] } })))
-    const all = await listPRComments('owner/repo', 5)
-    expect(all.map(c => c.id)).toEqual([1])
+    const res = await listPRCommentsPage('owner/repo', 5)
+    expect(res.comments.map(c => c.id)).toEqual([1])
     expect(execa).toHaveBeenCalledTimes(1)
-    expect(all.truncated).toEqual({ threads: true, replies: false })
+    // An explicit field of the payload, so it survives JSON (the disk cache) and list edits.
+    expect(JSON.parse(JSON.stringify(res)).truncated).toEqual({ threads: true, replies: false })
   })
 
   it('listPRComments reports no truncation when everything fits', async () => {
     execa.mockResolvedValueOnce(ok(wrap({ reviewThreads: { totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [thread(1)] } })))
-    expect((await listPRComments('owner/repo', 5)).truncated).toBe(false)
+    expect((await listPRCommentsPage('owner/repo', 5)).truncated).toBe(false)
   })
 
   it('a thread with more than 50 comments is listed as partial without a per-thread request', async () => {
@@ -821,12 +824,12 @@ describe('PR timeline paging (#507)', () => {
     execa.mockResolvedValueOnce(ok(wrap({ reviewThreads: { totalCount: 2, pageInfo: { hasNextPage: true, endCursor: 'T1' }, nodes: [partial] } })))
     execa.mockResolvedValueOnce(ok({ data: { node: { id: 'T1', isResolved: false, comments: { totalCount: 3, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [node(3, { replyTo: { databaseId: 1 } })] } } } }))
     execa.mockResolvedValueOnce(ok(wrap({ reviewThreads: { totalCount: 2, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [thread(4)] } })))
-    const all = await getPRReviewComments('owner/repo', 5)
-    expect(all.map(c => c.id)).toEqual([1, 2, 3, 4])
+    const all = await getPRReviewCommentsPage('owner/repo', 5)
+    expect(all.comments.map(c => c.id)).toEqual([1, 2, 3, 4])
     expect(all.truncated).toBe(false)
     execa.mockReset()
     execa.mockResolvedValue(ok(wrap({ reviewThreads: { totalCount: 9, pageInfo: { hasNextPage: true, endCursor: 'SAME' }, nodes: [thread(5)] } })))
-    const stalled = await getPRReviewComments('owner/repo', 5)
+    const stalled = await getPRReviewCommentsPage('owner/repo', 5)
     expect(stalled.truncated).toBe(true) // the second page sent SAME and got SAME back: stop and say so
     expect(execa).toHaveBeenCalledTimes(2)
   })

@@ -3,11 +3,11 @@
  * src/features/prs/diff/state.js — diff loading, navigation, overlays, and action callbacks.
  */
 
-import { useState, useMemo, useContext, useEffect, useRef } from 'react'
+import { useState, useMemo, useContext, useEffect, useRef, useCallback } from 'react'
 import { useStdout } from 'ink'
 import { useActionResolver, useKeymapInput } from '../../../config/keymap.js'
 import { useGh } from '../../../hooks/useGh.js'
-import { getPRDiff, listPRComments, addPRLineComment, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo, reviewPR } from '../../../executor.js'
+import { getPRDiff, listPRCommentsPage, addPRLineComment, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo, reviewPR } from '../../../executor.js'
 import { contextFooterHints } from '../../../ui/actions.js'
 import { usePendingWrite } from '../../../hooks/usePendingWrite.js'
 import { getAICodeReview, AIError } from '../../../ai/index.js'
@@ -84,7 +84,10 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   const { data: prMeta } = useGh(getPRMeta, [repo, prNumber], { ttl: 300_000, enabled: diffReady })
   const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000, enabled: diffReady })
   const headRefOid = /^[0-9a-f]{40}$/.test(prMeta?.headRefOid) ? prMeta.headRefOid : null
-  const { data: comments, refetch: refetchComments, mutate: mutateComments } = useGh(listPRComments, [repo, prNumber], { enabled: diffReady })
+  const { data: commentsPage, refetch: refetchComments, mutate: mutatePage } = useGh(listPRCommentsPage, [repo, prNumber], { enabled: diffReady })
+  const comments = commentsPage?.comments
+  // `truncated` rides in the payload next to the list, so an edit of the list keeps it.
+  const mutateComments = useCallback((fn) => mutatePage(prev => ({ truncated: false, ...prev, comments: fn(prev?.comments || []) })), [mutatePage])
   const [cursor, setCursor] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
@@ -653,7 +656,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
 
   return {
     stdout, visibleHeight, diffStats, isLargeDiff, diffTooLarge, diffWarningAck,
-    commentsTruncated: !!comments?.truncated,
+    commentsTruncated: !!commentsPage?.truncated,
     prMeta, repoInfo, loading: loading && !hasDiff, error: diffError, diffRefreshError, cursor, scrollOffset, dialog, setDialog,
     mergeChoice, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
     footerKeys, showTree, treeCursor, findQuery, setFindQuery, findActive,

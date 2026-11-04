@@ -70,7 +70,7 @@ vi.mock('./executor.js', () => {
   const fns = [
     'listPRs', 'listIssues', 'getPR', 'getIssue', 'getRepoInfo', 'getPRChecks', 'getBranchProtection',
     'listLabels', 'listCollaborators', 'getCurrentBranch', 'listBranches', 'listRuns',
-    'getPRDiff', 'getPRDiffStats', 'listPRComments', 'listPRTimelinePage', 'checkoutBranch',
+    'getPRDiff', 'getPRDiffStats', 'listPRCommentsPage', 'listPRTimelinePage', 'checkoutBranch',
   ]
   return { ...Object.fromEntries(fns.map(name => [name, vi.fn()])), classifyGhFailure: () => ({ message: 'x' }) }
 })
@@ -110,7 +110,8 @@ describe('dashboard repository identity (#493)', () => {
       if (fn === executor.getRepoInfo) return ghResult({ squashMergeAllowed: true, viewerPermission: 'WRITE' })
       if (fn === executor.getPRChecks) return ghResult([])
       if (fn === executor.getPRDiff) return ghResult('')
-      if (fn === executor.listPRComments || fn === executor.listPRTimelinePage) return ghResult(fn === executor.listPRTimelinePage ? { comments: [], conversation: [], threads: { total: 0, hasNextPage: false }, conversationPage: { total: 0, hasNextPage: false } } : [])
+      if (fn === executor.listPRCommentsPage) return ghResult({ comments: [], truncated: false })
+      if (fn === executor.listPRTimelinePage) return ghResult({ comments: [], conversation: [], threads: { total: 0, hasNextPage: false }, conversationPage: { total: 0, hasNextPage: false } })
       if (fn === executor.getBranchProtection) return ghResult({ requiredReviews: 1 })
       return ghResult(null)
     })
