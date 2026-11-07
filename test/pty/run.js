@@ -1,6 +1,7 @@
 import assert from 'assert/strict'
 import { spawnSync } from 'child_process'
-import { existsSync, mkdtempSync, readFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'fs'
+import { createServer } from 'net'
 import { tmpdir } from 'os'
 import { dirname, join, delimiter } from 'path'
 import pty from 'node-pty'
@@ -431,6 +432,60 @@ async function runResizeFlow() {
   }
 }
 
+// #491: the first frame must not wait on the background helper. The helper's socket is a listener that
+// accepts and never answers, which is the worst case for a probe that blocks the launcher. Cold start to first
+// frame is measured with the helper disabled and with the hung one; the difference must stay small, and the probe
+// must still happen (after the frame), so the check cannot pass by never looking for the helper.
+async function coldStartMs({ hungHelper }) {
+  const temp = mkdtempSync(join(tmpdir(), 'lh-'))
+  const stubBin = installGhStub(temp)
+  const env = childEnv(stubBin, temp)
+  let probes = 0
+  let helper = null
+  const held = new Set()
+  let term
+  let output = ''
+  try {
+    if (hungHelper) {
+      delete env.LAZYHUB_NO_DAEMON
+      const dir = join(temp, '.config', 'lazyhub')
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
+      helper = createServer(socket => { probes += 1; held.add(socket); socket.on('error', () => {}) })
+      await new Promise((resolve, reject) => { helper.once('error', reject); helper.listen(join(dir, 'daemon.sock'), resolve) })
+    }
+    const started = Date.now()
+    term = spawnTerminal(env)
+    term.onData(data => { output += data })
+    await waitForScreen(() => output, /Focus|PTY harness fixture PR/, `cold start (${hungHelper ? 'hung helper' : 'no helper'})`)
+    const ms = Date.now() - started
+    if (hungHelper) await waitUntil(() => (probes > 0 ? true : 'the launcher never probed the helper'), 'the background probe after the first frame')
+    term.write('q')
+    await waitForExit(term)
+    return { ms, probes }
+  } finally {
+    await stopTerminal(term)
+    for (const socket of held) socket.destroy()
+    helper?.close()
+    removeTempDir(temp)
+  }
+}
+
+async function runColdStartFlow() {
+  const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
+  const runs = { base: [], hung: [] }
+  for (let i = 0; i < 3; i += 1) {
+    runs.base.push((await coldStartMs({ hungHelper: false })).ms)
+    const hung = await coldStartMs({ hungHelper: true })
+    assert.ok(hung.probes >= 1, 'the helper was probed')
+    runs.hung.push(hung.ms)
+  }
+  const base = median(runs.base)
+  const hung = median(runs.hung)
+  process.stdout.write(`PTY cold start to first frame: no helper ${base} ms, hung helper ${hung} ms (runs: ${runs.base.join('/')} vs ${runs.hung.join('/')})\n`)
+  // A launcher that awaited the probe and the spawn window would add seconds; noise is a few hundred ms.
+  assert.ok(hung - base < 1000, `a hung helper delayed the first frame by ${hung - base} ms`)
+}
+
 // #279: Focus -> PR -> detail -> back -> issue -> detail -> back with real stdin. Coming back must
 // restore the section, the selected row and the scroll position. 30 rows per section forces the window
 // to scroll; `G` selects the last one so the first rows are provably out of view.
@@ -559,6 +614,7 @@ await runDayOneErrorFlow({
 await runPerfFlow()
 await runSwrCacheFlow()
 await runResizeFlow()
+await runColdStartFlow()
 await runFocusReturnFlow({ cols: 100, rows: 40 })
 await runFocusReturnFlow({ cols: 80, rows: 24 })
 await runFocusReturnFlow({ cols: 60, rows: 16, single: true })

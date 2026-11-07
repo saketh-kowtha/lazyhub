@@ -9,20 +9,13 @@ import {
 import { DaemonCache } from './cache.js'
 import { EventBus } from './event-bus.js'
 import {
-  DEFAULT_TTL_MS, ERR, MAX_MESSAGE_BYTES, MAX_TTL_MS, PRIVILEGED_TYPES, PROTOCOL_VERSION,
-  ProtocolError, buildReadArgs, checkSession, issueSession, unsafeDaemonEnv,
+  DEFAULT_TTL_MS, ERR, MAX_TTL_MS, PRIVILEGED_TYPES, PROTOCOL_VERSION,
+  ProtocolError, buildReadArgs, issueSession, unsafeDaemonEnv,
 } from './protocol.js'
+import { attachLineReader, authorize, currentSession, deny, parseRequest, send } from './wire.js'
 
 const DEFAULT_HOST = 'github.com'
 const ACCOUNT_TTL_MS = 60_000
-
-function send(socket, payload) {
-  try { socket.write(JSON.stringify(payload) + '\n') } catch { /* disconnected */ }
-}
-
-function deny(socket, id, code, message) {
-  send(socket, { id: id ?? null, ok: false, code, error: message })
-}
 
 /**
  * Start the K-lite daemon in the current process.
@@ -61,21 +54,7 @@ export function startDaemon(config = {}, env = process.env) {
       clearTimeout(idleTimer)
       idleTimer = null
     }
-    let buffer = ''
-
-    socket.on('data', chunk => {
-      buffer += chunk.toString()
-      const lines = buffer.split('\n')
-      buffer = lines.pop()
-      if (buffer.length > MAX_MESSAGE_BYTES || lines.some(l => l.length > MAX_MESSAGE_BYTES)) {
-        deny(socket, null, ERR.TOO_LARGE, 'message too large')
-        socket.destroy()
-        return
-      }
-      for (const line of lines) {
-        if (line.trim()) handleMessage(socket, line.trim())
-      }
-    })
+    attachLineReader(socket, line => handleMessage(socket, line))
     socket.on('close', () => {
       clients.delete(socket)
       armIdleShutdown()
@@ -114,20 +93,16 @@ export function startDaemon(config = {}, env = process.env) {
   }
 
   async function handleMessage(socket, raw) {
-    let msg
-    try { msg = JSON.parse(raw) } catch { return deny(socket, null, ERR.MALFORMED, 'malformed message') }
-    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) {
-      return deny(socket, null, ERR.MALFORMED, 'malformed message')
-    }
-    const id = typeof msg.id === 'string' || typeof msg.id === 'number' ? msg.id : null
-    if (msg.v !== PROTOCOL_VERSION) return deny(socket, id, ERR.VERSION, 'unsupported protocol version')
+    const parsed = parseRequest(raw)
+    if (parsed.error) return deny(socket, parsed.id, parsed.error.code, parsed.error.message)
+    const { msg, id } = parsed
     msg.id = id
 
     if (PRIVILEGED_TYPES.has(msg.type)) {
       // Rotate an expired secret in place so a long-lived daemon stays controllable
       // (`serve --stop` re-reads the token file); revoked sessions never rotate.
-      if (session && !session.revoked && Date.now() > session.expiresAt) session = issueSession(tokenPath)
-      const code = session ? checkSession(session, msg.auth) : ERR.UNAUTHENTICATED
+      session = currentSession(session, tokenPath)
+      const code = authorize(session, msg.auth)
       if (code) return deny(socket, id, code, 'privileged message denied')
     }
 
