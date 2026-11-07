@@ -5,6 +5,7 @@
  * Scrollable view: j/k to scroll, gg/G top/bottom, / to search body
  */
 
+import { logSwallowed } from '../../contain.js'
 import React, { useState, useContext, useMemo, useRef } from 'react'
 import { openUrl } from '../../services/platform.js'
 import { Box, Text, useStdout } from 'ink'
@@ -220,7 +221,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     if (id === 'pr.open-editor' && pr) {
       const files = pr.files || []
       if (files.length > 0) {
-        openInEditor(files[0].path, 1, _editorCfg).catch(() => {})
+        openInEditor(files[0].path, 1, _editorCfg).catch(err => logSwallowed('prs.detail.open-editor', err))
       }
       return
     }

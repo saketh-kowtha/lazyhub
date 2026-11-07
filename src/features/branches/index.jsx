@@ -2,6 +2,7 @@
  * src/features/branches/index.jsx — Branch list pane
  */
 
+import { logSwallowed } from '../../contain.js'
 import React, { useState, useCallback, useMemo, useEffect, useContext, useRef, memo } from 'react'
 import { currentBranch as gitCurrentBranch, createBranch, pushHead } from '../../services/git.js'
 import { Box, Text, useStdout } from 'ink'
@@ -71,7 +72,7 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
 
   const refreshCurrentBranch = useCallback(() => {
     if (!localDir) { setCurrentBranch(null); return }
-    gitCurrentBranch(localDir).then(setCurrentBranch).catch(() => {})
+    gitCurrentBranch(localDir).then(setCurrentBranch).catch(err => logSwallowed('branches.current-branch', err))
   }, [localDir])
 
   useEffect(() => { refreshCurrentBranch() }, [refreshCurrentBranch])

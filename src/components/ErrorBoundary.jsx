@@ -28,6 +28,12 @@ function ErrorDisplay({ title, onDismiss, onReset }) {
   )
 }
 
+/** One quiet line for a section (sidebar, header) that crashed on its own; the rest of the screen stays live. */
+function SectionFallback({ label }) {
+  const { t } = useTheme()
+  return <Text color={t.ci.fail}>⚠ {label} unavailable (see the log)</Text>
+}
+
 export class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props)
@@ -43,6 +49,7 @@ export class ErrorBoundary extends React.Component {
   componentDidCatch(error, info) {
     logger.error('Component crash caught by ErrorBoundary', error, {
       component: 'ErrorBoundary',
+      section: this.props.section,
       componentStack: info?.componentStack?.split('\n').slice(0, 3).join(' '),
     })
   }
@@ -57,6 +64,9 @@ export class ErrorBoundary extends React.Component {
   }
 
   render() {
+    if (this.state.hasError && this.props.section) {
+      return <SectionFallback label={this.props.section} />
+    }
     if (this.state.hasError) {
       return <ErrorDisplay title={this.state.errorTitle} onDismiss={this.handleDismiss} onReset={this.handleReset} />
     }

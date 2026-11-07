@@ -16,6 +16,7 @@
  *   DONE       — pushed, PR updated
  */
 
+import { logSwallowed } from '../../contain.js'
 import React, { useState, useEffect, useCallback, useContext, useRef } from 'react'
 import { openUrl } from '../../services/platform.js'
 import { Box, Text, useStdout } from 'ink'
@@ -163,7 +164,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
     const file = files[cursor]
 
     if ((key.return || input === 'e') && file) {
-      openInEditor(file.path, 1, _editorCfg).catch(() => {})
+      openInEditor(file.path, 1, _editorCfg).catch(err => logSwallowed('prs.conflict.open-editor', err))
       showStatus(`Opened ${file.path} in editor — resolve conflicts, save, then [Space] to stage`)
       return
     }

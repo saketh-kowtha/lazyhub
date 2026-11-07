@@ -2,6 +2,7 @@
 /**
  * New PR form state, branch validation, editor, and submission lifecycle.
  */
+import { logSwallowed } from '../../contain.js'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { editTextInEditor } from '../../services/platform.js'
 import { useKeymapInput } from '../../config/keymap.js'
@@ -49,7 +50,7 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
     getCurrentBranch().then(branch => {
       setCurrentBranch(branch)
       if (branch) setShowBranchHint(true)
-    }).catch(() => {})
+    }).catch(err => logSwallowed('prs.new.current-branch', err))
 
     getRepoInfo(repo).then(info => {
       const defBranch = info?.defaultBranchRef?.name
@@ -57,7 +58,7 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
         setForm(f => ({ ...f, base: f.base || defBranch }))
         validateBase(defBranch)
       }
-    }).catch(() => {})
+    }).catch(err => logSwallowed('prs.new.repo-info', err))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Validation helpers ───────────────────────────────────────────────────────
@@ -88,7 +89,8 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
           setHeadInfo({ comparison })
         }
       }
-    } catch {
+    } catch (err) {
+      logSwallowed('prs.new.head-check', err)
       setHeadStatus('error')
     } finally {
       setHeadValidating(false)
@@ -103,7 +105,8 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
     try {
       const remote = await getRemoteBranch(repo, branch)
       setBaseStatus(remote ? 'exists' : 'not-found')
-    } catch {
+    } catch (err) {
+      logSwallowed('prs.new.base-check', err)
       setBaseStatus('not-found')
     } finally {
       setBaseValidating(false)

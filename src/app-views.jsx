@@ -383,18 +383,22 @@ export function renderAppView(ctx) {
         )}
         <Box flexDirection="row" flexGrow={1} overflow="hidden">
           {showSidebar && (
-            <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
-              paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
-              borderRight={false}
-              onSelect={paneSwitch}
-              height={rows - (compactFooter ? 2 : 3)}
-            />
+            <ErrorBoundary section="Sidebar">
+              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
+                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
+                borderRight={false}
+                onSelect={paneSwitch}
+                height={rows - (compactFooter ? 2 : 3)}
+              />
+            </ErrorBoundary>
           )}
 
           <Box flexDirection="column" flexGrow={1} overflow="hidden"
                borderStyle={borderStyle || 'round'}
                borderColor={t.ui.borderActive}>
-            <PaneHeader pane={pane} count={paneState.count} loading={paneState.loading} error={paneState.error} isStale={paneState.isStale} />
+            <ErrorBoundary section="Pane header">
+              <PaneHeader pane={pane} count={paneState.count} loading={paneState.loading} error={paneState.error} isStale={paneState.isStale} />
+            </ErrorBoundary>
             <Box flexGrow={1} flexDirection="column" overflow="hidden">
               <ErrorBoundary>
                 {renderListPane()}

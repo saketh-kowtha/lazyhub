@@ -2,6 +2,7 @@
  * src/features/notifications/index.jsx — Notifications pane
  */
 
+import { logSwallowed } from '../../contain.js'
 import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
@@ -137,7 +138,7 @@ export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigate
       const notif = items[cursor]
       if (notif && onNavigateTo) {
         // Mark as read and navigate
-        markNotificationRead(notif.id).catch(() => {})
+        markNotificationRead(notif.id).catch(err => logSwallowed('notifications.mark-read', err))
         onNavigateTo(notif)
       }
       return
