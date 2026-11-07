@@ -110,12 +110,15 @@ export function writePrivateFile(path, data) {
  * to follow a symlink at `path`.
  * @param {string} path
  * @param {string} data
+ * @param {{ fsync?: boolean }} [opts] `fsync: true` flushes the file to disk before
+ *   returning (durable journals). Omitted or false behaves exactly as before.
  */
-export function appendPrivateFile(path, data) {
+export function appendPrivateFile(path, data, opts = {}) {
   const fd = openSync(path, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | NOFOLLOW, 0o600)
   try {
     if (POSIX) fchmodSync(fd, 0o600)
     writeSync(fd, data)
+    if (opts && opts.fsync === true) fsyncSync(fd)
   } finally {
     closeSync(fd)
   }
