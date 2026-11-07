@@ -114,7 +114,7 @@ const FOOTER_IDS = {
   'notification-list': ['cursor.down', 'notification.open', 'notification.mark-read', 'notification.mark-all'],
   'tab-list': ['cursor.down', 'tab.open-selected', 'tab.open-browser', 'tab.next-section'],
   'pr-detail': ['cursor.down', 'pr.diff', 'pr.checks', 'pr.approve', 'pr.merge', 'pr.comments', 'pr.open-browser', 'app.back'],
-  'issue-detail': ['cursor.down', 'issue.reply', 'issue.labels', 'issue.assignees', 'issue.open-browser', 'app.back'],
+  'issue-detail': ['cursor.down', 'issue.reply', 'issue.quote', 'issue.labels', 'issue.assignees', 'issue.open-browser', 'app.back'],
   'diff': ['cursor.down', 'diff.next-file', 'diff.next-thread', 'diff.comment', 'diff.file-jump', 'diff.split', 'list.search', 'app.back'],
   global: ['cursor.down'],
   'pr-comments': ['cursor.down', 'comment.reply', 'comment.resolve', 'comment.jump', 'comment.filter', 'app.back'],

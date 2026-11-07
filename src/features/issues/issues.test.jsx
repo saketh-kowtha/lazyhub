@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IssueList } from './list.jsx'
 import { IssueDetail } from './detail.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { getIssue, getIssueRow, closeIssue, createIssue, listIssuesPage, listLabels, listCollaborators, editIssueMembers, addIssueComment } from '../../executor.js'
+import { getIssueHeader, listIssueTimelinePage, getIssueRow, closeIssue, createIssue, listIssuesPage, listLabels, listCollaborators, editIssueMembers, addIssueComment } from '../../executor.js'
 import * as platform from '../../services/platform.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
@@ -18,7 +18,7 @@ vi.mock('../../executor.js', async () => ({
   ...await vi.importActual('../../executor/classify.js'),
   collaboratorsTruncated: (await vi.importActual('../../executor/issues.js')).collaboratorsTruncated,
   COLLAB_MAX_ROWS: (await vi.importActual('../../executor/issues.js')).COLLAB_MAX_ROWS,
-  getIssue: vi.fn(), getIssueRow: vi.fn(), listIssuesPage: vi.fn(), listLabels: vi.fn(), listCollaborators: vi.fn(),
+  getIssueHeader: vi.fn(), listIssueTimelinePage: vi.fn(), getIssueRow: vi.fn(), listIssuesPage: vi.fn(), listLabels: vi.fn(), listCollaborators: vi.fn(),
   closeIssue: vi.fn(), createIssue: vi.fn(), editIssueMembers: vi.fn(), addIssueComment: vi.fn(),
 }))
 
@@ -33,7 +33,15 @@ const issue = {
   number: 11, title: 'Issue title', state: 'OPEN', updatedAt: '2026-06-06T10:00:00Z',
   author: { login: 'author&amp;safe' }, labels: [{ name: 'bug&amp;safe', color: 'ff0000' }],
   assignees: [{ login: 'assignee&amp;safe' }], milestone: { title: 'release&amp;safe' },
-  comments: [{ author: { login: 'reviewer&amp;safe' }, body: 'Comment body', createdAt: '2026-06-06T10:00:00Z' }],
+}
+const timeline = {
+  items: [{
+    key: 'IC_1', kind: 'comment', id: 1, author: 'reviewer&amp;safe', authorAssociation: 'MEMBER', body: 'Comment body',
+    createdAt: '2026-06-06T10:00:00Z', lastEditedAt: null, isMinimized: false, minimizedReason: null,
+    viewerCanUpdate: false, viewerCanDelete: false, reactions: [], url: 'https://x/c/1',
+  }],
+  page: { total: 1, hasNextPage: false, endCursor: 'c1', stalled: false },
+  viewer: 'me',
 }
 const refetch = vi.fn()
 const page = (items, extra = {}) => ({ items, hasNextPage: false, endCursor: null, totalCount: items.length, ...extra })
@@ -41,7 +49,7 @@ const page = (items, extra = {}) => ({ items, hasNextPage: false, endCursor: nul
 beforeEach(() => {
   vi.clearAllMocks()
   useGh.mockImplementation(fn => ({
-    data: fn === listIssuesPage ? page([issue]) : fn === getIssue ? issue
+    data: fn === listIssuesPage ? page([issue]) : fn === getIssueHeader ? issue : fn === listIssueTimelinePage ? timeline
       : fn === listLabels ? [{ name: 'bug&amp;safe', color: 'ff0000' }, { name: 'new&amp;safe', color: '00ff00' }]
         : fn === listCollaborators ? [{ login: 'assignee&amp;safe' }, { login: 'new&amp;safe' }] : null,
     loading: false, error: null, refetch,

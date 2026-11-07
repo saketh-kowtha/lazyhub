@@ -68,7 +68,7 @@ vi.mock('./components/StatusBar.jsx', () => ({ StatusBar: () => null }))
 
 vi.mock('./executor.js', () => {
   const fns = [
-    'listPRs', 'listIssues', 'getPR', 'getIssue', 'getRepoInfo', 'getPRChecks', 'getBranchProtection',
+    'listPRs', 'listIssues', 'getPR', 'getIssue', 'getIssueHeader', 'listIssueTimelinePage', 'getRepoInfo', 'getPRChecks', 'getBranchProtection',
     'listLabels', 'listCollaborators', 'getCurrentBranch', 'listBranches', 'listRuns',
     'getPRDiff', 'listPRFilesPage', 'getPRFilePatch', 'getPRDiffStats', 'listPRCommentsPage', 'listPRTimelinePage', 'checkoutBranch',
   ]
@@ -106,7 +106,7 @@ describe('dashboard repository identity (#493)', () => {
       if (fn === executor.listPRs) return ghResult([pr(102, 'Remote repository PR')])
       if (fn === executor.listIssues) return ghResult([issue(302, 'Remote repository issue')])
       if (fn === executor.getPR) return ghResult(pr(deps[1], 'Loaded detail', prExtra))
-      if (fn === executor.getIssue) return ghResult(issue(deps[1], 'Loaded issue'))
+      if (fn === executor.getIssueHeader) return ghResult(issue(deps[1], 'Loaded issue'))
       if (fn === executor.getRepoInfo) return ghResult({ squashMergeAllowed: true, viewerPermission: 'WRITE' })
       if (fn === executor.getPRChecks) return ghResult([])
       if (fn === executor.listPRFilesPage) return ghResult({ files: [], hasNextPage: false, endCursor: null, totalCount: 0 })
@@ -132,8 +132,8 @@ describe('dashboard repository identity (#493)', () => {
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Remote repository issue'))
     await flush(30)
     await press([key(']'), ENTER])
-    await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.getIssue, ['other/project', 302]))
-    expect(useGh).not.toHaveBeenCalledWith(executor.getIssue, ['owner/repo', 302])
+    await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.getIssueHeader, ['other/project', 302]))
+    expect(useGh).not.toHaveBeenCalledWith(executor.getIssueHeader, ['owner/repo', 302])
   })
 
   async function openDetail() {
