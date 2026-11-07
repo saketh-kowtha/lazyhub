@@ -70,7 +70,7 @@ vi.mock('./executor.js', () => {
     'reviewPR', 'mergePR', 'closePR', 'checkoutBranch', 'enableAutoMerge', 'disableAutoMerge', 'markPRReady',
     'convertPRToDraft', 'editPRBase', 'requestReviewers', 'removeReviewers', 'addPRAssignees', 'removePRAssignees',
     'addLabels', 'removeLabels', 'listLabels', 'listCollaborators', 'rerunCheckRun', 'getCheckRunAnnotations',
-    'getCurrentBranch', 'createPR', 'listBranches', 'listRuns', 'rerunRun',
+    'getCurrentBranch', 'createPR', 'listBranches', 'listRuns', 'rerunRun', 'searchOwnsState', 'validatePRSearch',
   ]
   return Object.fromEntries(fns.map(name => [name, vi.fn()]))
 })

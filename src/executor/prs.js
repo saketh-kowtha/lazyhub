@@ -203,9 +203,41 @@ function stateQualifiers(states) {
   return { qualifiers: [], exact: false }
 }
 
+const PR_SEARCH_MAX_LENGTH = 256
+// Qualifiers that would move the list out of this repository, change what kind of item it lists, or fight its sort.
+const FORBIDDEN_SEARCH_QUALIFIER = /(?:^|\s)-?(?:repo|org|user|owner|type|sort):/i
+const FORBIDDEN_SEARCH_KIND = /(?:^|\s)-?(?:is|type):(?:issue|discussion)\b/i
+const STATE_SEARCH_QUALIFIER = /(?:^|\s)-?(?:is|state):(?:open|closed|merged|unmerged)\b/i
+
+/**
+ * Validate free text typed into the PR list search (`/`). It is appended to a query that
+ * already pins `repo:` and `is:pr`, so anything that could widen it past this repository,
+ * switch the item kind, or break the single-line query is refused with a reason.
+ * @param {unknown} text
+ * @returns {string} the trimmed query ('' for none)
+ */
+export function validatePRSearch(text) {
+  const query = String(text ?? '').trim()
+  if (/[\u0000-\u001f\u007f]/.test(query)) throw new Error('A search cannot contain control characters or line breaks')
+  if (query.length > PR_SEARCH_MAX_LENGTH) throw new Error(`A search is limited to ${PR_SEARCH_MAX_LENGTH} characters`)
+  const forbidden = FORBIDDEN_SEARCH_QUALIFIER.exec(query) || FORBIDDEN_SEARCH_KIND.exec(query)
+  if (forbidden) throw new Error(`"${forbidden[0].trim()}" is not allowed here: the search is already limited to pull requests of this repository`)
+  return query
+}
+
+/**
+ * True when the typed search names its own state (`is:closed`, `-is:merged`, `state:open`), which
+ * then replaces the state filter instead of adding to it.
+ * @param {unknown} text
+ */
+export function searchOwnsState(text) {
+  return STATE_SEARCH_QUALIFIER.test(String(text ?? ''))
+}
+
 function prPageSearchQuery(repo, filter) {
+  const search = validatePRSearch(filter.search)
   const parts = [`repo:${repo}`, 'is:pr', filter.sort === 'oldest' ? 'sort:updated-asc' : 'sort:updated-desc']
-  parts.push(...stateQualifiers(filter.states || (filter.state ? [filter.state] : ['open'])).qualifiers)
+  if (!searchOwnsState(search)) parts.push(...stateQualifiers(filter.states || (filter.state ? [filter.state] : ['open'])).qualifiers)
   if (filter.author) {
     const login = String(filter.author).trim()
     // An unquoted qualifier value: spaces, quotes or colons could add extra qualifiers.
@@ -215,6 +247,7 @@ function prPageSearchQuery(repo, filter) {
     if (filter.scope === 'own') parts.push('author:@me')
     if (filter.scope === 'reviewing') parts.push('review-requested:@me')
   }
+  if (search) parts.push(search)
   return parts.join(' ')
 }
 

@@ -249,3 +249,50 @@ describe('PR list preview fetch (#508)', () => {
     expect(view.lastFrame()).not.toContain('loading…')
   })
 })
+
+describe('PR list "/" searches GitHub (#508)', () => {
+  it('sends the typed query to GitHub with cursor pages, resets the list, and shows N of M for it', async () => {
+    const view = mount()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('30 of 75'))
+    await flush(20)
+    await sendInput('/')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Search pull requests'))
+    for (const ch of 'author:bob flaky') await sendInput(ch)
+    await sendInput('', { return: true })
+    await waitForExpectation(() => {
+      const calls = useGh.mock.calls.filter(c => c[0] === listPRsPage)
+      expect(calls.at(-1)[1][1]).toMatchObject({ search: 'author:bob flaky' })
+    })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('/ author:bob flaky'))
+    // The next cursor page of the SAME query is requested by cursor, not from page 1.
+    listPRsPage.mockResolvedValueOnce({ items: rows(31, 60), hasNextPage: false, endCursor: null, totalCount: 60 })
+    await flush(20)
+    await sendInput('G')
+    await waitForExpectation(() => expect(listPRsPage).toHaveBeenCalledTimes(1))
+    expect(listPRsPage.mock.calls[0][1]).toMatchObject({ after: 'c1', search: 'author:bob flaky' })
+  })
+
+  it('refuses a query that would leave this repository, with the reason, and keeps the dialog open', async () => {
+    const view = mount()
+    await flush(20)
+    await sendInput('/')
+    for (const ch of 'repo:other/x') await sendInput(ch)
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toMatch(/repo:/i))
+    expect(view.lastFrame()).toContain('Search pull requests')
+    expect(useGh.mock.calls.filter(c => c[0] === listPRsPage).every(c => !c[1][1].search)).toBe(true)
+  })
+
+  it('an empty query clears the search', async () => {
+    const view = mount()
+    await flush(20)
+    await sendInput('/')
+    for (const ch of 'foo') await sendInput(ch)
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('/ foo'))
+    await sendInput('/')
+    for (let i = 0; i < 3; i++) await sendInput('', { backspace: true })
+    await sendInput('', { return: true })
+    await waitForExpectation(() => expect(view.lastFrame()).not.toContain('/ foo'))
+  })
+})

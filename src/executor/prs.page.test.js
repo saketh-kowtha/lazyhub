@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { runGh } from './core.js'
-import { listPRsPage, getPRRow, getPRPreview } from './prs.js'
+import { listPRsPage, getPRRow, getPRPreview, searchOwnsState, validatePRSearch } from './prs.js'
 
 vi.mock('./core.js', () => ({ getRepo: (r) => r, runGh: vi.fn() }))
 
@@ -75,5 +75,53 @@ describe('getPRRow / getPRPreview (#508)', () => {
     runGh.mockResolvedValue({ body: 'hello', statusCheckRollup: [{ name: 'ci' }] })
     expect(await getPRPreview('o/r', 4)).toEqual({ body: 'hello', statusCheckRollup: [{ name: 'ci' }] })
     expect(runGh.mock.calls[0][0]).toEqual(expect.arrayContaining(['pr', 'view', '4']))
+  })
+})
+
+describe('listPRsPage server-side search (#508)', () => {
+  beforeEach(() => vi.clearAllMocks())
+  const empty = () => runGh.mockResolvedValue({ data: { search: { issueCount: 0, pageInfo: {}, nodes: [] } } })
+
+  it('sends the typed query to GitHub search after the repo, kind and state qualifiers', async () => {
+    empty()
+    await listPRsPage('o/r', { states: ['open'], search: 'author:alice flaky test' })
+    const query = q()
+    expect(query).toContain('repo:o/r is:pr')
+    expect(query).toContain('state:open')
+    expect(query.endsWith('author:alice flaky test')).toBe(true)
+  })
+
+  it('lets a query that names its own state replace the filter state', async () => {
+    empty()
+    await listPRsPage('o/r', { states: ['open'], search: 'is:closed author:x foo' })
+    expect(q()).not.toContain('state:open')
+    expect(q()).toContain('is:closed author:x foo')
+    expect(searchOwnsState('is:closed author:x foo')).toBe(true)
+    expect(searchOwnsState('-is:merged foo')).toBe(true)
+    expect(searchOwnsState('state:open')).toBe(true)
+    expect(searchOwnsState('author:x foo')).toBe(false)
+  })
+
+  it('keeps the cursor and the total for a search page', async () => {
+    runGh.mockResolvedValue({ data: { search: { issueCount: 80000, pageInfo: { hasNextPage: true, endCursor: 'z' }, nodes: [node()] } } })
+    const page = await listPRsPage('o/r', { search: 'foo', after: 'y' })
+    expect(runGh.mock.calls[0][0]).toContain('after=y')
+    expect(page).toMatchObject({ hasNextPage: true, endCursor: 'z', totalCount: 80000 })
+  })
+
+  it.each([
+    'repo:other/x foo', 'org:acme foo', 'user:bob foo', 'owner:bob foo', 'is:issue foo', 'type:issue foo',
+    'sort:created-asc foo', '-repo:o/r foo', 'foo\nrepo:other/x', 'x'.repeat(300),
+  ])('refuses a query that could leave this repository or break the list: %j', async (search) => {
+    expect(() => validatePRSearch(search)).toThrow()
+    await expect(listPRsPage('o/r', { search })).rejects.toThrow()
+    expect(runGh).not.toHaveBeenCalled()
+  })
+
+  it('treats an empty or blank query as no search', async () => {
+    empty()
+    await listPRsPage('o/r', { search: '   ' })
+    expect(q()).not.toMatch(/\s$/)
+    expect(validatePRSearch('  foo  ')).toBe('foo')
   })
 })

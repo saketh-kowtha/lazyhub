@@ -4,14 +4,13 @@
 import React from 'react'
 import { Box } from 'ink'
 import { enableAutoMerge, disableAutoMerge, mergePR, closePR, checkoutBranch, reviewPR } from '../../executor.js'
-import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { ReviewDialog } from '../../components/dialogs/ReviewDialog.jsx'
 import { sanitize } from '../../utils.js'
 import { NewPRDialog } from './NewPRDialog.jsx'
 import { MERGE_OPTIONS, autoMergeOption, canToggleAutoMergeFromList, mergeMethodLabel } from './list-row.jsx'
-import { LabelDialog, AssigneeDialog, AuthorSearchDialog, ReviewerDialog } from './list-dialogs.jsx'
+import { LabelDialog, AssigneeDialog, AuthorSearchDialog, ReviewerDialog, SearchQueryDialog } from './list-dialogs.jsx'
 
 const SELECTION_DIALOGS = { labels: LabelDialog, assignees: AssigneeDialog, reviewers: ReviewerDialog }
 
@@ -19,21 +18,17 @@ const SELECTION_DIALOGS = { labels: LabelDialog, assignees: AssigneeDialog, revi
 export function renderPRListDialog({
   dialog, selectedPR, items, repo, repoInfo, authorFilter, effectiveHeight,
   mergeOptions, setMergeOptions, setDialog, setCursor, setScrollOffset,
-  setAuthorFilter, showStatus, closeDialog, refetch, refreshPR = refetch,
+  setAuthorFilter, searchText = '', setSearchText = () => {}, showStatus, closeDialog, refetch, refreshPR = refetch,
   runWrite = (_label, fn) => fn(),
 }) {
-  if (dialog === 'fuzzy') {
-    const fuzzyItems = items.map(pr => ({ ...pr, authorLogin: pr.author?.login || '' }))
+  if (dialog === 'search') {
     return (
-      <FuzzySearch
-        items={fuzzyItems}
-        searchFields={['title', 'number', 'authorLogin', 'headRefName']}
-        onSubmit={(item) => {
-          const idx = items.findIndex(p => p.number === item.number)
-          if (idx !== -1) {
-            setCursor(idx)
-            setScrollOffset(Math.max(0, idx - Math.floor(effectiveHeight / 2)))
-          }
+      <SearchQueryDialog
+        current={searchText}
+        onSubmit={(query) => {
+          setSearchText(query)
+          setCursor(0); setScrollOffset(0)
+          showStatus(query ? `search: ${query}` : 'search cleared')
           closeDialog()
         }}
         onCancel={closeDialog}

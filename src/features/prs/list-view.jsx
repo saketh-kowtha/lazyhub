@@ -28,6 +28,7 @@ export function PRListView({
   scope,
   sortMode,
   authorFilter,
+  searchText,
   statusMsg,
   config,
   filterKeys,
@@ -79,6 +80,13 @@ export function PRListView({
             <Text color={t.ui.dim}>·</Text>
             <Text color={t.ci.pending}>@{authorFilter}</Text>
             <Text color={t.ui.dim}> [@] change</Text>
+          </>
+        )}
+        {searchText && (
+          <>
+            <Text color={t.ui.dim}>·</Text>
+            <Text color={t.ci.pending} wrap="truncate">/ {sanitize(searchText)}</Text>
+            <Text color={t.ui.dim}> [/] change</Text>
           </>
         )}
         {loading && items.length > 0 && <Text color={t.ui.dim}>⟳</Text>}
@@ -135,7 +143,7 @@ export function PRListView({
               : paging?.hasMore
                 ? (paging.total != null ? `${items.length} of ${paging.total}` : `${items.length} loaded`) + (paging.loadingMore ? ' · loading more…' : '')
                 : paging?.capped
-                  ? `${items.length}${paging.total != null ? ` of ${paging.total}` : ' loaded'} (GitHub search returns at most ${paging.cap}; refine the filter to reach older PRs)`
+                  ? `${items.length}${paging.total != null ? ` of ${paging.total}` : ' loaded'} (GitHub search returns at most ${paging.cap}; refine the ${paging.search ? 'search' : 'filter'} to reach older PRs)`
                   : `${items.length} of ${items.length} · end of list`}
           </Text>
           {items.length > effectiveHeight && (
