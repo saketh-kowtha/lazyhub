@@ -48,7 +48,7 @@ import { sendInput } from './test/input-bus.js'
 import { cleanup, renderWithProviders, waitForExpectation } from './test/test-helpers.jsx'
 import { unrouted } from './test/gh-fixtures.js'
 
-const SIZES = [[50, 15], [60, 18], [80, 24], [120, 40], [200, 50]]
+const SIZES = [[50, 15], [60, 18], [60, 20], [80, 24], [120, 40], [200, 50]]
 const THEMES = [
   { name: 'default', legacy: 'github-dark', scheme: 'lazyhub-dark' },
   { name: 'catppuccin-latte', legacy: 'catppuccin-latte', scheme: 'lazyhub-light' },

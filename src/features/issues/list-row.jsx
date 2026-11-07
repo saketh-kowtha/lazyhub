@@ -52,7 +52,7 @@ export const IssueRow = memo(({ issue, isSelected, t, width = 78 }) => {
       <Text color={t.ui.dim} bold>{fitCell(`#${issue.number}`, NUM_COLS)}</Text>
       <Text color={isSelected ? t.ui.selected : undefined}>{fitCell(sanitize(issue.title), titleWidth)}</Text>
       {show.labels && labelCols > 0 && visibleLabels.map(l => (
-        <Text key={l.text} color={`#${l.color}`}> {l.text}</Text>
+        <React.Fragment key={l.text}><Text color={`#${l.color}`}> {l.text}</Text></React.Fragment>
       ))}
       {show.labels && extraLabels > 0 && <Text color={t.ui.muted}> +{extraLabels}</Text>}
       {show.author && <Text color={t.ui.muted}> {authorLogin}</Text>}

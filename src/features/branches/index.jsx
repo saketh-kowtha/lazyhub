@@ -26,13 +26,13 @@ import { firstActionKey, matchesAction } from '../../config/actions.js'
 const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t, width }) => {
   const lock = branch.protected ? 3 : 0
   const pr = hasPR ? 3 : 0
-  const nameWidth = Math.max(4, width - 2 - 2 - 2 - lock - pr)
+  const nameWidth = Math.max(4, width - 2 - 2 - (isCurrent ? 2 : 0) - lock - pr)
   return (
     <Box key={branch.name} paddingX={1} height={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
       <Text color={isSelected ? t.ui.selected : t.ui.muted}>
         {isSelected ? '▶ ' : '  '}
       </Text>
-      <Text color={t.pr.open}>{isCurrent ? '► ' : '  '}</Text>
+      {isCurrent && <Text color={t.pr.open}>► </Text>}
       <Text color={isSelected ? t.ui.selected : undefined}>{fitCell(sanitize(branch.name), nameWidth)}</Text>
       {branch.protected && <Text color={t.ci.pending}> 🔒</Text>}
       {hasPR && <Text color={t.pr.open}> PR</Text>}

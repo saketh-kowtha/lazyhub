@@ -38,10 +38,21 @@ export function HelpOverlay({ pane, view, actionCtx, onClose, availableWidth, av
   const colWidth = Math.max(16, Math.min(40, outerWidth - (compactPad ? 4 : 6)))
   const keyWidth = Math.min(18, Math.max(8, Math.floor(colWidth / 2)))
   const maxHeight = Math.max(6, roomH - 2)
+  // Ink has no maxHeight: the box is given an explicit height, and each column shows only the rows
+  // that fit, ending in "+N more", so the overlay never spills past its own footer (#462).
+  const globalKeys = [...GLOBAL_KEYS, ...(isListView ? LIST_GLOBAL_KEYS : [])]
+  const chrome = 2 + (compactPad ? 0 : 2) + 1 + (compactPad ? 0 : 1) + 2 + (compactPad ? 0 : 1) + (compactPad ? 2 : 4)
+  const bodyRows = Math.max(2, maxHeight - chrome)
+  const clip = (rows) => (rows.length > bodyRows
+    ? [...rows.slice(0, bodyRows - 1), { key: '…', label: `+${rows.length - bodyRows + 1} more` }]
+    : rows)
+  const shownContext = clip(contextKeys)
+  const shownGlobal = narrow ? [] : clip(globalKeys)
+  const boxHeight = Math.min(maxHeight, chrome + Math.max(1, shownContext.length, shownGlobal.length))
 
   return (
     <Box flexDirection="column" paddingX={compactPad ? 1 : 2} paddingY={compactPad ? 0 : 1} borderStyle="round" borderColor={t.ui.selected}
-         width={outerWidth} maxHeight={maxHeight} overflow="hidden">
+         width={outerWidth} height={boxHeight} overflow="hidden">
       {/* ── Header ── */}
       <Box marginBottom={compactPad ? 0 : 1} justifyContent="space-between" flexShrink={0}>
         <Box gap={1} flexShrink={1} overflow="hidden">
@@ -58,12 +69,12 @@ export function HelpOverlay({ pane, view, actionCtx, onClose, availableWidth, av
             <Text color={t.ui.muted} bold wrap="truncate">{contextLabel}</Text>
           </Box>
 	          <Box flexDirection="column" marginTop={compactPad ? 0 : 1} flexShrink={0}>
-	            {contextKeys.length > 0 ? contextKeys.map((k, i) => (
+	            {shownContext.length > 0 ? shownContext.map((k, i) => (
 	              <Box key={`${i}:${k.key}`} gap={2} flexShrink={0}>
 	                <Box width={keyWidth} flexShrink={0}>
 	                  <Text color={t.ui.selected} bold wrap="truncate">{k.key}</Text>
 	                </Box>
-	                <Text color={t.ui.muted}>{k.label}</Text>
+	                <Text color={t.ui.muted} wrap="truncate">{k.label}</Text>
 	              </Box>
 	            )) : <Text color={t.ui.dim}>No specific keys</Text>}
           </Box>
@@ -76,12 +87,12 @@ export function HelpOverlay({ pane, view, actionCtx, onClose, availableWidth, av
               <Text color={t.ui.muted} bold>Global (any view)</Text>
             </Box>
 	            <Box flexDirection="column" marginTop={compactPad ? 0 : 1} flexShrink={0}>
-	              {[...GLOBAL_KEYS, ...(isListView ? LIST_GLOBAL_KEYS : [])].map((k, i) => (
+	              {shownGlobal.map((k, i) => (
 	                <Box key={`${i}:${k.key}`} gap={2} flexShrink={0}>
 	                  <Box width={keyWidth} flexShrink={0}>
 	                    <Text color={t.ui.selected} bold wrap="truncate">{k.key}</Text>
 	                  </Box>
-	                  <Text color={t.ui.muted}>{k.label}</Text>
+	                  <Text color={t.ui.muted} wrap="truncate">{k.label}</Text>
 	                </Box>
 	              ))}
             </Box>

@@ -186,7 +186,8 @@ describe('Focus dashboard is interactive (#279)', () => {
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Keyboard Reference'))
     const help = view.lastFrame()
     expect(help).toContain('Open the selected')
-    expect(help).toMatch(/browser/)
+    // Help rows are one truncated line each (#462), so the long description is cut at 80x24.
+    expect(help).toMatch(/^.*\bo\s+Open the selected/m)
     expect(help).toContain('Next section')
     expect(help).toContain('Refresh the active')
     // list-only verbs Focus does not implement stay out

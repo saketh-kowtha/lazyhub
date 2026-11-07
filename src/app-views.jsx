@@ -336,7 +336,7 @@ export function renderAppView(ctx) {
         }
         const customTab = (_config.customTabs || {})[pane]
         if (customTab) {
-          return <TabView tab={customTab} repo={repo} onOpenItem={(item, kind, itemRepo) => goToDetail({ ...item, _kind: kind, _repo: itemRepo })} />
+          return <TabView tab={customTab} repo={repo} innerWidth={listInnerWidth} listHeight={listHeight} onOpenItem={(item, kind, itemRepo) => goToDetail({ ...item, _kind: kind, _repo: itemRepo })} />
         }
         return <Box paddingX={1}><Text color={t.ui.muted}>Unknown pane: {pane}</Text></Box>
       }
