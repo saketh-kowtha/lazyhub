@@ -9,6 +9,7 @@
  */
 
 import { readFileSync } from 'fs'
+import { openUrl } from '../services/platform.js'
 import { homedir, userInfo, platform, arch, release } from 'os'
 import { createInterface } from 'readline'
 import { checkConfig } from './doctor/config.js'
@@ -127,8 +128,7 @@ async function confirm(question, input, output) {
 }
 
 async function openBrowser(url) {
-  const { execa } = await import('execa')
-  await execa(process.platform === 'darwin' ? 'open' : 'xdg-open', [url])
+  if (!await openUrl(url)) throw new Error('could not open a browser')
 }
 
 /**

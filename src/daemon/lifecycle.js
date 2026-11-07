@@ -8,6 +8,7 @@ import {
   PROTOCOL_VERSION, MAX_MESSAGE_BYTES, daemonSpawnEnv, isUntrustedAgentContext, readSessionToken,
 } from './protocol.js'
 import { assertPrivateDir, ensurePrivateDir, prepareSocketPath, writePrivateFile } from '../secure-fs.js'
+import { clearDaemonFallback, noteDaemonFallback } from './fallback.js'
 
 function expandHome(path) {
   if (!path) return path
@@ -178,8 +179,7 @@ function exposeDaemon(socketPath, config) {
  * @param {string} entrypoint absolute path to bin/lazyhub.js
  */
 export async function ensureDaemon(config = {}, entrypoint) {
-  if (process.env.LAZYHUB_NO_DAEMON === '1' || process.env.LAZYHUB_DAEMON_CHILD === '1') return null
-  if (config.agent?.auto_spawn_daemon === false) return null
+  if (daemonSkipReason(config)) return null
   const socketPath = daemonSocketPath(config)
   try {
     await requestDaemon(socketPath, { type: 'status' }, 150)
@@ -206,4 +206,45 @@ export async function ensureDaemon(config = {}, entrypoint) {
     }
   }
   return null
+}
+
+/**
+ * Why the helper is not wanted for this process, or null when it is. 'disabled'
+ * covers the user's own choices (config, env) and the helper process itself; those
+ * never produce a notice.
+ *
+ * @param {object} config
+ * @returns {'disabled'|null}
+ */
+export function daemonSkipReason(config = {}) {
+  if (process.env.LAZYHUB_NO_DAEMON === '1' || process.env.LAZYHUB_DAEMON_CHILD === '1') return 'disabled'
+  if (config.agent?.auto_spawn_daemon === false) return 'disabled'
+  return null
+}
+
+/**
+ * Start (or find) the daemon in the background, strictly after the caller has
+ * drawn its first frame: nothing here runs synchronously, and the TUI never waits
+ * for it (#491). Reads use the daemon once it is reachable and go straight to gh
+ * until then. When a wanted daemon cannot be reached, a visible notice is recorded
+ * instead of failing silently.
+ *
+ * @param {object} config
+ * @param {string} entrypoint absolute path to bin/lazyhub.js
+ * @param {{ delayMs?: number, ensure?: typeof ensureDaemon, trusted?: boolean }} [opts]
+ *   `trusted: true` skips the untrusted-agent-context check (tests only).
+ * @returns {NodeJS.Timeout}
+ */
+export function scheduleDaemon(config = {}, entrypoint, { delayMs = 100, ensure = ensureDaemon, trusted = false } = {}) {
+  const timer = setTimeout(() => {
+    if (daemonSkipReason(config)) return
+    // A non-interactive or agent-driven session never spawns a helper by design: not a degraded state.
+    if (!trusted && isUntrustedAgentContext()) return
+    ensure(config, entrypoint).then(
+      socket => { if (socket) clearDaemonFallback(); else noteDaemonFallback('unavailable') },
+      () => noteDaemonFallback('unavailable'),
+    )
+  }, delayMs)
+  timer.unref?.()
+  return timer
 }

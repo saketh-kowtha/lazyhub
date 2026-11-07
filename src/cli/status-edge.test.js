@@ -12,8 +12,8 @@ describe('ambient status: stale, partial and malformed observations', () => {
 
   it('uses only the newest entry per op and ignores entries without meta', () => {
     const result = summarizeStatus([
-      { ts: NOW - 900_000, meta: { op: 'listPRs' }, payload: [{ reviewDecision: 'REVIEW_REQUIRED' }] },
-      { ts: NOW - 5_000, meta: { op: 'listPRs' }, payload: [] },
+      { ts: NOW - 900_000, meta: { op: 'listPRs', host: 'github.com' }, payload: [{ reviewDecision: 'REVIEW_REQUIRED' }] },
+      { ts: NOW - 5_000, meta: { op: 'listPRs', host: 'github.com' }, payload: [] },
       null,
       { ts: NOW, payload: [{ reviewDecision: 'REVIEW_REQUIRED' }] },
     ], NOW)
@@ -23,13 +23,13 @@ describe('ambient status: stale, partial and malformed observations', () => {
 
   it('treats a non-array payload as empty and a partial cache as valid', () => {
     const result = summarizeStatus([
-      { ts: NOW - 1_000, meta: { op: 'listNotifications' }, payload: { error: 'x' } },
+      { ts: NOW - 1_000, meta: { op: 'listNotifications', host: 'github.com' }, payload: { error: 'x' } },
     ], NOW)
     expect(result.counts).toEqual({ review_requested: 0, failing_ci: 0, unread_notifications: 0 })
   })
 
   it('never reports a negative age when the cache timestamp is in the future', () => {
-    const result = summarizeStatus([{ ts: NOW + 60_000, meta: { op: 'listPRs' }, payload: [] }], NOW)
+    const result = summarizeStatus([{ ts: NOW + 60_000, meta: { op: 'listPRs', host: 'github.com' }, payload: [] }], NOW)
     expect(result.cache_age_seconds).toBe(0)
   })
 
@@ -38,7 +38,7 @@ describe('ambient status: stale, partial and malformed observations', () => {
     try {
       const result = summarizeStatus([{
         ts: NOW,
-        meta: { op: 'listPRs' },
+        meta: { op: 'listPRs', host: 'github.com' },
         payload: [
           { statusCheckRollup: [{ state: 'error' }] },
           { statusCheckRollup: [{ conclusion: 'success' }, { status: 'IN_PROGRESS' }] },

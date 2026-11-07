@@ -2,7 +2,7 @@ import React, { useEffect } from 'react'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRCommentsPage, deletePRComment } from '../../../executor.js'
-import { cacheKey, writeCache } from '../../../cache.js'
+import { scopedCacheKey, writeCache } from '../../../cache.js'
 import { resetGhMemoryCache } from '../../../hooks/useGh.js'
 import { sendInput } from '../../../test/input-bus.js'
 import { cleanup, renderWithProviders, waitForExpectation } from '../../../test/test-helpers.jsx'
@@ -66,7 +66,7 @@ describe('"inline comments incomplete" banner is carried in the payload (#507)',
   it('shows from a JSON-roundtripped disk cache seed before any fetch returns', async () => {
     listPRCommentsPage.mockReturnValue(new Promise(() => {}))
     const payload = JSON.parse(JSON.stringify({ comments: [comment(1)], truncated: TRUNC }))
-    writeCache(cacheKey(['o/r', 'listPRCommentsPage', ['o/r', pr]]), payload, { repo: 'o/r' })
+    writeCache(scopedCacheKey(['o/r', 'listPRCommentsPage', ['o/r', pr]]), payload, { repo: 'o/r' })
     const view = mount(pr)
     await waitForExpectation(() => expect(view.lastFrame()).toContain('inline comments incomplete'))
   })

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PRComments } from './comments.jsx'
 import { resetGhMemoryCache } from '../../hooks/useGh.js'
 import { listPRTimelinePage, listPRThreadReplies, resolveThread, addPRComment, replyToComment, editPRComment, deletePRComment } from '../../executor.js'
-import { cacheKey, writeCache } from '../../cache.js'
+import { scopedCacheKey, writeCache } from '../../cache.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -168,7 +168,7 @@ describe('loaded state reconciles with refreshed and local data (#507)', () => {
     listPRTimelinePage.mockReturnValue(fresh.promise)
     // A stale disk-cache seed is shown first; the revalidation is still in flight.
     const stale = JSON.parse(JSON.stringify(page({ conversation: range(1, 2), conversationPage: info({ total: 2 }), threads: info() })))
-    writeCache(cacheKey(['o/r', 'listPRTimelinePage', ['o/r', nextPR]]), stale, { repo: 'o/r' })
+    writeCache(scopedCacheKey(['o/r', 'listPRTimelinePage', ['o/r', nextPR]]), stale, { repo: 'o/r' })
     const view = await mountSeeded()
     await sendInput('c')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('posts a new PR comment'))

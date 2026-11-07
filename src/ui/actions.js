@@ -41,6 +41,7 @@ import {
   getRepoInfo,
 } from '../executor.js'
 import { getActionConfig } from '../config/actions.js'
+import { copyToClipboard } from '../services/platform.js'
 import { sanitize } from '../utils.js'
 import { actionScopeMatches, buildEffectiveActionKeys } from '../config/keymap.js'
 
@@ -668,17 +669,7 @@ export function buildActions({ onNavigate, onTheme, onClose, onQuit, themes = []
     run:      (ctx) => {
       if (ctx.selectedItem?.url) {
         onClose()
-        // Use pbcopy/xclip/xsel depending on platform
-        import('execa').then(({ execa }) => {
-          const url = ctx.selectedItem.url
-          if (process.platform === 'darwin') {
-            execa('pbcopy', [], { input: url }).catch(() => {})
-          } else {
-            execa('xclip', ['-selection', 'clipboard'], { input: url }).catch(() =>
-              execa('xsel', ['--clipboard', '--input'], { input: url }).catch(() => {})
-            )
-          }
-        }).catch(() => {})
+        copyToClipboard(ctx.selectedItem.url)
       }
     },
   })

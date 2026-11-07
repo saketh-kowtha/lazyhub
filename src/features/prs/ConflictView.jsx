@@ -17,6 +17,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useContext, useRef } from 'react'
+import { openUrl } from '../../services/platform.js'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -205,10 +206,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
 
   const openInBrowser = useCallback(() => {
     const url = `${pr.url}/conflicts`
-    import('execa').then(({ execa }) => {
-      const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
-      execa(cmd, [url]).catch(() => {})
-    })
+    openUrl(url)
     showStatus('Opening GitHub conflict editor in browser…')
   }, [pr, showStatus])
 

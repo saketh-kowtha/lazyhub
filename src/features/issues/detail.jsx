@@ -3,6 +3,7 @@
  */
 
 import React, { useState, useContext, useMemo, useCallback, useRef, useEffect } from 'react'
+import { openUrl } from '../../services/platform.js'
 import { Box, Text, useStdout } from 'ink'
 import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { firstActionKey } from '../../config/actions.js'
@@ -103,10 +104,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
     if (id === 'issue.labels') { setDialog('labels'); return }
     if (id === 'issue.assignees') { setDialog('assignees'); return }
     if (id === 'issue.open-browser' && issue?.url) {
-      import('execa').then(({ execa }) => {
-        const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
-        execa(cmd, [issue.url]).catch(() => {})
-      })
+      openUrl(issue.url)
       return
     }
     if (id === 'app.back') { onBack(); return }

@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useContext, useMemo, useRef } from 'react'
+import { openUrl } from '../../services/platform.js'
 import { Box, Text, useStdout } from 'ink'
 import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
@@ -122,10 +123,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
 
   const openCheckInBrowser = (check) => {
     if (!check?.url) return
-    import('execa').then(({ execa }) => {
-      const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
-      execa(cmd, [check.url]).catch(() => {})
-    })
+    openUrl(check.url)
   }
 
   const openCheckLogs = async (check) => {
@@ -209,10 +207,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     if (id === 'pr.diff' && pr) { onOpenDiff(pr); return }
     if (id === 'pr.comments' && onViewComments) { onViewComments(); return }
     if (id === 'pr.open-browser' && pr?.url) {
-      import('execa').then(({ execa }) => {
-        const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
-        execa(cmd, [pr.url]).catch(() => {})
-      })
+      openUrl(pr.url)
       return
     }
     if (id === 'pr.approve' && open) { setDialog('approve-body'); return }

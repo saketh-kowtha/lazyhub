@@ -616,3 +616,23 @@ describe('detectRepo (host-agnostic)', () => {
         expect(await detectRepo()).toBe(expected)
     })
 })
+
+// ─── cache identity (#520) ────────────────────────────────────────────────────
+
+describe('checkAuth scopes the cache to the authenticated account (#520)', () => {
+    it('records a one-way fingerprint of the token without another lookup', async () => {
+        vi.clearAllMocks()
+        const cache = await import('./cache.js')
+        cache.setCacheIdentity({ account: null })
+        execa.mockResolvedValue({ exitCode: 0, stdout: 'ghp_account_one\n' })
+        await checkAuth()
+        const one = cache.cacheIdentity().account
+        expect(one).toMatch(/^[0-9a-f]{16}$/)
+        expect(one).not.toContain('account_one')
+        expect(execa).toHaveBeenCalledTimes(1)
+        execa.mockResolvedValue({ exitCode: 0, stdout: 'ghp_account_two\n' })
+        await checkAuth()
+        expect(cache.cacheIdentity().account).not.toBe(one)
+        cache.setCacheIdentity({ account: null })
+    })
+})

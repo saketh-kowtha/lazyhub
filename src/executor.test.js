@@ -163,7 +163,7 @@ describe('listPRs()', () => {
     mockSuccess({ data: { search: { nodes: [] } } })
     await listPRs('owner/repo', { state: 'closed' })
     const [, args] = execa.mock.calls[0]
-    expect(args.find(arg => String(arg).startsWith('searchQuery='))).toContain('state:closed')
+    expect(args.find(arg => String(arg).startsWith('searchQuery='))).toContain('is:closed -is:merged')
   })
 
   it.each([

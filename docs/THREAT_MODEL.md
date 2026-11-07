@@ -128,7 +128,9 @@ helpers, direct clients, other MCP servers, bypass actors, and unknown paths.
 Residual risk: local operations that never reach GitHub cannot be observed.
 
 The IDE socket (`src/ipc.js`) is a same-user human integration, protected from
-other users by a 0700 directory and 0600 socket. It is not an agent-containment
+other users by a 0700 directory and 0600 socket, and from other same-user
+processes that cannot read the per-run session token file beside it (the same
+token model as the daemon). It is not an agent-containment
 boundary. Its GitHub writes (`reply-thread`, `resolve-thread`) are disabled by
 default (`[ipc].allow_writes`, local-only) and, when enabled, are equivalent to
 the user's own `gh` access.

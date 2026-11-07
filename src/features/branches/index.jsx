@@ -3,6 +3,7 @@
  */
 
 import React, { useState, useCallback, useMemo, useEffect, useContext, useRef, memo } from 'react'
+import { currentBranch as gitCurrentBranch, createBranch, pushHead } from '../../services/git.js'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
@@ -69,11 +70,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
 
   const refreshCurrentBranch = useCallback(() => {
     if (!localDir) { setCurrentBranch(null); return }
-    import('execa').then(({ execa }) => {
-      execa('git', ['branch', '--show-current'], { cwd: localDir })
-        .then(result => setCurrentBranch(result.stdout.trim()))
-        .catch(() => {})
-    })
+    gitCurrentBranch(localDir).then(setCurrentBranch).catch(() => {})
   }, [localDir])
 
   useEffect(() => { refreshCurrentBranch() }, [refreshCurrentBranch])
@@ -205,8 +202,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
       // Push current branch
       if (!requireLocal()) return
       runWrite('Pushing', async () => {
-        const { execa } = await import('execa')
-        await execa('git', ['push', local.remote, 'HEAD'], { cwd: localDir })
+        await pushHead(localDir, local.remote)
       }).then(ran => { if (ran) showStatus('Pushed') })
         .catch(err => showStatus(`Push failed: ${err.message}`, true))
       return
@@ -302,8 +298,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
               setDialog(null)
               try {
                 if (!await runWrite(`Creating ${name}`, async () => {
-                  const { execa } = await import('execa')
-                  await execa('git', ['checkout', '-b', name], { cwd: localDir })
+                  await createBranch(localDir, name)
                 })) return
                 showStatus(`✓ Created and checked out ${name}`)
                 refreshCurrentBranch()

@@ -4,6 +4,7 @@ import { IssueList } from './list.jsx'
 import { IssueDetail } from './detail.jsx'
 import { useGh } from '../../hooks/useGh.js'
 import { getIssue, getIssueRow, closeIssue, createIssue, listIssuesPage, listLabels, listCollaborators, editIssueMembers, addIssueComment } from '../../executor.js'
+import * as platform from '../../services/platform.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -12,6 +13,7 @@ vi.mock('ink', async () => {
   return { ...await vi.importActual('ink'), useInput: (await import('../../test/input-bus.js')).mockUseInput(React) }
 })
 vi.mock('../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
+vi.mock('../../services/platform.js', () => ({ openUrl: vi.fn(), copyToClipboard: vi.fn() }))
 vi.mock('../../executor.js', async () => ({
   ...await vi.importActual('../../executor/classify.js'),
   collaboratorsTruncated: (await vi.importActual('../../executor/issues.js')).collaboratorsTruncated,
@@ -372,6 +374,32 @@ describe('issue list load-more (#506)', () => {
     expect(closeIssue).toHaveBeenCalledTimes(1)
     release()
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Closed #1'))
+  })
+})
+
+describe('issue list opens the browser and clipboard through the platform service (#470)', () => {
+  const withUrl = { ...issue, url: 'https://github.com/owner/repo/issues/11' }
+
+  it('o and y call the mockable service, never a process directly', async () => {
+    useGh.mockImplementation(fn => ({ data: fn === listIssuesPage ? page([withUrl]) : null, loading: false, error: null, refetch }))
+    platform.openUrl.mockResolvedValue(true)
+    platform.copyToClipboard.mockResolvedValue(true)
+    const view = await renderIssue(<IssueList repo="owner/repo" onSelectIssue={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
+    await sendInput('o')
+    await waitForExpectation(() => expect(platform.openUrl).toHaveBeenCalledWith(withUrl.url))
+    await sendInput('y')
+    await waitForExpectation(() => expect(platform.copyToClipboard).toHaveBeenCalledWith(withUrl.url))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Copied'))
+  })
+
+  it('shows a failure when the clipboard tool is missing', async () => {
+    useGh.mockImplementation(fn => ({ data: fn === listIssuesPage ? page([withUrl]) : null, loading: false, error: null, refetch }))
+    platform.copyToClipboard.mockResolvedValue(false)
+    const view = await renderIssue(<IssueList repo="owner/repo" onSelectIssue={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
+    await sendInput('y')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Copy failed'))
   })
 })
 

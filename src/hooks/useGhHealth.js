@@ -3,6 +3,8 @@
  */
 
 import { useEffect, useState } from 'react'
+import { getDaemonFallback, onDaemonFallback } from '../daemon/fallback.js'
+import { getContainedToast, onContained } from '../contain.js'
 
 const state = {
   lastError: null,
@@ -15,6 +17,10 @@ function snapshot() {
     error: state.lastError,
     failingCount: state.failing.size,
     degraded: state.failing.size > 0,
+    // Non-error context shown when nothing is failing, e.g. running without the background helper (#491).
+    notice: getDaemonFallback(),
+    // A contained handler error (#490); shown for a few seconds.
+    toast: getContainedToast(),
   }
 }
 
@@ -38,6 +44,9 @@ function emit() {
   const next = snapshot()
   for (const listener of listeners) listener(next)
 }
+
+onDaemonFallback(() => emit())
+onContained(() => emit())
 
 /**
  * Mark a gh-backed call site as failing.

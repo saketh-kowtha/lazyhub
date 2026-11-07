@@ -14,6 +14,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
+import { openUrl, copyToClipboard } from '../../services/platform.js'
 import { useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -381,22 +382,12 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
     // y — copy PR URL to clipboard
     if (matchesAction('pr.copy-url', input, key, _actions) && pr.url) {
-      import('execa').then(({ execa }) => {
-        const [cmd, args] = process.platform === 'darwin'
-          ? ['pbcopy', []]
-          : ['xclip', ['-selection', 'clipboard']]
-        const proc = execa(cmd, args)
-        proc.stdin?.end(pr.url)
-        proc.then(() => showStatus(`✓ Copied ${pr.url}`)).catch(() => showStatus('✗ Copy failed', true))
-      })
+      copyToClipboard(pr.url).then(ok => (ok ? showStatus(`✓ Copied ${pr.url}`) : showStatus('✗ Copy failed', true)))
       return
     }
 
     if (matchesAction('pr.open-browser', input, key, _actions) && pr.url) {
-      import('execa').then(({ execa }) => {
-        const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
-        execa(cmd, [pr.url]).catch(() => {})
-      })
+      openUrl(pr.url)
       return
     }
 

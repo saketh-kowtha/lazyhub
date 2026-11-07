@@ -8,7 +8,8 @@ import React, { useState, useMemo, useEffect, useContext } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { format } from 'timeago.js'
-import { getLogs, logger, TextInput, copyToClipboard } from '../../utils.js'
+import { getLogs, logger, TextInput } from '../../utils.js'
+import { copyToClipboard } from '../../services/platform.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
 
@@ -31,8 +32,7 @@ export function LogPane({ onBack }) {
 
   const doCopy = (log) => {
     copyToClipboard(JSON.stringify(log, null, 2))
-      .then(() => { setCopyStatus('✓ Copied'); setTimeout(() => setCopyStatus(null), 2000) })
-      .catch(() => { setCopyStatus('✗ Copy failed'); setTimeout(() => setCopyStatus(null), 2000) })
+      .then(ok => { setCopyStatus(ok ? '✓ Copied' : '✗ Copy failed'); setTimeout(() => setCopyStatus(null), 2000) })
   }
 
   const refreshLogs = () => {

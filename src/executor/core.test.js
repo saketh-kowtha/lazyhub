@@ -11,6 +11,7 @@ import { writeAuditEntry } from '../daemon/audit.js'
 import { invalidateRepoCache } from '../cache.js'
 import { runGh, GhError, getGhCallHistory } from './core.js'
 import { classifyGhFailure } from './classify.js'
+import { clearDaemonFallback, getDaemonFallback } from '../daemon/fallback.js'
 
 const ok = (stdout = '[]') => ({ exitCode: 0, stdout, stderr: '' })
 const WRITE = ['pr', 'merge', '7', '--repo', 'o/r']
@@ -18,6 +19,7 @@ const TYPED_READ = ['pr', 'diff', '7', '--repo', 'o/r']
 
 beforeEach(() => {
   vi.resetAllMocks()
+  clearDaemonFallback()
   delete process.env.GH_HOST
   process.env.LAZYHUB_DAEMON_SOCKET = '/nonexistent/daemon.sock'
   execa.mockResolvedValue(ok())
@@ -104,5 +106,38 @@ describe('runGh spawn failure', () => {
     try { await runGh(['pr', 'list', '--repo', 'a/b']) } catch (e) { err = e }
     expect(`${err.message} ${err.stderr}`).toMatch(/ENOENT/)
     expect(Number.isInteger(err.exitCode)).toBe(true)
+  })
+})
+
+describe('daemon read fallback is visible (#491)', () => {
+  it('a failed daemon read falls back to gh, records the notice, and skips the daemon for a while', async () => {
+    execa.mockResolvedValue(ok('{"n":1}'))
+    expect(getDaemonFallback()).toBeNull()
+    expect(await runGh(TYPED_READ)).toBeDefined()
+    expect(requestDaemon).toHaveBeenCalledTimes(1)
+    expect(execa).toHaveBeenCalledTimes(1)
+    expect(getDaemonFallback()).toMatch(/without the background helper/)
+
+    // Within the retry window the daemon is not asked again (a hung helper must not add its timeout to every read).
+    await runGh(TYPED_READ)
+    expect(requestDaemon).toHaveBeenCalledTimes(1)
+    expect(execa).toHaveBeenCalledTimes(2)
+  })
+
+  it('a successful daemon read clears the notice', async () => {
+    requestDaemon.mockRejectedValueOnce(new Error('gone'))
+    await runGh(TYPED_READ)
+    expect(getDaemonFallback()).not.toBeNull()
+    clearDaemonFallback() // the retry window ends (or a lazy start finds the helper)
+    requestDaemon.mockResolvedValueOnce({ ok: true, payload: 'from-daemon' })
+    expect(await runGh(TYPED_READ)).toBe('from-daemon')
+    expect(getDaemonFallback()).toBeNull()
+  })
+
+  it('does not record a notice when the daemon was never in play', async () => {
+    delete process.env.LAZYHUB_DAEMON_SOCKET
+    await runGh(TYPED_READ)
+    expect(requestDaemon).not.toHaveBeenCalled()
+    expect(getDaemonFallback()).toBeNull()
   })
 })

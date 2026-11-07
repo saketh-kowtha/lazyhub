@@ -18,7 +18,8 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text } from 'ink'
+import { useInput } from '../hooks/useSafeInput.js'
 import { useTheme } from '../theme.js'
 import { TextInput } from '../utils.js'
 import { useKeyScope } from '../keyscope.js'

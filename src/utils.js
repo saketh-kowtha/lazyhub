@@ -6,7 +6,8 @@
 
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text } from 'ink'
+import { useInput } from './hooks/useSafeInput.js'
 /* eslint-enable no-unused-vars */
 import chalk from 'chalk'
 import { getHljs } from './highlight.js'
@@ -15,24 +16,6 @@ import { useTheme } from './theme.js'
 import { stripAnsi } from './utils-core.js'
 
 export { logger, getLogs, resolvePath, stripAnsi, decodeHtmlEntities, sanitize } from './utils-core.js'
-
-/**
- * Copy text to the system clipboard using platform-native tools.
- * Uses pbcopy (macOS), clip (Windows), or xclip (Linux).
- * @param {string} text - The text to copy.
- * @returns {Promise<import('execa').ExecaChildProcess>} Promise resolving when copy completes.
- */
-export function copyToClipboard(text) {
-  return import('execa').then(({ execa }) => {
-    const [cmd, args] =
-      process.platform === 'darwin' ? ['pbcopy', []] :
-      process.platform === 'win32'  ? ['clip',   []] :
-                                      ['xclip',  ['-selection', 'clipboard']]
-    const proc = execa(cmd, args)
-    proc.stdin?.end(text)
-    return proc
-  })
-}
 
 /**
  * Safely applies a color (hex or keyword) to a chalk instance.

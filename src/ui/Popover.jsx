@@ -28,7 +28,8 @@
  */
 
 import React from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text } from 'ink'
+import { useInput } from '../hooks/useSafeInput.js'
 
 // ─── Position calculator (pure — testable without React) ──────────────────────
 

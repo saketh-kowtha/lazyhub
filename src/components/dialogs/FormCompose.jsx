@@ -6,11 +6,9 @@
  */
 
 import React, { useState, useCallback } from 'react'
-import { Box, Text, useInput } from 'ink'
-import { spawnSync } from 'child_process'
-import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
+import { Box, Text } from 'ink'
+import { useInput } from '../../hooks/useSafeInput.js'
+import { editTextInEditor } from '../../services/platform.js'
 import { useTheme } from '../../theme.js'
 import { TextInput } from '../../utils.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -36,25 +34,10 @@ export function FormCompose({ title, fields = [], onSubmit, onCancel, validate =
   }
 
   const openEditor = useCallback((fieldName) => {
-    const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
-    if (!raw || /[\0\n\r]/.test(raw)) return
-    const [editorBin, ...editorArgs] = raw.split(/\s+/).filter(Boolean)
-    let tmpDir
-    try {
-      tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
-      const tmpFile = join(tmpDir, 'compose.md')
-      writeFileSync(tmpFile, values[fieldName] || '', { mode: 0o600 })
-      // Exit alternate screen so terminal editors (vim/nano) render cleanly;
-      // re-enter after the editor closes so Ink's state isn't garbled.
-      process.stdout.write('\x1b[?1049l')
-      const result = spawnSync(editorBin, [...editorArgs, tmpFile], { stdio: 'inherit' })
-      process.stdout.write('\x1b[?1049h\x1b[H')
-      if (result.status !== 0) return
-      const content = readFileSync(tmpFile, 'utf8')
-      setValues(prev => ({ ...prev, [fieldName]: content }))
-    } catch {
-      // ignore
-    } finally { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) } catch {} }
+    // Leaves the alternate screen so terminal editors (vim/nano) render cleanly and
+    // re-enters it afterwards so Ink's state isn't garbled.
+    const { ok, text } = editTextInEditor(values[fieldName] || '', { filename: 'compose.md' })
+    if (ok) setValues(prev => ({ ...prev, [fieldName]: text }))
   }, [values])
 
   useInput((input, key) => {

@@ -32,7 +32,9 @@
  */
 
 import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { openUrl, copyToClipboard, runConfiguredCommand } from '../services/platform.js'
+import { Box, Text, useStdout } from 'ink'
+import { useInput } from '../hooks/useSafeInput.js'
 import { format } from 'timeago.js'
 import { FuzzySearch } from './dialogs/FuzzySearch.jsx'
 import { AppContext } from '../context.js'
@@ -112,9 +114,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
     setError(null)
     try {
       const args = resolveCommandArgs(paneDef.command, repo)
-      const { execa } = await import('execa')
-      const [bin, ...rest] = args
-      const result = await execa(bin, rest, { reject: false })
+      const result = await runConfiguredCommand(args)
       if (result.exitCode !== 0) {
         throw new Error(result.stderr?.split('\n')[0] || 'Command failed')
       }
@@ -166,22 +166,12 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
 
   const openInBrowser = useCallback((url) => {
     if (!url) return showStatus('No URL', true)
-    import('execa').then(({ execa }) => {
-      const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
-      execa(cmd, [url]).catch(() => {})
-    })
+    openUrl(url)
   }, [])
 
   const copyUrl = useCallback((url) => {
     if (!url) return showStatus('No URL', true)
-    import('execa').then(({ execa }) => {
-      const [cmd, args] = process.platform === 'darwin'
-        ? ['pbcopy', []]
-        : ['xclip', ['-selection', 'clipboard']]
-      const proc = execa(cmd, args)
-      proc.stdin?.end(url)
-      proc.then(() => showStatus(`✓ Copied`)).catch(() => showStatus('✗ Copy failed', true))
-    })
+    copyToClipboard(url).then(ok => (ok ? showStatus('✓ Copied') : showStatus('✗ Copy failed', true)))
   }, [])
 
   useInput((input, key) => {

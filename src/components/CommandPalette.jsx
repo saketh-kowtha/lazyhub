@@ -14,7 +14,8 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text } from 'ink'
+import { useInput } from '../hooks/useSafeInput.js'
 import { useTheme }   from '../theme.js'
 import { useKeyScope } from '../keyscope.js'
 import { buildActions, confirmationFor, filterActions, recordActionUse, resolveContext } from '../ui/actions.js'

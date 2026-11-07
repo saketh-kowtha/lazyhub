@@ -5,10 +5,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Box, Text, useStdout } from 'ink'
-import { spawnSync } from 'child_process'
-import { writeFileSync, readFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
+import { editTextInEditor } from '../../services/platform.js'
 import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { firstActionKey } from '../../config/actions.js'
 import { contextFooterHints } from '../../ui/actions.js'
@@ -311,24 +308,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   }, [data, cursor, visibleCount, visibleHeight, filterMode, busy, moreFailed, convPage, threadsPage, flatComments, loadPage, loadReplies])
 
   // ── Open $EDITOR for multiline edit ───────────────────────────────────────
-  const openEditor = useCallback((initial) => {
-    const raw = process.env.EDITOR || process.env.VISUAL || 'vi'
-    if (!raw || /[\0\n\r]/.test(raw)) return initial
-    const [editorBin, ...editorArgs] = raw.split(/\s+/).filter(Boolean)
-    let tmpDir
-    try {
-      tmpDir = mkdtempSync(join(tmpdir(), 'lazyhub-'))
-      const tmp = join(tmpDir, 'comment.md')
-      writeFileSync(tmp, initial || '', { mode: 0o600 })
-      process.stdout.write('\x1b[?1049l')
-      const result = spawnSync(editorBin, [...editorArgs, tmp], { stdio: 'inherit' })
-      process.stdout.write('\x1b[?1049h\x1b[H')
-      if (result.status !== 0) return initial
-      const content = readFileSync(tmp, 'utf8')
-      return content
-    } catch { return initial }
-    finally { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) } catch {} }
-  }, [])
+  const openEditor = useCallback((initial) => editTextInEditor(initial, { filename: 'comment.md' }).text, [])
 
   // ── Submit action ──────────────────────────────────────────────────────────
   // Each success patches the loaded list in place instead of refetching (which would drop loaded pages).

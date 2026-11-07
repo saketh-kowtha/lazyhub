@@ -59,7 +59,9 @@ function sendIPC(msg) {
     let   buf = ''
 
     socket.once('connect', () => {
-      socket.write(JSON.stringify({ id, ...msg }) + '\n')
+      let auth
+      try { auth = fs.readFileSync(`${sockPath}.token`, 'utf8').trim() } catch { /* no session token: the server will refuse */ }
+      socket.write(JSON.stringify({ id, v: 1, auth, ...msg }) + '\n')
     })
 
     socket.on('data', (chunk) => {

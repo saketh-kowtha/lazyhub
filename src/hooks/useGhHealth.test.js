@@ -21,6 +21,6 @@ describe('useGhHealth state machine', () => {
     expect(getGhHealthSnapshot()).toMatchObject({ degraded: true, failingCount: 1 })
 
     recordGhSuccess('listIssues:b')
-    expect(getGhHealthSnapshot()).toEqual({ degraded: false, failingCount: 0, error: null })
+    expect(getGhHealthSnapshot()).toEqual({ degraded: false, failingCount: 0, error: null, notice: null, toast: null })
   })
 })

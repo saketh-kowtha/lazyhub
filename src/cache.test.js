@@ -237,3 +237,36 @@ describe('byte-bounded LRU (#457)', () => {
     expect(approxBytes(big)).toBeGreaterThan(300_000)
   })
 })
+
+describe('identity-scoped keys (#520)', () => {
+  it('differ by host and by account, and are stable for one identity', () => withCacheDir(async cache => {
+    const prev = process.env.GH_HOST
+    try {
+      delete process.env.GH_HOST
+      const parts = ['o/r', 'listPRs', ['o/r']]
+      const base = cache.scopedCacheKey(parts)
+      expect(cache.scopedCacheKey(parts)).toBe(base)
+      process.env.GH_HOST = 'GHE.example.com'
+      const ghes = cache.scopedCacheKey(parts)
+      expect(ghes).not.toBe(base)
+      expect(cache.scopedCacheKey(parts)).toBe(ghes)
+      process.env.GH_HOST = 'ghe.example.com' // hostnames are case-insensitive
+      expect(cache.scopedCacheKey(parts)).toBe(ghes)
+      cache.setCacheIdentity({ account: cache.accountFingerprint('token-a') })
+      const a = cache.scopedCacheKey(parts)
+      cache.setCacheIdentity({ account: cache.accountFingerprint('token-b') })
+      const b = cache.scopedCacheKey(parts)
+      expect(new Set([ghes, a, b]).size).toBe(3)
+    } finally {
+      if (prev === undefined) delete process.env.GH_HOST
+      else process.env.GH_HOST = prev
+    }
+  }))
+
+  it('fingerprint is one-way and never contains the credential', () => withCacheDir(async cache => {
+    const fp = cache.accountFingerprint('ghp_supersecret')
+    expect(fp).toMatch(/^[0-9a-f]{16}$/)
+    expect(fp).not.toContain('supersecret')
+    expect(cache.accountFingerprint('')).toBeNull()
+  }))
+})
