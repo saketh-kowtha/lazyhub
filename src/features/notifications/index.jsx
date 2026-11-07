@@ -10,6 +10,7 @@ import { useGh } from '../../hooks/useGh.js'
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { classifyGhFailure, listNotifications, markNotificationRead, markAllNotificationsRead } from '../../executor.js'
 import { sanitize } from '../../utils.js'
+import { fitCell, paneWidth, planRow } from '../../ui/row-layout.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { AppContext } from '../../context.js'
@@ -19,7 +20,11 @@ import { NotificationListSkeleton } from '../../components/Skeleton.jsx'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
 
-export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneState }) {
+const REPO_COLS = 12
+const REASON_COLS = 16
+const AGE_COLS = 13
+
+export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigateTo, onPaneState }) {
   useKeyScope('pane')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
@@ -35,6 +40,7 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
   }
 
   const { stdout } = useStdout()
+  const rowWidth = paneWidth(innerWidth, stdout)
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
   const { data: notifications, loading, error, refetch, isStale } = useGh(listNotifications, [])
@@ -209,21 +215,21 @@ export function NotificationList({ repo, listHeight = 10, onNavigateTo, onPaneSt
           const idx = scrollOffset + i
           const isSelected = idx === cursor
           const typeInfo = notifTypeIcon(notif.subject?.type)
+          // One line, never wider than the pane (#428): fixed cells keep their width, the
+          // title takes the rest, and the reason (then the age) is dropped when it is tight.
+          const { titleWidth, show } = planRow(rowWidth, { fixed: 2 + 3 + REPO_COLS + 1, optional: [{ key: 'reason', width: REASON_COLS + 1 }, { key: 'age', width: AGE_COLS + 1 }] })
           return (
-            <Box key={notif.id} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-              <Text color={typeInfo.color}>{typeInfo.icon} </Text>
-              <Text color={t.ui.dim}>{notif.repository?.name} </Text>
-              <Box flexGrow={1}>
-                <Text
-                  color={notif.unread ? (isSelected ? t.ui.selected : undefined) : t.ui.muted}
-                  wrap="truncate"
-                  bold={notif.unread}
-                >
-                  {sanitize(notif.subject?.title || '')}
-                </Text>
-              </Box>
-              <Text color={t.ui.dim}> {notif.reason}</Text>
-              <Text color={t.ui.dim}> {format(notif.updatedAt)}</Text>
+            <Box key={notif.id} paddingX={1} height={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
+              <Box width={3} flexShrink={0}><Text color={typeInfo.color}>{typeInfo.icon}</Text></Box>
+              <Text color={t.ui.dim}>{fitCell(sanitize(notif.repository?.name || ''), REPO_COLS)} </Text>
+              <Text
+                color={notif.unread ? (isSelected ? t.ui.selected : undefined) : t.ui.muted}
+                bold={notif.unread}
+              >
+                {fitCell(sanitize(notif.subject?.title || ''), titleWidth)}
+              </Text>
+              {show.reason && <Text color={t.ui.dim}> {fitCell(sanitize(notif.reason || ''), REASON_COLS)}</Text>}
+              {show.age && <Text color={t.ui.dim}> {fitCell(format(notif.updatedAt), AGE_COLS)}</Text>}
             </Box>
           )
         })}

@@ -27,11 +27,29 @@ function openInBrowser(url) {
   openUrl(url)
 }
 
-export function TabView({ tab, repo, onOpenItem }) {
+// Rows a section needs besides its items: top/bottom border, title row and the "+N more" line.
+const SECTION_CHROME = 4
+
+/**
+ * Split the dashboard's height between its sections (#431). Every section gets an equal share
+ * when each can show at least one row; otherwise only the active section is drawn, with the
+ * whole budget, and Tab/] moves between sections.
+ * @param {number} budget rows available below the dashboard title
+ * @param {number} count number of sections
+ * @returns {{perSection: number, single: boolean}} rows per drawn section
+ */
+export function sectionBudget(budget, count) {
+  const share = Math.floor(budget / Math.max(1, count))
+  if (count > 1 && share < SECTION_CHROME + 1) return { perSection: Math.max(SECTION_CHROME + 1, budget), single: true }
+  return { perSection: share, single: false }
+}
+
+export function TabView({ tab, repo, onOpenItem, innerWidth, listHeight }) {
   const { t } = useTheme()
   const { stdout } = useStdout()
   useKeyScope('pane')
-  const wide = (stdout?.columns || 80) >= 120
+  const cols = innerWidth || (stdout?.columns || 80) - 2
+  const wide = cols >= 118
   const panes = Array.isArray(tab?.panes) ? tab.panes : []
   const tabId = tab?.id || tab?.label || 'tab'
 
@@ -90,16 +108,26 @@ export function TabView({ tab, repo, onOpenItem }) {
     }
   })
 
+  // A fixed height budget per section (overflow hidden), so sections never overlap (#431).
+  const budget = Math.max(SECTION_CHROME + 1, (listHeight || 20) - 1)
+  const { perSection, single } = wide ? { perSection: budget, single: false } : sectionBudget(budget, panes.length)
+  const drawn = panes.map((pane, idx) => ({ pane, idx })).filter(({ idx }) => !single || idx === section)
+  const paneWidth = Math.floor((cols - 2 - (wide ? drawn.length - 1 : 0)) / (wide ? Math.max(1, drawn.length) : 1))
+
   return (
-    <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Box gap={2}>
-        <Text color={t.ui.selected} bold>{tab?.label || tab?.id}</Text>
-        <Text color={t.ui.dim}>{panes.length} panes</Text>
+    <Box flexDirection="column" flexGrow={1} paddingX={1} overflow="hidden">
+      <Box height={1} overflow="hidden">
+        <Text wrap="truncate">
+          <Text color={t.ui.selected} bold>{tab?.label || tab?.id}</Text>
+          <Text color={t.ui.dim}>  {single ? `section ${section + 1}/${panes.length}` : `${panes.length} panes`}</Text>
+        </Text>
       </Box>
-      <Box flexDirection={wide ? 'row' : 'column'} gap={1} flexGrow={1}>
-        {panes.map((pane, idx) => (
-          <Box key={`${pane.kind}-${pane.title || idx}`} flexGrow={1}>
+      <Box flexDirection={wide ? 'row' : 'column'} gap={wide ? 1 : 0} flexGrow={1}>
+        {drawn.map(({ pane, idx }) => (
+          <Box key={`${pane.kind}-${pane.title || idx}`} height={perSection} width={paneWidth} overflow="hidden">
             <TabPane
+              rows={perSection - SECTION_CHROME}
+              width={paneWidth}
               pane={pane}
               repo={repo}
               active={idx === section}

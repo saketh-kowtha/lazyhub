@@ -206,7 +206,7 @@ export function DiffView({ prNumber, state }) {
     aiReview, setAiReview, aiReviewLoading, aiReviewError, setAiReviewError,
     aiPostStatus, setAiPostStatus, files, rows, langCache, fileStartIndices,
     treeRows, commentsByLine, jumpTo, handleAiJumpTo, handleAiPost,
-    submitMerge, confirmMerge, submitApproval, submitChanges
+    repo, submitMerge, confirmMerge, submitApproval, submitChanges
   } = state
 
   if (dialog === 'merge' && repoInfo) {
@@ -216,7 +216,7 @@ export function DiffView({ prNumber, state }) {
       <OptionPicker
         title={`Merge PR #${prNumber}: ${sanitize(prMeta?.title || '')}  (${mergeStatusLine(prMeta, null)})`}
         options={mergeOpts}
-        initialIndex={preferredMergeIndex(methods)}
+        initialIndex={preferredMergeIndex(methods, repo)}
         promptText="Commit message (optional, Enter to skip)"
         promptKey="e"
         onSubmit={submitMerge}

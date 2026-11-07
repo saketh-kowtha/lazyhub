@@ -21,6 +21,7 @@ import { Spinner } from '../../components/Spinner.jsx'
 import { ActionListSkeleton } from '../../components/Skeleton.jsx'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
 import { sanitize } from '../../utils.js'
+import { fitCell, paneWidth, planRow } from '../../ui/row-layout.js'
 
 function StatusBadge({ run }) {
   const { t } = useTheme()
@@ -34,27 +35,32 @@ function StatusBadge({ run }) {
   return <Text color={t.ui.dim}>?</Text>
 }
 
-const ActionRow = memo(({ run, isSelected, t }) => {
+const BRANCH_COLS = 20
+const AGE_COLS = 13
+
+// One line, never wider than the pane (#430): the age, then the branch, are dropped when it is tight.
+const ActionRow = memo(({ run, isSelected, t, width }) => {
+  const { titleWidth, show } = planRow(width, {
+    fixed: 2 + 2,
+    optional: [{ key: 'age', width: AGE_COLS + 1 }, { key: 'branch', width: BRANCH_COLS + 1 }],
+  })
   return (
-    <Box key={run.databaseId} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
+    <Box key={run.databaseId} paddingX={1} height={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
       <StatusBadge run={run} />
       <Text> </Text>
-      <Box flexGrow={1}>
-        <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate">
-          {sanitize(run.workflowName)}
-        </Text>
-      </Box>
-      <Text color={t.ui.muted}> {sanitize(run.headBranch)}</Text>
-      <Text color={t.ui.dim}> {format(run.createdAt)}</Text>
+      <Text color={isSelected ? t.ui.selected : undefined}>{fitCell(sanitize(run.workflowName), titleWidth)}</Text>
+      {show.branch && <Text color={t.ui.muted}> {fitCell(sanitize(run.headBranch), BRANCH_COLS)}</Text>}
+      {show.age && <Text color={t.ui.dim}> {fitCell(format(run.createdAt), AGE_COLS)}</Text>}
     </Box>
   )
 })
 
-export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch = null }) {
+export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, initialBranch = null }) {
   useKeyScope('pane')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
+  const rowWidth = paneWidth(innerWidth, stdout)
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
   const [branchFilter, setBranchFilter] = useState(initialBranch)
@@ -286,6 +292,7 @@ export function ActionList({ repo, listHeight = 10, onPaneState, initialBranch =
               run={run}
               isSelected={isSelected}
               t={t}
+              width={rowWidth}
             />
           )
         })}

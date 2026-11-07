@@ -36,7 +36,7 @@ import { firstActionKey, hintLine } from '../../config/actions.js'
 
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { autoMergeOption, canToggleAutoMergeFromList } from './list-row.jsx'
-import { allowedMergeOptions, ADMIN_MERGE_OPTIONS, mergeMethodLabel, preferredMergeIndex, mergeStatusLine } from './merge-methods.js'
+import { allowedMergeOptions, ADMIN_MERGE_OPTIONS, mergeMethodLabel, preferredMergeIndex, mergeStatusLine, rememberMergeMethod } from './merge-methods.js'
 import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
@@ -121,9 +121,12 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
   const maxScroll     = Math.max(0, filteredRows.length - visibleHeight)
   const visibleRows   = filteredRows.slice(scrollY, scrollY + visibleHeight)
 
-  const openCheckInBrowser = (check) => {
-    if (!check?.url) return
-    openUrl(check.url)
+  // A failed opener is reported, never swallowed (#463).
+  const openCheckInBrowser = async (check, note = '') => {
+    if (!check?.url) { showStatus('This check has no URL to open', true); return }
+    const opened = await openUrl(check.url)
+    if (opened) { if (note) showStatus(note); return }
+    showStatus(`✗ Could not open ${sanitize(check.url)} in the browser`, true)
   }
 
   const openCheckLogs = async (check) => {
@@ -139,7 +142,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
         // No annotations — fall back to opening in browser
         setDialog(null)
         setCheckLogLoading(false)
-        openCheckInBrowser(check)
+        openCheckInBrowser(check, 'No annotations for this check; opened it in the browser')
         return
       }
       const lines = annotations.map(a => {
@@ -298,13 +301,14 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
       <OptionPicker
         title={`Merge PR #${pr.number}: ${sanitize(pr.title)}  (${mergeStatusLine(pr, checks)})`}
         options={mergeOpts}
-        initialIndex={preferredMergeIndex(methods)}
+        initialIndex={preferredMergeIndex(methods, repo)}
         promptText="Commit message (optional, Enter to skip)"
         promptKey="e"
         onSubmit={(val) => {
           const strategy = typeof val === 'object' ? val.value : val
           const msg = typeof val === 'object' ? val.text : undefined
           if (strategy === 'auto-merge') { setDialog('auto-merge'); return }
+          rememberMergeMethod(repo, strategy)
           // Choosing a method never merges by itself: a confirm (default No) always follows.
           setMergeChoice({ strategy, msg })
           setDialog('merge-confirm')
@@ -522,18 +526,18 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
       </Box>
 
       {/* ── Hint line ── */}
-      <Box paddingX={1} justifyContent="space-between">
+      <Box paddingX={1} justifyContent="space-between" height={1} overflow="hidden">
         {statusMsg
-          ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? '  [any key to dismiss]' : ''}</Text>
+          ? <Text wrap="truncate" color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? '  [any key to dismiss]' : ''}</Text>
           : checkCursor !== null
-            ? <Text color={t.ui.selected}>{hintLine(CHECK_HINTS)}</Text>
+            ? <Text wrap="truncate" color={t.ui.selected}>{hintLine(CHECK_HINTS)}</Text>
             : maxScroll > 0
-              ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  {hintLine([['cursor.down', 'scroll'], 'cursor.top'])}</Text>
+              ? <Text wrap="truncate" color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  {hintLine([['cursor.down', 'scroll'], 'cursor.top'])}</Text>
               : pr?.mergeable === 'CONFLICTING'
-                ? <Text color={t.pr.conflict || t.ci.pending}>{hintLine([['pr.conflicts', 'resolve conflicts'], 'pr.checks', 'pr.diff', 'pr.merge', 'pr.labels', 'pr.assignees', 'pr.reviewers'])}</Text>
-                : <Text color={t.ui.dim}>{hintLine(['pr.diff', 'pr.open-editor', ['pr.merge', 'merge/auto-merge'], 'pr.checks', 'pr.labels', 'pr.assignees', 'pr.reviewers'])}</Text>
+                ? <Text wrap="truncate" color={t.pr.conflict || t.ci.pending}>{hintLine([['pr.conflicts', 'resolve conflicts'], 'pr.checks', 'pr.diff', 'pr.merge', 'pr.labels', 'pr.assignees', 'pr.reviewers'])}</Text>
+                : <Text wrap="truncate" color={t.ui.dim}>{hintLine(['pr.diff', 'pr.open-editor', ['pr.merge', 'merge/auto-merge'], 'pr.checks', 'pr.labels', 'pr.assignees', 'pr.reviewers'])}</Text>
         }
-        <Text color={t.ui.dim}>{hintLine(['list.search', 'app.help', 'app.back'])}</Text>
+        <Box flexShrink={0} marginLeft={1}><Text color={t.ui.dim}>{hintLine(['list.search', 'app.help', 'app.back'])}</Text></Box>
       </Box>
     </Box>
   )

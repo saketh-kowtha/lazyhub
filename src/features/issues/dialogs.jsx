@@ -52,7 +52,8 @@ function IssueSelectionDialog({ repo, issue, current: currentNow, getOptions, fi
     return <PickerStatus onCancel={onClose} padding={loadingPadding}><Text color={t.ui.muted}>{loadingText}</Text></PickerStatus>
   }
   if (error && !hasOptions) {
-    return <PickerStatus onCancel={onClose} onRetry={refetch} padding={loadingPadding}><FailureNotice failure={classifyGhFailure(error)} /></PickerStatus>
+    return <PickerStatus onCancel={onClose} onRetry={refetch} padding={loadingPadding}><FailureNotice failure={classifyGhFailure(error)} />
+      <Text color={t.ui.dim}>{`  ${sanitize(String(error?.message || '').split('\n').find(line => line.trim()) || '').slice(0, 100)}`}</Text></PickerStatus>
   }
 
   const selected = new Set(current)
