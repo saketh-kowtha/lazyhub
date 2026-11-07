@@ -6,7 +6,7 @@ import React from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useTheme } from '../../theme.js'
-import { TextInput } from '../../utils.js'
+import { sanitize, TextInput } from '../../utils.js'
 
 // ─── Screen components ────────────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ function UnpushedCommitsScreen({ commits, onPush, onSkip, onBack }) {
       {shown.map(c => (
         <Box key={c.sha} gap={1}>
           <Text color={t.ui.dim}>{c.sha}</Text>
-          <Text color={t.ui.muted} wrap="truncate">{c.message}</Text>
+          <Text color={t.ui.muted} wrap="truncate">{sanitize(c.message)}</Text>
         </Box>
       ))}
       {commits.length > 8 && (

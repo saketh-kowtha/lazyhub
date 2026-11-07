@@ -133,6 +133,12 @@ export function skipOrFail(message) {
 export class TerminalScreen {
   constructor(cols, rows) { this.cols = cols; this.rows = rows; this.grid = Array.from({ length: rows }, () => Array(cols).fill(' ')); this.r = 0; this.c = 0; this.scrolls = 0; this.wraps = 0; this.autowrap = true; this.sgr = []; this.unhandled = new Set() }
   feed(data) {
+    // A PTY may split an escape sequence across two chunks; hold the incomplete tail for the next one.
+    // eslint-disable-next-line no-control-regex
+    const tail = /\x1b(?:\[[0-9;?]*|\][^\x07]*)?$/.exec(`${this.pending ?? ''}${data}`)
+    data = `${this.pending ?? ''}${data}`
+    this.pending = tail ? tail[0] : ''
+    if (tail) data = data.slice(0, tail.index)
     // eslint-disable-next-line no-control-regex
     const re = /\x1b\[([0-9;?]*)([A-Za-z])|\x1b[=>78]|\x1b\][^\x07]*\x07|([\s\S])/g
     for (const m of data.matchAll(re)) {

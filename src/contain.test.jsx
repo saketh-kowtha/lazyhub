@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Text } from 'ink'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { containHandler, getContainedToast, reportContained, resetContained } from './contain.js'
+import { containHandler, getContainedToast, getSwallowed, logSwallowed, reportContained, resetContained, resetSwallowed } from './contain.js'
 import { getGhHealthSnapshot } from './hooks/useGhHealth.js'
 import { useKeymapInput } from './config/keymap.js'
 import { ErrorBoundary } from './components/ErrorBoundary.jsx'
@@ -17,7 +17,7 @@ vi.mock('ink', async () => {
   return { ...await vi.importActual('ink'), useInput: (await import('./test/input-bus.js')).mockUseInput(React) }
 })
 
-afterEach(() => { cleanup(); resetContained() })
+afterEach(() => { cleanup(); resetContained(); resetSwallowed(); vi.unstubAllEnvs() })
 
 describe('handler errors are contained (#490)', () => {
   it('a throwing handler is logged and shown as a toast instead of escaping', () => {
@@ -109,5 +109,48 @@ describe('no app code reaches for Ink useInput directly', () => {
       .filter(f => !f.endsWith(join('hooks', 'useSafeInput.js')))
       .filter(f => /import\s*\{[^}]*\buseInput\b[^}]*\}\s*from\s*'ink'/.test(readFileSync(f, 'utf8')))
     expect(offenders.map(f => f.slice(root.length))).toEqual([])
+  })
+})
+
+describe('logSwallowed replaces silent catches (#490 R12)', () => {
+  it('records the scope and message only when LAZYHUB_DEBUG is set, and never throws', () => {
+    vi.stubEnv('LAZYHUB_DEBUG', '')
+    logSwallowed('a.b', new Error('quiet'))
+    expect(getSwallowed()).toEqual([])
+    vi.stubEnv('LAZYHUB_DEBUG', '1')
+    expect(() => logSwallowed('c.d', new Error('seen\nsecond line'))).not.toThrow()
+    expect(getSwallowed()).toMatchObject([{ scope: 'c.d', message: 'seen' }])
+    expect(() => logSwallowed('c.e', undefined)).not.toThrow()
+  })
+
+  it('collapses a repeating failure so a hot path cannot flood the log', () => {
+    vi.stubEnv('LAZYHUB_DEBUG', '1')
+    for (let i = 0; i < 20; i++) logSwallowed('hot.path', new Error('same'))
+    expect(getSwallowed()).toHaveLength(1)
+  })
+
+  it('no UI path keeps an empty catch block or an empty .catch(() => {})', () => {
+    const walk = dir => readdirSync(dir, { withFileTypes: true }).flatMap(e => {
+      const full = join(dir, e.name)
+      if (e.isDirectory()) return walk(full)
+      return /\.(?:js|jsx)$/.test(e.name) && !/\.test\./.test(e.name) ? [full] : []
+    })
+    const root = fileURLToPath(new URL('.', import.meta.url))
+    const dirs = ['features', 'components', 'ui', 'hooks'].map(d => join(root, d))
+    const files = [...dirs.flatMap(walk), join(root, 'app.jsx'), join(root, 'app-views.jsx'), join(root, 'app-panels.jsx')]
+    const silent = /catch\s*(?:\(\w*\))?\s*\{\s*(?:\/\*[^*]*\*\/|\/\/[^\n]*)?\s*\}|\.catch\(\s*\(\s*\w*\s*\)\s*=>\s*\{\s*\}\s*\)/
+    const offenders = files.filter(f => silent.test(readFileSync(f, 'utf8')))
+    expect(offenders).toEqual([])
+  })
+})
+
+describe('a crashing section does not take the screen down (#490 R12)', () => {
+  it('a section boundary shows one line and leaves its siblings alone', () => {
+    function Bomb() { throw new Error('sidebar crash') }
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const view = renderWithProviders(<><ErrorBoundary section="Sidebar"><Bomb /></ErrorBoundary><Text>main pane alive</Text></>)
+    expect(view.lastFrame()).toContain('Sidebar unavailable')
+    expect(view.lastFrame()).toContain('main pane alive')
+    errors.mockRestore()
   })
 })

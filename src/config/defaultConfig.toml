@@ -296,10 +296,18 @@ scope = "list"
 group = "meta"
 
 [actions."log.filter"]
-keys = ["f"]
-hint = "f"
+keys = ["/"]
+hint = "/"
 label = "filter"
 description = "Filter log output"
+scope = "dialog"
+group = "filter"
+
+[actions."log.excerpt"]
+keys = ["f"]
+hint = "f"
+label = "excerpt"
+description = "Switch between the failure excerpt and the full log"
 scope = "dialog"
 group = "filter"
 

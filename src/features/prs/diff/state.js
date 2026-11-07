@@ -3,6 +3,7 @@
  * src/features/prs/diff/state.js — diff loading, navigation, overlays, and action callbacks.
  */
 
+import { logSwallowed } from '../../../contain.js'
 import { useState, useMemo, useContext, useEffect, useRef, useCallback } from 'react'
 import { openUrl } from '../../../services/platform.js'
 import { useStdout } from 'ink'
@@ -439,7 +440,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
       const row = rows[cursor]
       if (row?.filename) {
         const line = row.newLine || row.oldLine || 1
-        openInEditor(row.filename, line, _editorCfg).catch(() => {})
+        openInEditor(row.filename, line, _editorCfg).catch(err => logSwallowed('prs.diff.open-editor', err))
       }
       return
     }

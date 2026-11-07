@@ -14,6 +14,7 @@
  * Layout (<80 cols):        list only (sidebar replaced by tab header)
  */
 
+import { logSwallowed } from './contain.js'
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { render, useApp } from 'ink'
 import { useInput } from './hooks/useSafeInput.js'
@@ -349,7 +350,7 @@ export function App({ repo, onSwitchRepo }) {
     }
 
     if (matchesAction('app.settings', input, key, _config.toml)) { setView('settings'); setSelectedItem(null); return }
-    if (matchesAction('app.open-config', input, key, _config.toml)) { openInEditor(CONFIG_PATH, 1, _config.editor).catch(() => {}); return }
+    if (matchesAction('app.open-config', input, key, _config.toml)) { openInEditor(CONFIG_PATH, 1, _config.editor).catch(err => logSwallowed('app.open-config', err)); return }
     if (matchesAction('app.logs', input, key, _config.toml) && process.env.LAZYHUB_DEBUG === '1') { setView('logs'); setSelectedItem(null); return }
 
     // : — command palette

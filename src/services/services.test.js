@@ -6,7 +6,7 @@ vi.mock('child_process', () => ({ spawnSync: vi.fn() }))
 import { execa } from 'execa'
 import { spawnSync } from 'child_process'
 import { copyToClipboard, editTextInEditor, isOpenableUrl, openUrl, runConfiguredCommand } from './platform.js'
-import { createBranch, currentBranch, pushHead } from './git.js'
+import { createBranch, currentBranch, push } from './git.js'
 
 const savedEditor = process.env.EDITOR
 beforeEach(() => { vi.clearAllMocks(); execa.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }) })
@@ -86,10 +86,10 @@ describe('editTextInEditor', () => {
 
 describe('git service', () => {
   it('runs every command in the given checkout with array args', async () => {
-    execa.mockResolvedValue({ stdout: 'main\n' })
+    execa.mockResolvedValue({ stdout: 'main\n', exitCode: 0 })
     expect(await currentBranch('/work/repo')).toBe('main')
     await createBranch('/work/repo', 'feature/x')
-    await pushHead('/work/repo', 'origin')
+    await push('/work/repo', 'origin')
     expect(execa.mock.calls.map(c => [c[0], c[1], c[2].cwd])).toEqual([
       ['git', ['branch', '--show-current'], '/work/repo'],
       ['git', ['checkout', '-b', 'feature/x'], '/work/repo'],
@@ -99,7 +99,7 @@ describe('git service', () => {
 
   it('rejects names that could be parsed as options', async () => {
     await expect(createBranch('/w', '--detach')).rejects.toThrow(/Invalid/)
-    await expect(pushHead('/w', '-f')).rejects.toThrow(/Invalid/)
+    await expect(push('/w', '-f')).rejects.toThrow(/Invalid/)
     expect(execa).not.toHaveBeenCalled()
   })
 })

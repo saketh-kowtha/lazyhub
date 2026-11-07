@@ -80,3 +80,45 @@ export function containHandler(handler, scope = 'a key handler') {
   }
   return /** @type {F} */ (wrapped)
 }
+
+// ─── Errors that are deliberately absorbed (#490 R12) ──────────────────────
+
+const SWALLOW_LIMIT = 50
+const SWALLOW_REPEAT_MS = 5000
+const swallowed = []
+const lastSeen = new Map()
+
+/** Recent absorbed errors, recorded only when LAZYHUB_DEBUG is set. For the debug-state snapshot. */
+export function getSwallowed() {
+  return swallowed.slice()
+}
+
+/** Forget absorbed errors (tests). */
+export function resetSwallowed() {
+  swallowed.length = 0
+  lastSeen.clear()
+}
+
+/**
+ * Record an error a UI path chose to absorb, instead of an empty `catch {}`.
+ * Always logs at debug level; with LAZYHUB_DEBUG set it is also kept for the debug-state
+ * snapshot. The same scope and message repeats at most once per five seconds so a hot
+ * path cannot flood the log. Never throws.
+ * @param {string} scope where it happened, e.g. 'issues.list.optimistic-insert'
+ * @param {unknown} err
+ */
+export function logSwallowed(scope, err) {
+  try {
+    const message = err instanceof Error ? err.message : String(err)
+    const key = `${scope}\u0000${message}`
+    const now = Date.now()
+    if (now - (lastSeen.get(key) ?? 0) < SWALLOW_REPEAT_MS) return
+    lastSeen.set(key, now)
+    if (lastSeen.size > 200) lastSeen.clear()
+    logger.debug(`swallowed error in ${scope}`, { error: message })
+    if (process.env.LAZYHUB_DEBUG) {
+      swallowed.push({ scope, message: message.split('\n')[0].slice(0, 200), at: new Date(now).toISOString() })
+      if (swallowed.length > SWALLOW_LIMIT) swallowed.shift()
+    }
+  } catch { /* absorbing an error must not raise one */ }
+}

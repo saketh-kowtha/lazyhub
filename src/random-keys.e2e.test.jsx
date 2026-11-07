@@ -42,7 +42,7 @@ const harness = vi.hoisted(() => {
   const cp = require('node:child_process')
   // Layer 3 (canary), part 1: the state of the real checkout we run in, measured with the real
   // git by absolute path BEFORE any shim goes on PATH. Compared again after the suite.
-  const gitBin = cp.spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim()
+  const gitBin = process.env.LAZYHUB_REAL_GIT || cp.spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim()
   // The fuzz runs with cwd set to a throwaway repo of its own (#546). Refs, tags and the HEAD reflog of a
   // real checkout are shared with every other worktree of the clone, so nothing there can be compared
   // reliably; the sandbox is private to this process, so ANY ref or HEAD change in it is the app's doing.

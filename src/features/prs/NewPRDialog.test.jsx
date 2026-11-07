@@ -4,7 +4,8 @@ import { readFileSync, writeFileSync } from 'fs'
 import { spawnSync } from 'child_process'
 import { NewPRDialog } from './NewPRDialog.jsx'
 import { useTheme, resolveTheme } from '../../theme.js'
-import { createPR, getCurrentBranch, getRemoteBranch, getRepoInfo, pushBranch } from '../../executor.js'
+import { createPR, getRemoteBranch, getRepoInfo } from '../../executor.js'
+import { currentBranch as getCurrentBranch, push as pushBranch } from '../../services/git.js'
 import { sendInput } from '../../test/input-bus.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
@@ -24,10 +25,16 @@ vi.mock('ink', async () => {
 })
 
 vi.mock('../../executor.js', () => ({
-  getCurrentBranch: vi.fn(), getRepoInfo: vi.fn(), getRemoteBranch: vi.fn(),
-  getUnpushedCommits: vi.fn().mockResolvedValue([]),
+  getRepoInfo: vi.fn(), getRemoteBranch: vi.fn(),
   compareBranches: vi.fn().mockResolvedValue({ ahead_by: 1 }),
-  pushBranch: vi.fn(), createPR: vi.fn(),
+  createPR: vi.fn(),
+}))
+vi.mock('../../services/git.js', () => ({
+  findLocalCheckout: vi.fn(async () => ({ dir: '/w', remote: 'origin' })),
+  noLocalCheckoutMessage: repo => `No local checkout of ${repo} here`,
+  currentBranch: vi.fn(),
+  unpushedCommits: vi.fn().mockResolvedValue([]),
+  push: vi.fn(),
 }))
 vi.mock('child_process', () => ({ spawnSync: vi.fn() }))
 
@@ -120,7 +127,7 @@ describe('NewPRDialog form flow', () => {
     await sendInput('p')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Branch not on GitHub'))
     await sendInput('', { return: true })
-    expect(pushBranch).toHaveBeenCalledWith('feature/dialog')
+    expect(pushBranch).toHaveBeenCalledWith('/w', 'origin', 'feature/dialog')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('New Pull Request'))
     await sendInput('', { escape: true })
     expect(onClose).toHaveBeenCalledOnce()

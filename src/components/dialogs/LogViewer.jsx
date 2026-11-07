@@ -1,6 +1,10 @@
 /**
  * LogViewer.jsx — full-screen scrollable log viewer primitive.
- * Props: lines (string[]), onClose(), title (string, optional)
+ * Props: lines (string[]), onClose(), title (string, optional), excerpt (optional)
+ * With `excerpt` ({ state, detail, excerpt } from loadFailureExcerpt) the viewer opens on a
+ * "Failure excerpt" block and `f` switches to the full log and back (#463, #359). The excerpt is
+ * already redacted and capped; it is still drawn as untrusted log text. A state other than 'ok'
+ * is shown as what it is (expired, too large, ...), never as a guess.
  * Every line is untrusted: it is cleaned (ANSI, TABs, control chars) before it is drawn (#463).
  */
 
@@ -18,7 +22,7 @@ function isStepHeader(line) {
   return STEP_HEADER_RE.test(line) || line.startsWith('##')
 }
 
-export function LogViewer({ lines: rawLines = [], onClose, title = 'Log Viewer' }) {
+export function LogViewer({ lines: rawLines = [], onClose, title = 'Log Viewer', excerpt = null }) {
   useKeyScope('dialog')
   const { t } = useTheme()
   const { stdout } = useStdout()
@@ -27,6 +31,7 @@ export function LogViewer({ lines: rawLines = [], onClose, title = 'Log Viewer' 
   const [filterQuery, setFilterQuery] = useState('')
   const [filtering, setFiltering] = useState(false)
   const [gPressed, setGPressed] = useState(false)
+  const [showExcerpt, setShowExcerpt] = useState(Boolean(excerpt))
 
   const lines = useMemo(() => rawLines.map(cleanLogLine), [rawLines])
 
@@ -57,6 +62,13 @@ export function LogViewer({ lines: rawLines = [], onClose, title = 'Log Viewer' 
     }
 
     if (matchesAction('dialog.cancel', input, key)) { onClose(); return }
+
+    if (excerpt && matchesAction('log.excerpt', input, key)) {
+      setShowExcerpt(v => !v)
+      return
+    }
+
+    if (showExcerpt) return
 
     if (matchesAction('log.filter', input, key)) {
       setFiltering(true)
@@ -92,6 +104,13 @@ export function LogViewer({ lines: rawLines = [], onClose, title = 'Log Viewer' 
 
     setGPressed(false)
   })
+
+  /** @type {(string | [string, string])[]} */
+  const footerHints = [['cursor.down', 'scroll'], 'cursor.top', 'log.filter']
+  if (excerpt) footerHints.push(['log.excerpt', 'excerpt'])
+  footerHints.push(['dialog.cancel', 'close'])
+
+  if (excerpt && showExcerpt) return <ExcerptView title={title} result={excerpt} />
 
   return (
     <Box flexDirection="column" height="100%">
@@ -131,7 +150,47 @@ export function LogViewer({ lines: rawLines = [], onClose, title = 'Log Viewer' 
         })}
       </Box>
       <Box borderStyle="single" borderColor={t.ui.border} paddingX={1}>
-        <Text color={t.ui.dim}>{hintLine([['cursor.down', 'scroll'], 'cursor.top', 'log.filter', ['dialog.cancel', 'close']])}</Text>
+        <Text color={t.ui.dim}>{hintLine(footerHints)}</Text>
+      </Box>
+    </Box>
+  )
+}
+
+/**
+ * The "Failure excerpt" block: what failed, where, and the first failure's lines.
+ * @param {{ title: string, result: { state: string, detail: string, excerpt: any } }} props
+ */
+function ExcerptView({ title, result }) {
+  const { t } = useTheme()
+  const ex = result.excerpt
+  return (
+    <Box flexDirection="column" height="100%">
+      <Box borderStyle="single" borderColor={t.ui.border} paddingX={1} justifyContent="space-between">
+        <Text color={t.ui.selected} bold wrap="truncate">{cleanLogLine(title)}</Text>
+        <Text color={t.ui.muted}>Failure excerpt</Text>
+      </Box>
+      <Box flexDirection="column" flexGrow={1} overflow="hidden" paddingX={1}>
+        {result.state !== 'ok' || !ex ? (
+          <Text color={t.ci.pending} wrap="truncate">{`Failure excerpt unavailable (${cleanLogLine(result.state)}): ${cleanLogLine(result.detail || 'no detail')}`}</Text>
+        ) : (
+          <>
+            <Text color={t.ui.muted} wrap="truncate">
+              {[ex.kind, ex.job && cleanLogLine(ex.job), ex.step && cleanLogLine(ex.step)].filter(Boolean).join(' · ')}
+            </Text>
+            {ex.lines.map((line, i) => (
+              <Box key={i}><Text color={t.diff.ctxFg} wrap="truncate">{cleanLogLine(line)}</Text></Box>
+            ))}
+            {ex.truncated && <Text color={t.ui.dim}>… excerpt cut; press f for the full log</Text>}
+            {ex.locations.length > 0 && (
+              <Text color={t.ui.dim} wrap="truncate">
+                {`at ${ex.locations.slice(0, 5).map(l => `${cleanLogLine(l.path)}:${l.line}${l.col ? `:${l.col}` : ''}`).join('  ')}`}
+              </Text>
+            )}
+          </>
+        )}
+      </Box>
+      <Box borderStyle="single" borderColor={t.ui.border} paddingX={1}>
+        <Text color={t.ui.dim}>{hintLine([['log.excerpt', 'full log'], ['dialog.cancel', 'close']])}</Text>
       </Box>
     </Box>
   )

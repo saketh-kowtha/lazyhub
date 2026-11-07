@@ -13,6 +13,7 @@
  * `useLayout()` / this hook rather than caching `stdout.columns`.
  */
 
+import { logSwallowed } from '../contain.js'
 import { useEffect, useRef, useState } from 'react'
 import { useStdout } from 'ink'
 
@@ -43,7 +44,7 @@ export function useTerminalSize({ debounceMs = RESIZE_DEBOUNCE_MS } = {}) {
   useEffect(() => {
     if (!stdout || typeof stdout.on !== 'function') return undefined
     const tty = Boolean(stdout.isTTY)
-    const emit = seq => { if (tty) { try { stdout.write(seq) } catch { /* closed stream */ } } }
+    const emit = seq => { if (tty) { try { stdout.write(seq) } catch (err) { logSwallowed('terminal.write', err) /* closed stream */ } } }
     let timer
     let wrapTimer
     const apply = () => {

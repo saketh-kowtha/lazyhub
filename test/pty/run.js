@@ -1,6 +1,7 @@
 import assert from 'assert/strict'
 import { spawnSync } from 'child_process'
-import { existsSync, mkdtempSync, readFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'fs'
+import { createServer } from 'net'
 import { tmpdir } from 'os'
 import { dirname, join, delimiter } from 'path'
 import pty from 'node-pty'
@@ -431,6 +432,165 @@ async function runResizeFlow() {
   }
 }
 
+// #491: the first frame must not wait on the background helper. The helper's socket is a listener that
+// accepts and never answers, which is the worst case for a probe that blocks the launcher. Cold start to first
+// frame is measured with the helper disabled and with the hung one; the difference must stay small, and the probe
+// must still happen (after the frame), so the check cannot pass by never looking for the helper.
+async function coldStartMs({ hungHelper }) {
+  const temp = mkdtempSync(join(tmpdir(), 'lh-'))
+  const stubBin = installGhStub(temp)
+  const env = childEnv(stubBin, temp)
+  let probes = 0
+  let helper = null
+  const held = new Set()
+  let term
+  let output = ''
+  try {
+    if (hungHelper) {
+      delete env.LAZYHUB_NO_DAEMON
+      const dir = join(temp, '.config', 'lazyhub')
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
+      helper = createServer(socket => { probes += 1; held.add(socket); socket.on('error', () => {}) })
+      await new Promise((resolve, reject) => { helper.once('error', reject); helper.listen(join(dir, 'daemon.sock'), resolve) })
+    }
+    const started = Date.now()
+    term = spawnTerminal(env)
+    term.onData(data => { output += data })
+    await waitForScreen(() => output, /Focus|PTY harness fixture PR/, `cold start (${hungHelper ? 'hung helper' : 'no helper'})`)
+    const ms = Date.now() - started
+    if (hungHelper) await waitUntil(() => (probes > 0 ? true : 'the launcher never probed the helper'), 'the background probe after the first frame')
+    term.write('q')
+    await waitForExit(term)
+    return { ms, probes }
+  } finally {
+    await stopTerminal(term)
+    for (const socket of held) socket.destroy()
+    helper?.close()
+    removeTempDir(temp)
+  }
+}
+
+async function runColdStartFlow() {
+  const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
+  const runs = { base: [], hung: [] }
+  for (let i = 0; i < 3; i += 1) {
+    runs.base.push((await coldStartMs({ hungHelper: false })).ms)
+    const hung = await coldStartMs({ hungHelper: true })
+    assert.ok(hung.probes >= 1, 'the helper was probed')
+    runs.hung.push(hung.ms)
+  }
+  const base = median(runs.base)
+  const hung = median(runs.hung)
+  process.stdout.write(`PTY cold start to first frame: no helper ${base} ms, hung helper ${hung} ms (runs: ${runs.base.join('/')} vs ${runs.hung.join('/')})\n`)
+  // A launcher that awaited the probe and the spawn window would add seconds; noise is a few hundred ms.
+  assert.ok(hung - base < 1000, `a hung helper delayed the first frame by ${hung - base} ms`)
+}
+
+// #463: Enter on a failed PR check opens the log viewer on its failure excerpt; f shows the full log and back.
+async function runFailedLogFlow() {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-faillog-'))
+  const stubBin = installGhStub(temp)
+  const screen = new TerminalScreen(100, 40)
+  let term
+  try {
+    term = spawnTerminal({ ...childEnv(stubBin, temp), LAZYHUB_GH_FAILED_CHECK: '1' }, [], { cols: 100, rows: 40 })
+    term.onData(data => screen.feed(data))
+    const showing = (re, want = true) => () => (re.test(screen.text()) === want ? true : screen.text())
+    await waitUntil(showing(/Focus/), 'failed-log flow startup')
+    await settle()
+    await sendUntil(() => writeChord(term, 'gp'), () => screen.text(), /PTY harness fixture PR/, 'PR list for the failed-log flow')
+    term.write('\r')
+    await waitUntil(showing(/Fixture body/), 'PR detail with a failed check')
+    term.write('c')
+    await waitUntil(showing(/\[Ctrl\+R\] re-run/), 'checks mode')
+    term.write('\r')
+    await waitUntil(showing(/Failure excerpt/), 'the failure excerpt opens first')
+    assert.match(screen.text(), /AssertionError/)
+    assert.doesNotMatch(screen.text(), /RUN {2}v3\.2\.4/, 'the full log is not shown yet')
+    term.write('f')
+    await waitUntil(showing(/RUN {2}v3\.2\.4/), 'f shows the full log')
+    assert.doesNotMatch(screen.text(), /Failure excerpt/)
+    term.write('f')
+    await waitUntil(showing(/Failure excerpt/), 'f returns to the excerpt')
+    term.write('\x1b')
+    await waitUntil(showing(/Failure excerpt/, false), 'Esc closes the viewer')
+    term.write('q')
+    await waitForExit(term)
+  } finally {
+    await stopTerminal(term)
+    removeTempDir(temp)
+  }
+}
+
+// #279: Focus -> PR -> detail -> back -> issue -> detail -> back with real stdin. Coming back must
+// restore the section, the selected row and the scroll position. 30 rows per section forces the window
+// to scroll; `G` selects the last one so the first rows are provably out of view.
+async function runFocusReturnFlow({ cols, rows, single = false }) {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-focus-'))
+  const stubBin = installGhStub(temp)
+  const screen = new TerminalScreen(cols, rows)
+  const label = `${cols}x${rows}`
+  let term
+  try {
+    term = spawnTerminal({ ...childEnv(stubBin, temp), LAZYHUB_GH_MANY: '30' }, [], { cols, rows })
+    term.onData(data => screen.feed(data))
+    const showing = (re, want = true) => () => (re.test(screen.text()) === want ? true : screen.text())
+    const key = async (k, pause = 120) => { term.write(k); await new Promise(resolve => setTimeout(resolve, pause)) }
+    // The row under the cursor: the marker and the number on one line.
+    const selected = number => new RegExp(`▸\\s+#${number}\\b`)
+    // The text of one dashboard section (its title row to its bottom border), since every section lists numbers.
+    const sectionOf = title => {
+      const lines = screen.text().split('\n')
+      const start = lines.findIndex(l => l.includes(title))
+      const end = lines.findIndex((l, i) => i > start && l.includes('╰'))
+      return start < 0 ? '' : lines.slice(start, end < 0 ? undefined : end).join('\n')
+    }
+
+    await waitUntil(showing(/Focus/), `${label}: Focus on start`)
+    await settle()
+    await waitUntil(showing(selected(300)), `${label}: first PR selected on Focus`)
+
+    // Section 1 (PRs): jump to the last row, so the window has scrolled away from the top.
+    await key('G')
+    await waitUntil(showing(selected(329)), `${label}: last PR selected`)
+    assert.doesNotMatch(sectionOf('Review requested'), /#300\b/, `${label}: the window scrolled past the first PR`)
+    const prView = screen.text()
+
+    await key('\r')
+    await waitUntil(showing(/Fixture body 329|#329 Fixture PR 329/), `${label}: the last PR opened in detail`)
+    await key('\x1b')
+    await waitUntil(showing(selected(329)), `${label}: PR row restored after Esc`)
+    assert.doesNotMatch(sectionOf('Review requested'), /#300\b/, `${label}: PR scroll position restored`)
+    assert.equal(screen.text().split('\n').find(l => selected(329).test(l)), prView.split('\n').find(l => selected(329).test(l)), `${label}: same row text`)
+
+    // Section 3 (issues): same dance.
+    await key(']')
+    await key(']')
+    if (single) await waitUntil(showing(/section 3\/3/), `${label}: one-section mode shows section 3/3`)
+    await waitUntil(showing(selected(400)), `${label}: first issue selected in section 3`)
+    await key('G')
+    await waitUntil(showing(selected(429)), `${label}: last issue selected`)
+    assert.doesNotMatch(sectionOf('Assigned issues'), /#400\b/, `${label}: the window scrolled past the first issue`)
+    await key('\r')
+    await waitUntil(showing(/Fixture issue body 429|#429 Fixture issue 429/), `${label}: the last issue opened in detail`)
+    await key('\x1b')
+    await waitUntil(showing(selected(429)), `${label}: issue row restored after Esc`)
+    assert.doesNotMatch(sectionOf('Assigned issues'), /#400\b/, `${label}: issue scroll position restored`)
+    if (single) assert.match(screen.text(), /section 3\/3/, `${label}: section 3 restored`)
+
+    // The PR section kept its own selection while the issue section was active.
+    await key('[')
+    await key('[')
+    await waitUntil(showing(selected(329)), `${label}: PR selection kept after visiting the issue section`)
+
+    term.write('q')
+    await waitForExit(term)
+  } finally {
+    await stopTerminal(term)
+    removeTempDir(temp)
+  }
+}
+
 // The same flow inside a real terminal emulator (tmux), which crops and reflows like a user's terminal.
 async function runTmuxResizeFlow() {
   const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-tmuxresize-'))
@@ -490,6 +650,11 @@ await runDayOneErrorFlow({
 await runPerfFlow()
 await runSwrCacheFlow()
 await runResizeFlow()
+await runColdStartFlow()
+await runFailedLogFlow()
+await runFocusReturnFlow({ cols: 100, rows: 40 })
+await runFocusReturnFlow({ cols: 80, rows: 24 })
+await runFocusReturnFlow({ cols: 60, rows: 16, single: true })
 
 if (spawnSync('tmux', ['-V']).status === 0) {
   await runLazyhubFlow({ useTmux: true })

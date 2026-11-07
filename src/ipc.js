@@ -65,7 +65,8 @@ import { randomBytes } from 'crypto'
 import { chmodSync, mkdirSync, readFileSync, unlinkSync } from 'fs'
 import { assertPrivateDir, prepareSocketPath, writePrivateFile } from './secure-fs.js'
 import { logger } from './utils-core.js'
-import { ERR, MAX_MESSAGE_BYTES, PROTOCOL_VERSION, checkSession, issueSession } from './daemon/protocol.js'
+import { ERR, issueSession } from './daemon/protocol.js'
+import { attachLineReader, authorize, currentSession, deny, parseRequest, send } from './daemon/wire.js'
 import {
   getPRStateForBranch as _defaultGetPRStateForBranch,
   getPRReviewCommentsPage as _defaultGetPRReviewComments,
@@ -158,26 +159,18 @@ function broadcast(event, data) {
 }
 
 function sendResponse(socket, id, payload) {
-  try {
-    socket.write(JSON.stringify({ id, ...payload }) + '\n')
-  } catch { /* client disconnected */ }
-}
-
-function deny(socket, id, code, message) {
-  sendResponse(socket, id, { ok: false, code, error: message })
+  send(socket, { id, ...payload })
 }
 
 function handleMessage(socket, raw) {
-  let msg
-  try { msg = JSON.parse(raw) } catch { return }
-  if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return
-  const id = typeof msg.id === 'string' || typeof msg.id === 'number' ? msg.id : null
-  if (msg.v !== PROTOCOL_VERSION) return deny(socket, id, ERR.VERSION, 'unsupported protocol version')
+  const parsed = parseRequest(raw)
+  // The editor socket ignores noise that is not even a JSON object; a wrong version is answered.
+  if (parsed.error?.code === ERR.MALFORMED) return
+  if (parsed.error) return deny(socket, parsed.id, parsed.error.code, parsed.error.message)
+  const { msg, id } = parsed
   // Rotate an expired secret in place so a long-running TUI stays reachable for clients that re-read the file.
-  if (_session && !_session.revoked && Date.now() > _session.expiresAt && _tokenPath) {
-    try { _session = issueSession(_tokenPath) } catch { /* keep the expired one: clients are refused */ }
-  }
-  const denied = _session ? checkSession(_session, msg.auth) : ERR.UNAUTHENTICATED
+  _session = currentSession(_session, _tokenPath)
+  const denied = authorize(_session, msg.auth)
   if (denied) return deny(socket, id, denied, 'request denied')
   _clients.add(socket) // only authenticated connections receive pushed events
   const { type } = msg
@@ -354,21 +347,7 @@ export function startIPC({ getState, onNavigate, onPRForBranch, onReviewComments
   }
 
   _server = createServer((socket) => {
-    let buf = ''
-
-    socket.on('data', (chunk) => {
-      buf += chunk.toString()
-      const lines = buf.split('\n')
-      buf = lines.pop() // last element may be incomplete
-      if (buf.length > MAX_MESSAGE_BYTES || lines.some(l => l.length > MAX_MESSAGE_BYTES)) {
-        deny(socket, null, ERR.TOO_LARGE, 'message too large')
-        socket.destroy()
-        return
-      }
-      for (const line of lines) {
-        if (line.trim()) handleMessage(socket, line.trim())
-      }
-    })
+    attachLineReader(socket, line => handleMessage(socket, line))
 
     socket.on('close', () => _clients.delete(socket))
     socket.on('error', () => _clients.delete(socket))

@@ -5,6 +5,7 @@
  * Scrollable view: j/k to scroll, gg/G top/bottom, / to search body
  */
 
+import { logSwallowed } from '../../contain.js'
 import React, { useState, useContext, useMemo, useRef } from 'react'
 import { openUrl } from '../../services/platform.js'
 import { Box, Text, useStdout } from 'ink'
@@ -28,7 +29,9 @@ import { useTheme } from '../../theme.js'
 import { sanitize, TextInput } from '../../utils.js'
 import { Spinner } from '../../components/Spinner.jsx'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
-import { classifyGhFailure } from '../../executor.js'
+import { classifyGhFailure, getFailedLog } from '../../executor.js'
+import { extractExcerpt } from './ci-log.js'
+import { toLogLines } from '../actions/log-lines.js'
 import { PRDetailSkeleton } from '../../components/Skeleton.jsx'
 import { openInEditor, editorLabel } from '../../editor.js'
 import { loadConfig } from '../../config.js'
@@ -40,7 +43,7 @@ import { allowedMergeOptions, ADMIN_MERGE_OPTIONS, mergeMethodLabel, preferredMe
 import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
-import { sortChecks, CHECK_HINTS } from './detail/Checks.jsx'
+import { sortChecks } from './detail/Checks.jsx'
 
 const _editorCfg = loadConfig().editor
 
@@ -75,6 +78,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
   const [checkCursor, setCheckCursor] = useState(null) // null = checks mode off, number = active
   const checkCursorRef = useRef(null)
   const [checkLogLines, setCheckLogLines] = useState([])
+  const [checkLogExcerpt, setCheckLogExcerpt] = useState(null)
   const [checkLogLoading, setCheckLogLoading] = useState(false)
 
   const showStatus = (msg, isError = false, sticky = false) => {
@@ -129,28 +133,52 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     showStatus(`✗ Could not open ${sanitize(check.url)} in the browser`, true)
   }
 
+  const annotationLines = (annotations) => annotations.map(a => {
+    const loc = a.path ? `${a.path}:${a.line || '?'}` : ''
+    const title = a.title ? `[${a.title}] ` : ''
+    return `${a.level?.toUpperCase() || 'NOTE'} ${title}${loc}\n  ${a.message || ''}`
+  }).join('\n').split('\n')
+
   const openCheckLogs = async (check) => {
     if (!check?.id) {
       openCheckInBrowser(check)
       return
     }
     setCheckLogLoading(true)
+    setCheckLogExcerpt(null)
     setDialog('check-logs')
+    const annotationsPromise = getCheckRunAnnotations(repo, check.id)
+    let note = null
+    // A failed check opens on the failure excerpt of its job's log (#463); `f` shows the full failed-step
+    // log, with the check's annotations first. Other checks show their annotations.
+    if (/failure|error/i.test(check.conclusion || check.status || check.state || '')) {
+      try {
+        const log = await getFailedLog(repo, { jobId: check.id })
+        const excerpt = log.state === 'ok' ? extractExcerpt(log.text) : null
+        if (excerpt) {
+          const annotations = await annotationsPromise.catch(() => [])
+          setCheckLogLines([...(annotations?.length ? [...annotationLines(annotations), ''] : []), ...toLogLines(log.text)])
+          setCheckLogExcerpt({ state: 'ok', detail: '', excerpt })
+          setCheckLogLoading(false)
+          return
+        }
+        note = { state: log.state === 'ok' ? 'empty' : log.state, detail: log.detail || 'The failed-step log has no content', excerpt: null }
+      } catch {
+        note = { state: 'unavailable', detail: 'Could not fetch the failed-step log', excerpt: null }
+      }
+      setCheckLogExcerpt(note)
+    }
     try {
-      const annotations = await getCheckRunAnnotations(repo, check.id)
+      const annotations = await annotationsPromise
       if (!annotations || annotations.length === 0) {
         // No annotations — fall back to opening in browser
         setDialog(null)
+        setCheckLogExcerpt(null)
         setCheckLogLoading(false)
         openCheckInBrowser(check, 'No annotations for this check; opened it in the browser')
         return
       }
-      const lines = annotations.map(a => {
-        const loc = a.path ? `${a.path}:${a.line || '?'}` : ''
-        const title = a.title ? `[${a.title}] ` : ''
-        return `${a.level?.toUpperCase() || 'NOTE'} ${title}${loc}\n  ${a.message || ''}`
-      }).join('\n').split('\n')
-      setCheckLogLines(lines)
+      setCheckLogLines(annotationLines(annotations))
     } catch (err) {
       setCheckLogLines([`Error loading annotations: ${err.message}`])
     }
@@ -220,7 +248,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     if (id === 'pr.open-editor' && pr) {
       const files = pr.files || []
       if (files.length > 0) {
-        openInEditor(files[0].path, 1, _editorCfg).catch(() => {})
+        openInEditor(files[0].path, 1, _editorCfg).catch(err => logSwallowed('prs.detail.open-editor', err))
       }
       return
     }
@@ -421,7 +449,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     return (
       <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
         <Text color={t.ui.selected} bold>Change base branch</Text>
-        <Text color={t.ui.dim}>Current: {pr.baseRefName}</Text>
+        <Text color={t.ui.dim}>Current: {sanitize(pr.baseRefName)}</Text>
         <Box marginTop={1} gap={1}>
           <Text color={t.ui.muted}>New base: </Text>
           <TextInput
@@ -493,6 +521,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     return (
       <LogViewer
         lines={checkLogLines}
+        excerpt={checkLogExcerpt}
         onClose={() => setDialog(null)}
       />
     )
@@ -525,19 +554,16 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
         {visibleRows.map(row => row.el)}
       </Box>
 
-      {/* ── Hint line ── */}
+      {/* ── State line: status, scroll position or a conflict notice. Key hints live in the footer only (#468). ── */}
       <Box paddingX={1} justifyContent="space-between" height={1} overflow="hidden">
         {statusMsg
           ? <Text wrap="truncate" color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? '  [any key to dismiss]' : ''}</Text>
-          : checkCursor !== null
-            ? <Text wrap="truncate" color={t.ui.selected}>{hintLine(CHECK_HINTS)}</Text>
-            : maxScroll > 0
-              ? <Text wrap="truncate" color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  {hintLine([['cursor.down', 'scroll'], 'cursor.top'])}</Text>
-              : pr?.mergeable === 'CONFLICTING'
-                ? <Text wrap="truncate" color={t.pr.conflict || t.ci.pending}>{hintLine([['pr.conflicts', 'resolve conflicts'], 'pr.checks', 'pr.diff', 'pr.merge', 'pr.labels', 'pr.assignees', 'pr.reviewers'])}</Text>
-                : <Text wrap="truncate" color={t.ui.dim}>{hintLine(['pr.diff', 'pr.open-editor', ['pr.merge', 'merge/auto-merge'], 'pr.checks', 'pr.labels', 'pr.assignees', 'pr.reviewers'])}</Text>
+          : maxScroll > 0
+            ? <Text wrap="truncate" color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}</Text>
+            : pr?.mergeable === 'CONFLICTING'
+              ? <Text wrap="truncate" color={t.pr.conflict || t.ci.pending}>{hintLine([['pr.conflicts', 'resolve conflicts']])}</Text>
+              : null
         }
-        <Box flexShrink={0} marginLeft={1}><Text color={t.ui.dim}>{hintLine(['list.search', 'app.help', 'app.back'])}</Text></Box>
       </Box>
     </Box>
   )

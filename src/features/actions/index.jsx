@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { toLogLines, logTitle } from './log-lines.js'
+import { loadFailureExcerpt } from '../prs/ci-log.js'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
@@ -71,6 +72,7 @@ export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, ini
   const [logLines, setLogLines] = useState([])
   const [logTitleText, setLogTitle] = useState('Log Viewer')
   const [logLoading, setLogLoading] = useState(false)
+  const [logExcerpt, setLogExcerpt] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
   const lastKeyRef   = useRef(null)
   const lastKeyTimer = useRef(null)
@@ -128,7 +130,11 @@ export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, ini
     if (!run) return
     setLogTitle(logTitle(run))
     setLogLoading(true)
-    setDialog('logs')
+    setLogExcerpt(null)
+    // A failed run opens on its failure excerpt (#463); every other run opens on the full log.
+    const failed = /failure|timed_out/i.test(run.conclusion || '')
+    setDialog(failed ? 'failed-logs' : 'logs')
+    const excerptPromise = failed ? loadFailureExcerpt(repo, { runId: run.databaseId }) : Promise.resolve(null)
     try {
       const rawLogs = await getRunLogs(repo, run.databaseId)
       const lines = toLogLines(rawLogs)
@@ -136,6 +142,7 @@ export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, ini
     } catch (err) {
       setLogLines([`Error loading logs: ${err.message}`])
     }
+    setLogExcerpt(await excerptPromise.catch(() => ({ state: 'unavailable', detail: 'Could not fetch the failed-step log', excerpt: null })))
     setLogLoading(false)
   }, [items, cursor, repo])
 
@@ -207,7 +214,7 @@ export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, ini
     )
   }
 
-  if (dialog === 'logs') {
+  if (dialog === 'logs' || dialog === 'failed-logs') {
     if (logLoading) {
       return (
         <Box flexDirection="column" flexGrow={1} paddingX={1}>
@@ -219,6 +226,7 @@ export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, ini
       <LogViewer
         title={logTitleText}
         lines={logLines}
+        excerpt={dialog === 'failed-logs' ? logExcerpt : null}
         onClose={() => setDialog(null)}
       />
     )

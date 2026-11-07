@@ -117,6 +117,7 @@ export function LabelDialog({ repo, pr, onClose, onError, runWrite }) {
     repo={repo} pr={pr} onClose={onClose} onError={onError} runWrite={runWrite}
     current={pr.labels?.map(label => label.name) || []}
     getOptions={listLabels} field="name" loadingText="Loading labels…"
+    title={`Labels: PR #${pr.number}`}
     kind="label"
   />
 }
@@ -126,6 +127,7 @@ export function AssigneeDialog({ repo, pr, onClose, onError, runWrite }) {
     repo={repo} pr={pr} onClose={onClose} onError={onError} runWrite={runWrite}
     current={pr.assignees?.map(assignee => assignee.login) || []}
     getOptions={listCollaborators} field="login" loadingText="Loading collaborators…"
+    title={`Assignees: PR #${pr.number}`}
     kind="assignee"
   />
 }
@@ -193,7 +195,7 @@ export function ReviewerDialog({ repo, pr, onClose, onError, runWrite }) {
   const names = Object.fromEntries(requests.map(reviewer => [reviewerId(reviewer), reviewer.name || reviewerId(reviewer)]))
   return <PRSelectionDialog
     repo={repo} pr={pr} onClose={onClose} onError={onError} runWrite={runWrite}
-    current={current} names={names} title="Request Reviewers"
+    current={current} names={names} title={`Reviewers: PR #${pr.number}`}
     getOptions={listCollaborators} field="login" loadingText="Loading collaborators…"
     kind="reviewer"
   />

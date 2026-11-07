@@ -3,6 +3,7 @@
  * src/features/prs/diff/highlight.js — language detection and cached terminal syntax highlighting.
  */
 
+import { logSwallowed } from '../../../contain.js'
 import { getHljs } from '../../../highlight.js'
 import { applyThemeStyle, expandTabs } from '../../../utils.js'
 
@@ -141,7 +142,8 @@ export function syntaxHighlight(rawCode, lang, bgColor, t) {
   try {
     const { value } = getHljs().highlight(code, { language: lang, ignoreIllegals: true })
     result = htmlToChalk(value, bgColor, t)
-  } catch {
+  } catch (err) {
+    logSwallowed('prs.diff.highlight', err)
     result = applyThemeStyle(code, t.syntax.default, bgColor)
   }
 

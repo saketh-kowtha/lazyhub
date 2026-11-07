@@ -163,6 +163,99 @@ triage those by exposure and severity regardless of stage.
 effort outrank stars or acquisition. No traction is claimed until pilots (#286)
 produce evidence.
 
+## Structure decisions (2026-10-31, R0 #478)
+
+How the code is organized, and where it is going. Each decision says what **ships
+today** and what is **planned**, so a fresh session never builds on a target as if it
+were the current code. The sections of `docs/ARCHITECTURE.md` describe the code as it is.
+
+### D13 - Focus manager: one key owner
+
+**Decision.** One root `useInput`; an explicit stack of focus entries; only the top
+entry receives keys, then registry-resolved globals. `notifyDialog`,
+`dialogActiveRef` and per-pane `if (dialog) return` are retired.
+
+**Shipped.** `src/keyscope.js` keeps a scope stack (`global < pane < view < overlay
+< dialog < input`); components claim a scope with `useKeyScope` and the root handler
+in `app.jsx` defers to anything above `pane`. Every handler is wrapped by
+`useSafeInput` (`containHandler`, #490), so a throw becomes a toast. Keys resolve
+through the action registry (`[actions.*]` in `defaultConfig.toml`,
+`src/config/actions.js`, `useKeymapInput`).
+
+**Planned (#483 R5, #484 R6).** The focus manager proper: synchronous claims, a
+single owner per key, and removal of `notifyDialog` / `dialogActiveRef`, which still
+exist in `app.jsx` and in every pane that opens a dialog. Until R6 lands,
+a component that opens a dialog still calls `notifyDialog(true/false)`.
+
+### D14 - Query layer
+
+**Decision.** All reads go through `useQuery(key, fetcher)`; all writes through
+`useMutation(fn, {invalidates})`. Structured keys, in-flight dedupe, cancellation,
+a synchronous cache seed, invalidation by key prefix.
+
+**Shipped (under the name `useGh`).** `src/hooks/useGh.js` is the read hook: a key
+built from host, account, function name and arguments; a request generation so only
+the latest request writes state; a synchronous seed from a bounded in-memory LRU
+(200 entries, 48 MB) or the startup mirror of the disk cache; stale-while-revalidate;
+health reporting (`useGhHealth`). `usePendingWrite` guards a write against a double
+submit. Writes invalidate a repository's cached reads coarsely (`invalidateRepoCache`).
+
+**Planned (#480 to #482, #486).** `useQuery` / `useMutation` with structured keys and
+prefix invalidation, in-flight dedupe and cancellation, list-to-detail seeding, and
+the shared list primitives. There is no in-flight dedupe or cancellation today.
+
+### D15 - Services layer
+
+**Decision.** UI code never spawns processes. Browser, clipboard, editor and git go
+through `src/services/`; git writes get the executor's classifier and audit.
+Layer rule: `components/features -> hooks -> services -> executor -> gh/git`.
+
+**Shipped.** `src/services/platform.js` (`openUrl` with an http(s) allow-list,
+clipboard, editor round-trips, configured pane commands), `src/services/editor.js`
+and `src/services/git.js` (every function takes the checkout directory; the clone of
+the viewed repo comes from `findLocalCheckout`). Local git runs through `runGit()`
+(`src/executor/git.js`): `classifyGit` allowlists reads and writes, a write is audited
+before and after and is blocked when the audit log is unavailable. `no-restricted-imports`
+bans `execa` and `child_process` in `features/`, `components/` and `ui/`, a test scans
+the whole tree (spawn sites exist only in `services/`, `executor/`, `bootstrap.js`,
+`daemon/`, `ai/providers/`), and test workers put shims for `open`, `xdg-open`,
+`git`, `pbcopy` and `xclip` at the front of PATH that fail the run when invoked.
+
+**Planned.** The rest of the layer rule is convention, not lint: nothing yet stops a
+component from importing `executor.js` directly (many do), and hooks do not go through
+services. Enforcing `components/features -> hooks -> services -> executor` by lint is
+open.
+
+### D16 - Product principle: fast and complete, not a gh wrapper
+
+(Maintainer, 2026-10-31.) lazyhub must feel instant and must never silently hide
+data, on repositories with thousands of open PRs, 80K closed PRs, 400-comment
+conversations and 100k-line diffs.
+
+1. **Render only what is visible:** every list, diff, log and thread is windowed.
+2. **Fetch only what is needed, page by page:** cursor pages that are appended and
+   never refetched; slim list rows; details load for the selected item.
+3. **Never block on the network for something we can predict:** a skeleton within one
+   frame, seeding from cache, prefetch of the likely next view.
+4. **Never silently truncate:** a list is complete, paged with "N of M / more", or
+   capped by GitHub with a notice and a path to the rest.
+5. **Measured, not claimed:** the budgets are a CI gate; a PR that regresses one is
+   not merged.
+
+**Shipped.** Cursor paging with a visible "more" for the PR, issue and review-thread
+lists (#506 to #508); a chunked, bounded diff load (#509); windowed rows in the
+PR conversation, the pickers and the fuzzy finder (`useVirtualList`) and the list panes; stale-while-revalidate seeding (#454, #455); the daemon is never
+awaited before the first frame (#491). `src/paging-audit.test.js` pins every
+fixed-size `gh` call with the reason it is complete, so a new silent cap fails
+`npm test` (#510, part). A PTY flow measures cold start to first frame with a hung helper, and
+`npm run test:memory` (`LAZYHUB_SCALE=1`) scrolls a 1,200-PR list and a 1,000-file diff under a memory cap.
+
+**Planned (the rest of #510).** Seeded large-data fixtures (5,000 open PRs, a 3,000-file
+diff, 250 checks, 600 notifications), PTY latency budgets against a slow fake `gh`,
+exact `getGhCallHistory()` counts per action, and a dedicated `Performance budget`
+CI job. Principle 3 (prefetch on cursor rest, detail to diff) is #482 and is not built.
+Until then, "measured" is true only for what the existing tests cover.
+
 ## How to read an issue body
 
 Every V1/V2/V3 issue is intended to be **executed in a single Claude session**
@@ -218,6 +311,19 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
   `\\.\pipe\lazyhub-<user>`. On crash, stale Unix socket files are cleaned on
   next attach attempt.
 - **Tracked in:** Phase K #145.
+
+**Current behaviour (recorded 2026-10-31, R0 #478; D9 still governs).** The TUI does
+not spawn the helper before it has drawn. `bin/lazyhub.js` renders first, then
+`scheduleDaemon()` (`src/daemon/lifecycle.js`) runs about 100 ms later in the background:
+it probes the socket and, if nothing answers, spawns `lazyhub serve --json` detached with
+a minimal environment (`daemonSpawnEnv`). It never runs for an untrusted agent context (no
+TTY on stdin or stdout, or an agent marker in the environment), and `LAZYHUB_NO_DAEMON=1`
+or `agent.auto_spawn_daemon = false` turns it off. Until the helper answers, reads go
+straight to `gh`; a failed helper read pauses helper use for 30 s and shows "running
+without the background helper" in the status bar. So "auto-spawn on first call" above
+is superseded twice: by D9 (no privileged auto-spawn from an untrusted context) and by
+this lazy, after-first-frame start. Control messages (`stop`, `invalidate`, `revoke`) need
+the per-run session token.
 
 ## Decision 4 — MCP server registration (superseded by D5 and D9)
 
@@ -289,7 +395,7 @@ If something is missing or ambiguous, open the issue thread and ask — don't gu
 
 - **Why:** this repo now has a meaningful mix of unit tests and mocked TUI interaction tests, but regressions still slip through when coverage is invisible. A hard floor makes "tests passed" less hollow, and the PR report gives reviewers a quick read on what changed.
 - **How:** keep Vitest config in `vite.config.js`, use `@vitest/coverage-v8` pinned to the same major/minor line as Vitest 3, and emit `text`, `json-summary`, `json`, and `html` reports. CI runs the full Vitest suite with coverage enabled and compares PR coverage against the base branch with `davelosert/vitest-coverage-report-action@v2`.
-- **Current floors:** statements `48`, branches `58`, functions `45`, lines `48`. They are set from the current cross-platform baseline, not from one local run. Raise them intentionally as coverage improves; don't quietly lower them to get a PR green.
+- **Current floors (`vite.config.js`):** statements `69`, branches `70`, functions `69`, lines `69` overall, plus per-directory floors for `src/cli/**` (85/78/84/85, statements/branches/functions/lines) and `src/daemon/**` (82/78/82/82). They sit under the measured baseline with a CI/platform margin, not at one local run. Raise them intentionally as coverage improves; don't quietly lower them to get a PR green. (The earlier floors of 48/58/45/48 in this section were long out of date.)
 - **Scope:** enforce thresholds against `src/**/*.{js,jsx}` with tests and support helpers excluded. Do not expand the gate to docs, build scripts, or editor integrations unless a future issue explicitly asks for that.
 - **Tracked in:** #138.
 
@@ -308,7 +414,9 @@ sessions don't need conversation history to know them.
 2. **`src/ai/providers/anthropic-api.js` is the only file that makes Anthropic HTTP calls.**
 3. **Subprocess discipline:** `execa` only, args always as arrays. Never shell
    strings / shell interpolation. Prompts via stdin, never argv. All `gh` calls
-   go through `runGh()` in `src/executor.js` (the single chokepoint).
+   go through `runGh()` in `src/executor/core.js` (the single chokepoint); all local
+   `git` calls go through `runGit()` in `src/executor/git.js`; UI code reaches the OS
+   only through `src/services/` (D15).
 4. **Curated env for AI subprocesses:** PATH / HOME / USER only. Never leak
    `ANTHROPIC_API_KEY` or `GH_TOKEN` to non-Anthropic CLIs.
 5. **Every AI call goes through `logAiUsage()`** for cost tracking and audit.
@@ -320,6 +428,10 @@ sessions don't need conversation history to know them.
 10. **Coverage plugin version must track Vitest's line.** If Vitest stays on 3.x, `@vitest/coverage-v8` stays on 3.x too.
 11. **User config examples must use TOML.** The runtime source of truth is `~/.config/lazyhub/lazyhub.toml`; do not document `settings.json` or root-level JSON config snippets as current behavior.
 12. **Default shell assumptions matter in docs/tests.** On default config, the app starts on `focus` and the active panes are `focus`, `prs`, `issues`, `branches`, `actions`, `notifications` unless a spec explicitly overrides them.
+13. **Fast and complete (D16).** Windowed rendering, page-by-page fetching, and no
+    silent truncation: a list is complete, paged with a visible "more", or capped with a
+    notice and a path to the rest. A new fixed-size `gh` call must be added to
+    `src/paging-audit.test.js` with the reason it is complete.
 
 ## Spec discipline for fresh sessions
 

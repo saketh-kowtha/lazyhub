@@ -9,15 +9,17 @@ import { ConflictView } from './ConflictView.jsx'
 import { useActiveScope } from '../../keyscope.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from '../../test/test-helpers.jsx'
 
-vi.mock('../../executor.js', () => ({
-  getCurrentBranch: vi.fn(async () => 'feature'),
-  checkoutBranch: vi.fn(),
+vi.mock('../../executor.js', () => ({ checkoutBranch: vi.fn() }))
+vi.mock('../../services/git.js', () => ({
+  findLocalCheckout: vi.fn(async () => ({ dir: '/w', remote: 'origin' })),
+  noLocalCheckoutMessage: repo => `No local checkout of ${repo} here`,
+  currentBranch: vi.fn(async () => 'feature'),
   isInMerge: vi.fn(async () => true),
-  getConflictedFiles: vi.fn(async () => [{ path: 'a.js' }]),
-  countFileConflicts: vi.fn(async () => 0), // no markers left: every file counts as staged
-  gitAdd: vi.fn(), gitUnstage: vi.fn(), gitMergeAbort: vi.fn(), gitCommit: vi.fn(), gitMergeBranch: vi.fn(),
-  getMergeCommitMessage: vi.fn(async () => 'Merge branch main'),
-  pushBranch: vi.fn(),
+  conflictedFiles: vi.fn(async () => [{ path: 'a.js' }]),
+  countConflictMarkers: vi.fn(async () => 0), // no markers left: every file counts as staged
+  stage: vi.fn(), unstage: vi.fn(), mergeAbort: vi.fn(), commit: vi.fn(), mergeBranch: vi.fn(),
+  mergeMessage: vi.fn(async () => 'Merge branch main'),
+  push: vi.fn(),
 }))
 vi.mock('../../editor.js', () => ({ openInEditor: vi.fn() }))
 

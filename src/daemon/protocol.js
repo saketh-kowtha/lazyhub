@@ -253,6 +253,35 @@ export function classifyGh(args) {
   }
 }
 
+// ─── Local git classification (fail closed) ──────────────────────────────────
+// The git counterpart of classifyGh: the one list of what runGit() may run. Reads change nothing;
+// writes move refs, the index, the working tree or a remote and are audited; everything else,
+// including any global option before the subcommand (`-c`, `-C`, `--exec-path`), is refused.
+
+const GIT_READ_COMMANDS = new Set(['rev-parse', 'status', 'log'])
+const GIT_WRITE_COMMANDS = new Set(['checkout', 'push', 'add', 'restore', 'commit', 'merge', 'fetch'])
+
+/**
+ * Classify a git argv (the part after `git`). Never throws; any failure classifies as 'unknown'.
+ *
+ * @param {unknown} args
+ * @returns {'read'|'write'|'unknown'}
+ */
+export function classifyGit(args) {
+  try {
+    if (!Array.isArray(args) || args.length === 0 || args.some(a => typeof a !== 'string' || a.includes('\0'))) return 'unknown'
+    const [cmd, ...rest] = args
+    if (cmd.startsWith('-')) return 'unknown'
+    if (cmd === 'branch') return rest.length === 1 && rest[0] === '--show-current' ? 'read' : 'unknown'
+    if (cmd === 'remote') return rest.length === 1 && rest[0] === '-v' ? 'read' : 'unknown'
+    if (GIT_READ_COMMANDS.has(cmd)) return 'read'
+    if (GIT_WRITE_COMMANDS.has(cmd)) return 'write'
+    return 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
 /**
  * True only for typed read ops, the sole cacheable operations.
  *

@@ -18,7 +18,7 @@ import { useTheme } from '../../theme.js'
 import { sanitize } from '../../utils.js'
 
 // Shell shown while options load, fail or save: Esc always closes, r retries.
-function PickerStatus({ children, onCancel, onRetry = undefined, padding = 0 }) {
+function PickerStatus({ children, title = '', onCancel, onRetry = undefined, padding = 0 }) {
   const { t } = useTheme()
   useKeyScope('dialog')
   useInput((input, key) => {
@@ -27,13 +27,14 @@ function PickerStatus({ children, onCancel, onRetry = undefined, padding = 0 }) 
   })
   return (
     <Box flexDirection="column" paddingX={padding}>
+      {title ? <Text color={t.ui.selected} bold>{title}</Text> : null}
       {children}
       <Text color={t.ui.dim}>{onRetry ? `[${firstActionKey('list.refresh', 'r')}] retry  ` : ''}[Esc] close</Text>
     </Box>
   )
 }
 
-function IssueSelectionDialog({ repo, issue, current: currentNow, getOptions, field, kind, loadingText, onClose, onError, loadingPadding = 0 }) {
+function IssueSelectionDialog({ repo, issue, current: currentNow, getOptions, field, kind, loadingText, title = '', onClose, onError, loadingPadding = 0 }) {
   const { t } = useTheme()
   // The diff base is what the issue had when the dialog opened; a refetch behind it must not move it.
   const [current] = useState(currentNow)
@@ -46,13 +47,13 @@ function IssueSelectionDialog({ repo, issue, current: currentNow, getOptions, fi
   const hasOptions = Array.isArray(options) && options.length > 0
 
   if (saving) {
-    return <PickerStatus onCancel={dismiss} padding={loadingPadding}><Text color={t.ui.muted}>Updating #{issue.number}...</Text></PickerStatus>
+    return <PickerStatus title={title} onCancel={dismiss} padding={loadingPadding}><Text color={t.ui.muted}>Updating #{issue.number}...</Text></PickerStatus>
   }
   if (loading && !hasOptions) {
-    return <PickerStatus onCancel={onClose} padding={loadingPadding}><Text color={t.ui.muted}>{loadingText}</Text></PickerStatus>
+    return <PickerStatus title={title} onCancel={onClose} padding={loadingPadding}><Text color={t.ui.muted}>{loadingText}</Text></PickerStatus>
   }
   if (error && !hasOptions) {
-    return <PickerStatus onCancel={onClose} onRetry={refetch} padding={loadingPadding}><FailureNotice failure={classifyGhFailure(error)} />
+    return <PickerStatus title={title} onCancel={onClose} onRetry={refetch} padding={loadingPadding}><FailureNotice failure={classifyGhFailure(error)} />
       <Text color={t.ui.dim}>{`  ${sanitize(String(error?.message || '').split('\n').find(line => line.trim()) || '').slice(0, 100)}`}</Text></PickerStatus>
   }
 
@@ -74,6 +75,7 @@ function IssueSelectionDialog({ repo, issue, current: currentNow, getOptions, fi
   const truncated = field === 'login' && collaboratorsTruncated(options)
   const picker = (
     <MultiSelect
+      title={title}
       items={items}
       onSubmit={async (selectedIds) => {
         if (submitted.current) return
@@ -105,7 +107,7 @@ export function IssueLabelDialog({ repo, issue, onClose, onError, loadingPadding
   return <IssueSelectionDialog
     repo={repo} issue={issue} onClose={onClose} onError={onError} loadingPadding={loadingPadding}
     current={issue.labels?.map(l => l.name) || []}
-    getOptions={listLabels} field="name" kind="label" loadingText="Loading labels..."
+    getOptions={listLabels} field="name" kind="label" loadingText="Loading labels..." title={`Labels: issue #${issue.number}`}
   />
 }
 
@@ -113,6 +115,6 @@ export function IssueAssigneeDialog({ repo, issue, onClose, onError, loadingPadd
   return <IssueSelectionDialog
     repo={repo} issue={issue} onClose={onClose} onError={onError} loadingPadding={loadingPadding}
     current={issue.assignees?.map(a => a.login) || []}
-    getOptions={listCollaborators} field="login" kind="assignee" loadingText="Loading collaborators..."
+    getOptions={listCollaborators} field="login" kind="assignee" loadingText="Loading collaborators..." title={`Assignees: issue #${issue.number}`}
   />
 }

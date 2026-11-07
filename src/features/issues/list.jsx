@@ -4,6 +4,7 @@
  * Issue list controller: query, filters, cursor, input and dialog lifecycle.
  */
 
+import { logSwallowed } from '../../contain.js'
 import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
 import { openUrl, copyToClipboard } from '../../services/platform.js'
 import { useStdout } from 'ink'
@@ -130,7 +131,8 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
           added: added && keep && sortMode !== 'oldest' ? [row, ...base.added] : base.added,
         }
       })
-    } catch {
+    } catch (err) {
+      logSwallowed('issues.list.optimistic-insert', err)
       refetch()
     }
   }, [repo, filterState, sortMode, pageKey, refetch])

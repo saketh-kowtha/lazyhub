@@ -5,18 +5,20 @@
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConflictView } from './ConflictView.jsx'
-import { gitCommit, gitUnstage, gitMergeAbort, pushBranch, getConflictedFiles, countFileConflicts } from '../../executor.js'
+import { commit, unstage, mergeAbort, push, conflictedFiles, countConflictMarkers } from '../../services/git.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from '../../test/test-helpers.jsx'
 
-vi.mock('../../executor.js', () => ({
-  getCurrentBranch: vi.fn(async () => 'feature'),
-  checkoutBranch: vi.fn(),
+vi.mock('../../executor.js', () => ({ checkoutBranch: vi.fn() }))
+vi.mock('../../services/git.js', () => ({
+  findLocalCheckout: vi.fn(async () => ({ dir: '/w', remote: 'origin' })),
+  noLocalCheckoutMessage: repo => `No local checkout of ${repo} here`,
+  currentBranch: vi.fn(async () => 'feature'),
   isInMerge: vi.fn(async () => true),
-  getConflictedFiles: vi.fn(async () => [{ path: 'a.js' }]),
-  countFileConflicts: vi.fn(async () => 0),
-  gitAdd: vi.fn(), gitUnstage: vi.fn(), gitMergeAbort: vi.fn(), gitCommit: vi.fn(), gitMergeBranch: vi.fn(),
-  getMergeCommitMessage: vi.fn(async () => 'Merge branch main'),
-  pushBranch: vi.fn(),
+  conflictedFiles: vi.fn(async () => [{ path: 'a.js' }]),
+  countConflictMarkers: vi.fn(async () => 0), // no markers left: every file counts as staged
+  stage: vi.fn(), unstage: vi.fn(), mergeAbort: vi.fn(), commit: vi.fn(), mergeBranch: vi.fn(),
+  mergeMessage: vi.fn(async () => 'Merge branch main'),
+  push: vi.fn(),
 }))
 vi.mock('../../editor.js', () => ({ openInEditor: vi.fn(async () => {}) }))
 
@@ -25,8 +27,8 @@ describe('ConflictView double submit (#453)', () => {
 
   it('commits and pushes once when Enter is pressed twice in a row', async () => {
     let release
-    gitCommit.mockReturnValue(new Promise(r => { release = r }))
-    pushBranch.mockResolvedValue(undefined)
+    commit.mockReturnValue(new Promise(r => { release = r }))
+    push.mockResolvedValue(undefined)
     const view = renderWithProviders(
       <ConflictView pr={{ number: 5, url: 'https://example.test/pr/5', headRefName: 'feature' }} repo="o/r" onBack={() => {}} onResolved={() => {}} />
     )
@@ -34,18 +36,18 @@ describe('ConflictView double submit (#453)', () => {
     await flush(20)
     view.stdin.write('\r')
     view.stdin.write('\r')
-    await waitForExpectation(() => expect(gitCommit).toHaveBeenCalled())
+    await waitForExpectation(() => expect(commit).toHaveBeenCalled())
     await flush(40)
-    expect(gitCommit).toHaveBeenCalledTimes(1)
+    expect(commit).toHaveBeenCalledTimes(1)
     release()
-    await waitForExpectation(() => expect(pushBranch).toHaveBeenCalledTimes(1))
+    await waitForExpectation(() => expect(push).toHaveBeenCalledTimes(1))
   })
 
   it('shows a pending status while an unstage runs', async () => {
     let release
-    gitUnstage.mockReturnValue(new Promise(r => { release = r }))
-    countFileConflicts.mockResolvedValue(0)
-    getConflictedFiles.mockResolvedValue([{ path: 'a.js', staged: false }])
+    unstage.mockReturnValue(new Promise(r => { release = r }))
+    countConflictMarkers.mockResolvedValue(0)
+    conflictedFiles.mockResolvedValue([{ path: 'a.js', staged: false }])
     const view = renderWithProviders(
       <ConflictView pr={{ number: 5, url: 'https://example.test/pr/5', headRefName: 'feature' }} repo="o/r" onBack={() => {}} onResolved={() => {}} />
     )
@@ -58,8 +60,8 @@ describe('ConflictView double submit (#453)', () => {
 
   it('keeps a pending message when an earlier 4 s status timer expires', async () => {
     let release
-    gitUnstage.mockReturnValue(new Promise(r => { release = r }))
-    getConflictedFiles.mockResolvedValue([{ path: 'a.js' }])
+    unstage.mockReturnValue(new Promise(r => { release = r }))
+    conflictedFiles.mockResolvedValue([{ path: 'a.js' }])
     const view = renderWithProviders(
       <ConflictView pr={{ number: 5, url: 'https://example.test/pr/5', headRefName: 'feature' }} repo="o/r" onBack={() => {}} onResolved={() => {}} />
     )
@@ -76,8 +78,8 @@ describe('ConflictView double submit (#453)', () => {
 
   it('closes the abort confirm at once and announces the pending abort', async () => {
     let release
-    gitMergeAbort.mockReturnValue(new Promise(r => { release = r }))
-    getConflictedFiles.mockResolvedValue([{ path: 'a.js' }])
+    mergeAbort.mockReturnValue(new Promise(r => { release = r }))
+    conflictedFiles.mockResolvedValue([{ path: 'a.js' }])
     const view = renderWithProviders(
       <ConflictView pr={{ number: 5, url: 'https://example.test/pr/5', headRefName: 'feature' }} repo="o/r" onBack={() => {}} onResolved={() => {}} />
     )
@@ -89,7 +91,7 @@ describe('ConflictView double submit (#453)', () => {
     view.stdin.write('y')
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Aborting merge'))
     expect(view.lastFrame()).not.toContain('Abort merge?')
-    expect(gitMergeAbort).toHaveBeenCalledTimes(1)
+    expect(mergeAbort).toHaveBeenCalledTimes(1)
     release()
   })
 })

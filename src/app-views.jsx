@@ -363,6 +363,15 @@ export function renderAppView(ctx) {
     'cancel-run':    DIALOG_KEYS.confirm,
     'mark-all':      DIALOG_KEYS.confirm,
     'logs':          DIALOG_KEYS.logs,
+    'failed-logs':   DIALOG_KEYS.failedLogs,
+    // Confirms and forms opened from list panes (#468): same hints as their siblings above.
+    'merge-confirm': DIALOG_KEYS.confirm,
+    'auto-merge':    DIALOG_KEYS.confirm,
+    'close':         DIALOG_KEYS.confirm,
+    'delete':        DIALOG_KEYS.confirm,
+    'rerun':         DIALOG_KEYS.confirm,
+    'cancel':        DIALOG_KEYS.confirm,
+    'new':           DIALOG_KEYS.compose,
   }
 
   const listFooter = (() => {
@@ -383,18 +392,22 @@ export function renderAppView(ctx) {
         )}
         <Box flexDirection="row" flexGrow={1} overflow="hidden">
           {showSidebar && (
-            <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
-              paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
-              borderRight={false}
-              onSelect={paneSwitch}
-              height={rows - (compactFooter ? 2 : 3)}
-            />
+            <ErrorBoundary section="Sidebar">
+              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
+                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
+                borderRight={false}
+                onSelect={paneSwitch}
+                height={rows - (compactFooter ? 2 : 3)}
+              />
+            </ErrorBoundary>
           )}
 
           <Box flexDirection="column" flexGrow={1} overflow="hidden"
                borderStyle={borderStyle || 'round'}
                borderColor={t.ui.borderActive}>
-            <PaneHeader pane={pane} count={paneState.count} loading={paneState.loading} error={paneState.error} isStale={paneState.isStale} />
+            <ErrorBoundary section="Pane header">
+              <PaneHeader pane={pane} count={paneState.count} loading={paneState.loading} error={paneState.error} isStale={paneState.isStale} />
+            </ErrorBoundary>
             <Box flexGrow={1} flexDirection="column" overflow="hidden">
               <ErrorBoundary>
                 {renderListPane()}

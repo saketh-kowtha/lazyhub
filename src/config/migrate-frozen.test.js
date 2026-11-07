@@ -143,7 +143,7 @@ describe('stripFrozenDefaults', () => {
 })
 
 describe('legacy-defaults.js covers every shipped revision of defaultConfig.toml', () => {
-  const run = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'ignore'] })
+  const run = (...args) => execFileSync(process.env.LAZYHUB_REAL_GIT || 'git', args, { encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'ignore'] })
   let shas = []
   try { shas = run('log', '--full-history', '--format=%H', '--', 'src/config/defaultConfig.toml').trim().split('\n').filter(Boolean) } catch { /* no history available */ }
   // A shallow clone cannot see old revisions; the working-tree check below still runs.

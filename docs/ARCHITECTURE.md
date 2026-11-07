@@ -1,87 +1,108 @@
 # lazyhub — Architecture & Point of Truth
 
-> **Purpose of this file:** Single source of truth for any AI coding assistant or human contributor. Read this before touching any file. It documents every architectural decision, every known bug (with root cause + fix), and every invariant.
+> **Purpose of this file:** how the code is organized today: layers, state ownership, key routing, data flow, process model and invariants (§1 to §6), plus the frozen bug-fix log (§21). Cross-cutting decisions, and what is shipped versus planned, are in `docs/ARCHITECT_DECISIONS.md`; newer bug fixes are in `docs/bugs/`.
 
 ---
 
-## 1. The Core Vision
-lazyhub is a terminal-based UI for GitHub, heavily inspired by the keyboard-driven UX of `lazygit`.
-- **Pure ESM**: Modern Node.js architecture.
-- **Ink-Powered**: React-based TUI framework.
-- **gh-CLI First**: All GitHub operations MUST happen via the official `gh` CLI.
+## 1. Layers
 
----
+lazyhub is a pure-ESM Node program: an Ink (React) terminal UI over the official `gh` CLI. This section and the next five describe the code as it is today; the target structure and what is still planned are in the "Structure decisions" section of `docs/ARCHITECT_DECISIONS.md` (D13 to D16). Where the two differ, that section says which is which.
 
-## 2. Elite CI/CD & Staging Strategy
-
-We use an **Enterprise Staging Model** to ensure 100% stable production releases.
-
-| Branch | Action | Purpose |
-| :--- | :--- | :--- |
-| **Feature** | PR to `main` | Primary integration area. |
-| **`main`** | **Release PR** | When ready to ship, `workflow_dispatch` opens a PR from `main` to a new release branch. |
-| **`release`** | **Promotion** | Merging the release PR into `main` triggers production deploy. |
-
-### The "Circular Sync" Pattern
-To prevent merge conflicts and "branch drift":
-1. **Prep**: Bot opens PR from `main` -> `release` with AI docs + version bump.
-2. **Deploy**: Merging `release` -> `main` creates Tag + Publishes.
-3. **Sync**: Bot automatically opens a **Sync PR** from `main` back to `release` to keep staging in sync with production.
-
----
-
-## 3. Branch Protection (Ruleset enforced)
-
-| Setting | `main` | `release` |
+| Layer | Where | Owns |
 |---|---|---|
-| Required checks | Test (Node 20/22), Dependency audit | same |
-| strict (up-to-date) | `false` | `true` |
-| Required reviews | 1 approval, dismiss stale | + admin review |
-| Linear history | yes | yes |
-| Force push | **BLOCKED** | **BLOCKED** |
-| Deletions | blocked | blocked |
-| enforce_admins | yes | yes |
+| Entry | `bin/lazyhub.js` | argument fast paths (`--version`, `--debug-state`, `perf report`, `--mcp`, `doctor`, `feedback`, `watch-only`, `serve`), crash handlers, config load, the editor socket, `renderApp()` |
+| Bootstrap | `src/bootstrap.js` | before any UI: is `gh` installed and signed in, which repository, onboarding |
+| Shell | `src/app.jsx`, `app-views.jsx`, `app-panels.jsx`, `app-keys.js` | the root component, the view tree (list, detail, diff, comments, conflict, settings, logs, overlays), global keys, footer and help text |
+| Features | `src/features/{prs,issues,branches,actions,notifications,tabs,settings,logs,onboarding}/` | one pane each: list, detail and dialogs; controllers hold state, `*-view.jsx` / `render.jsx` files draw |
+| Shared UI | `src/components/`, `src/ui/` | dialogs (`components/dialogs/`), status bar, footer, error boundary, popover, which-key; the action registry for the palette (`ui/actions.js`) |
+| Hooks | `src/hooks/` | `useGh` (reads), `useGhHealth`, `usePendingWrite`, `useLayout` / `useTerminalSize`, `useVirtualList`, `useSafeInput` |
+| Config and theme | `src/config/`, `src/theme/`, `src/themes/` | TOML config, the action and keymap registry, theme tokens (`useTheme()`) |
+| Services | `src/services/` | the only way UI code reaches the OS: `platform.js` (browser, clipboard, configured pane commands), `editor.js`, `git.js` (local git, always given the checkout directory) |
+| Executor | `src/executor.js` (barrel), `src/executor/` | `runGh()` and `runGit()`: classification, audit of writes, timeouts, concurrency, error typing; the typed GitHub calls (`prs.js`, `issues.js`, ...); `classify.js` turns a failure into a plain-language message |
+| Background | `src/daemon/`, `src/ipc.js`, `src/cli/`, `src/watch-only/`, `src/mcp.js` | the optional helper process and its protocol, the editor socket, the non-TUI commands |
+| AI | `src/ai/` | provider abstraction; `providers/anthropic-api.js` is the only Anthropic HTTP caller |
+
+The intended direction is `components/features -> hooks -> services -> executor -> gh/git`. What is enforced today: UI directories cannot import `execa` or `child_process` (lint and a source scan), spawn sites exist only in `services/`, `executor/`, `bootstrap.js`, `daemon/` and `ai/providers/` (test), and `useTheme()` is required over a static theme import. What is only convention: features and components import `executor.js` directly, and hooks do not go through services.
+
+CI, branch protection and release flow are documented in `docs/CI_SIMPLIFICATION.md` and `docs/RELEASING.md`; the workflow files under `.github/workflows/` are the source of truth.
 
 ---
 
-## 4. Required Secrets
+## 2. State ownership
 
-| Secret | Used by | Purpose |
+| State | Owner | Lifetime |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | `release.yml`, `claude-review.yml` | AI Code Reviews & Release Notes |
-| `GEMINI_API_KEY` | `release.yml`, `growth-engine.yml` | AI Architecture Docs & Marketing |
-| `NPM_TOKEN` | `publish.yml` | `npm publish` authorization |
-| `TAP_TOKEN` | `publish.yml` | Homebrew formula updates |
-| `GITHUB_TOKEN` | all workflows | GitHub Actions built-in |
+| Active pane, view (list, detail, diff, comments, conflict, settings, logs), selected item, overlays (help, palette, AI), toasts, the app mode | `App` in `src/app.jsx` | the session |
+| Per-pane report for the shell (`count`, `loading`, `error`, `dialogHint`, `actionCtx`) | each pane calls `onPaneState`; `App` keeps `paneState` | while the pane is mounted |
+| Cursor, scroll offset, filters, search text, open dialog | the pane's controller (`list.jsx`, `detail.jsx`, ...) | while mounted; `usePaneState` keeps list state across a detail round trip and `App` clears it on an explicit pane switch |
+| Dashboard section and row selection | `selectionMemory` in `features/tabs/view.jsx`, so a detail round trip restores it | the session |
+| Fetched data | `useGh` caches: an in-memory LRU (200 entries, 48 MB), then the disk cache under `~/.cache/lazyhub/data/` mirrored in memory at startup | memory for the session, disk across runs |
+| Key scope stack | `KeyScopeProvider` in `src/keyscope.js` | the session |
+| A dialog is open (suppresses global keys) | `dialogActiveRef` in `App`, set through `notifyDialog(true/false)`; every component that opens a dialog must call it | planned for removal (D13) |
+| gh health (failing calls) and the daemon-fallback notice | module state behind `useGhHealth` and `src/daemon/fallback.js`, shown by the status bar | the session |
+| In-flight write | `usePendingWrite` in the view that started it | until it settles |
+| Contained handler errors and absorbed errors | `src/contain.js` (toast; `logSwallowed` ring) | six seconds / the session |
+| Config | `~/.config/lazyhub/lazyhub.toml`, loaded by `src/config/loader.js`; the registry in `src/config/actions.js` | read at start, saved from Settings |
+| Theme | `ThemeProvider`; switched hot | the session |
+
+Rule of thumb: a pane owns what only it shows; `App` owns what changes the whole screen; nothing outside the executor and `useGh` owns GitHub data.
 
 ---
 
-## 5. Development Invariants
+## 3. Key routing
 
-1. **`src/executor/core.js` is the only implementation file that calls `gh`**. Public imports still go through `src/executor.js`, which is a barrel over the split executor modules.
-2. **`useTheme()` not `import { t }`** — always use the hook in components.
-3. **FuzzySearch always gets objects**, never strings.
-4. **GraphQL integer variables use `-F`**, string variables use `-f`.
-5. **`notifyDialog(true/false)`** must be called by any component that opens/closes a dialog.
-6. **`ErrorBoundary` wraps every view branch** in `app.jsx`.
-7. **`sanitize()`** every string from GitHub API before rendering in Ink components.
-8. **`src/ai/providers/anthropic-api.js` is the only file that makes Anthropic HTTP calls. All AI calls (any provider) go through `src/ai/index.js`.**
+1. Ink delivers a key to every `useInput` handler. App code imports `useInput` only from `src/hooks/useSafeInput.js`, which wraps the handler in `containHandler`: a throw (or a rejected promise) becomes a toast in the status bar and the app keeps running.
+2. Components that own keys claim a scope with `useKeyScope` (`global < pane < view < overlay < dialog < input`). The root handler in `app.jsx` returns early when the active scope is above `pane` or when `dialogActiveRef` is set, so a dialog or text field never also triggers a global key. A few keys always fire (`Ctrl+A` AI assistant, the debug dump).
+3. A key is resolved through the registry, not by letter: `[actions.*]` in `src/config/defaultConfig.toml` (rebindable through `[keymaps.*]`) is read by `src/config/actions.js` (`matchesAction`, `hintLine`) and `src/config/keymap.js` (`useActionResolver`, `useKeymapInput`). `useKeymapInput` first lets an armed prefix (`g`) consume the key. Panes resolve in their own scope (`pr-list`, `pr-detail`, `tab-list`, `pr-checks`, ...).
+4. The footer, the `?` help, the command palette and the which-key popup are generated from the same registry (`ui/actions.js`, `app-keys.js`), so a rebind changes what they show. A key advertised in a hint must have a handler, and the reverse (`src/config/key-ownership.test.js`).
+5. Digits jump to the Nth pane from list views only; `g` followed by `h`, `p`, `i`, `b`, `a`, `n` jumps by name; `<Space>` is the leader. Details are in `docs/mockups/keymap-canonical.md`.
+6. A view branch is wrapped in an `ErrorBoundary` (render crashes show a reset screen, not an exit); the sidebar and pane header have their own one-line boundaries.
 
 ---
 
-## 6. Quality Control (Deterministic)
+## 4. Data flow
 
-- **Dead Code:** Run `npx knip` to find unused files and exports.
-- **Architectural Linting:** `npm run lint` enforces the "Executor Pattern".
-- **Validation:** Always run `npm test` before any PR merge.
-- **PTY Acceptance:** `npm run test:pty` exercises the built CLI in a real pseudo-terminal. Locally it skips (exit 0) when `node-pty` cannot spawn; under `CI` that is a failure, so a green CI job always ran the flows. `ensureSpawnHelperExecutable()` (`test/pty/fixtures.js`) restores the execute bit node-pty 1.1.0 ships off on its macOS `spawn-helper`. It covers smoke navigation plus crash restoration, degraded `gh` recovery, opt-in perf writes, and stale-while-revalidate cache first-frame behavior.
+Reads: a pane calls `useGh(fetchFn, deps)`. The hook seeds synchronously from memory or the disk-cache mirror (stale-while-revalidate), then calls the executor function. That calls `runGh(args)`:
 
-## 7. Runtime Resilience & Performance
+1. `classifyGh(args)` labels the argv `read`, `write` or `unknown`; `unknown` is refused (fail closed).
+2. A typed read may be served by the daemon when one is reachable (`toTypedRead`); on any daemon failure it falls back to a direct `gh` and the status bar says so.
+3. Otherwise `gh` runs with an array argv, a timeout (30 s by default) and a bounded number of concurrent children (4). Output is parsed; a failure is a typed `GhError` with redacted stderr.
+4. `useGh` stores the result in both caches and reports success or failure to `useGhHealth`; a failure is also turned into a plain-language `Failure` by `executor/classify.js`.
 
-- Fatal crashes install handlers before Ink renders. The shared `src/crash.js` restore path leaves the alternate screen, shows the cursor, disables mouse tracking/raw mode where possible, and prints the bug-report pointer.
-- `useGh()` serves stale-while-revalidate data from `~/.cache/lazyhub/data/` when available, then refreshes in the background. Corrupt cache files are misses; mutation paths invalidate the affected repo cache coarsely.
-- `useGhHealth()` tracks failed gh-backed calls globally. The status bar renders a sanitized degraded-state banner with retry guidance and clears automatically after successful refreshes.
-- `LAZYHUB_PERF=1` records `runGh()` duration and keypress-to-render latency to `~/.cache/lazyhub/perf.ndjson`. `lazyhub perf report` summarizes count, p50, p95, and max per operation.
+Lists are fetched page by page with cursors and appended; every fixed-size call is listed with its reason in `src/paging-audit.test.js`.
+
+Writes: the UI asks for confirmation (default No for destructive ones), then runs the mutation through `usePendingWrite` (one in flight, a pending status). `runGh` writes an `intent` audit entry first (and blocks the write if it cannot), runs `gh`, drops the repository's cached reads, invalidates the daemon cache and writes a `result` entry. Local git follows the same path through `runGit()` in `executor/git.js`. There is no fallback to a direct `gh` call for a write.
+
+Rendering: every string that came from GitHub passes through `sanitize()` before it is drawn; colors come from `useTheme()` tokens; widths come from `useLayout()` (minimum 40 x 10, below which one "terminal too small" message replaces the screen).
+
+---
+
+## 5. Process model
+
+- **One TUI process.** `bin/lazyhub.js` installs the crash handlers (`src/crash.js` leaves the alternate screen, shows the cursor, disables mouse and raw mode, prints the bug-report pointer), loads config, runs `bootstrap`, starts the editor socket, and calls `renderApp()`. Quitting exits there and leaves nothing behind.
+- **Children, always with array argv and never a shell:** `gh` (through `runGh`), `git` (through `runGit`), the browser, clipboard and editor (through `services/`), AI CLI providers (in an empty temp directory with a throwaway HOME and a curated environment), and the optional helper.
+- **The helper (daemon).** Started lazily and detached by `scheduleDaemon()` about 100 ms after the first frame, only in a trusted interactive session, never awaited, switched off by `LAZYHUB_NO_DAEMON=1` or `agent.auto_spawn_daemon = false`. It serves typed reads from a cache and takes authenticated control messages. Its socket and the editor socket share one wire module (`src/daemon/wire.js`): newline-delimited JSON, a protocol version, a size limit, a per-run secret in a 0600 file beside the socket.
+- **The editor socket** (`src/ipc.js`) lets an editor ask for state, navigate and (only when `[ipc].allow_writes` is true) reply to and resolve review threads.
+- **Other entry points** reuse the executor: `lazyhub --mcp` (an MCP server on stdio; the default agent capability is read-only), `watch-only`, `doctor`, `feedback`, `serve`.
+- **Resilience.** A failed call raises a banner with a retry hint instead of an empty screen; cached data is shown stale while a refresh runs; `LAZYHUB_PERF=1` records `runGh()` duration and keypress-to-render latency to `~/.cache/lazyhub/perf.ndjson` (`lazyhub perf report`); there is no telemetry.
+- **Acceptance of the built binary:** `npm run test:pty` drives `dist/lazyhub.js` on a pseudo-terminal against a fixture `gh` (navigation, crash restoration, degraded recovery, resize, Focus round trips, cold start, failed-log viewer).
+
+---
+
+## 6. Invariants
+
+The full, numbered list is "Hard invariants" in `AGENTS.md`; `docs/ARCHITECT_DECISIONS.md` has the rationale. The ones this document relies on:
+
+1. Every `gh` call goes through `runGh()` in `src/executor/core.js` and every local `git` call through `runGit()` in `src/executor/git.js`; writes are classified, audited and fail closed. Imports use the `src/executor.js` barrel.
+2. UI code never spawns a process; it uses `src/services/`.
+3. `sanitize()` every string that came from GitHub before it is rendered or put in dialog text.
+4. Colors and spacing come from `useTheme()`; components never import the static theme constant.
+5. Input goes through `useSafeInput`; keys are registry actions; a dialog calls `notifyDialog(true/false)` until the focus manager replaces it.
+6. `ErrorBoundary` wraps every view branch in `app.jsx`.
+7. Config is TOML only (`~/.config/lazyhub/lazyhub.toml`).
+8. Fast and complete: windowed rendering, page-by-page fetching, no silent truncation (D16).
+9. No telemetry. Default agent capability is read-only; there is no ungoverned write fallback.
+10. Pinned: React 18, ESLint 8, Vitest 3 (with the matching coverage plugin).
 
 ---
 

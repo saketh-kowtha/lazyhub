@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { execa } from 'execa'
-import { findLocalCheckout, remoteMatchesRepo, clearLocalCheckoutCache, checkoutRemoteBranch } from './branches.js'
+import { findLocalCheckout, remoteMatchesRepo, clearLocalCheckoutCache, checkout } from './git.js'
 
 vi.mock('execa', () => ({ execa: vi.fn() }))
 
@@ -68,19 +68,19 @@ describe('findLocalCheckout (#471)', () => {
   })
 })
 
-describe('checkoutRemoteBranch (#471)', () => {
+describe('checkout (#471)', () => {
   beforeEach(() => vi.clearAllMocks())
   const calls = () => execa.mock.calls.map(([, args]) => args.join(' '))
 
   it('plain checkout for origin', async () => {
     execa.mockResolvedValue({ stdout: '', exitCode: 0 })
-    await checkoutRemoteBranch({ dir: '/w', remote: 'origin' }, 'dev')
+    await checkout({ dir: '/w', remote: 'origin' }, 'dev')
     expect(calls()).toEqual(['checkout dev'])
   })
 
   it('fetches from the matching remote and tracks it when the branch is not local', async () => {
     execa.mockImplementation(async (_cmd, args) => ({ stdout: '', exitCode: args[0] === 'rev-parse' ? 1 : 0 }))
-    await checkoutRemoteBranch({ dir: '/w', remote: 'upstream' }, 'dev')
+    await checkout({ dir: '/w', remote: 'upstream' }, 'dev')
     expect(calls()).toEqual(['fetch upstream dev', 'rev-parse --verify --quiet refs/heads/dev', 'checkout -b dev --track upstream/dev'])
     for (const [, , opts] of execa.mock.calls) expect(opts.cwd).toBe('/w')
   })

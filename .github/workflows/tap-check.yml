@@ -1,0 +1,28 @@
+name: Tap check
+
+# Fails when the Homebrew tap is not on the npm `latest` version (#472), so a stale tap is noticed
+# within a week instead of after users report old bugs. Read-only: it fetches the public npm registry
+# and the public tap file; it never pushes to either.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  tap:
+    name: Tap version equals npm latest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Compare
+        run: node scripts/homebrew-formula.mjs check

@@ -9,6 +9,7 @@
  * startup that follows completion creates it.
  */
 
+import { logSwallowed } from '../../contain.js'
 import { existsSync } from 'fs'
 import { classifyGhFailure, runGh } from '../../executor.js'
 import { resolveCurrentRepo } from '../../executor/activity.js'
@@ -63,7 +64,7 @@ export async function loadSession() {
   const user = await runGh(['api', 'user'])
   const login = typeof user?.login === 'string' ? user.login : ''
   let current = null
-  try { current = await resolveCurrentRepo() } catch { /* not inside a repository */ }
+  try { current = await resolveCurrentRepo() } catch (err) { logSwallowed('onboarding.current-repo', err) /* not inside a repository */ }
   let names = []
   let listError = null
   try {
