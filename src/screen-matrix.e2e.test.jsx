@@ -48,7 +48,7 @@ import { sendInput } from './test/input-bus.js'
 import { cleanup, renderWithProviders, waitForExpectation } from './test/test-helpers.jsx'
 import { unrouted } from './test/gh-fixtures.js'
 
-const SIZES = [[50, 15], [60, 18], [80, 24], [120, 40], [200, 50]]
+const SIZES = [[50, 15], [60, 18], [60, 20], [80, 24], [120, 40], [200, 50]]
 const THEMES = [
   { name: 'default', legacy: 'github-dark', scheme: 'lazyhub-dark' },
   { name: 'catppuccin-latte', legacy: 'catppuccin-latte', scheme: 'lazyhub-light' },
@@ -86,15 +86,7 @@ const SCREENS = [
  * `kind` is the invariant that is broken there. Each links the issue that tracks it.
  * @type {Array<{ screen: string, kind: string, at?: string[], issue: string }>}
  */
-const KNOWN_DEFECTS = [
-  { screen: 'notifications', kind: 'width', at: ['50x15', '60x18', '80x24'], issue: '#428' },
-  { screen: 'notifications', kind: 'footer', at: ['50x15'], issue: '#428' },
-  { screen: 'issues', kind: 'width', at: ['60x18', '80x24'], issue: '#429' },
-  { screen: 'issues', kind: 'footer', at: ['50x15', '80x24'], issue: '#429' },
-  { screen: 'actions', kind: 'footer', at: ['50x15'], issue: '#430' },
-  { screen: 'focus', kind: 'width', at: ['50x15'], issue: '#431' },
-  { screen: 'focus', kind: 'footer', at: ['50x15', '60x18', '80x24'], issue: '#431' },
-]
+const KNOWN_DEFECTS = []
 
 // eslint-disable-next-line no-control-regex
 const SGR = /\x1b\[[0-9;:]*m/g

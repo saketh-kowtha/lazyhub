@@ -9,7 +9,7 @@ import { Box, Text, useStdout } from 'ink'
 import { useInput } from '../../hooks/useSafeInput.js'
 import { useTheme } from '../../theme.js'
 import { useKeyScope } from '../../keyscope.js'
-import { firstActionKey, matchesAction } from '../../config/actions.js'
+import { firstActionKey, hintLine, matchesAction } from '../../config/actions.js'
 import { cleanLogLine } from '../../utils.js'
 
 const STEP_HEADER_RE = /^(##\s+|Step \d+|^\d{4}-\d{2}-\d{2}.*\s+(##|step)|\s*\d+\.\d+\s)/i
@@ -131,7 +131,7 @@ export function LogViewer({ lines: rawLines = [], onClose, title = 'Log Viewer' 
         })}
       </Box>
       <Box borderStyle="single" borderColor={t.ui.border} paddingX={1}>
-        <Text color={t.ui.dim}>[j/k] scroll  [gg] top  [G] bottom  [f] filter  [Esc] close</Text>
+        <Text color={t.ui.dim}>{hintLine([['cursor.down', 'scroll'], 'cursor.top', 'log.filter', ['dialog.cancel', 'close']])}</Text>
       </Box>
     </Box>
   )

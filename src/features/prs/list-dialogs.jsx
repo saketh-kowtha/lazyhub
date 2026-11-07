@@ -5,7 +5,7 @@ import React, { useState, useRef } from 'react'
 import { Box, Text } from 'ink'
 import { useInput } from '../../hooks/useSafeInput.js'
 import { useGh } from '../../hooks/useGh.js'
-import { classifyGhFailure, listLabels, listCollaborators, editPRMembers } from '../../executor.js'
+import { classifyGhFailure, listLabels, listCollaborators, editPRMembers, collaboratorsTruncated, COLLAB_MAX_ROWS } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { TextInput, sanitize } from '../../utils.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -50,7 +50,14 @@ function PRSelectionDialog({ repo, pr, current: currentNow, names = {}, getOptio
     return <PickerStatus title={title} onCancel={onClose}><Text color={t.ui.muted}>{loadingText}</Text></PickerStatus>
   }
   if (error && !hasOptions) {
-    return <PickerStatus title={title} onCancel={onClose} onRetry={refetch}><FailureNotice failure={classifyGhFailure(error)} /></PickerStatus>
+    // The classified cause says what to do; the first line of gh's own message says why (e.g. 403 needs push access).
+    const reason = sanitize(String(error?.message || '').split('\n').find(line => line.trim()) || '').slice(0, 100)
+    return (
+      <PickerStatus title={title} onCancel={onClose} onRetry={refetch}>
+        <FailureNotice failure={classifyGhFailure(error)} />
+        {reason ? <Text color={t.ui.dim}>{`  ${reason}`}</Text> : null}
+      </PickerStatus>
+    )
   }
 
   const selected = new Set(current)
@@ -68,7 +75,9 @@ function PRSelectionDialog({ repo, pr, current: currentNow, names = {}, getOptio
     if (!listed.has(id)) items.push({ id, name: sanitize(names[id] || id), selected: true })
   }
 
-  return (
+  // Never silently cap the list: say so when GitHub paging stopped at the ceiling (#444).
+  const truncated = field === 'login' && collaboratorsTruncated(options)
+  const picker = (
     <MultiSelect
       title={title}
       items={items}
@@ -93,6 +102,13 @@ function PRSelectionDialog({ repo, pr, current: currentNow, names = {}, getOptio
       }}
       onCancel={onClose}
     />
+  )
+  if (!truncated) return picker
+  return (
+    <Box flexDirection="column">
+      <Text color={t.ci.pending}>{`showing first ${COLLAB_MAX_ROWS.toLocaleString('en-US')} collaborators`}</Text>
+      {picker}
+    </Box>
   )
 }
 

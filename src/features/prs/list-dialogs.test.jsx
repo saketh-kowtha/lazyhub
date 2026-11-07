@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from 'ink-testing-library'
 import { renderWithProviders, waitForInputReady, waitForExpectation } from '../../test/test-helpers.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { editPRMembers } from '../../executor.js'
+import { editPRMembers, COLLAB_MAX_ROWS } from '../../executor.js'
 import { LabelDialog, AssigneeDialog, ReviewerDialog, AuthorSearchDialog } from './list-dialogs.jsx'
 
 vi.mock('../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
@@ -259,5 +259,28 @@ describe('PR list dialogs', () => {
     release()
     await new Promise(resolve => setTimeout(resolve, 20))
     expect(onClose).toHaveBeenCalledOnce()
+  })
+})
+
+describe('PR pickers: notices (#513)', () => {
+  it('says when the collaborator list stopped at the paging ceiling', () => {
+    const data = Array.from({ length: COLLAB_MAX_ROWS }, (_, i) => ({ login: `user${i}` }))
+    useGh.mockReturnValue({ loading: false, data })
+    const view = renderWithProviders(<AssigneeDialog repo="o/r" pr={{ number: 1 }} onClose={() => {}} />)
+    expect(view.lastFrame()).toContain('showing first')
+    expect(view.lastFrame()).toContain('collaborators')
+  })
+
+  it('does not claim a cap for a short list', () => {
+    useGh.mockReturnValue({ loading: false, data: [{ login: 'alice' }] })
+    const view = renderWithProviders(<AssigneeDialog repo="o/r" pr={{ number: 1 }} onClose={() => {}} />)
+    expect(view.lastFrame()).not.toContain('showing first')
+  })
+
+  it('shows the cause gh gave when listing collaborators fails', () => {
+    useGh.mockReturnValue({ loading: false, error: new Error('HTTP 403: Must have push access to view repository collaborators'), refetch: vi.fn() })
+    const view = renderWithProviders(<AssigneeDialog repo="o/r" pr={{ number: 1 }} onClose={() => {}} />)
+    expect(view.lastFrame()).toMatch(/push access/)
+    expect(view.lastFrame()).toContain('[Esc] close')
   })
 })

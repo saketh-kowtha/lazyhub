@@ -7,7 +7,7 @@ import { App } from './app.jsx'
 import { getGhCallHistory } from './executor.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
-const fake = vi.hoisted(() => ({ calls: [], respond: null }))
+const fake = vi.hoisted(() => ({ calls: [], respond: null, failOpen: false }))
 
 vi.mock('ink', async () => {
   const React = await import('react')
@@ -24,6 +24,7 @@ vi.mock('execa', () => ({
   execa: (cmd, args = []) => {
     fake.calls.push([cmd, ...args])
     const out = cmd === 'gh' ? fake.respond(args) : ''
+    if (fake.failOpen && (cmd === 'open' || cmd === 'xdg-open')) return Promise.reject(new Error('no opener'))
     const p = Promise.resolve(out).then(o => (o && o.__fail
       ? { exitCode: 1, stdout: '', stderr: o.__fail }
       : { exitCode: 0, stdout: typeof o === 'string' ? o : JSON.stringify(o), stderr: '' }))
@@ -103,7 +104,7 @@ async function openPrDetail() {
   return view
 }
 
-beforeEach(() => { fake.calls.length = 0; fake.respond = gh; overrides = {} })
+beforeEach(() => { fake.calls.length = 0; fake.respond = gh; fake.failOpen = false; overrides = {} })
 afterEach(() => { cleanup() })
 
 describe('advertised keys work (#511)', () => {
@@ -177,5 +178,15 @@ describe('advertised keys work (#511)', () => {
     expect(text).toContain('Global (any view)')
     expect(text).not.toMatch(/1-9\s+jump to pane/)
     expect(text).not.toMatch(/Tab\s+pane/)
+  })
+
+  it('Enter on a check with no annotations reports a failed browser open instead of swallowing it (#463)', async () => {
+    overrides['annotations'] = []
+    fake.failOpen = true
+    const view = await openPrDetail()
+    await press('c')
+    await waitForExpectation(() => expect(frame(view)).toContain('[Ctrl+R] re-run'))
+    await press(K.enter)
+    await waitForExpectation(() => expect(frame(view)).toMatch(/Could not open .* in the browser/))
   })
 })

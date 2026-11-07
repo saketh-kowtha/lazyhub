@@ -30,23 +30,27 @@ export function PRDetailHeader({ pr }) {
     <Box flexDirection="column" paddingX={1} paddingY={0}
       borderStyle="single" borderColor={t.ui.border}
       borderTop={false} borderLeft={false} borderRight={false} borderBottom={true}>
-      <Box gap={1}>
-        <Text color={badge.color} bold>{badge.icon}</Text>
-        <Text color={t.ui.dim}>#{pr.number}</Text>
-        <Text bold color={t.ui.selected} wrap="truncate">{sanitize(pr.title)}</Text>
+      {/* Each row is one terminal line: the tail is cut, never wrapped (#464). The most useful
+          fields come first, so a narrow terminal keeps who and which branch. */}
+      <Box height={1} overflow="hidden">
+        <Text wrap="truncate">
+          <Text color={badge.color} bold>{badge.icon}</Text>
+          <Text color={t.ui.dim}> #{pr.number} </Text>
+          <Text bold color={t.ui.selected}>{sanitize(pr.title)}</Text>
+        </Text>
       </Box>
-      <Box gap={1}>
-        <Text color={t.ui.muted}>{sanitize(pr.author?.login)}</Text>
-        <Text color={t.ui.dim}>·</Text>
-        <Text color={t.ui.dim}>{format(pr.updatedAt)}</Text>
-        <Text color={t.ui.dim}>·</Text>
-        <Text color={t.ui.muted}>{sanitize(pr.baseRefName)}</Text>
-        <Text color={t.ui.dim}>←</Text>
-        <Text color={t.ui.selected}>{sanitize(pr.headRefName)}</Text>
-        <Text color={t.ui.dim}>·</Text>
-        <Text color={t.ci.pass}>+{pr.additions || 0}</Text>
-        <Text color={t.ci.fail}>-{pr.deletions || 0}</Text>
-        <Text color={t.ui.dim}>{pr.changedFiles || 0} files</Text>
+      <Box height={1} overflow="hidden">
+        <Text wrap="truncate">
+          <Text color={t.ui.muted}>{sanitize(pr.author?.login)}</Text>
+          <Text color={t.ui.dim}> · </Text>
+          <Text color={t.ui.selected}>{sanitize(pr.headRefName)}</Text>
+          <Text color={t.ui.dim}> → </Text>
+          <Text color={t.ui.muted}>{sanitize(pr.baseRefName)}</Text>
+          <Text color={t.ui.dim}> · </Text>
+          <Text color={t.ci.pass}>+{pr.additions || 0}</Text>
+          <Text color={t.ci.fail}> -{pr.deletions || 0}</Text>
+          <Text color={t.ui.dim}> {pr.changedFiles || 0} files · {format(pr.updatedAt)}</Text>
+        </Text>
       </Box>
     </Box>
   )

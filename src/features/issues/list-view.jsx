@@ -11,19 +11,19 @@ import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { EmptyState } from '../../components/EmptyState.jsx'
 import { IssueRow } from './list-row.jsx'
 
-export function IssueListView({ items, loading, error, filterState, sortMode, statusMsg, filterKeys: FK, actions, t, visibleHeight, visibleIssues, scrollOffset, cursor, paging }) {
+export function IssueListView({ items, loading, error, filterState, sortMode, statusMsg, filterKeys: FK, actions, t, visibleHeight, visibleIssues, scrollOffset, cursor, paging, width }) {
   return (
     <Box flexDirection="column" flexGrow={1}>
-      <Box paddingX={1} gap={1}>
-        <Text color={t.ui.dim}>filter:</Text>
-        <Text color={filterState === 'open' ? t.issue.open : t.issue.closed} bold>{filterState}</Text>
-        {sortMode === 'oldest' && (
-          <Text color={t.ci.pending} bold>↑ oldest</Text>
-        )}
-        <Text color={t.ui.dim}>  [{FK.filterOpen}] open  [{FK.filterClosed}] closed  [s] sort  [n] new</Text>
-        {statusMsg && (
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
-        )}
+      <Box paddingX={1} height={1}>
+        <Text wrap="truncate">
+          <Text color={t.ui.dim}>filter: </Text>
+          <Text color={filterState === 'open' ? t.issue.open : t.issue.closed} bold>{filterState}</Text>
+          {sortMode === 'oldest' && <Text color={t.ci.pending} bold> ↑ oldest</Text>}
+          <Text color={t.ui.dim}>  [{FK.filterOpen}] open  [{FK.filterClosed}] closed  [s] sort  [n] new</Text>
+          {statusMsg && (
+            <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
+          )}
+        </Text>
       </Box>
       <Box flexDirection="column" flexGrow={1}>
         {loading && items.length === 0 && (
@@ -42,6 +42,7 @@ export function IssueListView({ items, loading, error, filterState, sortMode, st
               issue={issue}
               isSelected={isSelected}
               t={t}
+              width={width}
             />
           )
         })}

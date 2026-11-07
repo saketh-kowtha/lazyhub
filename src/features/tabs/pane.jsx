@@ -9,30 +9,32 @@ import { useGh } from '../../hooks/useGh.js'
 import { useTheme } from '../../theme.js'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { sanitize, shortAge } from '../../utils.js'
+import { fitCell } from '../../ui/row-layout.js'
 import { filterToGh } from './filter-to-gh.js'
 
 export const VISIBLE_ROWS = 8
 
-function DashboardRows({ items, cursor, active }) {
+function DashboardRows({ items, cursor, active, rows = VISIBLE_ROWS, width = 60 }) {
   const { t } = useTheme()
   // The window follows the cursor, so the selected row is always on screen and
   // returning to the dashboard restores the same scroll position.
-  const offset = Math.max(0, cursor - (VISIBLE_ROWS - 1))
-  const hidden = Math.max(0, items.length - offset - VISIBLE_ROWS)
+  const total = items.length
+  const show = Math.max(1, Math.min(VISIBLE_ROWS, total > rows ? rows - 1 : rows))
+  const offset = Math.max(0, cursor - (show - 1))
+  const hidden = Math.max(0, total - offset - show)
+  // marker(1) + gap + number(6) + gap + title + gap + age(4), inside the section's border and padding.
+  const inner = width - 4
+  const titleWidth = Math.max(4, inner - (1 + 1 + 6 + 1 + 1 + 4))
   return (
     <Box flexDirection="column">
-      {items.slice(offset, offset + VISIBLE_ROWS).map((item, i) => {
+      {items.slice(offset, offset + show).map((item, i) => {
         const selected = active && offset + i === cursor
         return (
-          <Box key={`${item.number}-${item.title}`} gap={1}>
-            <Text color={t.ui.selected} bold>{selected ? '▸' : ' '}</Text>
-            <Box width={6}>
-              <Text color={t.ui.dim}>#{item.number}</Text>
-            </Box>
-            <Box flexGrow={1}>
-              <Text color={t.ui.selected} bold={selected} wrap="truncate">{sanitize(item.title)}</Text>
-            </Box>
-            <Text color={t.ui.dim}>{shortAge(item.updatedAt)}</Text>
+          <Box key={`${item.number}-${item.title}`} height={1}>
+            <Text color={t.ui.selected} bold>{selected ? '▸' : ' '} </Text>
+            <Text color={t.ui.dim}>{fitCell(`#${item.number}`, 6)} </Text>
+            <Text color={t.ui.selected} bold={selected}>{fitCell(sanitize(item.title), titleWidth)} </Text>
+            <Text color={t.ui.dim}>{fitCell(shortAge(item.updatedAt), 4)}</Text>
           </Box>
         )
       })}
@@ -42,7 +44,7 @@ function DashboardRows({ items, cursor, active }) {
   )
 }
 
-export function TabPane({ pane, repo, active = false, cursor = 0, onData, repeatOf = null }) {
+export function TabPane({ pane, repo, active = false, cursor = 0, onData, repeatOf = null, rows = VISIBLE_ROWS, width = 60 }) {
   const { t } = useTheme()
   const limit = pane.limit || 25
   const translated = useMemo(() => filterToGh(pane.filter || {}, { limit }), [pane.filter, limit])
@@ -56,7 +58,7 @@ export function TabPane({ pane, repo, active = false, cursor = 0, onData, repeat
   useEffect(() => { if (onData) onData({ items, refetch, kind: pane.kind, repo: paneRepo, failed: failure ? failure.kind : null }) })
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={active ? t.ui.borderActive : t.ui.border} paddingX={1} minWidth={30} flexGrow={1}>
+    <Box flexDirection="column" borderStyle="round" borderColor={active ? t.ui.borderActive : t.ui.border} paddingX={1} width={width} overflow="hidden">
       <Box justifyContent="space-between">
         <Text color={t.ui.selected} bold>{pane.title || pane.kind}</Text>
         <Text color={t.ui.dim}>{pane.kind}</Text>
@@ -72,7 +74,7 @@ export function TabPane({ pane, repo, active = false, cursor = 0, onData, repeat
         // show only the cause; `cached` is true only when this pane really has data.
         <FailureNotice failure={failure} compact={repeatOf !== null} />
       )}
-      {!loading && !error && <DashboardRows items={items} cursor={Math.max(0, Math.min(cursor, items.length - 1))} active={active} />}
+      {!loading && !error && <DashboardRows items={items} cursor={Math.max(0, Math.min(cursor, items.length - 1))} active={active} rows={rows} width={width} />}
     </Box>
   )
 }

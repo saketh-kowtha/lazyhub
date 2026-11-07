@@ -4,6 +4,7 @@ import { PRDetail } from './detail.jsx'
 import { useGh } from '../../hooks/useGh.js'
 import { getPR, getRepoInfo, getPRChecks, getBranchProtection, mergePR, reviewPR } from '../../executor.js'
 import { sendInput } from '../../test/input-bus.js'
+import { saveState } from '../../config.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
 vi.mock('ink', async () => {
@@ -25,6 +26,7 @@ let repoInfo
 const result = (data) => ({ data, loading: false, error: null, refetch: vi.fn(), mutate: vi.fn() })
 
 beforeEach(() => {
+  saveState({ mergeMethods: {} }) // the remembered method (#314) must not leak between tests
   repoInfo = { squashMergeAllowed: true, mergeCommitAllowed: true, rebaseMergeAllowed: true, viewerPermission: 'WRITE' }
   mergePR.mockResolvedValue(undefined)
   reviewPR.mockResolvedValue(undefined)

@@ -303,22 +303,24 @@ export function renderAppView(ctx) {
   }
 
   // ─── List view ────────────────────────────────────────────────────────────
+  // Columns inside the pane border: what every list row may use (the width contract, #512).
+  const listInnerWidth = columns - (showSidebar ? sidebarWidth : 0) - 2
   function renderListPane() {
     switch (pane) {
       case 'prs': return (
         <PRList repo={repo} listHeight={listHeight}
-          innerWidth={columns - (showSidebar ? sidebarWidth : 0) - 2}
+          innerWidth={listInnerWidth}
           onSelectPR={goToDetail}
           onOpenDiff={goToDiff} onPaneState={onPaneState} />
       )
       case 'issues': return (
-        <IssueList repo={repo} listHeight={listHeight}
+        <IssueList repo={repo} listHeight={listHeight} innerWidth={listInnerWidth}
           onSelectIssue={goToDetail} onPaneState={onPaneState} />
       )
-      case 'branches':     return <BranchList repo={repo} listHeight={listHeight} onPaneState={onPaneState} />
-      case 'actions':      return <ActionList repo={actionsRepo || repo} listHeight={listHeight} onPaneState={onPaneState} initialBranch={actionsBranch} />
+      case 'branches':     return <BranchList repo={repo} listHeight={listHeight} innerWidth={listInnerWidth} onPaneState={onPaneState} />
+      case 'actions':      return <ActionList repo={actionsRepo || repo} listHeight={listHeight} innerWidth={listInnerWidth} onPaneState={onPaneState} initialBranch={actionsBranch} />
       case 'notifications': return (
-        <NotificationList repo={repo} listHeight={listHeight} onPaneState={onPaneState}
+        <NotificationList repo={repo} listHeight={listHeight} innerWidth={listInnerWidth} onPaneState={onPaneState}
           onNavigateTo={(notif) => {
             const type = notif.subject?.type
             if (type === 'PullRequest') setPane('prs')
@@ -334,7 +336,7 @@ export function renderAppView(ctx) {
         }
         const customTab = (_config.customTabs || {})[pane]
         if (customTab) {
-          return <TabView tab={customTab} repo={repo} onOpenItem={(item, kind, itemRepo) => goToDetail({ ...item, _kind: kind, _repo: itemRepo })} />
+          return <TabView tab={customTab} repo={repo} innerWidth={listInnerWidth} listHeight={listHeight} onOpenItem={(item, kind, itemRepo) => goToDetail({ ...item, _kind: kind, _repo: itemRepo })} />
         }
         return <Box paddingX={1}><Text color={t.ui.muted}>Unknown pane: {pane}</Text></Box>
       }
