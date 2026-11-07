@@ -44,7 +44,25 @@ const diffFor = names => names.map(n => {
   const body = Array.from({ length: 12 }, (_, k) => ' const keep' + k + ' = ' + k).join('\\n')
   return 'diff --git a/src/' + n + '.js b/src/' + n + '.js\\n--- a/src/' + n + '.js\\n+++ b/src/' + n + '.js\\n@@ -1,13 +1,13 @@\\n' + body + '\\n-const old = 1\\n+const next = 2\\n'
 }).join('')
+const fileNames = () => SCALE ? Array.from({ length: ${SCALE_FILES} }, (_, i) => 'file' + String(i).padStart(4, '0')) : ['alpha', 'beta', 'gamma']
+const patchFor = () => '@@ -1,13 +1,13 @@\\n' + Array.from({ length: 12 }, (_, k) => ' const keep' + k + ' = ' + k).join('\\n') + '\\n-const old = 1\\n+const next = 2'
 wait(60) // a real gh call is never instant; keeps overlap measurable
+// Per-file diff (#509): the file list by cursor, then one file's patch (gh has already applied the --jq select).
+if (args[0] === 'api' && args[1] === 'graphql' && args.some(a => a.includes('files(first'))) {
+  const names = fileNames()
+  const first = Number(arg('limit') || 100)
+  const start = Number(arg('after') || 0)
+  const end = Math.min(names.length, start + first)
+  out({ data: { repository: { pullRequest: { files: {
+    totalCount: names.length, pageInfo: { hasNextPage: end < names.length, endCursor: String(end) },
+    nodes: names.slice(start, end).map(n => ({ path: 'src/' + n + '.js', additions: 1, deletions: 1, changeType: 'MODIFIED' })),
+  } } } } })
+}
+if (args[0] === 'api' && /\\/pulls\\/\\d+\\/files/.test(args[1] || '')) {
+  const hit = /filename == "([^"]+)"/.exec(args.join(' '))
+  if (!hit) out('')
+  out(JSON.stringify({ filename: hit[1], status: 'modified', additions: 1, deletions: 1, patch: patchFor() }) + '\\n')
+}
 if (args.includes('--version')) out('gh version 2.0.0\\n')
 if (args[0] === 'auth' && args[1] === 'token') out('stub-auth\\n')
 if (args[0] === 'auth' && args[1] === 'status') out('github.com\\n  ✓ Logged in to github.com account octocat (stub)\\n')
