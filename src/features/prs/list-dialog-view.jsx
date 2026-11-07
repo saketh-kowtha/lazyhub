@@ -7,10 +7,10 @@ import { enableAutoMerge, disableAutoMerge, mergePR, closePR, checkoutBranch, re
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
-import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
+import { ReviewDialog } from '../../components/dialogs/ReviewDialog.jsx'
 import { sanitize } from '../../utils.js'
 import { NewPRDialog } from './NewPRDialog.jsx'
-import { MERGE_OPTIONS, autoMergeOption, canToggleAutoMergeFromList } from './list-row.jsx'
+import { MERGE_OPTIONS, autoMergeOption, canToggleAutoMergeFromList, mergeMethodLabel } from './list-row.jsx'
 import { LabelDialog, AssigneeDialog, AuthorSearchDialog, ReviewerDialog } from './list-dialogs.jsx'
 
 const SELECTION_DIALOGS = { labels: LabelDialog, assignees: AssigneeDialog, reviewers: ReviewerDialog }
@@ -77,7 +77,7 @@ export function renderPRListDialog({
   if (dialog === 'merge-confirm' && selectedPR && mergeOptions) {
     return (
       <ConfirmDialog
-        message={`Merge PR #${selectedPR.number} via --${mergeOptions.strategy}?${mergeOptions.msg ? `\nMessage: "${mergeOptions.msg}"` : ''}`}
+        message={`Merge PR #${selectedPR.number} via ${mergeMethodLabel(mergeOptions.strategy)}?${mergeOptions.msg ? `\nMessage: "${mergeOptions.msg}"` : ''}`}
         destructive={true}
         onConfirm={async () => {
           closeDialog()
@@ -172,14 +172,14 @@ export function renderPRListDialog({
   if ((dialog === 'approve-body' || dialog === 'reqchanges-body') && selectedPR) {
     const approving = dialog === 'approve-body'
     return (
-      <FormCompose
-        title={approving ? `Approve PR #${selectedPR.number}` : `Request changes on PR #${selectedPR.number}`}
-        fields={[{ name: 'body', label: approving ? 'Optional comment (Ctrl+G to submit, leave empty to skip)' : 'Describe the changes needed', type: 'text' }]}
-        onSubmit={async (values) => {
+      <ReviewDialog
+        number={selectedPR.number}
+        mode={approving ? 'approve' : 'request-changes'}
+        onSubmit={async (body) => {
           closeDialog()
           await runWrite(approving ? `Approving #${selectedPR.number}` : `Requesting changes on #${selectedPR.number}`, async () => {
             try {
-              await reviewPR(repo, selectedPR.number, approving ? 'approve' : 'request-changes', approving ? values.body || '' : values.body)
+              await reviewPR(repo, selectedPR.number, approving ? 'approve' : 'request-changes', body)
               showStatus(approving ? `✓ Approved PR #${selectedPR.number}` : `✓ Requested changes on PR #${selectedPR.number}`)
               refreshPR(selectedPR.number) // the row's review state is stale otherwise (#439)
             } catch (err) {

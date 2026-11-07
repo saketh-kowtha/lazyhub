@@ -26,7 +26,7 @@ vi.mock('../../../executor.js', () => ({
   getPRDiff: async function getPRDiff() { return h.track('getPRDiff') },
   getPR: async function getPR() { return h.track('getPR') },
   getRepoInfo: async function getRepoInfo() { return h.track('getRepoInfo') },
-  listPRComments: async function listPRComments() { return h.track('listPRComments') },
+  listPRCommentsPage: async function listPRCommentsPage() { return h.track('listPRCommentsPage') },
   getPRDiffStats: async function getPRDiffStats() { return h.track('getPRDiffStats') },
   addPRLineComment: vi.fn(), replyToComment: vi.fn(), editPRComment: vi.fn(),
   deletePRComment: vi.fn(), mergePR: vi.fn(), reviewPR: vi.fn(),
@@ -72,7 +72,7 @@ describe('diff open order (#451)', () => {
     await waitForExpectation(() => expect(view.lastFrame()).toContain('newValue'))
     // Secondary calls start only after the diff has landed.
     await waitForExpectation(() => expect(h.calls).toEqual(
-      expect.arrayContaining(['getPRDiff', 'getPR', 'getRepoInfo', 'listPRComments'])))
+      expect.arrayContaining(['getPRDiff', 'getPR', 'getRepoInfo', 'listPRCommentsPage'])))
     // Stats are derived from the diff text, no separate call.
     expect(h.calls).not.toContain('getPRDiffStats')
     // Diff rendered without waiting for any secondary call to resolve.
@@ -109,7 +109,7 @@ describe('diff open: errors, too-large, retry (#451)', () => {
     await waitForExpectation(() => expect(h.calls).toEqual(['getPRDiff', 'getPRDiff']))
     h.pending.getPRDiff.resolve(DIFF)
     await waitForExpectation(() => expect(view.lastFrame()).toContain('newValue'))
-    await waitForExpectation(() => expect(h.calls).toEqual(expect.arrayContaining(['getPR', 'getRepoInfo', 'listPRComments'])))
+    await waitForExpectation(() => expect(h.calls).toEqual(expect.arrayContaining(['getPR', 'getRepoInfo', 'listPRCommentsPage'])))
   })
 
   it('does not count +++/--- content lines inside a hunk as headers', async () => {
@@ -154,7 +154,7 @@ describe('diff with a cached copy on disk (#451/#454)', () => {
     await waitForExpectation(() => expect(h.calls).toContain('getPRDiff'))
     expect(h.calls).toEqual(['getPRDiff'])
     h.pending.getPRDiff.resolve(DIFF)
-    await waitForExpectation(() => expect(h.calls).toEqual(expect.arrayContaining(['getPR', 'getRepoInfo', 'listPRComments'])))
+    await waitForExpectation(() => expect(h.calls).toEqual(expect.arrayContaining(['getPR', 'getRepoInfo', 'listPRCommentsPage'])))
   })
 
   it('keeps the cached diff and shows a banner when the revalidation fails', async () => {

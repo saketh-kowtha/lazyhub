@@ -16,8 +16,8 @@ export function ConfirmDialog({ message, destructive = false, onConfirm, onCance
   const [cursor, setCursor] = useState(1) // 0 = Yes, 1 = No (default No for safety)
   const [typed, setTyped] = useState('')
 
-  const borderColor = destructive ? '#f85149' : t.ui.selected
-  const yesColor = destructive ? '#f85149' : t.ui.selected
+  const borderColor = destructive ? t.ci.fail : t.ui.selected
+  const yesColor = destructive ? t.ci.fail : t.ui.selected
   const canConfirm = !requireText || typed === requireText
 
   useInput((input, key) => {
@@ -53,9 +53,9 @@ export function ConfirmDialog({ message, destructive = false, onConfirm, onCance
   })
 
   return (
-    <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={borderColor} paddingX={2} paddingY={1}>
+    <Box flexDirection="column" borderStyle="round" borderColor={borderColor} paddingX={1}>
       <Box marginBottom={1}>
-        <Text color={destructive ? '#f85149' : t.ui.selected} bold>
+        <Text color={destructive ? t.ci.fail : t.ui.selected} bold>
           {destructive ? '⚠ ' : 'ℹ '}
           {message}
         </Text>
@@ -64,7 +64,7 @@ export function ConfirmDialog({ message, destructive = false, onConfirm, onCance
         <Box marginBottom={1} flexDirection="column">
           <Text color={t.ui.muted}>Type <Text bold color={t.ui.selected}>{requireText}</Text> to confirm:</Text>
           <Box>
-            <Text color={canConfirm ? '#3fb950' : '#f85149'}>{typed}</Text>
+            <Text color={canConfirm ? t.ci.pass : t.ci.fail}>{typed}</Text>
             <Text color={t.ui.dim}>█</Text>
           </Box>
         </Box>
@@ -85,16 +85,20 @@ export function ConfirmDialog({ message, destructive = false, onConfirm, onCance
           )}
         </Box>
         <Box>
-          <Text color={cursor === 1 ? '#3fb950' : t.ui.muted} bold={cursor === 1}>
+          <Text color={cursor === 1 ? t.ci.pass : t.ui.muted} bold={cursor === 1}>
             {cursor === 1 ? '▶ ' : '  '}
           </Text>
-          <Text color={cursor === 1 ? '#3fb950' : t.ui.muted} bold={cursor === 1}>
+          <Text color={cursor === 1 ? t.ci.pass : t.ui.muted} bold={cursor === 1}>
             No
           </Text>
         </Box>
       </Box>
       <Box marginTop={1}>
-        <Text color={t.ui.dim}>[←→ / j/k] choose  [Enter] confirm  [Esc] cancel</Text>
+        <Text color={t.ui.dim}>
+          {requireText
+            ? `Type ${requireText}, then ←, then Enter  [Esc] cancel`
+            : '[←→ / j/k] choose  [Enter] confirm  [Esc] cancel'}
+        </Text>
       </Box>
     </Box>
   )

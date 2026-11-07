@@ -8,8 +8,9 @@ import { Box, Text } from 'ink'
 import { firstActionKey } from '../../../config/actions.js'
 import { OptionPicker } from '../../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../../components/dialogs/ConfirmDialog.jsx'
+import { allowedMergeOptions, ADMIN_MERGE_OPTIONS, mergeMethodLabel, preferredMergeIndex, mergeStatusLine } from '../merge-methods.js'
 import { FuzzySearch } from '../../../components/dialogs/FuzzySearch.jsx'
-import { FormCompose } from '../../../components/dialogs/FormCompose.jsx'
+import { ReviewDialog } from '../../../components/dialogs/ReviewDialog.jsx'
 import { FooterKeys } from '../../../components/FooterKeys.jsx'
 import { AIReviewPane } from '../../../components/AIReviewPane.jsx'
 import { useTheme } from '../../../theme.js'
@@ -22,13 +23,6 @@ import { syntaxHighlight, expandTabs } from './highlight.js'
 import { openEditorSync } from './editor.js'
 
 const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
-
-const MERGE_OPTIONS_BASE = [
-  { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
-  { value: 'squash', label: '--squash', description: 'Squash all commits into one' },
-  { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
-]
-const MERGE_OPTION_ADMIN = { value: 'admin', label: '--admin', description: 'Bypass branch protection (admin only)' }
 
 // ─── Diff line renderer ───────────────────────────────────────────────────────
 // Gutter: cursor(1) oldLn(4) newLn(4) sign(2) code
@@ -200,15 +194,15 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
 export function DiffView({ prNumber, state }) {
   const { t } = useTheme()
   const {
-    stdout, visibleHeight, diffStats, isLargeDiff, diffTooLarge, diffRefreshError, diffWarningAck,
+    stdout, visibleHeight, diffStats, isLargeDiff, diffTooLarge, diffRefreshError, diffWarningAck, commentsTruncated,
     prMeta, repoInfo, loading, error, cursor, scrollOffset, dialog, setDialog,
-    adminMergeMsg, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
+    mergeChoice, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
     footerKeys, showTree, treeCursor, findQuery, setFindQuery, findActive,
     findMatches, gotoActive, gotoInput, setGotoInput, fileJumpActive, setFileJumpActive,
     aiReview, setAiReview, aiReviewLoading, aiReviewError, setAiReviewError,
     aiPostStatus, setAiPostStatus, files, rows, langCache, fileStartIndices,
     treeRows, commentsByLine, jumpTo, handleAiJumpTo, handleAiPost,
-    submitMerge, selectAdminMethod, confirmAdminMerge, submitApproval, submitChanges
+    submitMerge, confirmMerge, submitApproval, submitChanges
   } = state
 
   if (diffTooLarge) {
@@ -238,61 +232,42 @@ export function DiffView({ prNumber, state }) {
     )
   }
 
-  if (dialog === 'merge') {
-    const mergeOpts = !repoInfo || repoInfo.viewerPermission === 'ADMIN'
-      ? [...MERGE_OPTIONS_BASE, MERGE_OPTION_ADMIN]
-      : MERGE_OPTIONS_BASE
+  if (dialog === 'merge' && repoInfo) {
+    const methods = allowedMergeOptions(repoInfo)
+    const mergeOpts = repoInfo.viewerPermission === 'ADMIN' ? [...methods, ...ADMIN_MERGE_OPTIONS] : methods
     return (
       <OptionPicker
-        title={`Merge PR #${prNumber}: ${sanitize(prMeta?.title || '')}`}
+        title={`Merge PR #${prNumber}: ${sanitize(prMeta?.title || '')}  (${mergeStatusLine(prMeta, null)})`}
         options={mergeOpts}
-        promptText="Commit message (optional)"
+        initialIndex={preferredMergeIndex(methods)}
+        promptText="Commit message (optional, Enter to skip)"
+        promptKey="e"
         onSubmit={submitMerge}
         onCancel={() => setDialog(null)}
       />
     )
   }
 
-  if (dialog === 'merge-admin') {
-    return (
-      <OptionPicker
-        title={`Merge method (admin bypass) — PR #${prNumber}`}
-        options={MERGE_OPTIONS_BASE}
-        onSubmit={selectAdminMethod}
-        onCancel={() => setDialog('merge')}
-      />
-    )
-  }
-
-  if (dialog === 'merge-admin-confirm') {
-    const pending = typeof adminMergeMsg === 'object' ? adminMergeMsg : { strategy: 'admin-merge', msg: adminMergeMsg }
+  if (dialog === 'merge-confirm' && mergeChoice) {
+    const admin = mergeChoice.strategy.startsWith('admin-')
     return (
       <ConfirmDialog
-        message={`⚠ ADMIN BYPASS: merge PR #${prNumber} via --${pending.strategy.replace('admin-', '')} bypassing branch protection?`}
+        message={`${admin ? 'ADMIN BYPASS: ' : ''}Merge PR #${prNumber} via ${mergeMethodLabel(mergeChoice.strategy)}?${mergeChoice.msg ? `\nMessage: "${sanitize(mergeChoice.msg)}"` : ''}`}
         destructive={true}
-        onConfirm={confirmAdminMerge}
-        onCancel={() => setDialog('merge-admin')}
-      />
-    )
-  }
-
-  if (dialog === 'approve-body') {
-    return (
-      <FormCompose
-        title={`Approve PR #${prNumber}`}
-        fields={[{ name: 'body', label: 'Comment (optional)', type: 'text' }]}
-        onSubmit={submitApproval}
+        requireText={admin ? String(prNumber) : null}
+        onConfirm={confirmMerge}
         onCancel={() => setDialog(null)}
       />
     )
   }
 
-  if (dialog === 'reqchanges-body') {
+  if (dialog === 'approve-body' || dialog === 'reqchanges-body') {
+    const approving = dialog === 'approve-body'
     return (
-      <FormCompose
-        title={`Request changes on PR #${prNumber}`}
-        fields={[{ name: 'body', label: 'Describe the changes needed', type: 'text' }]}
-        onSubmit={submitChanges}
+      <ReviewDialog
+        number={prNumber}
+        mode={approving ? 'approve' : 'request-changes'}
+        onSubmit={(body) => (approving ? submitApproval({ body }) : submitChanges({ body }))}
         onCancel={() => setDialog(null)}
       />
     )
@@ -323,6 +298,7 @@ export function DiffView({ prNumber, state }) {
       <Box paddingX={1} justifyContent="space-between">
         <Text color={t.ui.selected} bold>PR #{prNumber} Diff</Text>
         {diffRefreshError && <Text color={t.ci.pending}>⚠ showing cached diff, refresh failed [{firstActionKey('list.refresh', 'r')}] retry</Text>}
+        {commentsTruncated && <Text color={t.ci.pending}>⚠ inline comments incomplete: open comments ({firstActionKey('pr.comments', 'v')}) for all</Text>}
         {commentStatus && <Text color={t.ci.pass}>{commentStatus}</Text>}
         {splitView && <Text color={t.ui.muted}>[split]</Text>}
         <Text color={t.ui.dim}>{cursor + 1} / {rows.length}</Text>

@@ -214,11 +214,7 @@ export const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded, maskTitle 
   )
 })
 
-export const MERGE_OPTIONS = [
-  { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
-  { value: 'squash', label: '--squash', description: 'Squash all commits into one' },
-  { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
-]
+export { MERGE_OPTIONS, mergeMethodLabel, allowedMergeOptions } from './merge-methods.js'
 
 export function canToggleAutoMergeFromList(pr) {
   return pr?.state === 'OPEN' && !pr?.isDraft

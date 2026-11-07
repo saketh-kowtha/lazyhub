@@ -68,7 +68,7 @@ import { logger } from './utils-core.js'
 import { ERR, MAX_MESSAGE_BYTES, PROTOCOL_VERSION, checkSession, issueSession } from './daemon/protocol.js'
 import {
   getPRStateForBranch as _defaultGetPRStateForBranch,
-  getPRReviewComments as _defaultGetPRReviewComments,
+  getPRReviewCommentsPage as _defaultGetPRReviewComments,
   addPRReviewThreadReply as _defaultAddPRReviewThreadReply,
   resolvePRReviewThread as _defaultResolvePRReviewThread,
 } from './executor.js'
@@ -231,7 +231,8 @@ function handleMessage(socket, raw) {
       const state = _stateGetter()
       const repo = msg.repo || state.repo || null
       ;(_reviewCommentsHandler(repo, prNumber))
-        .then(comments => sendResponse(socket, id, { comments: comments || [] }))
+        // A handler returns a plain array or { comments, truncated }; tell the editor when the list is incomplete.
+        .then(res => sendResponse(socket, id, { comments: (Array.isArray(res) ? res : res?.comments) || [], truncated: !!(res && !Array.isArray(res) && res.truncated) }))
         .catch(err => sendResponse(socket, id, { comments: [], error: err?.message || 'fetch failed' }))
       break
     }

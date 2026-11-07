@@ -13,10 +13,10 @@ import githubDark from '../../../themes/github-dark.js'
 
 vi.mock('../../../hooks/useGh.js', () => ({
   useGh: () => ({
-    data: [{
+    data: { threads: { total: 1, hasNextPage: false }, conversationPage: { total: 1, hasNextPage: false }, conversation: [{ id: 'conv-1', kind: 'conversation', body: 'conv&amp;body', user: { login: 'conv&amp;user' }, createdAt: '2026-01-01T00:00:00Z' }], comments: [{
       id: 'comment-1', body: 'safe&amp;comment\nextra', path: 'safe&amp;path\nextra', line: 4,
       user: { login: 'safe&amp;name\nextra' }, createdAt: '2026-01-01T00:00:00Z',
-    }],
+    }] },
     loading: false,
     error: null,
     refetch: () => {},
@@ -115,6 +115,8 @@ describe('PR detail untrusted display fields', () => {
     expect(frame).toContain('safe&path extra')
     expect(frame).toContain('@safe&name extra')
     expect(frame).toContain('safe&comment')
+    expect(frame).toContain('conv&body')
+    expect(frame).toContain('@conv&user')
     expect(frame).toContain('extra')
     expect(frame).not.toContain('&amp;')
   })

@@ -187,6 +187,17 @@ describe.skipIf(!posix)('IDE socket GitHub writes', () => {
     expect(await request(path, { id: 3, type: 'ping' })).toMatchObject({ pong: true })
   })
 
+  it('review-comments tells the editor when the list is incomplete (#507)', async () => {
+    const partial = { comments: [{ id: 1 }], truncated: true }
+    const { path } = await start({ onReviewComments: vi.fn(async () => partial) })
+    expect(await request(path, { id: 1, type: 'review-comments', prNumber: 5, repo: 'o/r' })).toMatchObject({ comments: [{ id: 1 }], truncated: true })
+  })
+
+  it('review-comments says truncated: false for a complete list (#507)', async () => {
+    const { path } = await start({ onReviewComments: vi.fn(async () => [{ id: 2 }]) })
+    expect(await request(path, { id: 2, type: 'review-comments', prNumber: 5, repo: 'o/r' })).toMatchObject({ truncated: false })
+  })
+
   it('runs the handlers when allowWrites is true', async () => {
     const { path, onReplyThread, onResolveThread } = await start({ allowWrites: true })
     expect(await request(path, { id: 1, type: 'reply-thread', threadId: 'T', body: 'hi' })).toMatchObject({ ok: true, commentId: 7 })

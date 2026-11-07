@@ -20,7 +20,7 @@ import {
 } from '../../executor.js'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
-import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
+import { ReviewDialog } from '../../components/dialogs/ReviewDialog.jsx'
 import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -36,6 +36,7 @@ import { firstActionKey } from '../../config/actions.js'
 
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { autoMergeOption, canToggleAutoMergeFromList } from './list-row.jsx'
+import { allowedMergeOptions, ADMIN_MERGE_OPTIONS, mergeMethodLabel, preferredMergeIndex, mergeStatusLine } from './merge-methods.js'
 import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
@@ -43,18 +44,7 @@ import { sortChecks } from './detail/Checks.jsx'
 
 const _editorCfg = loadConfig().editor
 
-const MERGE_OPTIONS_BASE = [
-  { value: 'merge',  label: '--merge',  description: 'Create a merge commit' },
-  { value: 'squash', label: '--squash', description: 'Squash all commits into one' },
-  { value: 'rebase', label: '--rebase', description: 'Rebase onto base branch' },
-]
-const MERGE_OPTIONS_ADMIN = [
-  { value: 'admin-merge',  label: '--admin --merge',  description: 'Bypass branch protection + merge commit' },
-  { value: 'admin-squash', label: '--admin --squash', description: 'Bypass branch protection + squash' },
-  { value: 'admin-rebase', label: '--admin --rebase', description: 'Bypass branch protection + rebase' },
-]
-
-export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
+export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
   useKeyScope('view')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
@@ -65,12 +55,14 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
   const { data: pr, loading, error, refetch } = useGh(getPR, [repo, prNumber])
   const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000 })
   const { data: checks }   = useGh(getPRChecks, [repo, prNumber], { ttl: 30_000 })
-  const baseBranch = pr?.baseRefName || ''
+  // The list row already knows the base branch: ask for protection now instead of after getPR (#452).
+  const baseBranch = pr?.baseRefName || rowBaseRefName || ''
   const { data: protection } = useGh(getBranchProtection, [repo, baseBranch], { ttl: 300_000 })
 
   const [scrollY, setScrollY] = useState(0)
   const [dialog, setDialog]   = useState(null)
   const [adminMergeMsg, setAdminMergeMsg] = useState('')
+  const [mergeChoice, setMergeChoice] = useState(null) // { strategy, msg } awaiting confirmation
   const [rerunCheck, setRerunCheck] = useState(null) // check awaiting re-run confirmation
   const [searching, setSearching] = useState(false)
   const [searchText, setSearchText] = useState('')
@@ -259,7 +251,11 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
       return
     }
     if (id === 'list.search') { setSearching(true); setSearchText(''); return }
-    if (id === 'pr.merge' && open) { setDialog('merge'); return }
+    if (id === 'pr.merge' && open) {
+      // The picker is built from repoInfo (allowed methods, admin rights): never open it before that loads.
+      if (!repoInfo) { showStatus('Loading repository settings… try again in a moment'); return }
+      setDialog('merge'); return
+    }
     if (id === 'pr.close' && open) { setDialog('close'); return }
     if (id === 'pr.draft' && open) { setDialog('draft'); return }
     if (id === 'pr.base' && open) { setDialog('base'); return }
@@ -293,23 +289,42 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
 
   // ── Dialogs ────────────────────────────────────────────────────────────────
 
-  if (dialog === 'merge') {
-    // Show admin options when confirmed admin, or while repoInfo is still loading
-    const baseOpts = canToggleAutoMergeFromList(pr) ? [...MERGE_OPTIONS_BASE, autoMergeOption(pr)] : MERGE_OPTIONS_BASE
-    const mergeOpts = !repoInfo || repoInfo.viewerPermission === 'ADMIN'
-      ? [...baseOpts, ...MERGE_OPTIONS_ADMIN]
-      : baseOpts
+  if (dialog === 'merge' && repoInfo) {
+    // Options are fixed once repoInfo is loaded, so they never change under the cursor, and only admins see bypass.
+    const methods = allowedMergeOptions(repoInfo)
+    const baseOpts = canToggleAutoMergeFromList(pr) ? [...methods, autoMergeOption(pr)] : methods
+    const mergeOpts = repoInfo.viewerPermission === 'ADMIN' ? [...baseOpts, ...ADMIN_MERGE_OPTIONS] : baseOpts
     return (
       <OptionPicker
-        title={`Merge PR #${pr.number}: ${sanitize(pr.title)}`}
+        title={`Merge PR #${pr.number}: ${sanitize(pr.title)}  (${mergeStatusLine(pr, checks)})`}
         options={mergeOpts}
-        promptText="Commit message (optional)"
+        initialIndex={preferredMergeIndex(methods)}
+        promptText="Commit message (optional, Enter to skip)"
+        promptKey="e"
         onSubmit={(val) => {
           const strategy = typeof val === 'object' ? val.value : val
           const msg = typeof val === 'object' ? val.text : undefined
           if (strategy === 'auto-merge') { setDialog('auto-merge'); return }
+          // Choosing a method never merges by itself: a confirm (default No) always follows.
+          setMergeChoice({ strategy, msg })
+          setDialog('merge-confirm')
+        }}
+        onCancel={() => setDialog(null)}
+      />
+    )
+  }
+
+  if (dialog === 'merge-confirm' && mergeChoice) {
+    const { strategy, msg } = mergeChoice
+    const admin = strategy.startsWith('admin-')
+    return (
+      <ConfirmDialog
+        message={`${admin ? 'ADMIN BYPASS: ' : ''}Merge PR #${pr.number} via ${mergeMethodLabel(strategy)}?${msg ? `\nMessage: "${sanitize(msg)}"` : ''}`}
+        destructive={true}
+        requireText={admin ? String(pr.number) : null}
+        onConfirm={() => {
           setDialog(null)
-          runWrite(`Merging #${pr.number}`, () => mergePR(repo, pr.number, strategy, msg, { allowAdmin: strategy.startsWith('admin-') })
+          runWrite(`Merging #${pr.number}`, () => mergePR(repo, pr.number, strategy, msg, { allowAdmin: admin })
             // Two-argument then: a refetch problem after a successful merge must not read as "Merge failed".
             .then(() => { showStatus(`✓ Merged PR #${pr.number}`); refetch() }, err => showStatus(`✗ Merge failed: ${sanitize(err.message)}`, true)))
         }}
@@ -431,36 +446,18 @@ export function PRDetail({ prNumber, repo, onBack, onOpenDiff, onOpenConflict, o
     )
   }
 
-  if (dialog === 'approve-body') {
+  if (dialog === 'approve-body' || dialog === 'reqchanges-body') {
+    const approving = dialog === 'approve-body'
     return (
-      <FormCompose
-        title={`Approve PR #${pr.number}`}
-        fields={[{ name: 'body', label: 'Comment (optional)', type: 'text' }]}
-        onSubmit={async (values) => {
+      <ReviewDialog
+        number={pr.number}
+        mode={approving ? 'approve' : 'request-changes'}
+        onSubmit={async (body) => {
           setDialog(null)
-          await runWrite(`Approving #${pr.number}`, async () => {
+          await runWrite(approving ? `Approving #${pr.number}` : `Requesting changes on #${pr.number}`, async () => {
             try {
-              await reviewPR(repo, pr.number, 'approve', values.body || '')
-              showStatus(`✓ Approved PR #${pr.number}`)
-            } catch (err) { showStatus(`✗ ${err.message}`, true) }
-          })
-        }}
-        onCancel={() => setDialog(null)}
-      />
-    )
-  }
-
-  if (dialog === 'reqchanges-body') {
-    return (
-      <FormCompose
-        title={`Request changes on PR #${pr.number}`}
-        fields={[{ name: 'body', label: 'Describe the changes needed', type: 'text' }]}
-        onSubmit={async (values) => {
-          setDialog(null)
-          await runWrite(`Requesting changes on #${pr.number}`, async () => {
-            try {
-              await reviewPR(repo, pr.number, 'request-changes', values.body)
-              showStatus(`✓ Requested changes on PR #${pr.number}`)
+              await reviewPR(repo, pr.number, approving ? 'approve' : 'request-changes', body)
+              showStatus(approving ? `✓ Approved PR #${pr.number}` : `✓ Requested changes on PR #${pr.number}`)
             } catch (err) { showStatus(`✗ ${err.message}`, true) }
           })
         }}

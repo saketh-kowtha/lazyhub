@@ -55,10 +55,14 @@ export async function openUrl(url) {
  */
 export async function runConfiguredCommand(args) {
   const [bin, ...rest] = args
-  return execa(bin, rest, { reject: false })
+  const r = await execa(bin, rest, { reject: false })
+  return { exitCode: r.exitCode ?? 1, stdout: String(r.stdout ?? ''), stderr: String(r.stderr ?? '') }
 }
 
-/** Clipboard commands to try, in order, for this platform. */
+/**
+ * Clipboard commands to try, in order, for this platform.
+ * @returns {Array<[string, string[]]>}
+ */
 function clipboardCommands() {
   if (process.platform === 'darwin') return [['pbcopy', []]]
   if (process.platform === 'win32') return [['clip', []]]
