@@ -5,6 +5,8 @@ export default {
   ci:    { pass: '#3fb950', fail: '#f85149', pending: '#d29922', running: '#d29922' },
   review: { approved: '#3fb950', changes: '#f85149', pending: '#d29922' },
   ui: {
+    bg:           '#0d1117',
+    fg:           '#c9d1d9',
     selected:     '#58a6ff',
     muted:        '#8b949e',
     dim:          '#484f58',

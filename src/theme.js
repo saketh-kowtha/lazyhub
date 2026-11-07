@@ -14,11 +14,17 @@ import catppuccinMocha from './themes/catppuccin-mocha.js'
 import catppuccinLatte from './themes/catppuccin-latte.js'
 import tokyoNight      from './themes/tokyo-night.js'
 import ansi16          from './themes/ansi-16.js'
+import terminal        from './themes/terminal.js'
 import auroraDark      from './themes/aurora-dark.js'
 import auroraLight     from './themes/aurora-light.js'
 import { loadConfig as loadTomlConfig } from './config/loader.js'
+import { detectBackground } from './theme/bg-detect.js'
+
+/** The theme used when none is configured: ANSI named colours only, so it follows the terminal's scheme. */
+export const DEFAULT_THEME_NAME = 'terminal'
 
 export const BUILTIN_THEMES = {
+  'terminal':         terminal,
   'lazyhub-dark':      githubDark,
   'lazyhub-light':     githubLight,
   'github-dark':      githubDark,
@@ -33,14 +39,43 @@ export const BUILTIN_THEMES = {
 
 export const THEME_NAMES = Object.keys(BUILTIN_THEMES)
 
+/**
+ * Light or dark hex theme for the terminal's background (bg-detect.js). Only the hex themes need
+ * this; the default `terminal` theme follows the terminal's own palette and decides nothing.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {'github-dark' | 'github-light'}
+ */
+export function hexThemeForBackground(env = process.env) {
+  return detectBackground(env) === 'light' ? 'github-light' : 'github-dark'
+}
+
+/**
+ * Compatibility view of `t` in the old `scheme.*` shape (fg/accent/border/pr/ci). It is derived from
+ * `t`, so there is one palette; new code reads `t.*` directly.
+ * @param {object} t
+ * @returns {{fg: object, accent: object, border: object, pr: object, ci: object}}
+ */
+export function tToScheme(t) {
+  return {
+    fg:     { default: t.ui.fg, muted: t.ui.muted, subtle: t.ui.dim },
+    accent: { primary: t.ui.selected, secondary: t.ui.selected },
+    border: { default: t.ui.border, focused: t.ui.borderActive, subtle: t.ui.divider },
+    pr:     { open: t.pr.open, draft: t.pr.draft, merged: t.pr.merged, closed: t.pr.closed },
+    ci:     { pass: t.ci.pass, fail: t.ci.fail, pending: t.ci.pending, skipped: t.pr.draft },
+  }
+}
+
 const ThemeContext = createContext({
-  t: githubDark,
-  themeName: 'github-dark',
+  t: terminal,
+  scheme: tToScheme(terminal),
+  themeName: DEFAULT_THEME_NAME,
   setTheme: () => {},
 })
 
 /**
- *
+ * The active theme: `t` (the token tree), `themeName`, `setTheme`, and `scheme` (a derived,
+ * deprecated view of `t`).
+ * @returns {{t: any, scheme: any, themeName: string, setTheme: (name: any) => void}}
  */
 export function useTheme() {
   return useContext(ThemeContext)
@@ -53,7 +88,7 @@ export function useTheme() {
  * @param {string | {name: string, overrides?: object}} [root0.initialTheme] A built-in or file theme name, or the `[theme]` table `{name, overrides}`.
  */
 export function ThemeProvider({ children, initialTheme }) {
-  const [themeCfg, setThemeName] = useState(initialTheme || 'github-dark')
+  const [themeCfg, setThemeName] = useState(initialTheme || DEFAULT_THEME_NAME)
 
   const t = useMemo(() => {
     return resolveTheme(themeCfg)
@@ -66,7 +101,7 @@ export function ThemeProvider({ children, initialTheme }) {
     setThemeName(name)
   }, [])
 
-  const value = useMemo(() => ({ t, themeName, setTheme }), [t, themeName, setTheme])
+  const value = useMemo(() => ({ t, scheme: tToScheme(t), themeName, setTheme }), [t, themeName, setTheme])
 
   return (
     <ThemeContext.Provider value={value}>
@@ -150,27 +185,34 @@ function resolveSemanticTokens(rawTheme) {
  * @param cfg
  */
 export function resolveTheme(cfg) {
-  const fallback = githubDark
+  // Hex themes and theme files are layered over github-dark so a partial theme is still complete;
+  // `terminal` stands alone (merging it over hex values would leak them into an ANSI-only theme).
+  const hexBase = githubDark
+  const named = (name) => {
+    if (name === 'auto') return BUILTIN_THEMES[hexThemeForBackground()]
+    return BUILTIN_THEMES[name]
+  }
+  const layer = (theme) => (theme === terminal ? terminal : resolveSemanticTokens(deepMerge(hexBase, theme)))
 
-  if (!cfg) return fallback
+  if (!cfg) return terminal
 
   // String: either a built-in name or a file path
   if (typeof cfg === 'string') {
-    if (BUILTIN_THEMES[cfg]) return resolveSemanticTokens(deepMerge(fallback, BUILTIN_THEMES[cfg]))
+    if (named(cfg)) return layer(named(cfg))
     const fromFile = loadThemeFile(cfg)
-    return fromFile ? resolveSemanticTokens(deepMerge(fallback, fromFile)) : fallback
+    return fromFile ? resolveSemanticTokens(deepMerge(hexBase, fromFile)) : terminal
   }
 
   // Object forms
   if (typeof cfg === 'object' && !Array.isArray(cfg)) {
     if (typeof cfg.name === 'string') {
-      const namedBase = BUILTIN_THEMES[cfg.name] || fallback
-      return resolveSemanticTokens(deepMerge(deepMerge(fallback, namedBase), cfg.overrides || {}))
+      const base = layer(named(cfg.name) || terminal)
+      return resolveSemanticTokens(deepMerge(base, cfg.overrides || {}))
     }
-    return resolveSemanticTokens(deepMerge(fallback, cfg))
+    return resolveSemanticTokens(deepMerge(hexBase, cfg))
   }
 
-  return fallback
+  return terminal
 }
 
 /**

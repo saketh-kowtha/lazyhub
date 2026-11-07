@@ -74,6 +74,8 @@ export default {
   },
   review: { approved: '#1a7f37', changes: '#cf222e', pending: '#9a6700' },
   ui: {
+    bg:           '#ffffff',
+    fg:           '#1f2328',
     selected: '#0969da',
     muted: '#656d76',
     dim: '#7d8590',
