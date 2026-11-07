@@ -174,3 +174,36 @@ describe('colours come from the theme (#489)', () => {
     for (const [file, n] of Object.entries(BASELINE)) expect(now[file] ?? 0, `${file} improved: lower the baseline`).toBe(n)
   })
 })
+
+describe('no double dimming (#566)', () => {
+  // The text of every <Text ...> opening tag: attributes may hold `=>` and nested braces.
+  function textTags(src) {
+    const tags = []
+    for (let i = src.indexOf('<Text'); i !== -1; i = src.indexOf('<Text', i + 1)) {
+      if (/[A-Za-z]/.test(src[i + 5] ?? '')) continue
+      let depth = 0
+      let j = i + 5
+      for (; j < src.length; j++) {
+        if (src[j] === '{') depth++
+        else if (src[j] === '}') depth--
+        else if (src[j] === '>' && depth === 0 && src[j - 1] !== '=') break
+      }
+      tags.push(src.slice(i, j + 1))
+    }
+    return tags
+  }
+  const doubleDimmed = tag => /\bdimColor\b/.test(tag) && /\bcolor=\{[^}]*\bdim\b/.test(tag)
+
+  it('no <Text> combines dimColor with a dim theme colour', () => {
+    const hits = SCANNED.flatMap(f => textTags(readFileSync(f, 'utf8')).filter(doubleDimmed).map(tag => `${relative(ROOT, f)}: ${tag.replace(/\s+/g, ' ')}`))
+    expect(hits).toEqual([])
+  })
+
+  it('the scan recognises the pattern and ignores single dimming', () => {
+    expect(textTags('<Text color={t.ui.dim} dimColor italic>x</Text>').some(doubleDimmed)).toBe(true)
+    expect(textTags('<Text dimColor color={t.ui.dim}>x</Text>').some(doubleDimmed)).toBe(true)
+    expect(textTags('<Text color={t.ui.dim}>x</Text>').some(doubleDimmed)).toBe(false)
+    expect(textTags('<Text dimColor>x</Text>').some(doubleDimmed)).toBe(false)
+    expect(textTags('<Text color={t.ui.dim} onClick={() => go()}>x</Text><Text dimColor>y</Text>').some(doubleDimmed)).toBe(false)
+  })
+})

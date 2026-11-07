@@ -117,13 +117,12 @@ export function HelpOverlay({ pane, view, actionCtx, onClose, availableWidth, av
 // ─── PR summary panel (right side) ───────────────────────────────────────────
 
 // ─── Pane header ──────────────────────────────────────────────────────────────
+// One row inside the pane's own box: no rule under it (#566), the box already frames the pane.
 
 export function PaneHeader({ pane, count, loading, error, isStale }) {
   const { t } = useTheme()
   return (
-    <Box paddingX={1} paddingY={0} gap={1} flexShrink={0} height={2} overflow="hidden"
-         borderStyle="single" borderTop={false} borderLeft={false} borderRight={false}
-         borderColor={t.ui.divider}>
+    <Box paddingX={1} paddingY={0} gap={1} flexShrink={0} height={1} overflow="hidden">
       <Text color={t.ui.selected} bold wrap="truncate">{PANE_ICONS[pane] || '✦'}  {PANE_LABELS[pane] || pane}</Text>
       {count != null && !loading && <Text color={t.ui.dim}>{count}</Text>}
       {isStale && <Text color={t.ui.muted} wrap="truncate">⟳ refreshing</Text>}

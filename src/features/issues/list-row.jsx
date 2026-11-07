@@ -8,22 +8,14 @@ import { format } from 'timeago.js'
 import { sanitize, safeHex, formatLogin } from '../../utils.js'
 import { fitCell, cellWidth, planRow } from '../../ui/row-layout.js'
 
-// ─── Age colour ───────────────────────────────────────────────────────────────
-
-function ageColor(updatedAt, t) {
-  if (!updatedAt) return t.ui.dim
-  const days = (Date.now() - new Date(updatedAt).getTime()) / 86_400_000
-  if (days < 3)  return t.ci.pass     // green  — fresh
-  if (days < 7)  return undefined     // default — normal
-  if (days < 14) return t.ci.pending  // yellow — getting stale
-  return t.ci.fail                     // red    — stale
-}
-
-function IssueStateBadge({ issue, t }) {
+// Colour budget (#566): the state is the glyph (● open, ○ closed) and the focused row takes the one
+// accent; everything else is muted. Labels are muted unless the row is focused.
+function IssueStateBadge({ issue, t, isSelected }) {
+  const quiet = isSelected ? t.ui.selected : t.ui.muted
   switch (issue.state) {
-    case 'OPEN':   return <Text color={t.issue.open}>●</Text>
-    case 'CLOSED': return <Text color={t.issue.closed}>●</Text>
-    default:       return <Text color={t.ui.muted}>●</Text>
+    case 'OPEN':   return <Text color={isSelected ? t.ui.selected : undefined}>●</Text>
+    case 'CLOSED': return <Text color={quiet}>○</Text>
+    default:       return <Text color={quiet}>●</Text>
   }
 }
 
@@ -36,27 +28,28 @@ export const IssueRow = memo(({ issue, isSelected, t, width = 78 }) => {
   const visibleLabels = (issue.labels || []).slice(0, 2).map(l => ({ color: safeHex(l.color), text: `[${sanitize(l.name).slice(0, 14)}]` }))
   const extraLabels   = (issue.labels || []).length - 2
   const labelText     = visibleLabels.map(l => l.text).join(' ') + (extraLabels > 0 ? ` +${extraLabels}` : '')
-  const timeColor     = ageColor(issue.updatedAt, t)
+  const quiet         = isSelected ? t.ui.selected : t.ui.muted
   // One line, never wider than the pane (#429): the number keeps its columns, the title takes
   // the rest, and labels, then author, then age are dropped when the pane is narrow.
   const labelCols = labelText ? cellWidth(labelText) + 1 : 0
   const { titleWidth, show } = planRow(width, {
-    fixed: 2 + 2 + NUM_COLS,
+    fixed: 2 + 1 + 2 + NUM_COLS,
     optional: [{ key: 'labels', width: labelCols }, { key: 'author', width: AUTHOR_COLS + 1 }, { key: 'age', width: AGE_COLS + 1 }],
   })
 
   return (
     <Box paddingX={1} height={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-      <IssueStateBadge issue={issue} t={t} />
+      <Text color={isSelected ? t.ui.selected : undefined}>{isSelected ? '▎' : ' '}</Text>
+      <IssueStateBadge issue={issue} t={t} isSelected={isSelected} />
       <Text> </Text>
-      <Text color={t.ui.dim} bold>{fitCell(`#${issue.number}`, NUM_COLS)}</Text>
-      <Text color={isSelected ? t.ui.selected : undefined}>{fitCell(sanitize(issue.title), titleWidth)}</Text>
+      <Text color={quiet} bold>{fitCell(`#${issue.number}`, NUM_COLS)}</Text>
+      <Text color={isSelected ? t.ui.selected : undefined} bold={isSelected}>{fitCell(sanitize(issue.title), titleWidth)}</Text>
       {show.labels && labelCols > 0 && visibleLabels.map(l => (
-        <React.Fragment key={l.text}><Text color={l.color}> {l.text}</Text></React.Fragment>
+        <React.Fragment key={l.text}><Text color={quiet}> {l.text}</Text></React.Fragment>
       ))}
-      {show.labels && extraLabels > 0 && <Text color={t.ui.muted}> +{extraLabels}</Text>}
-      {show.author && <Text color={t.ui.muted}> {authorLogin}</Text>}
-      {show.age && <Text color={timeColor}> {fitCell(format(issue.updatedAt), AGE_COLS)}</Text>}
+      {show.labels && extraLabels > 0 && <Text color={quiet}> +{extraLabels}</Text>}
+      {show.author && <Text color={quiet}> {authorLogin}</Text>}
+      {show.age && <Text color={quiet}> {fitCell(format(issue.updatedAt), AGE_COLS)}</Text>}
     </Box>
   )
 })

@@ -4,6 +4,8 @@
  */
 export default {
   ui: {
+    bg:           undefined,
+    fg:           undefined,
     selected:     'cyan',
     headerBg:     'blue',
     border:       'grey',

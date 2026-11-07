@@ -8,7 +8,7 @@
 
 import React from 'react'
 import { Box, Text, useStdout } from 'ink'
-import { useTheme } from '../theme/index.js'
+import { useTheme } from '../theme.js'
 import { Popover } from './Popover.jsx'
 
 const COLUMN_WIDTH = 26
@@ -21,7 +21,7 @@ const COLUMN_WIDTH = 26
  * @returns {import('react').ReactElement} popup
  */
 export function WhichKey({ prefix, items, onClose }) {
-  const { scheme } = useTheme()
+  const { t } = useTheme()
   const { stdout } = useStdout()
   const termCols = stdout?.columns || 80
   const termRows = stdout?.rows || 24
@@ -44,17 +44,17 @@ export function WhichKey({ prefix, items, onClose }) {
       preferredSide="below"
       onClose={onClose}
     >
-      <Box flexDirection="column" borderStyle="round" borderColor={scheme.border.focused} paddingX={1} width={width} height={height}>
+      <Box flexDirection="column" borderStyle="round" borderColor={t.ui.borderActive} paddingX={1} width={width} height={height}>
         <Box justifyContent="space-between">
-          <Text color={scheme.fg.default} bold>{prefix}  go to / prefix</Text>
-          <Text color={scheme.fg.subtle}>Esc cancel</Text>
+          <Text color={t.ui.fg} bold>{prefix}  go to / prefix</Text>
+          <Text color={t.ui.dim}>Esc cancel</Text>
         </Box>
         {rows.map((row, i) => (
           <Box key={i}>
             {row.map(item => (
               <Box key={item.key} width={COLUMN_WIDTH}>
-                <Text color={scheme.accent.secondary} bold>{item.key}</Text>
-                <Text color={scheme.fg.muted}>  {item.label}</Text>
+                <Text color={t.ui.selected} bold>{item.key}</Text>
+                <Text color={t.ui.muted}>  {item.label}</Text>
               </Box>
             ))}
           </Box>

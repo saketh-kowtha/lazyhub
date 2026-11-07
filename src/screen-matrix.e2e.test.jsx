@@ -48,15 +48,17 @@ import { sendInput } from './test/input-bus.js'
 import { cleanup, renderWithProviders, waitForExpectation } from './test/test-helpers.jsx'
 import { unrouted } from './test/gh-fixtures.js'
 
-const SIZES = [[50, 15], [60, 18], [60, 20], [80, 24], [120, 40], [200, 50]]
+const SIZES = [[50, 15], [60, 18], [60, 20], [80, 24], [120, 30], [120, 40], [200, 50]]
 const THEMES = [
-  { name: 'default', legacy: 'github-dark', scheme: 'lazyhub-dark' },
-  { name: 'catppuccin-latte', legacy: 'catppuccin-latte', scheme: 'lazyhub-light' },
+  { name: 'default', theme: 'terminal' },
+  { name: 'catppuccin-latte', theme: 'catppuccin-latte' },
+  { name: 'github-dark', theme: 'github-dark' },
 ]
 const VARIANTS = [
   { label: 'default theme', theme: THEMES[0], mode: 'color' },
   { label: 'catppuccin-latte theme', theme: THEMES[1], mode: 'color' },
   { label: 'default theme, NO_COLOR=1', theme: THEMES[0], mode: 'NO_COLOR' },
+  { label: 'github-dark theme', theme: THEMES[2], mode: 'color' },
 ]
 
 const key = (input, k = {}) => ({ input, key: k })
@@ -105,7 +107,7 @@ function hasColourParam(seq) {
 function mount(cols, rows, theme = THEMES[0]) {
   size.columns = cols
   size.rows = rows
-  const view = renderWithProviders(<App repo="owner/repo" />, { legacyTheme: theme.legacy, schemeTheme: theme.scheme })
+  const view = renderWithProviders(<App repo="owner/repo" />, { theme: theme.theme })
   // ink-testing-library's stdout is fixed at 100 columns; Ink lays out against stdout.columns.
   Object.defineProperty(view.stdout, 'columns', { value: cols, configurable: true })
   Object.defineProperty(view.stdout, 'rows', { value: rows, configurable: true })
@@ -239,6 +241,22 @@ describe('screen matrix: real App against fixtures', () => {
           })
         }
       }
+    })
+  })
+
+  describe('NO_COLOR stays readable with the terminal theme (#460, #566)', () => {
+    // Without colour the focused row and each state must still be told apart by glyph and weight.
+    it.each([[80, 24], [120, 30]])('%ix%i prs: gutter glyph, state glyphs and bold survive', async (cols, rows) => {
+      const c = { cols, rows, theme: THEMES[0], mode: 'NO_COLOR', screen: SCREENS.find(x => x.id === 'prs') }
+      const view = await reach(c)
+      const frame = terminalFrame(view, 'NO_COLOR')
+      const plain = strip(frame)
+      expect(violations(frame, c).map(v => v.message)).toEqual([])
+      expect(plain.match(/▎[●▲◐⟳] #\d+/g) ?? [], dumpOf(frame)).toHaveLength(1)
+      expect(plain, dumpOf(frame)).toMatch(/[●▲◐]/)
+      expect(plain, dumpOf(frame)).toMatch(/[✓✗]/)
+      // eslint-disable-next-line no-control-regex
+      expect(frame, 'bold survives NO_COLOR').toMatch(/\x1b\[[0-9;]*\b1[;m]/)
     })
   })
 

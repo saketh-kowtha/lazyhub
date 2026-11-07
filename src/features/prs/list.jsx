@@ -24,10 +24,9 @@ import { AppContext } from '../../context.js'
 import { usePaneState } from '../../hooks/usePaneState.js'
 import { loadConfig, loadState, saveState } from '../../config.js'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
-import { useTheme } from '../../theme/index.js'
+import { useTheme } from '../../theme.js'
 import { sanitize } from '../../utils.js'
 import {
-  schemeToT,
   canToggleAutoMergeFromList,
   previewPanelLayout,
 } from './list-row.jsx'
@@ -46,12 +45,11 @@ const PAGE_SIZE = Math.max(1, Math.min(Number(_cfg.pageSize) || 50, 100))
 const PREVIEW_DELAY_MS = 150
 const emptyMore = (key) => ({ key, items: [], endCursor: null, hasNextPage: null, totalCount: null, loading: false, error: null })
 
-export { schemeToT, canToggleAutoMergeFromList } from './list-row.jsx'
+export { canToggleAutoMergeFromList } from './list-row.jsx'
 
 export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDiff, onPaneState }) {
   useKeyScope('pane')
-  const { scheme } = useTheme()
-  const t = schemeToT(scheme)
+  const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const termRows = stdout?.rows || 24
@@ -457,7 +455,6 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       popoverDismissed={popoverDismissed}
       setPopoverDismissed={setPopoverDismissed}
       expansionEnabled={expansionEnabled}
-      scheme={scheme}
     />
   )
 }

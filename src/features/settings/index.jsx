@@ -397,7 +397,7 @@ function AIProviderEditor({ ai, onSave, onCancel }) {
               )}
             </Box>
             {isSelected && hints[field] && (
-              <Text color={t.ui.dim} dimColor>  {hints[field]}</Text>
+              <Text color={t.ui.dim}>  {hints[field]}</Text>
             )}
           </Box>
         )
@@ -431,7 +431,7 @@ function FieldEditor({ label, hint, value, mask, onSave, onCancel }) {
       <Box marginBottom={1}>
         <Text color={t.ui.selected} bold>{label}</Text>
       </Box>
-      {hint && <Text color={t.ui.dim} dimColor>{hint}</Text>}
+      {hint && <Text color={t.ui.dim}>{hint}</Text>}
       <Box marginTop={1}>
         <Text color={t.ui.muted}>&gt; </Text>
         <TextInput

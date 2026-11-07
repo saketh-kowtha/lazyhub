@@ -20,7 +20,7 @@ import { cleanup, flush, renderWithProviders, waitForExpectation } from '../test
 import { sendInput } from '../test/input-bus.js'
 import { diffFilesPage, fakeFilePatch } from '../test/diff-fixtures.js'
 import { PRDetail } from '../features/prs/detail.jsx'
-import { PRRow, PRDetailPopoverContentMemo, schemeToT } from '../features/prs/list-row.jsx'
+import { PRRow, PRDetailPopoverContentMemo } from '../features/prs/list-row.jsx'
 import { IssueList } from '../features/issues/list.jsx'
 import { IssueDetail } from '../features/issues/detail.jsx'
 import { BranchList } from '../features/branches/index.jsx'
@@ -35,8 +35,7 @@ import { useDiffState } from '../features/prs/diff/state.js'
 import { DiffView } from '../features/prs/diff/render.jsx'
 import { toLogLines, logTitle } from '../features/actions/log-lines.js'
 import { annotationLines } from '../features/prs/ci-log.js'
-import scheme from '../theme/schemes/lazyhub-dark.js'
-import { useTheme } from '../theme.js'
+import { resolveTheme, useTheme } from '../theme.js'
 
 vi.mock('ink', async () => ({
   ...await vi.importActual('ink'),
@@ -209,11 +208,11 @@ const PROTECTION = poison({ requiredReviews: 1, requireCodeOwnerReviews: true, r
 
 describe('PR views', () => {
   it('list row and popover', () => {
-    const t = schemeToT(scheme)
+    const t = resolveTheme('github-dark')
     const row = renderWithProviders(<PRRow pr={PR} isSelected={true} t={t} titleWidth={60} expanded={true} />)
     expect(frameOf(row)).toContain('CANARY')
     expectClean(frameOf(row))
-    const pop = renderWithProviders(<PRDetailPopoverContentMemo pr={PR} t={t} scheme={scheme} width={70} />)
+    const pop = renderWithProviders(<PRDetailPopoverContentMemo pr={PR} t={t} width={70} />)
     expectClean(frameOf(pop))
   })
 

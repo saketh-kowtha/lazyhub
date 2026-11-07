@@ -265,7 +265,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
         <Box paddingX={2} paddingY={1} flexDirection="column">
           <Text color={t.ci.fail}>⚠ Command failed — [r] retry</Text>
           <Text color={t.ui.dim}>{error}</Text>
-          <Text color={t.ui.dim} dimColor>$ {resolveCommandArgs(paneDef.command, repo).join(' ')}</Text>
+          <Text color={t.ui.dim}>$ {resolveCommandArgs(paneDef.command, repo).join(' ')}</Text>
         </Box>
       )}
 

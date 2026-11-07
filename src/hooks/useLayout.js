@@ -62,10 +62,10 @@ export function computeLayout({ columns: cols, rows }, cfg = {}) {
   const borderStyle = cfg.borderStyle === 'none' ? undefined : (cfg.borderStyle ?? 'round')
   const compactFooter = rows < 20 || !!cfg.compactFooter
 
-  // Chrome: border-top(1) + PaneHeader(2) + border-bottom(1) + statusBar(1) + footerKeys(0|1) + pane-filter-bar(1) = 6|7
+  // Chrome: border-top(1) + PaneHeader(1) + border-bottom(1) + statusBar(1) + footerKeys(0|1) + pane-filter-bar(1) = 5|6
   // TabStrip (shown instead of sidebar) adds 1 row.
   const tabStripRow = showSidebar ? 0 : 1
-  const listHeight = Math.max(3, rows - (compactFooter ? 6 : 7) - tabStripRow)
+  const listHeight = Math.max(3, rows - (compactFooter ? 5 : 6) - tabStripRow)
 
   return {
     mode: tooSmall ? 'too-small' : bp.name, tooSmall, minCols: MIN_COLS, minRows: MIN_ROWS,

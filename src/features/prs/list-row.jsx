@@ -1,85 +1,29 @@
 /** PR rows, expanded metadata and popover content; shared display summaries stay here. */
 import React, { memo } from 'react'
 import { Box, Text } from 'ink'
-import { sanitize, shortAge, authorColor, truncateToWidth, formatLogin, padEndWidth, padStartWidth } from '../../utils.js'
-
-// ─── Theme adapter ────────────────────────────────────────────────────────────
-// Maps the new token scheme (src/theme/index.js) to the legacy `t.*` shape
-// consumed by every sub-component in this file.  All token values are 1:1
-// with the lazyhub-dark scheme values that existed before this migration.
-//
-// Token map:
-//   t.ui.muted    → scheme.fg.muted      (#768390 muted secondary text)
-//   t.ui.dim      → scheme.fg.subtle     (#545d68 tertiary/separator text)
-//   t.ui.selected → scheme.accent.primary (#539bf5 focused row / active)
-//   t.pr.*        → scheme.pr.*          (open/draft/merged/closed indicators)
-//   t.ci.*        → scheme.ci.*          (pass/fail/pending/skipped)
-//   t.review.*    → mapped to ci.pass/ci.fail (same semantic)
-//   t.pr.conflict → scheme.ci.pending    (amber; identical value in old theme)
-/**
- * Maps a new-style token scheme object (src/theme/index.js) to the legacy
- * `t.*` shape consumed by PR list sub-components.
- *
- * @param {object} scheme - Active scheme from useTheme().scheme
- * @returns {{ ui: object, pr: object, ci: object, review: object }}
- */
-export function schemeToT(scheme) {
-  return {
-    ui: {
-      muted:    scheme.fg.muted,
-      dim:      scheme.fg.subtle,
-      selected: scheme.accent.primary,
-    },
-    pr: {
-      open:     scheme.pr.open,
-      draft:    scheme.pr.draft,
-      merged:   scheme.pr.merged,
-      closed:   scheme.pr.closed,
-      // conflict had no token; old theme used ci.pending amber — keep that.
-      conflict: scheme.ci.pending,
-    },
-    ci: {
-      pass:    scheme.ci.pass,
-      fail:    scheme.ci.fail,
-      pending: scheme.ci.pending,
-      skipped: scheme.ci.skipped,
-    },
-    review: {
-      approved: scheme.ci.pass,
-      changes:  scheme.ci.fail,
-    },
-  }
-}
-
-// ─── Age colour ───────────────────────────────────────────────────────────────
-
-function ageColor(updatedAt, t) {
-  if (!updatedAt) return t.ui.dim
-  const days = (Date.now() - new Date(updatedAt).getTime()) / 86_400_000
-  if (days < 0.167) return t.ci.pass   // < 4h — fresh, green
-  if (days < 3)     return undefined    // 4h–3d — recent, default
-  if (days < 7)     return t.ci.pending // 3–7d — aging, yellow
-  if (days < 21)    return t.ci.fail    // 7–21d — stale, red
-  return t.ui.dim                        // > 21d — frozen, dim
-}
+import { sanitize, shortAge, truncateToWidth, formatLogin, padEndWidth, padStartWidth } from '../../utils.js'
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
+// Colour budget (#566): the state is the glyph (● open, ◐ draft, ⟳ auto-merge, ◆ merged, ○ closed,
+// ▲ conflict) and the focused row takes the one accent. Red and yellow are kept for what needs
+// attention: failing or pending CI, changes requested, a merge conflict.
 
-function PRStateBadge({ pr, t }) {
+function PRStateBadge({ pr, t, isSelected }) {
   const conflicting = pr.state === 'OPEN' && pr.mergeable === 'CONFLICTING'
-  if (pr.isDraft)   return <Text color={t.pr.draft}>◐</Text>
-  if (conflicting)  return <Text color={t.pr.conflict || t.ci.pending}>▲</Text>
+  const quiet = isSelected ? t.ui.selected : t.ui.muted
+  if (conflicting)  return <Text color={t.pr.conflict || t.ci.pending} bold>▲</Text>
+  if (pr.isDraft)   return <Text color={quiet}>◐</Text>
   switch (pr.state) {
     case 'OPEN':
-      if (pr.autoMergeRequest) return <Text color={t.pr.merged}>⟳</Text>
-      return <Text color={t.pr.open}>●</Text>
-    case 'MERGED': return <Text color={t.pr.merged}>●</Text>
-    case 'CLOSED': return <Text color={t.pr.closed}>●</Text>
-    default:       return <Text color={t.ui.muted}>●</Text>
+      if (pr.autoMergeRequest) return <Text color={isSelected ? t.ui.selected : undefined}>⟳</Text>
+      return <Text color={isSelected ? t.ui.selected : undefined}>●</Text>
+    case 'MERGED': return <Text color={quiet}>◆</Text>
+    case 'CLOSED': return <Text color={quiet}>○</Text>
+    default:       return <Text color={quiet}>●</Text>
   }
 }
 
-function CIBadge({ pr, t }) {
+function CIBadge({ pr, t, isSelected }) {
   const checks = pr.statusCheckRollup
   let total; let failing; let pending
   if (checks && checks.length > 0) {
@@ -93,16 +37,16 @@ function CIBadge({ pr, t }) {
   } else {
     return null
   }
-  if (failing > 0) return <Text color={t.ci.fail}> ✗ {failing}/{total}</Text>
+  if (failing > 0) return <Text color={t.ci.fail} bold> ✗ {failing}/{total}</Text>
   if (pending > 0) return <Text color={t.ci.pending}> ● {pending}/{total}</Text>
-  return <Text color={t.ci.pass}> ✓</Text>
+  return <Text color={isSelected ? t.ui.selected : t.ui.muted}> ✓</Text>
 }
 
-function ReviewBadge({ pr, t }) {
+function ReviewBadge({ pr, t, isSelected }) {
   const rd = pr.reviewDecision
   if (!rd || rd === 'REVIEW_REQUIRED') return <Text> </Text>
-  if (rd === 'APPROVED')          return <Text color={t.review?.approved || t.ci.pass}> ✓</Text>
-  if (rd === 'CHANGES_REQUESTED') return <Text color={t.review?.changes  || t.ci.fail}> ✗</Text>
+  if (rd === 'APPROVED')          return <Text color={isSelected ? t.ui.selected : t.ui.muted}> ✓</Text>
+  if (rd === 'CHANGES_REQUESTED') return <Text color={t.review?.changes  || t.ci.fail} bold> ✗</Text>
   return <Text> </Text>
 }
 
@@ -119,7 +63,7 @@ function summarizeChecks(checks, t, summary) {
       pending: summary.pending,
       passing,
       total: summary.total,
-      ciColor: summary.failing ? t.ci.fail : summary.pending ? t.ci.pending : t.ci.pass,
+      ciColor: summary.failing ? t.ci.fail : summary.pending ? t.ci.pending : t.ui.muted,
     }
   }
   const failing = checks.filter(check => /failure|error/i.test(check.state || check.conclusion || '')).length
@@ -129,7 +73,7 @@ function summarizeChecks(checks, t, summary) {
     pending,
     passing: checks.length - failing - pending,
     total: checks.length,
-    ciColor: failing ? t.ci.fail : pending ? t.ci.pending : checks.length ? t.ci.pass : t.ui.dim,
+    ciColor: failing ? t.ci.fail : pending ? t.ci.pending : t.ui.muted,
   }
 }
 
@@ -159,17 +103,17 @@ function PRExpandedDetail({ pr, t }) {
         <Text color={ciColor} wrap="truncate">   {ciParts.join('  ')}</Text>
       )}
       {labels.length > 0 && (
-        <Text color={t.ui.dim} wrap="truncate">
+        <Text color={t.ui.selected} wrap="truncate">
           {'◆  ' + labels.map(l => sanitize(l.name)).join('  ·  ')}
         </Text>
       )}
       {reviewers.length > 0 && (
-        <Text color={t.ui.dim} wrap="truncate">
+        <Text color={t.ui.muted} wrap="truncate">
           {'◇  ' + reviewers.map(r => '@' + sanitize(r.login || r.name || '')).join('  ')}
         </Text>
       )}
       {bodyLine ? (
-        <Text color={t.ui.dim} dimColor italic wrap="truncate">
+        <Text color={t.ui.muted} italic wrap="truncate">
           {"   " + sanitize(bodyLine).slice(0, 120)}
         </Text>
       ) : null}
@@ -183,17 +127,15 @@ export const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded, maskTitle 
   // Use display-width-aware helpers so CJK/emoji authors don't break borders
   const rawLogin    = sanitize(pr.author?.login)
   const authorLogin = padEndWidth(formatLogin(rawLogin, 11), 11)
-  const authorClr   = authorColor(pr.author?.login)
   const ageStr      = padStartWidth(shortAge(pr.updatedAt), 4)
-  const timeColor   = ageColor(pr.updatedAt, t)
   const tw          = Math.max(8, titleWidth || 20)
 
   return (
     <Box flexDirection="column">
       <Box paddingX={1} height={1}>
-        <Text color={isSelected ? t.ui.selected : t.ui.dim}>{isSelected ? '▎' : ' '}</Text>
-        <PRStateBadge pr={pr} t={t} />
-        <Text color={t.ui.dim}> {'#' + String(pr.number).padEnd(5)}</Text>
+        <Text color={isSelected ? t.ui.selected : t.ui.muted}>{isSelected ? '▎' : ' '}</Text>
+        <PRStateBadge pr={pr} t={t} isSelected={isSelected} />
+        <Text color={isSelected ? t.ui.selected : t.ui.muted}> {'#' + String(pr.number).padEnd(5)}</Text>
         <Box width={tw} overflow="hidden">
           <Text
             color={isSelected ? t.ui.selected : undefined}
@@ -204,10 +146,10 @@ export const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded, maskTitle 
             {maskTitle ? ' ' : sanitize(pr.title)}
           </Text>
         </Box>
-        <CIBadge pr={pr} t={t} />
-        <ReviewBadge pr={pr} t={t} />
-        <Text color={authorClr || t.ui.muted}> @{authorLogin}</Text>
-        <Text color={timeColor}> {ageStr}</Text>
+        <CIBadge pr={pr} t={t} isSelected={isSelected} />
+        <ReviewBadge pr={pr} t={t} isSelected={isSelected} />
+        <Text color={isSelected ? t.ui.selected : t.ui.muted}> @{authorLogin}</Text>
+        <Text color={isSelected ? t.ui.selected : t.ui.muted}> {ageStr}</Text>
       </Box>
       {expanded && <PRExpandedDetail pr={pr} t={t} />}
     </Box>
@@ -259,11 +201,10 @@ export function previewPanelLayout({ listWidth, termRows, previewWidth }) {
  *
  * @param {object} props
  * @param {object} props.pr  - PR object from the list (includes body, statusCheckRollup, etc.)
- * @param {object} props.t   - Theme adapter object (schemeToT output).
- * @param {object} props.scheme - Raw theme scheme from useTheme().
+ * @param {object} props.t   - The active theme (useTheme().t).
  * @param {number} props.width  - Effective popover inner width (box width - 2 for borders).
  */
-function PRDetailPopoverContent({ pr, t, scheme, width }) {
+function PRDetailPopoverContent({ pr, t, width }) {
   const innerW = Math.max(10, width - 2)  // subtract left+right border
 
   // ── Meta line: state · @author → base · age
@@ -297,7 +238,7 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
   // ── Unresolved threads (reviewThreads not in list payload; default 0)
   const unresolvedCount = 0
 
-  const borderColor  = scheme.border.focused
+  const borderColor  = t.ui.borderActive
 
   return (
     <Box
@@ -308,7 +249,7 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
     >
       {/* Title */}
       <Box paddingX={1}>
-        <Text color={scheme.fg.default} bold wrap="truncate">
+        <Text color={t.ui.fg} bold wrap="truncate">
           {'#' + pr.number + ' ' + sanitize(pr.title || '')}
         </Text>
       </Box>
@@ -327,7 +268,7 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
       {/* Body excerpt */}
       {bodyLines.map((line, idx) => (
         <Box key={idx} paddingX={1}>
-          <Text color={scheme.fg.default} wrap="truncate">
+          <Text color={t.ui.fg} wrap="truncate">
             {line || ' '}
           </Text>
         </Box>

@@ -1,18 +1,20 @@
 /** catppuccin-mocha.js — Catppuccin Mocha (dark) color scheme. */
 export default {
-  pr:    { open: '#a6e3a1', merged: '#cba6f7', closed: '#f38ba8', draft: '#6c7086', conflict: '#f9e2af' },
-  issue: { open: '#a6e3a1', closed: '#6c7086' },
+  pr:    { open: '#a6e3a1', merged: '#cba6f7', closed: '#f38ba8', draft: '#9399b2', conflict: '#f9e2af' },
+  issue: { open: '#a6e3a1', closed: '#9399b2' },
   ci:    { pass: '#a6e3a1', fail: '#f38ba8', pending: '#f9e2af', running: '#f9e2af' },
   review: { approved: '#a6e3a1', changes: '#f38ba8', pending: '#f9e2af' },
   ui: {
+    bg:           '#1e1e2e',
+    fg:           '#cdd6f4',
     selected:     '#89b4fa',
     muted:        '#a6adc8',
-    dim:          '#6c7086',
-    border:       '#45475a',
+    dim:          '#7f849c',
+    border:       '#4a4d62',
     borderActive: '#89b4fa',
     headerBg:     '#181825',
     activeBg:     '#313244',
-    divider:      '#1e1e2e',
+    divider:      '#4a4d62',
     rowHover:     '#181825',
   },
   diff: {

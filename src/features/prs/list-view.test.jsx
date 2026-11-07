@@ -5,12 +5,11 @@ import { cleanup } from 'ink-testing-library'
 import { renderWithProviders } from '../../test/test-helpers.jsx'
 import { PRListView } from './list-view.jsx'
 import { PRRow } from './list-row.jsx'
-import { schemeToT } from './list.jsx'
-import lazyhubDark from '../../theme/schemes/lazyhub-dark.js'
+import { resolveTheme } from '../../theme.js'
 
 afterEach(cleanup)
 
-const t = schemeToT(lazyhubDark)
+const t = resolveTheme('github-dark')
 const filler = 'x'.repeat(44)
 const pr = (number, marker, login = 'maria-lopez') => ({
   number,
@@ -33,7 +32,7 @@ function renderList(cols, items, cursor, extra = {}) {
       innerWidth={cols - 4} termCols={cols} termRows={40}
       selectedPR={items[cursor]} dialog={null}
       popoverDismissed={false} setPopoverDismissed={() => {}}
-      expansionEnabled={false} scheme={lazyhubDark}
+      expansionEnabled={false}
       {...extra}
     /></Box>,
   )

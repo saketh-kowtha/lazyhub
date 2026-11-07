@@ -6,7 +6,7 @@
 
 import React from 'react'
 import { Box, Text } from 'ink'
-import { sanitize, sanitizeBlock, safeHex, shortAge, displayWidth, getMarkdownRows } from '../../utils.js'
+import { sanitize, sanitizeBlock, shortAge, displayWidth, getMarkdownRows } from '../../utils.js'
 import { wrapLine } from './timeline-state.js'
 
 const ROLE = {
@@ -76,7 +76,7 @@ export function buildTimelineRows({ issue, items, width, t, repo = '' }) {
   if (issue?.labels?.length > 0) {
     push(0, 'labels', (
       <Text wrap="truncate">
-        {issue.labels.map(l => <React.Fragment key={l.name}><Text color={safeHex(l.color)}>{`[${sanitize(l.name)}] `}</Text></React.Fragment>)}
+        {issue.labels.map(l => <React.Fragment key={l.name}><Text color={t.ui.muted}>{`[${sanitize(l.name)}] `}</Text></React.Fragment>)}
       </Text>
     ))
   }

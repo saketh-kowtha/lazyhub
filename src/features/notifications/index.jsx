@@ -32,11 +32,11 @@ export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigate
 
   function notifTypeIcon(type) {
     switch (type) {
-      case 'PullRequest': return { icon: '⎇', color: t.pr.open }
-      case 'Issue': return { icon: '○', color: t.issue.open }
-      case 'Release': return { icon: '▸', color: t.ui.selected }
-      case 'Discussion': return { icon: '💬', color: t.ui.muted }
-      default: return { icon: '●', color: t.ui.muted }
+      case 'PullRequest': return { icon: '⎇' }
+      case 'Issue': return { icon: '○' }
+      case 'Release': return { icon: '▸' }
+      case 'Discussion': return { icon: '💬' }
+      default: return { icon: '●' }
     }
   }
 
@@ -218,19 +218,20 @@ export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigate
           const typeInfo = notifTypeIcon(notif.subject?.type)
           // One line, never wider than the pane (#428): fixed cells keep their width, the
           // title takes the rest, and the reason (then the age) is dropped when it is tight.
-          const { titleWidth, show } = planRow(rowWidth, { fixed: 2 + 3 + REPO_COLS + 1, optional: [{ key: 'reason', width: REASON_COLS + 1 }, { key: 'age', width: AGE_COLS + 1 }] })
+          const { titleWidth, show } = planRow(rowWidth, { fixed: 2 + 1 + 3 + REPO_COLS + 1, optional: [{ key: 'reason', width: REASON_COLS + 1 }, { key: 'age', width: AGE_COLS + 1 }] })
           return (
             <Box key={notif.id} paddingX={1} height={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-              <Box width={3} flexShrink={0}><Text color={typeInfo.color}>{typeInfo.icon}</Text></Box>
-              <Text color={t.ui.dim}>{fitCell(sanitize(notif.repository?.name || ''), REPO_COLS)} </Text>
+              <Text color={isSelected ? t.ui.selected : undefined}>{isSelected ? '▎' : ' '}</Text>
+              <Box width={3} flexShrink={0}><Text color={isSelected ? t.ui.selected : t.ui.muted}>{typeInfo.icon}</Text></Box>
+              <Text color={isSelected ? t.ui.selected : t.ui.muted}>{fitCell(sanitize(notif.repository?.name || ''), REPO_COLS)} </Text>
               <Text
-                color={notif.unread ? (isSelected ? t.ui.selected : undefined) : t.ui.muted}
-                bold={notif.unread}
+                color={isSelected ? t.ui.selected : (notif.unread ? undefined : t.ui.muted)}
+                bold={notif.unread || isSelected}
               >
                 {fitCell(sanitize(notif.subject?.title || ''), titleWidth)}
               </Text>
-              {show.reason && <Text color={t.ui.dim}> {fitCell(sanitize(notif.reason || ''), REASON_COLS)}</Text>}
-              {show.age && <Text color={t.ui.dim}> {fitCell(format(notif.updatedAt), AGE_COLS)}</Text>}
+              {show.reason && <Text color={isSelected ? t.ui.selected : t.ui.muted}> {fitCell(sanitize(notif.reason || ''), REASON_COLS)}</Text>}
+              {show.age && <Text color={isSelected ? t.ui.selected : t.ui.muted}> {fitCell(format(notif.updatedAt), AGE_COLS)}</Text>}
             </Box>
           )
         })}
