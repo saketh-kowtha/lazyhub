@@ -17,7 +17,7 @@ afterEach(cleanup)
 // app.jsx:433 feeds readRawThemeCfg() (the [theme] table, i.e. { name }) into the legacy ThemeProvider.
 describe('Settings > Theme row', () => {
   it('shows the theme name when config.theme is the TOML table { name }', async () => {
-    const view = renderWithProviders(<SettingsPane onBack={() => {}} />, { legacyTheme: { name: 'lazyhub-dark' } })
+    const view = renderWithProviders(<SettingsPane onBack={() => {}} />, { theme: { name: 'lazyhub-dark' } })
     await flush(60)
     expect(view.lastFrame()).not.toContain('[object Object]')
     expect(view.lastFrame()).toMatch(/Theme:\s*lazyhub-dark/)

@@ -11,8 +11,7 @@ import { Box, Text } from 'ink'
 import { render, cleanup } from 'ink-testing-library'
 import { calcPopoverPosition, Popover } from './Popover.jsx'
 import { PRDetailPopoverContentMemo, POPOVER_WIDTH, POPOVER_HEIGHT } from '../features/prs/list-row.jsx'
-import { schemeToT } from '../features/prs/list.jsx'
-import lazyhubDark from '../theme/schemes/lazyhub-dark.js'
+import { resolveTheme } from '../theme.js'
 
 // Helper: build a typical anchor at column `x`, row `y`, size `w`×`h`
 function anchor(x, y, w = 60, h = 1) {
@@ -260,7 +259,7 @@ describe('Popover rendering', () => {
 
   it('PR popover content renders exactly POPOVER_HEIGHT rows (dividers do not wrap)', () => {
     const { lastFrame } = render(
-      <PRDetailPopoverContentMemo pr={pr} t={schemeToT(lazyhubDark)} scheme={lazyhubDark} width={POPOVER_WIDTH} />
+      <PRDetailPopoverContentMemo pr={pr} t={resolveTheme('github-dark')} width={POPOVER_WIDTH} />
     )
     expect(lastFrame().split('\n')).toHaveLength(POPOVER_HEIGHT)
   })

@@ -46,7 +46,6 @@ export function PRListView({
   popoverDismissed,
   setPopoverDismissed,
   expansionEnabled,
-  scheme,
   paging,
   previewWidth,
 }) {
@@ -165,7 +164,6 @@ export function PRListView({
           <PRDetailPopoverContentMemo
             pr={selectedPR}
             t={t}
-            scheme={scheme}
             width={panelWidth}
           />
         </Popover>

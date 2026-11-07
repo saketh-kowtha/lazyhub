@@ -186,7 +186,7 @@ Alphabetical. Cross-references in **bold**.
 
 **Theme install** — `lazyhub theme install <user>/<repo>` subcommand. V1 **marketplace** stand-in per ARCHITECT_DECISIONS §2. Clones a GitHub repo containing a `theme.toml` into `~/.config/lazyhub/themes/`.
 
-**Theme tokens** — The 30 named color/style slots that define a theme (e.g. `accent.primary`, `diff.add.fg`). Documented in `DESIGN_REVAMP.md §3.1`. Source: `src/theme/tokens.js`.
+**Theme tokens** — The 30 named color/style slots that define a theme (e.g. `accent.primary`, `diff.add.fg`). Documented in `DESIGN_REVAMP.md §3.1`. Source: `src/themes/github-dark.js` (the shape every theme fills).
 
 **TOML config** — `~/.config/lazyhub/lazyhub.toml`. The single user-facing customization surface (themes, keymaps, scopes, AI provider, custom tabs, budgets). Phase E1 #130 ships the loader.
 

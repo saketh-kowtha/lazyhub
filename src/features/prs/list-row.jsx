@@ -4,23 +4,13 @@ import { Box, Text } from 'ink'
 import { sanitize, shortAge, authorColor, truncateToWidth, formatLogin, padEndWidth, padStartWidth } from '../../utils.js'
 
 // ─── Theme adapter ────────────────────────────────────────────────────────────
-// Maps the new token scheme (src/theme/index.js) to the legacy `t.*` shape
-// consumed by every sub-component in this file.  All token values are 1:1
-// with the lazyhub-dark scheme values that existed before this migration.
-//
-// Token map:
-//   t.ui.muted    → scheme.fg.muted      (#768390 muted secondary text)
-//   t.ui.dim      → scheme.fg.subtle     (#545d68 tertiary/separator text)
-//   t.ui.selected → scheme.accent.primary (#539bf5 focused row / active)
-//   t.pr.*        → scheme.pr.*          (open/draft/merged/closed indicators)
-//   t.ci.*        → scheme.ci.*          (pass/fail/pending/skipped)
-//   t.review.*    → mapped to ci.pass/ci.fail (same semantic)
-//   t.pr.conflict → scheme.ci.pending    (amber; identical value in old theme)
+// The PR list reads `t` from useTheme() like every other pane. This adapter only serves callers that
+// still hold the derived `scheme` view (useTheme().scheme, see tToScheme in src/theme.js) and need a
+// `t`-shaped object; new code reads `t` directly.
 /**
- * Maps a new-style token scheme object (src/theme/index.js) to the legacy
- * `t.*` shape consumed by PR list sub-components.
+ * Maps the derived `scheme` view of the active theme back to a `t.*`-shaped object.
  *
- * @param {object} scheme - Active scheme from useTheme().scheme
+ * @param {object} scheme - useTheme().scheme
  * @returns {{ ui: object, pr: object, ci: object, review: object }}
  */
 export function schemeToT(scheme) {
@@ -259,11 +249,10 @@ export function previewPanelLayout({ listWidth, termRows, previewWidth }) {
  *
  * @param {object} props
  * @param {object} props.pr  - PR object from the list (includes body, statusCheckRollup, etc.)
- * @param {object} props.t   - Theme adapter object (schemeToT output).
- * @param {object} props.scheme - Raw theme scheme from useTheme().
+ * @param {object} props.t   - The active theme (useTheme().t).
  * @param {number} props.width  - Effective popover inner width (box width - 2 for borders).
  */
-function PRDetailPopoverContent({ pr, t, scheme, width }) {
+function PRDetailPopoverContent({ pr, t, width }) {
   const innerW = Math.max(10, width - 2)  // subtract left+right border
 
   // ── Meta line: state · @author → base · age
@@ -297,7 +286,7 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
   // ── Unresolved threads (reviewThreads not in list payload; default 0)
   const unresolvedCount = 0
 
-  const borderColor  = scheme.border.focused
+  const borderColor  = t.ui.borderActive
 
   return (
     <Box
@@ -308,7 +297,7 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
     >
       {/* Title */}
       <Box paddingX={1}>
-        <Text color={scheme.fg.default} bold wrap="truncate">
+        <Text color={t.ui.fg} bold wrap="truncate">
           {'#' + pr.number + ' ' + sanitize(pr.title || '')}
         </Text>
       </Box>
@@ -327,7 +316,7 @@ function PRDetailPopoverContent({ pr, t, scheme, width }) {
       {/* Body excerpt */}
       {bodyLines.map((line, idx) => (
         <Box key={idx} paddingX={1}>
-          <Text color={scheme.fg.default} wrap="truncate">
+          <Text color={t.ui.fg} wrap="truncate">
             {line || ' '}
           </Text>
         </Box>

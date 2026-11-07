@@ -96,10 +96,10 @@ border/
 
 ### 3.2 Built-in schemes
 
-- **`lazyhub-dark`** — default when terminal background detection is dark or uncertain.
-- **`lazyhub-light`** — selected when terminal background detection reports a light background.
+- **`terminal`** (default) — built only from the 16 ANSI named colours plus bold and inverse, so it follows the terminal's own scheme. Selection is a bold accent plus the gutter glyph, never colour alone.
+- **Hex themes** — `github-dark`, `github-light` (also `lazyhub-dark` and `lazyhub-light`), `catppuccin-mocha`, `catppuccin-latte`, `tokyo-night`, `aurora-dark`, `aurora-light`, plus `ansi-16`. `auto` picks `github-dark` or `github-light` from terminal background detection (`src/theme/bg-detect.js`).
 
-These are the schemes currently registered by `src/theme/index.js`.
+All of them are registered in `src/theme.js`. Every hex theme declares its background (`ui.bg`) and passes the contrast floor in `src/themes/contrast.test.js`: text and state tokens 4.5:1, `muted`/`dim` 3:1, borders 1.8:1.
 
 ### 3.3 Theme overrides
 
@@ -118,8 +118,8 @@ See `CONFIG_REFERENCE.md` and `src/config/defaultConfig.toml` for current keys a
 
 ### 3.4 Implementation contract
 
-- `src/theme/index.js` exports the `useTheme()` hook and the active `scheme`.
-- Theme-aware components read colors from `useTheme().scheme[...]`.
+- `src/theme.js` exports the `useTheme()` hook and the active theme `t` (`t.ui.*`, `t.pr.*`, `t.ci.*`, `t.diff.*`, `t.syntax.*`). There is one token set; `useTheme().scheme` is a derived, deprecated view of it.
+- Theme-aware components read colors from `useTheme().t[...]`.
 - No `chalk.green(...)`, no `<Text color="green">` literals in feature code. PR review check: `git grep -E "color=[\"']\\w+[\"']" src/features` should match nothing.
 - A supported theme switch applies live, without relaunch.
 
@@ -282,8 +282,8 @@ Project-wide decisions belong in `ARCHITECT_DECISIONS.md`. The following visual 
 
 | # | Contract | Requirement |
 |---|---|---|
-| 1 | Default dark palette | `lazyhub-dark` uses GitHub Dark Dimmed-inspired colors: foreground near `#adbac7`, background near `#22272e`, accent near `#539bf5`, added diff background near `#0f2f23`, and deleted diff background near `#3c1f1f`. Scheme files remain the source of exact values. Body text should retain readable contrast; subdued metadata may use lower contrast. |
-| 2 | Theme token shape | Every theme implements the complete taxonomy in `src/theme/tokens.js`; diff add/delete tokens carry foreground and background values. |
+| 1 | Default dark palette | The default `terminal` theme has no hex values (the terminal's palette decides). `lazyhub-dark` is an alias of `github-dark`; theme files in `src/themes/` remain the source of exact values. Body text should retain readable contrast; subdued metadata may use lower contrast. |
+| 2 | Theme token shape | Every theme implements the complete `t.*` shape of `src/themes/github-dark.js`; diff add/delete tokens carry foreground and background values. |
 | 3 | Theme consumption | Components use `useTheme()` tokens. Do not add raw color literals in feature components. |
 | 4 | Layout and width | Shared primitives own positioning and terminal-width calculations. Use the project's width helpers for displayed text, padding and truncation. |
 | 5 | Interaction | Every view remains keyboard operable; overlays close with the documented escape behavior and do not cause parent layout shifts. |

@@ -50,9 +50,9 @@ import { unrouted } from './test/gh-fixtures.js'
 
 const SIZES = [[50, 15], [60, 18], [60, 20], [80, 24], [120, 30], [120, 40], [200, 50]]
 const THEMES = [
-  { name: 'default', legacy: 'terminal', scheme: 'lazyhub-dark' },
-  { name: 'catppuccin-latte', legacy: 'catppuccin-latte', scheme: 'lazyhub-light' },
-  { name: 'github-dark', legacy: 'github-dark', scheme: 'lazyhub-dark' },
+  { name: 'default', theme: 'terminal' },
+  { name: 'catppuccin-latte', theme: 'catppuccin-latte' },
+  { name: 'github-dark', theme: 'github-dark' },
 ]
 const VARIANTS = [
   { label: 'default theme', theme: THEMES[0], mode: 'color' },
@@ -107,7 +107,7 @@ function hasColourParam(seq) {
 function mount(cols, rows, theme = THEMES[0]) {
   size.columns = cols
   size.rows = rows
-  const view = renderWithProviders(<App repo="owner/repo" />, { legacyTheme: theme.legacy, schemeTheme: theme.scheme })
+  const view = renderWithProviders(<App repo="owner/repo" />, { theme: theme.theme })
   // ink-testing-library's stdout is fixed at 100 columns; Ink lays out against stdout.columns.
   Object.defineProperty(view.stdout, 'columns', { value: cols, configurable: true })
   Object.defineProperty(view.stdout, 'rows', { value: rows, configurable: true })
