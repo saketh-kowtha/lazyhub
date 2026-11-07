@@ -449,7 +449,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     return (
       <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
         <Text color={t.ui.selected} bold>Change base branch</Text>
-        <Text color={t.ui.dim}>Current: {pr.baseRefName}</Text>
+        <Text color={t.ui.dim}>Current: {sanitize(pr.baseRefName)}</Text>
         <Box marginTop={1} gap={1}>
           <Text color={t.ui.muted}>New base: </Text>
           <TextInput

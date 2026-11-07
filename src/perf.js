@@ -54,7 +54,7 @@ function appendPerf(entry) {
     if (existsSync(PERF_PATH) && statSync(PERF_PATH).size > MAX_BYTES) {
       writePrivateFile(PERF_PATH, '')
     }
-  } catch {}
+  } catch { /* perf is best effort: a missing file is created by the append below */ }
   appendPrivateFile(PERF_PATH, `${JSON.stringify(entry)}\n`)
 }
 

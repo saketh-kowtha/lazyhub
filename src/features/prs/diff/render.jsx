@@ -301,7 +301,7 @@ export function DiffView({ prNumber, state }) {
                 return (
                   <Box key={i} backgroundColor={isTreeSelected ? t.ui.headerBg : undefined} paddingX={1}>
                     <Text color={isTreeSelected ? t.ui.selected : (treeRow.type === 'dir' ? t.ui.muted : t.diff.ctxFg)} wrap="truncate">
-                      {treeRow.prefix.replace(/[─└├│]/g, c => ({ '─': '─', '└': '└', '├': '├', '│': '│' }[c] || c))}{fileGlyph} {treeRow.name}
+                      {treeRow.prefix.replace(/[─└├│]/g, c => ({ '─': '─', '└': '└', '├': '├', '│': '│' }[c] || c))}{fileGlyph} {sanitize(treeRow.name)}
                     </Text>
                   </Box>
                 )

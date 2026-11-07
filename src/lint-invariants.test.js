@@ -107,3 +107,70 @@ describe('source scan of the UI directories (.js and .jsx)', () => {
     expect(STATIC_THEME.test("import { useTheme } from '../../theme.js'")).toBe(false)
   })
 })
+
+describe('empty blocks need a reason (#489)', () => {
+  it('rejects an empty catch and accepts one that says why', async () => {
+    expect((await errorsFor('try { JSON.parse("") } catch {}', 'src/features/prs/x.js')).some(m => /Empty block/.test(m))).toBe(true)
+    expect(await errorsFor('try { JSON.parse("") } catch { /* the stream may be closed */ }', 'src/features/prs/x.js')).toEqual([])
+  })
+})
+
+describe('warning budget (#489)', () => {
+  it('complexity and function length are warnings, and the budget is a --max-warnings in the lint script', () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
+    expect(pkg.scripts.lint).toMatch(/--max-warnings \d+/)
+    const rc = JSON.parse(readFileSync(join(ROOT, '.eslintrc.json'), 'utf8'))
+    expect(rc.rules.complexity[0]).toBe('warn')
+    expect(rc.rules['max-lines-per-function'][0]).toBe('warn')
+    expect(rc.rules['no-empty']).toBe('error')
+  })
+})
+
+// Source scans over every UI file. Each has a baseline of known, justified exceptions that may only shrink.
+const SCANNED = [
+  ...['features', 'components', 'ui'].flatMap(d => uiFiles(join(ROOT, 'src', d))),
+  ...['app.jsx', 'app-views.jsx', 'app-panels.jsx'].map(f => join(ROOT, 'src', f)),
+]
+
+describe('GitHub text is sanitized before it is drawn (#489)', () => {
+  // A <Text> whose child is a bare GitHub-sourced field. Errors raised by the app itself (err.message) are not GitHub text.
+  const BARE_FIELD = /<Text\b[^>]*>[^<]*\{\s*((?:[A-Za-z_][A-Za-z0-9_]*\??\.)+(?:title|body|login|headRefName|baseRefName|name|path|summary|message|text))\s*\}/g
+  const APP_AUTHORED = /^(?:\w*[eE]rr\w*|toast|selectedLog|log|pending\.confirmation)\./
+  // Fields that are sanitized where the row is built, so the render site receives clean text.
+  const SANITIZED_UPSTREAM = new Set([
+    'src/features/issues/list-row.jsx: {l.text}', // `[${sanitize(l.name)}]`
+    'src/components/dialogs/MultiSelect.jsx: {item.name}', // items are built with sanitize(option[field])
+  ])
+  const found = () => SCANNED.flatMap(f => [...readFileSync(f, 'utf8').matchAll(BARE_FIELD)]
+    .filter(m => !APP_AUTHORED.test(m[1]))
+    .map(m => `${relative(ROOT, f)}: {${m[1]}}`))
+    .filter(hit => !SANITIZED_UPSTREAM.has(hit))
+
+  it('no <Text> renders a bare title, body, login, branch name, path or commit message', () => {
+    expect(found()).toEqual([])
+  })
+
+  it('the pattern catches what it guards against', () => {
+    const hit = code => [...code.matchAll(BARE_FIELD)].filter(m => !APP_AUTHORED.test(m[1])).length
+    expect(hit('<Text color={c}>{pr.title}</Text>')).toBe(1)
+    expect(hit('<Text>by {issue.author.login}</Text>')).toBe(1)
+    expect(hit('<Text>{sanitize(pr.title)}</Text>')).toBe(0)
+    expect(hit('<Text>{err.message}</Text>')).toBe(0)
+  })
+})
+
+describe('colours come from the theme (#489)', () => {
+  const LITERAL = /['"`]#[0-9a-fA-F]{3,8}['"`]/g
+  // Known literals that predate this check: white sign/cursor glyphs and a marker in the diff renderer.
+  // The count may only go down.
+  const BASELINE = { 'src/features/prs/diff/render.jsx': 10 }
+  const counts = () => Object.fromEntries(SCANNED
+    .map(f => [relative(ROOT, f), (readFileSync(f, 'utf8').match(LITERAL) || []).length])
+    .filter(([, n]) => n > 0))
+
+  it('no UI file has a literal hex colour beyond the recorded baseline', () => {
+    const now = counts()
+    for (const [file, n] of Object.entries(now)) expect(n, file).toBeLessThanOrEqual(BASELINE[file] ?? 0)
+    for (const [file, n] of Object.entries(BASELINE)) expect(now[file] ?? 0, `${file} improved: lower the baseline`).toBe(n)
+  })
+})

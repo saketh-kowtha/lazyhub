@@ -33,7 +33,7 @@ function MessageRow({ msg }) {
   const roleLabel  = msg.role === 'user' ? ' You' : msg.role === 'system' ? ' Lzy' : '  AI'
   const roleColor  = msg.role === 'user'   ? t.ui.selected
                    : msg.role === 'system' ? t.ui.muted
-                   : '#3fb950'
+                   : t.ci.pass
   const timeStr    = fmtTime(msg.timestamp)
 
   return (
@@ -240,7 +240,7 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
         {phase === PHASE.THINKING ? (
           <Spinner label={thinkingStatus} />
         ) : !hasApiKey ? (
-          <Text color={t.ci?.fail || '#f85149'}>
+          <Text color={t.ci.fail}>
             No API key — press [S] to open Settings → AI Provider
           </Text>
         ) : (
