@@ -51,6 +51,28 @@ The approval stage builds on Review Alpha but is optional and does not claim tha
 | 4 | #244 | Protected-branch PRs require the App-pinned check; Lazyhub never merges them. |
 | 5 | #141 | Live sandbox evidence covers source pinning, invalidation, bypass handling and no merge execution. |
 
+Design and contracts for this stage are in [`design/optional-approval.md`](design/optional-approval.md) (#278, #277, #203, #235). Approval is a human decision in the interactive TUI, recorded in a local hash-linked journal; no agent submits requests in this stage, so #145, #148 and #236 are not prerequisites, and narrowed subsets of #237 (retention) and #238 (safe mode) are activation prerequisites. Expiry and revocation of a check that already passed are Lazyhub-mediated and are never reported as `github_enforced`.
+
+**Status (honest):** only groundwork exists in the tree: the record module under `src/approval/` and the typed context read, with tests. Nothing imports them, there is no config key, command or screen, and nothing is enforced or protected. Coverage stays `advisory`. The README does not describe approval as available.
+
+### Execution order (acyclic)
+
+| Step | Work | Needs |
+|---|---|---|
+| P0 | Design doc, #235 groundwork, #140 scaffold (this groundwork) | none |
+| P1 | #277 sandbox feasibility run | maintainer actions M1, M2 |
+| P2 | #245 helper code against a fake endpoint | P0 |
+| P3 | #245 live seeding | P2, M1, M2 |
+| P4 | #244 adapter and ruleset verification | P0, P3, P1 decisions confirmed |
+| P5 | #203 UI against the transition contract (may run in parallel with P2-P4) | P0 |
+| P6 | #203 wired to the real publisher | P4, P5 |
+| P7 | Activation prerequisites: #237 retention subset, #129 approval-screen polish | none |
+| P8 | #141 live proof, matrix run twice | P6, P7, M3 |
+| P9 | #140 remaining journeys | P6 (unit), P8 (live) |
+| P10 | Docs may describe the stage as available (default still off) | P8, P9 |
+
+The table above orders by dependency; the numbered list keeps #203 before #244 because the transition contract lets the UI start first, while its publish-and-read-back criterion completes at P6.
+
 Exit requires enrolled protected-branch PRs to be blocked without the App-sourced check, stale or revoked approvals to be unusable, and the sandbox to prove the stated boundaries. A human performs the final merge through GitHub or another client.
 
 ## Demand-gated and Beta work
