@@ -437,3 +437,31 @@ instead of needing conversation history.
   the spec, Haiku executes, Sonnet reviews.
 
 Every Haiku output is reviewed by Sonnet before being considered done.
+
+## Optional approval amendment (2026-11-07)
+
+### D17 — Optional approval runs without the gateway service
+
+Full design, contracts and semantics: `docs/design/optional-approval.md`. This is
+an explicit, reviewed amendment for `stage:approval` only. **D1-D11 are
+unchanged**, and D12's statement that approval never executes merges stands.
+
+For `stage:approval`, approval decisions are made only by a human in the
+interactive TUI, recorded in a local append-only hash-linked journal, and
+reflected only through the App-pinned `lazyhub/approval` check. No agent submits
+approval requests in this stage, so the dependencies narrow as follows:
+
+| Issue | Status for this stage |
+|---|---|
+| #145 `lazyhub serve` | not a prerequisite; the daemon, MCP and IPC expose no approval operation |
+| #148 policy engine | replaced by the fixed constant `lazyhub-approval-policy/1` |
+| #236 agent identity | not a prerequisite; origin is unverified metadata, approver identity is the `gh` account |
+| #237 audit | the minimum (append-only, hash-linked, private modes, fail closed) is owned by #235; 90-day retention and a read-only store check are activation prerequisites |
+| #238 safe mode | a local subset (block new approvals, keep deny and revoke) is an activation prerequisite of #203 |
+| #146 stable errors | approval error codes are stable from the first commit and are absorbed unchanged later |
+
+Expiry and revocation of an already-passing check are Lazyhub-mediated
+(`managed_gateway` at best), depend on Lazyhub running and reaching GitHub, and
+are never reported as `github_enforced`. Coverage stays `advisory` until the
+live proof in #141 passes. Activating agent-submitted approval requests requires
+a new decision.
