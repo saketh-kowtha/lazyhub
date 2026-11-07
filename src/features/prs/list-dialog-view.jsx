@@ -18,7 +18,7 @@ const SELECTION_DIALOGS = { labels: LabelDialog, assignees: AssigneeDialog, revi
 export function renderPRListDialog({
   dialog, selectedPR, items, repo, repoInfo, authorFilter, effectiveHeight,
   mergeOptions, setMergeOptions, setDialog, setCursor, setScrollOffset,
-  setAuthorFilter, searchText = '', setSearchText = () => {}, showStatus, closeDialog, refetch, refreshPR = refetch,
+  setAuthorFilter, searchText = '', setSearchText = (/** @type {string} */ _query) => {}, showStatus, closeDialog, refetch, refreshPR = refetch,
   runWrite = (_label, fn) => fn(),
 }) {
   if (dialog === 'search') {
