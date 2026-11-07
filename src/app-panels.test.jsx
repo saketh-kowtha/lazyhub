@@ -1,6 +1,6 @@
 import React from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { HelpOverlay } from './app-panels.jsx'
+import { HelpOverlay, PaneHeader } from './app-panels.jsx'
 import { cleanup, renderWithProviders } from './test/test-helpers.jsx'
 
 afterEach(() => cleanup())
@@ -38,4 +38,14 @@ describe('HelpOverlay height budget (#462)', () => {
       expect(lines.at(-1), lastFrame()).toMatch(/[╯┘]/)
     })
   }
+})
+
+describe('PaneHeader (#566)', () => {
+  it('is one row with no rule under it: the pane already has its own box', () => {
+    const { lastFrame } = renderWithProviders(<PaneHeader pane="prs" count={12} loading={false} error={null} isStale={false} />)
+    const frame = lastFrame()
+    expect(frame.split('\n')).toHaveLength(1)
+    expect(frame).not.toContain('─')
+    expect(frame).toContain('Pull Requests')
+  })
 })
