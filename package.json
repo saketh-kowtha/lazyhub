@@ -1,7 +1,7 @@
 {
   "name": "lazyhub",
   "version": "26.6.3",
-  "description": "A lazygit-style GitHub TUI — every GitHub action without leaving your terminal",
+  "description": "A lazygit-style GitHub TUI for reviewing pull requests, issues and CI from your terminal",
   "type": "module",
   "bin": {
     "lazyhub": "./dist/lazyhub.js"
@@ -76,6 +76,10 @@
     "vitest": "^3.2.6"
   },
   "overrides": {
-    "esbuild": "$esbuild"
+    "esbuild": "$esbuild",
+    "test-exclude": {
+      "glob": "^14.0.2",
+      "minimatch": "^11.0.1"
+    }
   }
 }

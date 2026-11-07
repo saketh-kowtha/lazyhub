@@ -23,6 +23,8 @@ vi.mock('ink', async () => ({
   useInput: (await import('../../../test/input-bus.js')).mockUseInput(await import('react')),
 }))
 vi.mock('../../../executor.js', () => ({
+  listPRFilesPage: async function listPRFilesPage() { return h.track('listPRFilesPage') },
+  getPRFilePatch: async function getPRFilePatch(_repo, _n, path) { return h.track(`patch:${path}`) },
   getPRDiff: async function getPRDiff() { return h.track('getPRDiff') },
   getPR: async function getPR() { return h.track('getPR') },
   getRepoInfo: async function getRepoInfo() { return h.track('getRepoInfo') },
@@ -38,12 +40,10 @@ const { useDiffState } = await import('./state.js')
 const { DiffView } = await import('./render.jsx')
 const { resetGhMemoryCache } = await import('../../../hooks/useGh.js')
 
-const DIFF = [
-  'diff --git a/src/code.js b/src/code.js',
-  '@@ -1 +1 @@',
-  '-oldValue',
-  '+newValue',
-].join('\n')
+const PATCH = '@@ -1 +1 @@\n-oldValue\n+newValue'
+const LIST = { files: [{ path: 'src/code.js', additions: 1, deletions: 1, changeType: 'MODIFIED' }], hasNextPage: false, endCursor: null, totalCount: 1 }
+const okPatch = (patch = PATCH) => ({ status: 'ok', patch, oldPath: null, additions: 1, deletions: 1 })
+const secondary = ['getPR', 'getRepoInfo', 'listPRCommentsPage']
 
 let currentState
 function Session({ n = 451 }) {
@@ -60,109 +60,118 @@ beforeEach(() => {
   currentState = null
 })
 afterEach(() => { cleanup(); rmSync(process.env.LAZYHUB_CACHE_DIR, { recursive: true, force: true }) })
+const mount = (n) => renderWithProviders(<Session n={n} />, { appContext: { notifyDialog: () => {} } })
 
-describe('diff open order (#451)', () => {
-  it('requests only the diff first, renders it on arrival, then loads secondary data', async () => {
-    const view = renderWithProviders(<Session />, { appContext: { notifyDialog: () => {} } })
-    await waitForExpectation(() => expect(h.calls).toContain('getPRDiff'))
-    // Nothing else may compete with the diff for the gh concurrency cap.
-    expect(h.calls).toEqual(['getPRDiff'])
+describe('diff open order (#451, #509)', () => {
+  it('requests only the file list first, shows the files at once, then loads patches and secondary data', async () => {
+    const view = mount(451)
+    await waitForExpectation(() => expect(h.calls).toContain('listPRFilesPage'))
+    // Nothing else may compete with the file list for the gh concurrency cap.
+    expect(h.calls).toEqual(['listPRFilesPage'])
 
-    h.pending.getPRDiff.resolve(DIFF)
+    h.pending.listPRFilesPage.resolve(LIST)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('src/code.js'))
+    expect(view.lastFrame()).toContain('file 1 of 1')
+    // The file's patch is requested on demand; the whole diff is never downloaded.
+    await waitForExpectation(() => expect(h.calls).toContain('patch:src/code.js'))
+    expect(h.calls).not.toContain('getPRDiff')
+    await waitForExpectation(() => expect(h.calls).toEqual(expect.arrayContaining(secondary)))
+    h.pending['patch:src/code.js'].resolve(okPatch())
     await waitForExpectation(() => expect(view.lastFrame()).toContain('newValue'))
-    // Secondary calls start only after the diff has landed.
-    await waitForExpectation(() => expect(h.calls).toEqual(
-      expect.arrayContaining(['getPRDiff', 'getPR', 'getRepoInfo', 'listPRCommentsPage'])))
-    // Stats are derived from the diff text, no separate call.
     expect(h.calls).not.toContain('getPRDiffStats')
-    // Diff rendered without waiting for any secondary call to resolve.
-    expect(view.lastFrame()).toContain('newValue')
   })
 
-  it('gates a large diff from the diff text itself, in the frame it arrives', async () => {
-    const view = renderWithProviders(<Session n={452} />, { appContext: { notifyDialog: () => {} } })
-    await waitForExpectation(() => expect(h.calls).toContain('getPRDiff'))
-    const big = ['diff --git a/a.js b/a.js', '@@ -1 +1 @@', ...Array.from({ length: 5001 }, (_, i) => `+line ${i}`)].join('\n')
-    h.pending.getPRDiff.resolve(big)
-    await waitForExpectation(() => expect(view.lastFrame()).toContain('Large diff: +5001 -0 across 1 files'))
-    expect(h.calls).not.toContain('getPRDiffStats')
+  it('loads a huge single file without a size gate (#509)', async () => {
+    const view = mount(452)
+    await waitForExpectation(() => expect(h.calls).toContain('listPRFilesPage'))
+    h.pending.listPRFilesPage.resolve({ ...LIST, files: [{ path: 'a.js', additions: 5001, deletions: 0, changeType: 'MODIFIED' }] })
+    await waitForExpectation(() => expect(h.calls).toContain('patch:a.js'))
+    h.pending['patch:a.js'].resolve(okPatch(['@@ -1 +1,5001 @@', ...Array.from({ length: 5001 }, (_, i) => `+line ${i}`)].join('\n')))
+    await waitForExpectation(() => expect(currentState.rows.length).toBe(5003))
+    expect(view.lastFrame()).not.toContain('Large diff')
+    expect(view.lastFrame()).toContain('+5001')
+  })
+
+  it('says so for a file GitHub will not render instead of dropping it', async () => {
+    const view = mount(453)
+    await waitForExpectation(() => expect(h.calls).toContain('listPRFilesPage'))
+    h.pending.listPRFilesPage.resolve(LIST)
+    await waitForExpectation(() => expect(h.calls).toContain('patch:src/code.js'))
+    h.pending['patch:src/code.js'].resolve({ status: 'omitted', patch: null, oldPath: null, additions: 9000, deletions: 0 })
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('does not render'))
+    expect(view.lastFrame()).toContain('src/code.js')
   })
 })
 
-describe('diff open: errors, too-large, retry (#451)', () => {
-  it('shows the large-diff gate with open-in-browser when gh says the diff is too large', async () => {
-    const view = renderWithProviders(<Session n={460} />, { appContext: { notifyDialog: () => {} } })
-    await waitForExpectation(() => expect(h.calls).toContain('getPRDiff'))
-    h.pending.getPRDiff.reject(Object.assign(new Error('HTTP 406: Sorry, the diff exceeded the maximum number of lines'), { stderr: '' }))
-    await waitForExpectation(() => expect(view.lastFrame()).toContain('Large diff'))
-    expect(view.lastFrame()).toContain('Open in browser')
-    expect(h.calls).toEqual(['getPRDiff'])
-  })
-
-  it('retry after a diff error loads the diff and then the secondary data', async () => {
-    const view = renderWithProviders(<Session n={461} />, { appContext: { notifyDialog: () => {} } })
-    await waitForExpectation(() => expect(h.calls).toContain('getPRDiff'))
-    h.pending.getPRDiff.reject(new Error('boom'))
+describe('diff open: errors and retry (#451)', () => {
+  it('shows a retryable error when the file list fails (including a too-large diff), then loads on retry', async () => {
+    const view = mount(461)
+    await waitForExpectation(() => expect(h.calls).toContain('listPRFilesPage'))
+    h.pending.listPRFilesPage.reject(new Error('boom'))
     await waitForExpectation(() => expect(view.lastFrame()).toMatch(/retry/))
-    expect(h.calls).toEqual(['getPRDiff'])
+    expect(h.calls).toEqual(['listPRFilesPage'])
     await sendInput(firstActionKey('list.refresh', 'r'))
-    await waitForExpectation(() => expect(h.calls).toEqual(['getPRDiff', 'getPRDiff']))
-    h.pending.getPRDiff.resolve(DIFF)
-    await waitForExpectation(() => expect(view.lastFrame()).toContain('newValue'))
-    await waitForExpectation(() => expect(h.calls).toEqual(expect.arrayContaining(['getPR', 'getRepoInfo', 'listPRCommentsPage'])))
+    await waitForExpectation(() => expect(h.calls).toEqual(['listPRFilesPage', 'listPRFilesPage']))
+    h.pending.listPRFilesPage.resolve(LIST)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('src/code.js'))
+    await waitForExpectation(() => expect(h.calls).toEqual(expect.arrayContaining(secondary)))
   })
 
   it('does not count +++/--- content lines inside a hunk as headers', async () => {
-    const view = renderWithProviders(<Session n={462} />, { appContext: { notifyDialog: () => {} } })
-    await waitForExpectation(() => expect(h.calls).toContain('getPRDiff'))
-    const lines = ['diff --git a/a.sql b/a.sql', '--- a/a.sql', '+++ b/a.sql', '@@ -1 +1 @@']
+    mount(462)
+    await waitForExpectation(() => expect(h.calls).toContain('listPRFilesPage'))
+    h.pending.listPRFilesPage.resolve({ ...LIST, files: [{ path: 'a.sql', additions: 2600, deletions: 2600, changeType: 'MODIFIED' }] })
+    await waitForExpectation(() => expect(h.calls).toContain('patch:a.sql'))
+    const lines = ['@@ -1 +1 @@']
     for (let i = 0; i < 2600; i++) lines.push(`+++i${i}`, `--- sql${i}`)
-    h.pending.getPRDiff.resolve(lines.join('\n'))
-    await waitForExpectation(() => expect(view.lastFrame()).toContain('Large diff: +2600 -2600 across 1 files'))
+    h.pending['patch:a.sql'].resolve(okPatch(lines.join('\n')))
+    await waitForExpectation(() => expect(currentState.files[0].addCount).toBe(2600))
+    expect(currentState.files[0].delCount).toBe(2600)
+    expect(currentState.files).toHaveLength(1)
   })
 })
 
 describe('diff loading frame (#454)', () => {
   it('shows a skeleton with header on the first frame, not a bare spinner', async () => {
-    const view = renderWithProviders(<Session n={454} />, { appContext: { notifyDialog: () => {} } })
+    const view = mount(454)
     const frame = view.lastFrame()
     expect(frame).toContain('PR #454 Diff')
     expect(frame).toContain('░')
     expect(frame).not.toContain('Loading diff')
   })
 
-  it('renders a cached diff immediately with no loading frame', async () => {
-    const first = renderWithProviders(<Session n={455} />, { appContext: { notifyDialog: () => {} } })
-    await waitForExpectation(() => expect(h.calls).toContain('getPRDiff'))
-    h.pending.getPRDiff.resolve(DIFF)
-    await waitForExpectation(() => expect(first.lastFrame()).toContain('newValue'))
+  it('renders a cached file list immediately with no loading frame', async () => {
+    const first = mount(455)
+    await waitForExpectation(() => expect(h.calls).toContain('listPRFilesPage'))
+    h.pending.listPRFilesPage.resolve(LIST)
+    await waitForExpectation(() => expect(first.lastFrame()).toContain('src/code.js'))
     cleanup()
 
-    const second = renderWithProviders(<Session n={455} />, { appContext: { notifyDialog: () => {} } })
-    expect(second.lastFrame()).toContain('newValue')
+    const second = mount(455)
+    expect(second.lastFrame()).toContain('src/code.js')
     expect(second.lastFrame()).not.toContain('░')
   })
 })
 
-describe('diff with a cached copy on disk (#451/#454)', () => {
-  const seedDiskDiff = (n) => writeCache(mkDiskKey(['load/order', 'getPRDiff', ['load/order', n]]), DIFF, { repo: 'load/order', op: 'getPRDiff' })
+describe('diff with a cached file list on disk (#451/#454)', () => {
+  const seedDiskList = (n) => writeCache(mkDiskKey(['load/order', 'listPRFilesPage', ['load/order', n]]), LIST, { repo: 'load/order', op: 'listPRFilesPage' })
 
-  it('does not start secondary calls until the revalidation of a cached diff lands', async () => {
-    seedDiskDiff(470)
-    const view = renderWithProviders(<Session n={470} />, { appContext: { notifyDialog: () => {} } })
-    expect(view.lastFrame()).toContain('newValue')
-    await waitForExpectation(() => expect(h.calls).toContain('getPRDiff'))
-    expect(h.calls).toEqual(['getPRDiff'])
-    h.pending.getPRDiff.resolve(DIFF)
-    await waitForExpectation(() => expect(h.calls).toEqual(expect.arrayContaining(['getPR', 'getRepoInfo', 'listPRCommentsPage'])))
+  it('does not start secondary calls until the revalidation of a cached list lands', async () => {
+    seedDiskList(470)
+    const view = mount(470)
+    expect(view.lastFrame()).toContain('src/code.js')
+    await waitForExpectation(() => expect(h.calls).toContain('listPRFilesPage'))
+    expect(h.calls.filter(c => secondary.includes(c))).toEqual([])
+    h.pending.listPRFilesPage.resolve(LIST)
+    await waitForExpectation(() => expect(h.calls).toEqual(expect.arrayContaining(secondary)))
   })
 
-  it('keeps the cached diff and shows a banner when the revalidation fails', async () => {
-    seedDiskDiff(471)
-    const view = renderWithProviders(<Session n={471} />, { appContext: { notifyDialog: () => {} } })
-    await waitForExpectation(() => expect(h.calls).toContain('getPRDiff'))
-    h.pending.getPRDiff.reject(new Error('network down'))
+  it('keeps the cached list and shows a banner when the revalidation fails', async () => {
+    seedDiskList(471)
+    const view = mount(471)
+    await waitForExpectation(() => expect(h.calls).toContain('listPRFilesPage'))
+    h.pending.listPRFilesPage.reject(new Error('network down'))
     await waitForExpectation(() => expect(view.lastFrame()).toContain('refresh failed'))
-    expect(view.lastFrame()).toContain('newValue')
+    expect(view.lastFrame()).toContain('src/code.js')
   })
 })

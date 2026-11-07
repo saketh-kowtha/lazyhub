@@ -1,13 +1,14 @@
 import React, { useEffect } from 'react'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRCommentsPage, deletePRComment } from '../../../executor.js'
+import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRFilesPage, getPRFilePatch, listPRCommentsPage, deletePRComment } from '../../../executor.js'
 import { scopedCacheKey, writeCache } from '../../../cache.js'
 import { resetGhMemoryCache } from '../../../hooks/useGh.js'
 import { sendInput } from '../../../test/input-bus.js'
 import { cleanup, renderWithProviders, waitForExpectation } from '../../../test/test-helpers.jsx'
 import { useDiffState } from './state.js'
 import { DiffView } from './render.jsx'
+import { diffFilesPage, fakeFilePatch } from '../../../test/diff-fixtures.js'
 
 // Real useGh on purpose: the banner must survive its cache, mutate and disk seed, not a mock of them.
 vi.mock('ink', async () => ({
@@ -15,13 +16,13 @@ vi.mock('ink', async () => ({
   useInput: (await import('../../../test/input-bus.js')).mockUseInput(await import('react')),
 }))
 vi.mock('../../../executor.js', () => ({
-  getPR: vi.fn(), getRepoInfo: vi.fn(), getPRDiffStats: vi.fn(), getPRDiff: vi.fn(), listPRCommentsPage: vi.fn(),
+  getPR: vi.fn(), getRepoInfo: vi.fn(), getPRDiffStats: vi.fn(), getPRDiff: vi.fn(), listPRFilesPage: vi.fn(), getPRFilePatch: vi.fn(), listPRCommentsPage: vi.fn(),
   addPRLineComment: vi.fn(), replyToComment: vi.fn(), editPRComment: vi.fn(), deletePRComment: vi.fn(),
   mergePR: vi.fn(), reviewPR: vi.fn(),
 }))
 
 // useGh keys its caches by function name, and vi.fn() mocks are all called "spy".
-for (const [name, fn] of Object.entries({ getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRCommentsPage })) {
+for (const [name, fn] of Object.entries({ getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRFilesPage, getPRFilePatch, listPRCommentsPage })) {
   Object.defineProperty(fn, 'name', { value: name })
 }
 
@@ -44,6 +45,8 @@ beforeEach(() => {
   currentState = null
   pr += 1
   getPRDiff.mockResolvedValue(DIFF)
+  listPRFilesPage.mockResolvedValue(diffFilesPage(DIFF))
+  getPRFilePatch.mockImplementation(fakeFilePatch(DIFF))
   getPR.mockResolvedValue({ title: 'T', state: 'OPEN', headRefOid: 'a'.repeat(40) })
   getRepoInfo.mockResolvedValue({ viewerPermission: 'WRITE' })
   getPRDiffStats.mockResolvedValue({ additions: 1, deletions: 1, changedFiles: 1 })

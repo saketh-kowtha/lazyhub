@@ -71,14 +71,14 @@ describe('PR list dialog contract', () => {
     expect(renderPRListDialog(props(null))).toBeNull()
   })
 
-  it('returns fuzzy selections to the same centered list position', () => {
-    const items = Array.from({ length: 8 }, (_, i) => ({ number: i + 1, title: `PR ${i}`, author: { login: 'author' } }))
-    const state = props('fuzzy', { items })
-    const search = renderPRListDialog(state)
-    expect(search.props.items[6].authorLogin).toBe('author')
-    search.props.onSubmit(search.props.items[6])
-    expect(state.setCursor).toHaveBeenCalledWith(6)
-    expect(state.setScrollOffset).toHaveBeenCalledWith(4)
+  it('applies a search to the server query, resets the cursor and closes the dialog (#508)', () => {
+    const state = props('search', { searchText: 'old' })
+    state.setSearchText = vi.fn()
+    const dialog = renderPRListDialog(state)
+    expect(dialog.props.current).toBe('old')
+    dialog.props.onSubmit('author:bob')
+    expect(state.setSearchText).toHaveBeenCalledWith('author:bob')
+    expect(state.setCursor).toHaveBeenCalledWith(0)
     expect(state.closeDialog).toHaveBeenCalledOnce()
   })
 })

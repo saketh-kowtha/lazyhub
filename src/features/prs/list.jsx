@@ -19,7 +19,7 @@ import { useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
-import { listPRsPage, getPRRow, getPRPreview, getRepoInfo } from '../../executor.js'
+import { listPRsPage, getPRRow, getPRPreview, getRepoInfo, searchOwnsState } from '../../executor.js'
 import { AppContext } from '../../context.js'
 import { usePaneState } from '../../hooks/usePaneState.js'
 import { loadConfig, loadState, saveState } from '../../config.js'
@@ -74,6 +74,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     scope: _persistedScope || _cfg.defaultScope,
     sortMode: 'default',
     authorFilter: '',
+    searchText: '',
     cursor: 0,
     scrollOffset: 0,
   })
@@ -91,12 +92,14 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const [scope, setScopeRaw] = useState(savedState.scope)
   const [sortMode, setSortModeRaw] = useState(savedState.sortMode)
   const [authorFilter, setAuthorFilterRaw] = useState(savedState.authorFilter)
+  // `/` runs a GitHub search with this text (#508); cursor pages come from the same query.
+  const [searchText, setSearchTextRaw] = useState(savedState.searchText || '')
 
   // First page through the query cache; later pages are fetched by cursor and appended, and
   // earlier pages are never refetched (D16). Open+merged is the one state set GitHub search
   // cannot express, so that set is filtered client-side and shows no total (exactTotal false).
   const statesList = [...filterStates].sort()
-  const pageFilter = { states: statesList, scope, author: authorFilter || undefined, sort: sortMode, limit: PAGE_SIZE }
+  const pageFilter = { states: statesList, scope, author: authorFilter || undefined, search: searchText || undefined, sort: sortMode, limit: PAGE_SIZE }
   const pageKey = JSON.stringify([repo, pageFilter])
   const { data: firstPage, loading, error, refetch: refetchFirst, isStale } = useGh(listPRsPage, [repo, pageFilter])
   const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000 })
@@ -147,6 +150,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const setScope = (v) => { setScopeRaw(v); setSavedState({ scope: v }); saveState({ prScope: v }) }
   const setSortMode = (v) => { setSortModeRaw(v); setSavedState({ sortMode: v }) }
   const setAuthorFilter = (v) => { setAuthorFilterRaw(v); setSavedState({ authorFilter: v }) }
+  const setSearchText = (v) => { setSearchTextRaw(v); setSavedState({ searchText: v }) }
   const setCursor = (v) => { setCursorRaw(v); setSavedState({ cursor: typeof v === 'function' ? v(cursor) : v }) }
   const setScrollOffset = (v) => { setScrollOffsetRaw(v); setSavedState({ scrollOffset: typeof v === 'function' ? v(scrollOffset) : v }) }
   const [dialog, setDialog] = useState(null)
@@ -172,8 +176,9 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     return [...(firstPage?.items || []), ...extra.items]
       .filter(pr => pr && pr.number && !seen.has(pr.number) && seen.add(pr.number))
       .map(pr => patches.rows[pr.number] || pr)
-      .filter(pr => filterStates.has((pr.state || '').toLowerCase()))
-  }, [firstPage, extra.items, patches, filterStatesArr]) // eslint-disable-line react-hooks/exhaustive-deps
+      // A search that names its own state decides what is listed; otherwise the state filter applies.
+      .filter(pr => searchOwnsState(searchText) || filterStates.has((pr.state || '').toLowerCase()))
+  }, [firstPage, extra.items, patches, filterStatesArr, searchText]) // eslint-disable-line react-hooks/exhaustive-deps
   const itemsRef = useRef(items)
   itemsRef.current = items
 
@@ -308,7 +313,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     if (matchesAction('cursor.down', input, key, _actions)) { moveCursor(1);  return }
     if (matchesAction('cursor.up', input, key, _actions))   { moveCursor(-1); return }
     if (matchesAction('list.refresh', input, key, _actions)) { if (extra.error) retryPage(); else refetch(); return }
-    if (matchesAction('list.search', input, key, _actions)) { openDialog('fuzzy'); return }
+    if (matchesAction('list.search', input, key, _actions)) { openDialog('search'); return }
     if (matchesAction('pr.preview', input, key, _actions)) { setPopoverDismissed(d => !d); return }
 
     const focusedPR = !loading && items.length > 0 ? items[cursor] : null
@@ -415,7 +420,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const dialogView = renderPRListDialog({
     dialog, selectedPR, items, repo, repoInfo, authorFilter, effectiveHeight,
     mergeOptions, setMergeOptions, setDialog, setCursor, setScrollOffset,
-    setAuthorFilter, showStatus, closeDialog, refetch, refreshPR, runWrite,
+    setAuthorFilter, searchText, setSearchText, showStatus, closeDialog, refetch, refreshPR, runWrite,
   })
   if (dialogView) return dialogView
 
@@ -432,6 +437,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       scope={scope}
       sortMode={sortMode}
       authorFilter={authorFilter}
+      searchText={searchText}
       statusMsg={statusMsg}
       config={_cfg}
       filterKeys={FK}
@@ -446,7 +452,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       termRows={termRows}
       selectedPR={selectedPR}
       dialog={dialog}
-      paging={{ hasMore: hasNextPage, total: totalCount, loadingMore: extra.loading, error: extra.error, cap: SEARCH_CAP, capped }}
+      paging={{ hasMore: hasNextPage, total: totalCount, loadingMore: extra.loading, error: extra.error, cap: SEARCH_CAP, capped, search: Boolean(searchText) }}
       previewWidth={_appConfig.layout?.previewWidth}
       popoverDismissed={popoverDismissed}
       setPopoverDismissed={setPopoverDismissed}

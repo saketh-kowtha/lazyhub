@@ -25,8 +25,9 @@ private candidate build before coordinated disclosure.
 ## Security model
 
 Read `docs/THREAT_MODEL.md` for the exact claims, exclusions, coverage states,
-and T1-T21 threat checklist. In particular, Alpha is approval-only and Lazyhub
-does not claim to secure a fully compromised same-user operating system.
+and T1-T21 threat checklist. In particular, the Alpha is review-first (agent and assistant writes are
+disabled until the governed approval path ships) and Lazyhub does not claim to
+secure a fully compromised same-user operating system.
 Local-agent merge approval becomes `managed_gateway` only once Slice 2 ships the
 approval path; until then no approval path exists and doctor reports it as
 `advisory` or `ungoverned`, never `managed_gateway`.
@@ -79,8 +80,11 @@ has. The default `gh auth login` scopes include `repo` and `workflow`, so
 lazyhub can do anything those scopes allow, including writes. Lazyhub stores no
 credentials of its own: it keeps only local config and cache files, which can
 contain private repository content and are created with private permissions.
-AI features are off by default and send nothing until
-you enable a provider. Lazyhub has no telemetry.
+AI features (such as AI review) are available by default and a provider is
+detected from your environment, but nothing is sent to a model provider until
+you invoke one of them; lazyhub never sends anything in the background. To turn
+them off, disable AI review in Settings or leave no provider configured.
+Lazyhub has no telemetry.
 
 ## Running with least privilege
 

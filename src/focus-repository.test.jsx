@@ -70,7 +70,7 @@ vi.mock('./executor.js', () => {
   const fns = [
     'listPRs', 'listIssues', 'getPR', 'getIssue', 'getRepoInfo', 'getPRChecks', 'getBranchProtection',
     'listLabels', 'listCollaborators', 'getCurrentBranch', 'listBranches', 'listRuns',
-    'getPRDiff', 'getPRDiffStats', 'listPRCommentsPage', 'listPRTimelinePage', 'checkoutBranch',
+    'getPRDiff', 'listPRFilesPage', 'getPRFilePatch', 'getPRDiffStats', 'listPRCommentsPage', 'listPRTimelinePage', 'checkoutBranch',
   ]
   return { ...Object.fromEntries(fns.map(name => [name, vi.fn()])), classifyGhFailure: () => ({ message: 'x' }) }
 })
@@ -109,7 +109,7 @@ describe('dashboard repository identity (#493)', () => {
       if (fn === executor.getIssue) return ghResult(issue(deps[1], 'Loaded issue'))
       if (fn === executor.getRepoInfo) return ghResult({ squashMergeAllowed: true, viewerPermission: 'WRITE' })
       if (fn === executor.getPRChecks) return ghResult([])
-      if (fn === executor.getPRDiff) return ghResult('')
+      if (fn === executor.listPRFilesPage) return ghResult({ files: [], hasNextPage: false, endCursor: null, totalCount: 0 })
       if (fn === executor.listPRCommentsPage) return ghResult({ comments: [], truncated: false })
       if (fn === executor.listPRTimelinePage) return ghResult({ comments: [], conversation: [], threads: { total: 0, hasNextPage: false }, conversationPage: { total: 0, hasNextPage: false } })
       if (fn === executor.getBranchProtection) return ghResult({ requiredReviews: 1 })
@@ -149,8 +149,8 @@ describe('dashboard repository identity (#493)', () => {
   it('keeps the item repository through diff, comments and Esc back', async () => {
     await openDetail()
     await press([key('d')])
-    await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.getPRDiff, ['other/project', 102]))
-    expect(useGh).not.toHaveBeenCalledWith(executor.getPRDiff, ['owner/repo', 102])
+    await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.listPRFilesPage, ['other/project', 102]))
+    expect(useGh).not.toHaveBeenCalledWith(executor.listPRFilesPage, ['owner/repo', 102])
     await press([key('v')])
     await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.listPRTimelinePage, ['other/project', 102]))
     expect(useGh).not.toHaveBeenCalledWith(executor.listPRTimelinePage, ['owner/repo', 102])
@@ -163,7 +163,7 @@ describe('dashboard repository identity (#493)', () => {
   it('keeps the comments action after inspecting the diff and returning to detail (#492)', async () => {
     await openDetail()
     await press([key('d')])
-    await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.getPRDiff, ['other/project', 102]))
+    await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.listPRFilesPage, ['other/project', 102]))
     await press([key('', { escape: true })])
     await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.getPR, ['other/project', 102]))
     useGh.mockClear()

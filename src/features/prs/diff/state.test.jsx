@@ -1,10 +1,11 @@
 import React, { act, useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useGh } from '../../../hooks/useGh.js'
-import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRCommentsPage, mergePR, reviewPR, replyToComment, deletePRComment } from '../../../executor.js'
+import { getPR, getRepoInfo, getPRDiffStats, getPRDiff, listPRFilesPage, getPRFilePatch, listPRCommentsPage, mergePR, reviewPR, replyToComment, deletePRComment } from '../../../executor.js'
 import { firstActionKey } from '../../../config/actions.js'
 import { sendInput } from '../../../test/input-bus.js'
 import { cleanup, renderWithProviders, waitForExpectation } from '../../../test/test-helpers.jsx'
+import { diffFilesPage, fakeFilePatch } from '../../../test/diff-fixtures.js'
 import { useDiffState } from './state.js'
 import { DiffView } from './render.jsx'
 import { buildTreeRows } from './tree.js'
@@ -15,7 +16,7 @@ vi.mock('ink', async () => ({
 }))
 vi.mock('../../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
 vi.mock('../../../executor.js', () => ({
-  getPR: vi.fn(), getRepoInfo: vi.fn(), getPRDiffStats: vi.fn(), getPRDiff: vi.fn(),
+  getPR: vi.fn(), getRepoInfo: vi.fn(), getPRDiffStats: vi.fn(), getPRDiff: vi.fn(), listPRFilesPage: vi.fn(), getPRFilePatch: vi.fn(),
   listPRCommentsPage: vi.fn(), mergePR: vi.fn(), addPRLineComment: vi.fn(),
   replyToComment: vi.fn(), editPRComment: vi.fn(), deletePRComment: vi.fn(), reviewPR: vi.fn(),
 }))
@@ -51,8 +52,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   currentState = null
   mergePR.mockResolvedValue(undefined)
+  getPRFilePatch.mockImplementation(fakeFilePatch(DIFF))
   useGh.mockImplementation(fn => ({
-    data: fn === getPRDiff ? DIFF
+    data: fn === listPRFilesPage ? diffFilesPage(DIFF)
       : fn === getPR ? { title: 'Diff contracts', state: 'OPEN', headRefOid: 'a'.repeat(40) }
       : fn === getRepoInfo ? { viewerPermission: 'ADMIN' }
       : fn === getPRDiffStats ? { additions: 2, deletions: 1, changedFiles: 2 }

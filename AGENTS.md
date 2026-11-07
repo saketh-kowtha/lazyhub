@@ -169,8 +169,10 @@ log: `docs/bugs/` and, up to B-91, `docs/ARCHITECTURE.md` §21). Check each one 
    HTTP calls.** Every AI call, any provider, goes through `src/ai/index.js`.
 3. **Subprocess discipline:** `execa`/`execFile` only, args always as arrays.
    Never shell strings or shell interpolation. Prompts go via stdin, never argv.
-4. **Curated env for AI/gh subprocesses:** PATH/HOME/USER only. Never leak
-   `ANTHROPIC_API_KEY` or `GH_TOKEN` to unrelated CLIs.
+4. **Curated env for AI subprocesses:** PATH/HOME/USER only. Never leak
+   `ANTHROPIC_API_KEY` or `GH_TOKEN` to unrelated CLIs. The `gh` executor
+   deliberately inherits the user's `gh` environment (`GH_HOST`, `GH_TOKEN`,
+   `GH_CONFIG_DIR`): do not strip it.
 5. **Every AI call goes through `logAiUsage()`** for cost tracking and audit.
 6. **No telemetry, ever.** No analytics, no crash reporting, no phone-home. This
    is a hard line — do not propose adding it, even to fix an issue.

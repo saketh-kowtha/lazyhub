@@ -5,7 +5,7 @@ import React, { useState, useRef } from 'react'
 import { Box, Text } from 'ink'
 import { useInput } from '../../hooks/useSafeInput.js'
 import { useGh } from '../../hooks/useGh.js'
-import { classifyGhFailure, listLabels, listCollaborators, editPRMembers, collaboratorsTruncated, COLLAB_MAX_ROWS } from '../../executor.js'
+import { classifyGhFailure, listLabels, listCollaborators, editPRMembers, validatePRSearch, collaboratorsTruncated, COLLAB_MAX_ROWS } from '../../executor.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { TextInput, sanitize } from '../../utils.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -152,6 +152,34 @@ export function AuthorSearchDialog({ current, onSubmit, onCancel }) {
       <Box marginTop={0}>
         <Text color={t.ui.dim}>[Enter] apply  [Esc] cancel  (empty = show all authors)</Text>
       </Box>
+    </Box>
+  )
+}
+
+// Server-side search (#508): the text goes to GitHub search, so any PR in the repo is reachable.
+export function SearchQueryDialog({ current, onSubmit, onCancel }) {
+  const { scheme } = useTheme()
+  const t = schemeToT(scheme)
+  const [text, setText] = useState(current || '')
+  const [problem, setProblem] = useState(null)
+  useKeyScope('dialog')
+
+  useKeymapInput((input, key) => {
+    if (key.escape) { onCancel(); return }
+    if (key.return) {
+      try { onSubmit(validatePRSearch(text)) } catch (err) { setProblem(err.message) }
+    }
+  })
+
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={2} paddingY={1}>
+      <Text color={t.ui.selected} bold>Search pull requests</Text>
+      <Box marginTop={1} gap={1}>
+        <Text color={t.ui.dim}>/</Text>
+        <TextInput value={text} onChange={v => { setText(v); setProblem(null) }} focus={true} placeholder="author:alice flaky test" />
+      </Box>
+      {problem && <Text color={t.ci.fail}>{sanitize(problem)}</Text>}
+      <Text color={t.ui.dim}>GitHub search, any age. [Enter] apply  [Esc] cancel  (empty = clear)</Text>
     </Box>
   )
 }

@@ -14,7 +14,7 @@ brew install saketh-kowtha/tap/lazyhub
 class Lazyhub < Formula
   desc "Lazygit-style GitHub TUI — keyboard-driven terminal UI for GitHub"
   homepage "https://github.com/saketh-kowtha/lazyhub"
-  url "https://registry.npmjs.org/lazyhub/-/lazyhub-0.2.1.tgz"
+  url "https://registry.npmjs.org/lazyhub/-/lazyhub-<version>.tgz"   # filled in by the release workflow
   sha256 "..."
   license "MIT"
 
