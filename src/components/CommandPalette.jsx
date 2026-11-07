@@ -154,7 +154,7 @@ export function CommandPalette({ context, onClose, onNavigate, onTheme, onQuit, 
   const displayedActions = filtered.slice(0, MAX_VISIBLE)
 
   return (
-    <Box flexDirection="column" borderStyle="double" borderColor={t.ui.selected} paddingX={1} paddingY={0}>
+    <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1} paddingY={0}>
       {/* ── Header + query input ── */}
       <Box gap={1} paddingY={0}>
         <Text color={t.ui.selected} bold>▶</Text>

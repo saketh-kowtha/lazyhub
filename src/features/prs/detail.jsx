@@ -41,7 +41,7 @@ import { allowedMergeOptions, ADMIN_MERGE_OPTIONS, mergeMethodLabel, preferredMe
 import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
-import { sortChecks, CHECK_HINTS } from './detail/Checks.jsx'
+import { sortChecks } from './detail/Checks.jsx'
 
 const _editorCfg = loadConfig().editor
 
@@ -526,19 +526,16 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
         {visibleRows.map(row => row.el)}
       </Box>
 
-      {/* ── Hint line ── */}
+      {/* ── State line: status, scroll position or a conflict notice. Key hints live in the footer only (#468). ── */}
       <Box paddingX={1} justifyContent="space-between" height={1} overflow="hidden">
         {statusMsg
           ? <Text wrap="truncate" color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? '  [any key to dismiss]' : ''}</Text>
-          : checkCursor !== null
-            ? <Text wrap="truncate" color={t.ui.selected}>{hintLine(CHECK_HINTS)}</Text>
-            : maxScroll > 0
-              ? <Text wrap="truncate" color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  {hintLine([['cursor.down', 'scroll'], 'cursor.top'])}</Text>
-              : pr?.mergeable === 'CONFLICTING'
-                ? <Text wrap="truncate" color={t.pr.conflict || t.ci.pending}>{hintLine([['pr.conflicts', 'resolve conflicts'], 'pr.checks', 'pr.diff', 'pr.merge', 'pr.labels', 'pr.assignees', 'pr.reviewers'])}</Text>
-                : <Text wrap="truncate" color={t.ui.dim}>{hintLine(['pr.diff', 'pr.open-editor', ['pr.merge', 'merge/auto-merge'], 'pr.checks', 'pr.labels', 'pr.assignees', 'pr.reviewers'])}</Text>
+          : maxScroll > 0
+            ? <Text wrap="truncate" color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}</Text>
+            : pr?.mergeable === 'CONFLICTING'
+              ? <Text wrap="truncate" color={t.pr.conflict || t.ci.pending}>{hintLine([['pr.conflicts', 'resolve conflicts']])}</Text>
+              : null
         }
-        <Box flexShrink={0} marginLeft={1}><Text color={t.ui.dim}>{hintLine(['list.search', 'app.help', 'app.back'])}</Text></Box>
       </Box>
     </Box>
   )

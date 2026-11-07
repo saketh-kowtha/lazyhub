@@ -5,7 +5,6 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { format } from 'timeago.js'
-import { firstActionKey } from '../../config/actions.js'
 import { sanitize, TextInput } from '../../utils.js'
 
 export function IssueDetailView({ issue, t, visibleRows, maxScroll, scrollY, visibleHeight, contentRows, replyMode, replyText, setReplyText, doReply, statusMsg, statusIsError = false }) {
@@ -13,7 +12,8 @@ export function IssueDetailView({ issue, t, visibleRows, maxScroll, scrollY, vis
 
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Box marginBottom={1} flexDirection="column" borderStyle="single" borderColor={t.ui.border} paddingX={1}>
+      <Box flexDirection="column" borderStyle="single" borderColor={t.ui.border} paddingX={1}
+        borderTop={false} borderLeft={false} borderRight={false} borderBottom={true}>
         <Box gap={1}>
           <Text color={stateColor}>{issue.state === 'OPEN' ? '●' : '✗'}</Text>
           <Text bold color={t.ui.selected} wrap="truncate">#{issue.number} {sanitize(issue.title)}</Text>
@@ -44,7 +44,7 @@ export function IssueDetailView({ issue, t, visibleRows, maxScroll, scrollY, vis
       {/* ── Scroll info ── */}
       {maxScroll > 0 && (
         <Box paddingX={1} marginBottom={1}>
-          <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, contentRows.length)} / {contentRows.length}  [j/k] scroll  [gg/G] top/bottom</Text>
+          <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, contentRows.length)} / {contentRows.length}</Text>
         </Box>
       )}
 
@@ -62,10 +62,6 @@ export function IssueDetailView({ issue, t, visibleRows, maxScroll, scrollY, vis
       )}
 
       {statusMsg && <Text color={statusIsError ? t.ci.fail : t.ci.pass}>{statusMsg}</Text>}
-
-      <Box paddingX={1} gap={2} borderStyle="single" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} borderColor={t.ui.border}>
-        <Text color={t.ui.dim}>{`[${firstActionKey('issue.reply', 'c')}] reply  [${firstActionKey('issue.labels', 'l')}] labels  [${firstActionKey('issue.assignees', 'A')}] assignees  [Esc] back`}</Text>
-      </Box>
     </Box>
   )
 }

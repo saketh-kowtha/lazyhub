@@ -363,6 +363,14 @@ export function renderAppView(ctx) {
     'cancel-run':    DIALOG_KEYS.confirm,
     'mark-all':      DIALOG_KEYS.confirm,
     'logs':          DIALOG_KEYS.logs,
+    // Confirms and forms opened from list panes (#468): same hints as their siblings above.
+    'merge-confirm': DIALOG_KEYS.confirm,
+    'auto-merge':    DIALOG_KEYS.confirm,
+    'close':         DIALOG_KEYS.confirm,
+    'delete':        DIALOG_KEYS.confirm,
+    'rerun':         DIALOG_KEYS.confirm,
+    'cancel':        DIALOG_KEYS.confirm,
+    'new':           DIALOG_KEYS.compose,
   }
 
   const listFooter = (() => {

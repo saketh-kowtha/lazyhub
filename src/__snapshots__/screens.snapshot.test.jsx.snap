@@ -57,20 +57,20 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 command palette 1`] = `
 "
 
-            ╔══════════════════════════════════════════════════════════════════════════╗
-            ║ ▶  ▍ pr-list                                                             ║
-            ║ ──────────────────────────────────────────────                           ║
-            ║ ▶ Approve PR             a      Submit an approving review for the focu… ║
-            ║   Checkout PR Branch          b       Checkout the pull request branch … ║
-            ║   Close PR                  X      Close the focused pull request witho… ║
-            ║   Copy PR URL                 y        Copy the pull request URL to cli… ║
-            ║   Cycle PR Scope                s       Cycle filter: all → own → revie… ║
-            ║   Cycle Theme                              Switch to next available the… ║
-            ║   Go to Actions                    g a       Switch to the Actions pane  ║
-            ║   Go to Branches                   g b       Switch to the Branches pane ║
-            ║   Go to Issue #…                         Jump to a specific issue by nu… ║
-            ║ [↑↓/Ctrl+np] nav  [Tab] fill  [Enter] run  [Esc] cancel                  ║
-            ╚══════════════════════════════════════════════════════════════════════════╝
+            ╭──────────────────────────────────────────────────────────────────────────╮
+            │ ▶  ▍ pr-list                                                             │
+            │ ──────────────────────────────────────────────                           │
+            │ ▶ Approve PR             a      Submit an approving review for the focu… │
+            │   Checkout PR Branch          b       Checkout the pull request branch … │
+            │   Close PR                  X      Close the focused pull request witho… │
+            │   Copy PR URL                 y        Copy the pull request URL to cli… │
+            │   Cycle PR Scope                s       Cycle filter: all → own → revie… │
+            │   Cycle Theme                              Switch to next available the… │
+            │   Go to Actions                    g a       Switch to the Actions pane  │
+            │   Go to Branches                   g b       Switch to the Branches pane │
+            │   Go to Issue #…                         Jump to a specific issue by nu… │
+            │ [↑↓/Ctrl+np] nav  [Tab] fill  [Enter] run  [Esc] cancel                  │
+            ╰──────────────────────────────────────────────────────────────────────────╯
 
 
 
