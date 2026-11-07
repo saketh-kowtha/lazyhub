@@ -243,7 +243,10 @@ export function App({ repo, onSwitchRepo }) {
   useInput((input, key) => {
     if (isPerfEnabled()) pendingInputPerf.current.push(startTimer())
     if (process.env.LAZYHUB_CRASH_TEST === '1' && ((key.ctrl && input === '_') || input === '\x1f')) {
-      throw new Error('LAZYHUB_CRASH_TEST crash')
+      // Thrown outside the handler so key-handler containment (#490) cannot catch it:
+      // this hook exists to exercise the process crash handler.
+      setImmediate(() => { throw new Error('LAZYHUB_CRASH_TEST crash') })
+      return
     }
     // Ctrl+A: open AI assistant (always fires regardless of scope)
     if (matchesAction('app.ai-assistant', input, key, _config.toml)) { setShowAI(true); return }
