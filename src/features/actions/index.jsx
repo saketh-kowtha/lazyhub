@@ -24,16 +24,18 @@ import { firstActionKey, matchesAction } from '../../config/actions.js'
 import { sanitize } from '../../utils.js'
 import { fitCell, paneWidth, planRow } from '../../ui/row-layout.js'
 
-function StatusBadge({ run }) {
+// Colour budget (#566): the state is the glyph; only a failing or running run is coloured.
+function StatusBadge({ run, isSelected }) {
   const { t } = useTheme()
   const status = run.status
   const conclusion = run.conclusion
-  if (conclusion === 'success') return <Text color={t.ci.pass}>✓</Text>
-  if (conclusion === 'failure' || conclusion === 'timed_out') return <Text color={t.ci.fail}>✗</Text>
+  const quiet = isSelected ? t.ui.selected : t.ui.muted
+  if (conclusion === 'success') return <Text color={quiet}>✓</Text>
+  if (conclusion === 'failure' || conclusion === 'timed_out') return <Text color={t.ci.fail} bold>✗</Text>
   if (status === 'in_progress' || status === 'queued') return <Text color={t.ci.running}>●</Text>
-  if (conclusion === 'cancelled') return <Text color={t.ui.muted}>⊘</Text>
-  if (conclusion === 'skipped') return <Text color={t.ui.dim}>—</Text>
-  return <Text color={t.ui.dim}>?</Text>
+  if (conclusion === 'cancelled') return <Text color={quiet}>⊘</Text>
+  if (conclusion === 'skipped') return <Text color={quiet}>—</Text>
+  return <Text color={quiet}>?</Text>
 }
 
 const BRANCH_COLS = 20
@@ -42,16 +44,17 @@ const AGE_COLS = 13
 // One line, never wider than the pane (#430): the age, then the branch, are dropped when it is tight.
 const ActionRow = memo(({ run, isSelected, t, width }) => {
   const { titleWidth, show } = planRow(width, {
-    fixed: 2 + 2,
+    fixed: 2 + 1 + 2,
     optional: [{ key: 'age', width: AGE_COLS + 1 }, { key: 'branch', width: BRANCH_COLS + 1 }],
   })
   return (
     <Box key={run.databaseId} paddingX={1} height={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-      <StatusBadge run={run} />
+      <Text color={isSelected ? t.ui.selected : undefined}>{isSelected ? '▎' : ' '}</Text>
+      <StatusBadge run={run} isSelected={isSelected} />
       <Text> </Text>
-      <Text color={isSelected ? t.ui.selected : undefined}>{fitCell(sanitize(run.workflowName), titleWidth)}</Text>
-      {show.branch && <Text color={t.ui.muted}> {fitCell(sanitize(run.headBranch), BRANCH_COLS)}</Text>}
-      {show.age && <Text color={t.ui.dim}> {fitCell(format(run.createdAt), AGE_COLS)}</Text>}
+      <Text color={isSelected ? t.ui.selected : undefined} bold={isSelected}>{fitCell(sanitize(run.workflowName), titleWidth)}</Text>
+      {show.branch && <Text color={isSelected ? t.ui.selected : t.ui.muted}> {fitCell(sanitize(run.headBranch), BRANCH_COLS)}</Text>}
+      {show.age && <Text color={isSelected ? t.ui.selected : t.ui.muted}> {fitCell(format(run.createdAt), AGE_COLS)}</Text>}
     </Box>
   )
 })

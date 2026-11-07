@@ -1,7 +1,7 @@
 /** PR rows, expanded metadata and popover content; shared display summaries stay here. */
 import React, { memo } from 'react'
 import { Box, Text } from 'ink'
-import { sanitize, shortAge, authorColor, truncateToWidth, formatLogin, padEndWidth, padStartWidth } from '../../utils.js'
+import { sanitize, shortAge, truncateToWidth, formatLogin, padEndWidth, padStartWidth } from '../../utils.js'
 
 // ─── Theme adapter ────────────────────────────────────────────────────────────
 // The PR list reads `t` from useTheme() like every other pane. This adapter only serves callers that
@@ -41,35 +41,27 @@ export function schemeToT(scheme) {
   }
 }
 
-// ─── Age colour ───────────────────────────────────────────────────────────────
-
-function ageColor(updatedAt, t) {
-  if (!updatedAt) return t.ui.dim
-  const days = (Date.now() - new Date(updatedAt).getTime()) / 86_400_000
-  if (days < 0.167) return t.ci.pass   // < 4h — fresh, green
-  if (days < 3)     return undefined    // 4h–3d — recent, default
-  if (days < 7)     return t.ci.pending // 3–7d — aging, yellow
-  if (days < 21)    return t.ci.fail    // 7–21d — stale, red
-  return t.ui.dim                        // > 21d — frozen, dim
-}
-
 // ─── Badges ───────────────────────────────────────────────────────────────────
+// Colour budget (#566): the state is the glyph (● open, ◐ draft, ⟳ auto-merge, ◆ merged, ○ closed,
+// ▲ conflict) and the focused row takes the one accent. Red and yellow are kept for what needs
+// attention: failing or pending CI, changes requested, a merge conflict.
 
-function PRStateBadge({ pr, t }) {
+function PRStateBadge({ pr, t, isSelected }) {
   const conflicting = pr.state === 'OPEN' && pr.mergeable === 'CONFLICTING'
-  if (pr.isDraft)   return <Text color={t.pr.draft}>◐</Text>
-  if (conflicting)  return <Text color={t.pr.conflict || t.ci.pending}>▲</Text>
+  const quiet = isSelected ? t.ui.selected : t.ui.muted
+  if (conflicting)  return <Text color={t.pr.conflict || t.ci.pending} bold>▲</Text>
+  if (pr.isDraft)   return <Text color={quiet}>◐</Text>
   switch (pr.state) {
     case 'OPEN':
-      if (pr.autoMergeRequest) return <Text color={t.pr.merged}>⟳</Text>
-      return <Text color={t.pr.open}>●</Text>
-    case 'MERGED': return <Text color={t.pr.merged}>●</Text>
-    case 'CLOSED': return <Text color={t.pr.closed}>●</Text>
-    default:       return <Text color={t.ui.muted}>●</Text>
+      if (pr.autoMergeRequest) return <Text color={isSelected ? t.ui.selected : undefined}>⟳</Text>
+      return <Text color={isSelected ? t.ui.selected : undefined}>●</Text>
+    case 'MERGED': return <Text color={quiet}>◆</Text>
+    case 'CLOSED': return <Text color={quiet}>○</Text>
+    default:       return <Text color={quiet}>●</Text>
   }
 }
 
-function CIBadge({ pr, t }) {
+function CIBadge({ pr, t, isSelected }) {
   const checks = pr.statusCheckRollup
   let total; let failing; let pending
   if (checks && checks.length > 0) {
@@ -83,16 +75,16 @@ function CIBadge({ pr, t }) {
   } else {
     return null
   }
-  if (failing > 0) return <Text color={t.ci.fail}> ✗ {failing}/{total}</Text>
+  if (failing > 0) return <Text color={t.ci.fail} bold> ✗ {failing}/{total}</Text>
   if (pending > 0) return <Text color={t.ci.pending}> ● {pending}/{total}</Text>
-  return <Text color={t.ci.pass}> ✓</Text>
+  return <Text color={isSelected ? t.ui.selected : t.ui.muted}> ✓</Text>
 }
 
-function ReviewBadge({ pr, t }) {
+function ReviewBadge({ pr, t, isSelected }) {
   const rd = pr.reviewDecision
   if (!rd || rd === 'REVIEW_REQUIRED') return <Text> </Text>
-  if (rd === 'APPROVED')          return <Text color={t.review?.approved || t.ci.pass}> ✓</Text>
-  if (rd === 'CHANGES_REQUESTED') return <Text color={t.review?.changes  || t.ci.fail}> ✗</Text>
+  if (rd === 'APPROVED')          return <Text color={isSelected ? t.ui.selected : t.ui.muted}> ✓</Text>
+  if (rd === 'CHANGES_REQUESTED') return <Text color={t.review?.changes  || t.ci.fail} bold> ✗</Text>
   return <Text> </Text>
 }
 
@@ -109,7 +101,7 @@ function summarizeChecks(checks, t, summary) {
       pending: summary.pending,
       passing,
       total: summary.total,
-      ciColor: summary.failing ? t.ci.fail : summary.pending ? t.ci.pending : t.ci.pass,
+      ciColor: summary.failing ? t.ci.fail : summary.pending ? t.ci.pending : t.ui.muted,
     }
   }
   const failing = checks.filter(check => /failure|error/i.test(check.state || check.conclusion || '')).length
@@ -119,7 +111,7 @@ function summarizeChecks(checks, t, summary) {
     pending,
     passing: checks.length - failing - pending,
     total: checks.length,
-    ciColor: failing ? t.ci.fail : pending ? t.ci.pending : checks.length ? t.ci.pass : t.ui.dim,
+    ciColor: failing ? t.ci.fail : pending ? t.ci.pending : t.ui.muted,
   }
 }
 
@@ -149,17 +141,17 @@ function PRExpandedDetail({ pr, t }) {
         <Text color={ciColor} wrap="truncate">   {ciParts.join('  ')}</Text>
       )}
       {labels.length > 0 && (
-        <Text color={t.ui.dim} wrap="truncate">
+        <Text color={t.ui.selected} wrap="truncate">
           {'◆  ' + labels.map(l => sanitize(l.name)).join('  ·  ')}
         </Text>
       )}
       {reviewers.length > 0 && (
-        <Text color={t.ui.dim} wrap="truncate">
+        <Text color={t.ui.muted} wrap="truncate">
           {'◇  ' + reviewers.map(r => '@' + sanitize(r.login || r.name || '')).join('  ')}
         </Text>
       )}
       {bodyLine ? (
-        <Text color={t.ui.dim} italic wrap="truncate">
+        <Text color={t.ui.muted} italic wrap="truncate">
           {"   " + sanitize(bodyLine).slice(0, 120)}
         </Text>
       ) : null}
@@ -173,17 +165,15 @@ export const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded, maskTitle 
   // Use display-width-aware helpers so CJK/emoji authors don't break borders
   const rawLogin    = sanitize(pr.author?.login)
   const authorLogin = padEndWidth(formatLogin(rawLogin, 11), 11)
-  const authorClr   = authorColor(pr.author?.login)
   const ageStr      = padStartWidth(shortAge(pr.updatedAt), 4)
-  const timeColor   = ageColor(pr.updatedAt, t)
   const tw          = Math.max(8, titleWidth || 20)
 
   return (
     <Box flexDirection="column">
       <Box paddingX={1} height={1}>
-        <Text color={isSelected ? t.ui.selected : t.ui.dim}>{isSelected ? '▎' : ' '}</Text>
-        <PRStateBadge pr={pr} t={t} />
-        <Text color={t.ui.dim}> {'#' + String(pr.number).padEnd(5)}</Text>
+        <Text color={isSelected ? t.ui.selected : t.ui.muted}>{isSelected ? '▎' : ' '}</Text>
+        <PRStateBadge pr={pr} t={t} isSelected={isSelected} />
+        <Text color={isSelected ? t.ui.selected : t.ui.muted}> {'#' + String(pr.number).padEnd(5)}</Text>
         <Box width={tw} overflow="hidden">
           <Text
             color={isSelected ? t.ui.selected : undefined}
@@ -194,10 +184,10 @@ export const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded, maskTitle 
             {maskTitle ? ' ' : sanitize(pr.title)}
           </Text>
         </Box>
-        <CIBadge pr={pr} t={t} />
-        <ReviewBadge pr={pr} t={t} />
-        <Text color={authorClr || t.ui.muted}> @{authorLogin}</Text>
-        <Text color={timeColor}> {ageStr}</Text>
+        <CIBadge pr={pr} t={t} isSelected={isSelected} />
+        <ReviewBadge pr={pr} t={t} isSelected={isSelected} />
+        <Text color={isSelected ? t.ui.selected : t.ui.muted}> @{authorLogin}</Text>
+        <Text color={isSelected ? t.ui.selected : t.ui.muted}> {ageStr}</Text>
       </Box>
       {expanded && <PRExpandedDetail pr={pr} t={t} />}
     </Box>

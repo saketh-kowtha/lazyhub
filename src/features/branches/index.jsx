@@ -33,10 +33,10 @@ const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t, width }) => {
       <Text color={isSelected ? t.ui.selected : t.ui.muted}>
         {isSelected ? '▶ ' : '  '}
       </Text>
-      {isCurrent && <Text color={t.pr.open}>► </Text>}
-      <Text color={isSelected ? t.ui.selected : undefined}>{fitCell(sanitize(branch.name), nameWidth)}</Text>
-      {branch.protected && <Text color={t.ci.pending}> 🔒</Text>}
-      {hasPR && <Text color={t.pr.open}> PR</Text>}
+      {isCurrent && <Text color={isSelected ? t.ui.selected : undefined} bold>► </Text>}
+      <Text color={isSelected ? t.ui.selected : undefined} bold={isSelected || isCurrent}>{fitCell(sanitize(branch.name), nameWidth)}</Text>
+      {branch.protected && <Text color={isSelected ? t.ui.selected : t.ui.muted}> 🔒</Text>}
+      {hasPR && <Text color={isSelected ? t.ui.selected : t.ui.muted} bold> PR</Text>}
     </Box>
   )
 })
