@@ -169,7 +169,7 @@ function PRExpandedDetail({ pr, t }) {
         </Text>
       )}
       {bodyLine ? (
-        <Text color={t.ui.dim} dimColor italic wrap="truncate">
+        <Text color={t.ui.dim} italic wrap="truncate">
           {"   " + sanitize(bodyLine).slice(0, 120)}
         </Text>
       ) : null}
