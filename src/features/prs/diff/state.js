@@ -16,7 +16,8 @@ import { loadConfig } from '../../../config.js'
 import { AppContext } from '../../../context.js'
 import { useKeyScope } from '../../../keyscope.js'
 import { sanitize } from '../../../utils.js'
-import { parseDiff, flattenFiles } from '../diff-parser.js'
+import { flattenFiles } from '../diff-parser.js'
+import { usePRDiffFiles } from './files.js'
 import { openInEditor } from '../../../editor.js'
 import { getLang } from './highlight.js'
 import { buildTreeRows } from './tree.js'
@@ -25,34 +26,6 @@ import { openEditorSync } from './editor.js'
 const _cfg = loadConfig()
 const _diffCfg = _cfg.diff
 const _editorCfg = _cfg.editor
-
-/**
- * True when gh refused the diff because it is too large (HTTP 406 and friends).
- * @param {Error|null|undefined} err
- */
-function isDiffTooLarge(err) {
-  if (!err) return false
-  const text = `${err.message || ''} ${err.stderr || ''}`
-  return /\b406\b|too[ _]large|too big|diff exceeded|exceeds the maximum/i.test(text)
-}
-
-/**
- * Count +/- lines and files from raw unified diff text (single pass).
- * Only lines inside a hunk count: `+++`/`---` are file headers only before the first `@@`.
- * @param {string} [text]
- */
-function countDiffStats(text) {
-  const stats = { additions: 0, deletions: 0, changedFiles: 0 }
-  if (!text) return stats
-  let inHunk = false
-  for (const line of text.split('\n')) {
-    if (line.startsWith('diff --git ')) { stats.changedFiles++; inHunk = false }
-    else if (line.startsWith('@@')) inHunk = true
-    else if (inHunk && line.startsWith('+')) stats.additions++
-    else if (inHunk && line.startsWith('-')) stats.deletions++
-  }
-  return stats
-}
 
 /** Own the diff session, keyboard routing, and mutation lifecycle.
  * @param {object} props
@@ -66,21 +39,19 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   const { stdout } = useStdout()
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 6)
 
-  // The diff is fetched first and alone so it never queues behind secondary
-  // calls on the gh concurrency cap (#451); everything else loads after it lands.
-  const { data: diffText, loading, error, refetch, isStale: diffStale } = useGh(getPRDiff, [repo, prNumber])
+  // The file list (paths and counts, no patch text) is fetched first and alone so it never queues
+  // behind secondary calls on the gh concurrency cap (#451); everything else loads after it lands.
+  // File patches then load one at a time around the cursor (#509): no all-or-nothing size gate.
+  const [focusFile, setFocusFile] = useState(0)
+  const diffFiles = usePRDiffFiles({ repo, prNumber, focusIndex: focusFile })
+  const { files, stats: diffStats, loading, refetch, isStale: diffStale } = diffFiles
+  const error = diffFiles.error || diffFiles.refreshError
   // Fetched this visit (not merely cached): secondary calls must not race the revalidation.
-  const hasDiff = typeof diffText === 'string'
+  const hasDiff = diffFiles.hasList
   const diffReady = hasDiff && (!diffStale || Boolean(error))
   // Stale data on screen + failed revalidation: keep the diff, surface a banner instead of an error screen.
-  const diffRefreshError = hasDiff ? error : null
-  const diffError = hasDiff ? null : error
-  const diffTooLarge = isDiffTooLarge(diffError)
-  // Large-diff gate is decided from the diff text itself: no separate stats call,
-  // and the warning is decided in the same frame the diff arrives.
-  const diffStats = useMemo(() => countDiffStats(diffText), [diffText])
-  const isLargeDiff = (diffStats.additions + diffStats.deletions) > 5000
-  const [diffWarningAck, setDiffWarningAck] = useState(false)
+  const diffRefreshError = diffFiles.refreshError
+  const diffError = diffFiles.error
 
   const { data: prMeta } = useGh(getPRMeta, [repo, prNumber], { ttl: 300_000, enabled: diffReady })
   const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000, enabled: diffReady })
@@ -162,8 +133,6 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
     setCompose(null)
   }, [])
 
-  const skipParse = isLargeDiff && !diffWarningAck
-  const files = useMemo(() => (skipParse ? [] : parseDiff(diffText || '')), [diffText, skipParse])
   const rows  = useMemo(() => flattenFiles(files), [files])
 
   // filename → language, computed once per diff fetch
@@ -176,6 +145,35 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   const fileStartIndices = useMemo(() =>
     rows.reduce((acc, row, i) => { if (row.type === 'file-header') acc.push(i); return acc }, [])
   , [rows])
+
+  // The file under the cursor decides which patches load (this one and the next few).
+  useEffect(() => {
+    let index = 0
+    for (let i = 0; i < fileStartIndices.length && fileStartIndices[i] <= cursor; i += 1) index = i
+    setFocusFile(prev => (prev === index ? prev : index))
+  }, [cursor, fileStartIndices])
+
+  // A patch arriving above the cursor changes how many rows precede it; keep the cursor on the
+  // same line of the same file instead of letting the view slide.
+  const prevLayout = useRef({ starts: fileStartIndices, files, rows })
+  useEffect(() => {
+    const prev = prevLayout.current
+    prevLayout.current = { starts: fileStartIndices, files, rows }
+    if (prev.rows === rows) return
+    let fi = 0
+    for (let i = 0; i < prev.starts.length && prev.starts[i] <= cursor; i += 1) fi = i
+    const name = prev.files[fi]?.filename
+    const ni = name == null ? -1 : files.findIndex(f => f.filename === name)
+    if (ni < 0) return
+    const newStart = fileStartIndices[ni]
+    const length = (fileStartIndices[ni + 1] ?? rows.length) - newStart
+    const next = newStart + Math.min(cursor - prev.starts[fi], Math.max(0, length - 1))
+    if (next !== cursor) {
+      const delta = next - cursor
+      setCursor(next)
+      setScrollOffset(o => Math.max(0, o + delta))
+    }
+  }, [rows]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // File tree rows
   const treeRows = useMemo(() => buildTreeRows(files), [files])
@@ -205,7 +203,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
     if (!findQuery) return []
     const q = findQuery.toLowerCase()
     return rows.reduce((acc, row, i) => {
-      if (row.type !== 'file-header' && row.type !== 'hunk' && row.text?.toLowerCase().includes(q))
+      if (row.type !== 'file-header' && row.type !== 'file-note' && row.type !== 'hunk' && row.text?.toLowerCase().includes(q))
         acc.push(i)
       return acc
     }, [])
@@ -248,21 +246,6 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
 
   useKeymapInput((input, key) => {
     const id = resolveAction(input, key)
-
-    // gh refused the diff as too large: only browser/back make sense
-    if (diffTooLarge) {
-      if (id === 'pr.open-browser') { openFilesInBrowser(); return }
-      if (id === 'app.back') { onBack(); return }
-      return
-    }
-
-    // Large diff warning intercept
-    if (isLargeDiff && !diffWarningAck) {
-      if (key.return) { setDiffWarningAck(true); return }
-      if (id === 'pr.open-browser') { openFilesInBrowser(); return }
-      if (id === 'app.back') { onBack(); return }
-      return
-    }
 
     // findActive — handled by TextInput, here we only handle exit keys
     if (findActive) {
@@ -519,7 +502,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
     // comment / reply / edit / delete act on the thread at the cursor line
     if (id === 'diff.comment' || id === 'diff.edit-comment' || id === 'diff.delete-comment') {
       const row = rows[cursor]
-      const isCodeRow = row && row.type !== 'file-header' && row.filename
+      const isCodeRow = row && row.type !== 'file-header' && row.type !== 'file-note' && row.filename
       const lineNum = isCodeRow ? (row.newLine ?? row.oldLine) : null
       const lineKey = lineNum != null ? `${row.filename}:${lineNum}` : null
       const lineComments = lineKey ? commentsByLine.get(lineKey) : null
@@ -530,7 +513,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
       if (id === 'diff.comment') {
         const rootId = sorted.filter(c => !c.inReplyToId)[0]?.id
         if (rootId) setCompose({ mode: 'reply', rootCommentId: rootId, body: '' })
-        else if (row && row.type !== 'file-header') setCompose({ mode: 'new', commentType: 'comment', body: '' })
+        else if (row && row.type !== 'file-header' && row.type !== 'file-note') setCompose({ mode: 'new', commentType: 'comment', body: '' })
       } else if (lastComment && id === 'diff.edit-comment') {
         setCompose({ mode: 'edit', commentId: lastComment.id, body: lastComment.body || '' })
       } else if (lastComment) {
@@ -550,12 +533,13 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
       }
       setAiReviewLoading(true)
       setAiReviewError(null)
-      getAICodeReview({
+      // The review needs the whole diff, so fetch it now (the pane itself only holds the files in view).
+      getPRDiff(repo, prNumber).then(diffText => getAICodeReview({
         diff:     diffText || '',
         prTitle:  sanitize(prMeta?.title || `PR #${prNumber}`),
         prBody:   sanitize((prMeta?.body || '').slice(0, 500)),
         authorHint: prMeta?.author?.login,
-      })
+      }))
         .then(result => { setAiReview(result) })
         .catch(err => {
           setAiReviewError(err instanceof AIError ? err.message : 'AI review failed')
@@ -653,7 +637,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   }
 
   return {
-    stdout, visibleHeight, diffStats, isLargeDiff, diffTooLarge, diffWarningAck,
+    stdout, visibleHeight, diffStats, focusFile, totalFiles: diffFiles.totalFiles, listComplete: diffFiles.listComplete, listError: diffFiles.listError,
     commentsTruncated: !!commentsPage?.truncated,
     prMeta, repoInfo, loading: loading && !hasDiff, error: diffError, diffRefreshError, cursor, scrollOffset, dialog, setDialog,
     mergeChoice, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,

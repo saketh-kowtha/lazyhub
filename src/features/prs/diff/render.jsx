@@ -51,6 +51,10 @@ const DiffLine = React.memo(({ row, isSelected, lang, isMatch, t }) => {
     return <Text wrap="truncate">{cur + line}</Text>
   }
 
+  if (row.type === 'file-note') {
+    return <Text wrap="truncate" color={t.ci.pending}>{cur + '   ' + sanitize(row.text)}</Text>
+  }
+
   if (row.type === 'hunk') {
     return (
       <Text wrap="truncate">
@@ -96,7 +100,7 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
     const isSelected = idx === cursor || (nextIsPairedAdd && (scrollOffset + i + 1) === cursor)
 
     // Full-width rows (file-header, hunk)
-    if (row.type === 'file-header' || row.type === 'hunk') {
+    if (row.type === 'file-header' || row.type === 'hunk' || row.type === 'file-note') {
       const lang = langCache.get(row.filename)
       result.push(
         <Box key={idx}>
@@ -194,7 +198,7 @@ function renderSplitView(rows, scrollOffset, visibleHeight, cursor, langCache, c
 export function DiffView({ prNumber, state }) {
   const { t } = useTheme()
   const {
-    stdout, visibleHeight, diffStats, isLargeDiff, diffTooLarge, diffRefreshError, diffWarningAck, commentsTruncated,
+    stdout, visibleHeight, diffStats, focusFile, totalFiles, listComplete, listError, diffRefreshError, commentsTruncated,
     prMeta, repoInfo, loading, error, cursor, scrollOffset, dialog, setDialog,
     mergeChoice, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
     footerKeys, showTree, treeCursor, findQuery, setFindQuery, findActive,
@@ -204,33 +208,6 @@ export function DiffView({ prNumber, state }) {
     treeRows, commentsByLine, jumpTo, handleAiJumpTo, handleAiPost,
     submitMerge, confirmMerge, submitApproval, submitChanges
   } = state
-
-  if (diffTooLarge) {
-    return (
-      <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
-        <Text color={t.ci.pending} bold>⚠ Large diff: GitHub would not return it here</Text>
-        <Text color={t.ui.muted}>The diff is too large to load in the terminal.</Text>
-        <Box marginTop={1} gap={3}>
-          <Text color={t.ui.muted}>[{firstActionKey('pr.open-browser', 'o')}] Open in browser</Text>
-          <Text color={t.ui.dim}>[Esc] Back</Text>
-        </Box>
-      </Box>
-    )
-  }
-
-  if (isLargeDiff && !diffWarningAck) {
-    return (
-      <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
-        <Text color={t.ci.pending} bold>⚠ Large diff: +{diffStats.additions} -{diffStats.deletions} across {diffStats.changedFiles} files</Text>
-        <Text color={t.ui.muted}>This may take a moment to render.</Text>
-        <Box marginTop={1} gap={3}>
-          <Text color={t.ui.selected}>[Enter] Load anyway</Text>
-          <Text color={t.ui.muted}>[o] Open in browser</Text>
-          <Text color={t.ui.dim}>[Esc] Back</Text>
-        </Box>
-      </Box>
-    )
-  }
 
   if (dialog === 'merge' && repoInfo) {
     const methods = allowedMergeOptions(repoInfo)
@@ -301,6 +278,11 @@ export function DiffView({ prNumber, state }) {
         {commentsTruncated && <Text color={t.ci.pending}>⚠ inline comments incomplete: open comments ({firstActionKey('pr.comments', 'v')}) for all</Text>}
         {commentStatus && <Text color={t.ci.pass}>{commentStatus}</Text>}
         {splitView && <Text color={t.ui.muted}>[split]</Text>}
+        {totalFiles > 0 && (
+          <Text color={listError ? t.ci.pending : t.ui.dim}>
+            file {focusFile + 1} of {totalFiles}{!listComplete && !listError ? ' · listing…' : ''}{listError ? ` · file list incomplete [${firstActionKey('list.refresh', 'r')}] retry` : ''}
+          </Text>
+        )}
         <Text color={t.ui.dim}>{cursor + 1} / {rows.length}</Text>
       </Box>
 

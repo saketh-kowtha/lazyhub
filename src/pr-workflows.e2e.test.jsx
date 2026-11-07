@@ -1,4 +1,5 @@
 import React from 'react'
+import { diffFilesPage, fakeFilePatch } from './test/diff-fixtures.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Text } from 'ink'
 import { InputDriver } from './test/input-driver.jsx'
@@ -16,6 +17,8 @@ import {
   rerunCheckRun,
   getPRDiffStats,
   getPRDiff,
+  listPRFilesPage,
+  getPRFilePatch,
   listPRCommentsPage,
   listPRTimelinePage,
   getPR as getPRMeta,
@@ -64,6 +67,8 @@ vi.mock('./executor.js', () => ({
   getCheckRunAnnotations: vi.fn(),
   getPRDiffStats: vi.fn(),
   getPRDiff: vi.fn(),
+  listPRFilesPage: vi.fn(),
+  getPRFilePatch: vi.fn(),
   listPRCommentsPage: vi.fn(),
   listPRTimelinePage: vi.fn(),
   addPRLineComment: vi.fn(),
@@ -163,13 +168,15 @@ describe('PR detail and diff E2E flows', () => {
       },
     ]
 
+    getPRFilePatch.mockImplementation((...args) => fakeFilePatch(currentDiffText)(...args))
+    getPRDiff.mockImplementation(async () => currentDiffText)
     useGh.mockImplementation((fn) => {
       if (fn === getPR) return ghResult(currentPR)
       if (fn === getRepoInfo) return ghResult(currentRepoInfo)
       if (fn === getPRChecks) return ghResult(currentChecks)
       if (fn === getBranchProtection) return ghResult(currentProtection)
       if (fn === getPRDiffStats) return ghResult(currentDiffStats)
-      if (fn === getPRDiff) return ghResult(currentDiffText)
+      if (fn === listPRFilesPage) return ghResult(diffFilesPage(currentDiffText))
       if (fn === listPRCommentsPage) return ghResult({ comments: currentComments, truncated: false }, { mutate: vi.fn(), refetch: vi.fn() })
       if (fn === getPRMeta) return ghResult(currentPR)
       return ghResult(null)

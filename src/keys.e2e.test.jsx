@@ -51,6 +51,8 @@ let overrides = {}
 function gh(args) {
   const a = args.join(' ')
   for (const [re, v] of Object.entries(overrides)) if (new RegExp(re).test(a)) return typeof v === 'function' ? v() : v
+  if (a.includes('files(first')) return { data: { repository: { pullRequest: { files: { totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ path: 'a.js', additions: 1, deletions: 1, changeType: 'MODIFIED' }] } } } } }
+  if (/pulls\/\d+\/files/.test(a)) return JSON.stringify({ filename: 'a.js', status: 'modified', additions: 1, deletions: 1, patch: DIFF.slice(DIFF.indexOf('@@')).trimEnd() })
   if (args[0] === 'api' && args[1] === 'graphql') return a.includes('is:pr') ? { data: { search: { pageInfo: { hasNextPage: false }, nodes: [gqlNode] } } } : { data: {} }
   if (a.startsWith('pr view') && a.includes('headRefOid') && !a.includes('number,title')) return { headRefOid: PR.headRefOid }
   if (a.startsWith('pr view')) return PR

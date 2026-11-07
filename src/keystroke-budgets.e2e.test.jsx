@@ -18,6 +18,7 @@ import { sendInput } from './test/input-bus.js'
 import { App } from './app.jsx'
 import { useGh } from './hooks/useGh.js'
 import * as executor from './executor.js'
+import { diffFilesPage, fakeFilePatch } from './test/diff-fixtures.js'
 import { disarmPrefix } from './config/keymap.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 import { timelinePage } from './test/timeline.js'
@@ -65,7 +66,7 @@ vi.mock('./features/tabs/view.jsx', () => ({ TabView: () => <Text>TAB VIEW</Text
 
 vi.mock('./executor.js', () => {
   const fns = [
-    'listPRs', 'listPRsPage', 'getPRRow', 'getPRPreview', 'getPR', 'getRepoInfo', 'getPRChecks', 'getBranchProtection', 'getPRDiffStats', 'getPRDiff',
+    'listPRs', 'listPRsPage', 'getPRRow', 'getPRPreview', 'getPR', 'getRepoInfo', 'getPRChecks', 'getBranchProtection', 'getPRDiffStats', 'getPRDiff', 'listPRFilesPage', 'getPRFilePatch',
     'listPRComments', 'listPRCommentsPage', 'listPRTimelinePage', 'resolveThread', 'replyToComment', 'editPRComment', 'deletePRComment', 'addPRLineComment',
     'reviewPR', 'mergePR', 'closePR', 'checkoutBranch', 'enableAutoMerge', 'disableAutoMerge', 'markPRReady',
     'convertPRToDraft', 'editPRBase', 'requestReviewers', 'removeReviewers', 'addPRAssignees', 'removePRAssignees',
@@ -198,6 +199,7 @@ describe('keystroke budgets', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     executor.getPRRow.mockResolvedValue({ ...PR })
+    executor.getPRFilePatch.mockImplementation(fakeFilePatch(DIFF))
     useGh.mockImplementation((fn) => {
       if (fn === executor.listPRsPage) return ghResult({ items: [PR], hasNextPage: false, endCursor: null, totalCount: 1 })
       if (fn === executor.getPR) return ghResult(PR)
@@ -205,7 +207,7 @@ describe('keystroke budgets', () => {
       if (fn === executor.getPRChecks) return ghResult(PR.statusCheckRollup)
       if (fn === executor.getBranchProtection) return ghResult({ requiredReviews: 1 })
       if (fn === executor.getPRDiffStats) return ghResult({ additions: 2, deletions: 0, changedFiles: 1 })
-      if (fn === executor.getPRDiff) return ghResult(DIFF)
+      if (fn === executor.listPRFilesPage) return ghResult(diffFilesPage(DIFF))
       if (fn === executor.listPRCommentsPage) return ghResult({ comments: COMMENTS, truncated: false })
       if (fn === executor.listPRTimelinePage) return ghResult(timelinePage(COMMENTS))
       if (fn === executor.listRuns) return ghResult([RUN])
