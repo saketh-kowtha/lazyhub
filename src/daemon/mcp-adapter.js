@@ -239,4 +239,4 @@ export async function runMCPServer() {
   }
 }
 
-export { MCP_MUTATIONS_DISABLED, TOOLS, callTool, handleRequest }
+export { MCP_MUTATIONS_DISABLED, MUTATING_TOOLS, TOOLS, TOOL_ALIASES, callTool, handleRequest }
