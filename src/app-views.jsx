@@ -4,6 +4,7 @@ import React from 'react'
 import { Box, Text } from 'ink'
 import { APP_CONFIG as _config, DIALOG_KEYS, PANES, PANE_ICONS, PANE_LABELS } from './app-keys.js'
 import { AppContext } from './context.js'
+import { hintLine } from './config/actions.js'
 import { Sidebar } from './components/Sidebar.jsx'
 import { TooSmall } from './components/TooSmall.jsx'
 import { TabStrip } from './components/TabStrip.jsx'
@@ -404,11 +405,7 @@ export function renderAppView(ctx) {
         {leaderActive && (
           <Box paddingX={2} paddingY={0}>
             <Text color={t.ui.selected} bold>{'<Space> '}</Text>
-            <Text color={t.ui.muted}>t</Text><Text color={t.ui.dim}> theme  </Text>
-            <Text color={t.ui.muted}>a</Text><Text color={t.ui.dim}> AI  </Text>
-            <Text color={t.ui.muted}>r</Text><Text color={t.ui.dim}> recent  </Text>
-            <Text color={t.ui.muted}>?</Text><Text color={t.ui.dim}> help  </Text>
-            <Text color={t.ui.dim}> (1.5s)</Text>
+            <Text color={t.ui.dim}>{hintLine(['app.leader-theme', 'app.leader-ai', 'app.leader-help'], _config.toml)}  (1.5s)</Text>
           </Box>
         )}
         <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />

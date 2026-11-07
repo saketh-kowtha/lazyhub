@@ -3,7 +3,7 @@ import { Box, Text, useInput, useStdout } from 'ink'
 import { useTheme } from './theme.js'
 import { useKeyScope } from './keyscope.js'
 import { matchesAction } from './config/actions.js'
-import { APP_CONFIG as _config, GLOBAL_KEYS, LIST_VIEW_KEYS, PANE_ICONS, PANE_LABELS } from './app-keys.js'
+import { APP_CONFIG as _config, GLOBAL_KEYS, LIST_GLOBAL_KEYS, LIST_VIEW_KEYS, PANE_ICONS, PANE_LABELS } from './app-keys.js'
 import { contextHelpRows } from './ui/actions.js'
 
 // ─── Help overlay — shown on ? from any view ─────────────────────────────────
@@ -75,7 +75,7 @@ export function HelpOverlay({ pane, view, actionCtx, onClose, availableWidth, av
               <Text color={t.ui.muted} bold>Global (any view)</Text>
             </Box>
 	            <Box flexDirection="column" marginTop={compactPad ? 0 : 1} flexShrink={0}>
-	              {GLOBAL_KEYS.map((k, i) => (
+	              {[...GLOBAL_KEYS, ...(isListView ? LIST_GLOBAL_KEYS : [])].map((k, i) => (
 	                <Box key={`${i}:${k.key}`} gap={2} flexShrink={0}>
 	                  <Box width={keyWidth} flexShrink={0}>
 	                    <Text color={t.ui.selected} bold wrap="truncate">{k.key}</Text>

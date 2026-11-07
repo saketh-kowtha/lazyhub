@@ -348,12 +348,6 @@ export function App({ repo, onSwitchRepo }) {
     if (matchesAction('app.open-config', input, key, _config.toml)) { openInEditor(CONFIG_PATH, 1, _config.editor).catch(() => {}); return }
     if (matchesAction('app.logs', input, key, _config.toml) && process.env.LAZYHUB_DEBUG === '1') { setView('logs'); setSelectedItem(null); return }
 
-    // V — toggle visual (batch-select) mode skeleton
-    if (matchesAction('app.visual-toggle', input, key, _config.toml) && view === 'list') {
-      setAppMode(m => m === 'VISUAL' ? 'NORMAL' : 'VISUAL')
-      return
-    }
-
     // : — command palette
     if (matchesAction('command-palette.open', input, key, _config.toml)) {
       setShowPalette(true)
@@ -387,7 +381,6 @@ export function App({ repo, onSwitchRepo }) {
       if (matchesAction('app.leader-theme', input, key, _config.toml)) { setShowPalette(true); setAppMode('COMMAND'); return }
       if (matchesAction('app.leader-ai', input, key, _config.toml)) { setShowAI(true); return }
       if (matchesAction('app.leader-help', input, key, _config.toml)) { setShowHelp(true); return }
-      if (matchesAction('app.leader-recent', input, key, _config.toml)) { /* recent PRs — future */ return }
       return
     }
 
@@ -438,11 +431,6 @@ export function App({ repo, onSwitchRepo }) {
   }, [view, selectedItem])
 
   const onPaneState = useCallback((s) => setPaneState(prev => ({ ...prev, ...s })), [])
-
-  // Clear visual mode whenever we leave list view
-  useEffect(() => {
-    if (view !== 'list' && appMode === 'VISUAL') setAppMode('NORMAL')
-  }, [view, appMode])
 
   const tree = renderAppView({
     actionsBranch, actionsRepo, itemIsForeign, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,

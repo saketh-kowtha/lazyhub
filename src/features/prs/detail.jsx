@@ -31,7 +31,7 @@ import { classifyGhFailure } from '../../executor.js'
 import { PRDetailSkeleton } from '../../components/Skeleton.jsx'
 import { openInEditor, editorLabel } from '../../editor.js'
 import { loadConfig } from '../../config.js'
-import { firstActionKey } from '../../config/actions.js'
+import { firstActionKey, hintLine } from '../../config/actions.js'
 
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { autoMergeOption, canToggleAutoMergeFromList } from './list-row.jsx'
@@ -39,7 +39,7 @@ import { allowedMergeOptions, ADMIN_MERGE_OPTIONS, mergeMethodLabel, preferredMe
 import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
-import { sortChecks } from './detail/Checks.jsx'
+import { sortChecks, CHECK_HINTS } from './detail/Checks.jsx'
 
 const _editorCfg = loadConfig().editor
 
@@ -531,14 +531,14 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
         {statusMsg
           ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? '  [any key to dismiss]' : ''}</Text>
           : checkCursor !== null
-            ? <Text color={t.ui.selected}>[j/k] nav checks  [Enter/o] open  [l] annotations  [R] rerun  [Esc] exit checks</Text>
+            ? <Text color={t.ui.selected}>{hintLine(CHECK_HINTS)}</Text>
             : maxScroll > 0
-              ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  [j/k] scroll  [gg/G] top/bottom</Text>
+              ? <Text color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}  {hintLine([['cursor.down', 'scroll'], 'cursor.top'])}</Text>
               : pr?.mergeable === 'CONFLICTING'
-                ? <Text color={t.pr.conflict || t.ci.pending}>[C] resolve conflicts  [c] checks  [d] diff  [m] merge  [l] labels  [A] assignees  [R] reviewers</Text>
-                : <Text color={t.ui.dim}>[d] diff  [E] editor  [m] merge/auto-merge  [c] checks  [l] labels  [A] assignees  [R] reviewers</Text>
+                ? <Text color={t.pr.conflict || t.ci.pending}>{hintLine([['pr.conflicts', 'resolve conflicts'], 'pr.checks', 'pr.diff', 'pr.merge', 'pr.labels', 'pr.assignees', 'pr.reviewers'])}</Text>
+                : <Text color={t.ui.dim}>{hintLine(['pr.diff', 'pr.open-editor', ['pr.merge', 'merge/auto-merge'], 'pr.checks', 'pr.labels', 'pr.assignees', 'pr.reviewers'])}</Text>
         }
-        <Text color={t.ui.dim}>[/] search  [?] help  [Esc] back</Text>
+        <Text color={t.ui.dim}>{hintLine(['list.search', 'app.help', 'app.back'])}</Text>
       </Box>
     </Box>
   )

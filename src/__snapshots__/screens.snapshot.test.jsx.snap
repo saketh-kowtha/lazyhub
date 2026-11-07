@@ -24,7 +24,7 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ↯  Actions  ·  owner/repo                                                               ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav  ┊  Enter / l logs │ Ctrl+R re-run │ X cancel  ┊  Tab pane  ┊  r refresh          │ ? help"
+ j/k nav  ┊  Enter / l logs │ Ctrl+R re-run │ X cancel  ┊  / search  ┊  Tab pane           │ ? help"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 branches 1`] = `
@@ -329,7 +329,7 @@ exports[`major screen golden snapshots > covers wide PR list and diff frames > 1
 │                 │                                                                                │
 │                 │                                                                                │
 │ ──────────────  │                                                                                │
-│ ? help · S cfg… │                                                                                │
+│ ? help · , set… │                                                                                │
 ╰─────────────────╰────────────────────────────────────────────────────────────────────────────────╯
  ⎇  Pull Requests  ·  owner/repo                                                         ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────

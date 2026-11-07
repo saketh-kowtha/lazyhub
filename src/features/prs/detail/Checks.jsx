@@ -3,6 +3,11 @@ import React from 'react'
 import { Box, Text } from 'ink'
 import { useTheme } from '../../../theme.js'
 import { sanitize } from '../../../utils.js'
+import { hintLine } from '../../../config/actions.js'
+
+/** Hint line for checks mode; every key comes from the registry (#445). */
+/** @type {(string | [string, string])[]} */
+export const CHECK_HINTS = [['cursor.down', 'nav'], 'check.log', 'check.open-browser', 'check.rerun', ['check.exit', 'exit']]
 
 /** @typedef {{name?: string, context?: string, conclusion?: string, status?: string, state?: string, appName?: string}} PRCheck */
 
@@ -35,7 +40,7 @@ export function ChecksHeading({ checks, checkCursor }) {
       {failing > 0 && <Text color={t.ci.fail}>✗ {failing}</Text>}
       {pending > 0 && <Text color={t.ci.pending}>● {pending}</Text>}
       {skipped > 0 && <Text color={t.ui.dim}>⊘ {skipped}</Text>}
-      {checksActive && <Text color={t.ui.dim}>[j/k] nav  [Enter/o] open  [R] rerun  [Esc] exit</Text>}
+      {checksActive && <Text color={t.ui.dim}>{hintLine(CHECK_HINTS)}</Text>}
     </Box>
   )
 }

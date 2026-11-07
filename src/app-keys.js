@@ -24,14 +24,13 @@ for (const [id, def] of Object.entries(_config.customTabs || {})) {
 // Context keys (per pane/view) are generated from the registry by
 // contextHelpRows() in ui/actions.js; only the global block lives here.
 
+// Only keys app.jsx handles in EVERY view belong here. Tab and `,` stop at full-screen
+// views (they are listed with the list view's keys below); `r`, `o` and `/` belong to
+// whichever pane implements them, so contextHelpRows() lists them where they work (#449).
 export const GLOBAL_KEYS = actionHints([
   'app.ai-assistant',
-  'app.next-pane',
-  'list.refresh',
-  'pr.open-browser',
-  'list.search',
   'app.help',
-  'app.settings',
+  'command-palette.open',
   'go.home',
   'go.prs',
   'go.issues',
@@ -57,3 +56,7 @@ export const DIALOG_KEYS = {
 // Digits jump panes from list views only (#450), so the help overlay lists them with
 // the list view's keys rather than under "Global (any view)".
 export const LIST_VIEW_KEYS = actionHints(['app.jump-pane'], _config.toml)
+
+// Global keys that only work from a list view; the overlay appends them to the global
+// block there, and leaves them out inside detail/diff/comments (#449).
+export const LIST_GLOBAL_KEYS = actionHints(['app.next-pane', 'app.settings'], _config.toml)

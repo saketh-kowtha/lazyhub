@@ -199,14 +199,6 @@ description = "Open the command palette"
 scope = "global"
 group = "global"
 
-[actions."app.visual-toggle"]
-keys = ["V"]
-hint = "V"
-label = "visual"
-description = "Toggle visual selection mode"
-scope = "global"
-group = "global"
-
 [actions."app.logs"]
 keys = ["L"]
 hint = "L"
@@ -252,14 +244,6 @@ keys = ["?"]
 hint = "?"
 label = "help"
 description = "Open help from leader mode"
-scope = "leader"
-group = "leader"
-
-[actions."app.leader-recent"]
-keys = ["r"]
-hint = "r"
-label = "recent"
-description = "Open recently viewed items from leader mode"
 scope = "leader"
 group = "leader"
 
