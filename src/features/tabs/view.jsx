@@ -71,8 +71,11 @@ export function TabView({ tab, repo, onOpenItem, innerWidth, listHeight }) {
 
   const section = Math.min(selection.section, Math.max(0, panes.length - 1))
   const cursorOf = (idx) => {
+    const stored = Math.max(0, selection.cursors[idx] || 0)
     const len = paneData.current[idx]?.items?.length || 0
-    return Math.max(0, Math.min(selection.cursors[idx] || 0, len - 1))
+    // A section that is not loaded (not drawn in one-section mode, or still loading) knows no length yet:
+    // keep the remembered row instead of snapping it to 0. TabPane clamps it to the rows it really has.
+    return len > 0 ? Math.min(stored, len - 1) : stored
   }
   const setCursor = (idx, value) => setSelection(prev => {
     const cursors = [...prev.cursors]

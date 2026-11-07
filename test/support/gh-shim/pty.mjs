@@ -2,7 +2,8 @@
 // Env hooks used by the scenarios: LAZYHUB_GH_LOG (log argv per call as JSON lines),
 // LAZYHUB_GH_LATENCY_MS (slow search/list), LAZYHUB_GH_FAIL_ONCE_FILE (first search fails),
 // LAZYHUB_GH_STUB_STDERR + LAZYHUB_GH_STUB_EXIT (search fails with stderr),
-// LAZYHUB_GH_STUB_EMPTY (search returns no results).
+// LAZYHUB_GH_STUB_EMPTY (search returns no results),
+// LAZYHUB_GH_MANY=N (N numbered PRs #300.. and issues #400.. so lists scroll; detail views echo the number asked for).
 import { appendFileSync, writeFileSync } from 'node:fs'
 import { VITEST_LOG } from '../../../src/features/prs/ci-log.fixtures.js'
 
@@ -44,6 +45,10 @@ const RUN = { databaseId: 1, name: 'CI', status: 'completed', conclusion: 'succe
 
 const searchNode = pr => ({ __typename: 'PullRequest', ...pr, labels: { nodes: pr.labels }, reviewRequests: { nodes: [] }, statusCheckRollup: { nodes: pr.statusCheckRollup }, assignees: { nodes: pr.assignees } })
 
+const MANY = Number(process.env.LAZYHUB_GH_MANY || 0)
+const manyPRs = () => Array.from({ length: MANY }, (_, i) => ({ ...PR, number: 300 + i, title: `Fixture PR ${300 + i}` }))
+const manyIssues = () => Array.from({ length: MANY }, (_, i) => ({ ...ISSUE, number: 400 + i, title: `Fixture issue ${400 + i}` }))
+
 export default function handle(args, out) {
   const [a0, a1] = args
   const isSearch = (a0 === 'api' && a1 === 'graphql') || (a0 === 'pr' && a1 === 'list')
@@ -66,6 +71,19 @@ export default function handle(args, out) {
     process.exit(Number(process.env.LAZYHUB_GH_STUB_EXIT || 1))
   }
   if (process.env.LAZYHUB_GH_STUB_EMPTY && isSearch) out(a0 === 'pr' ? [] : { data: { search: { nodes: [] } } })
+  if (MANY > 0) {
+    if (a0 === 'api' && a1 === 'graphql') out({ data: { search: { nodes: manyPRs().map(searchNode) } } })
+    if (a0 === 'pr' && a1 === 'list') out(manyPRs())
+    if (a0 === 'issue' && a1 === 'list') out(manyIssues())
+    if (a0 === 'pr' && a1 === 'view') {
+      const n = Number(args[2])
+      out({ ...PR, number: n, title: `Fixture PR ${n}`, body: `Fixture body ${n}`, reviews: [], files: [], additions: 1, deletions: 0, changedFiles: 1, mergeStateStatus: 'CLEAN', headRefOid: 'abc123' })
+    }
+    if (a0 === 'issue' && a1 === 'view') {
+      const n = Number(args[2])
+      out({ ...ISSUE, number: n, title: `Fixture issue ${n}`, body: `Fixture issue body ${n}` })
+    }
+  }
   if (args.includes('--version')) out('gh version 2.0.0\n')
   if (a0 === 'auth' && a1 === 'token') out('stub-auth\n')
   if (a0 === 'auth' && a1 === 'status') out('github.com\n  ✓ Logged in to github.com account octocat (stub)\n  - Active account: true\n')

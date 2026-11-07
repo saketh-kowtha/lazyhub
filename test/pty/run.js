@@ -431,6 +431,75 @@ async function runResizeFlow() {
   }
 }
 
+// #279: Focus -> PR -> detail -> back -> issue -> detail -> back with real stdin. Coming back must
+// restore the section, the selected row and the scroll position. 30 rows per section forces the window
+// to scroll; `G` selects the last one so the first rows are provably out of view.
+async function runFocusReturnFlow({ cols, rows, single = false }) {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-focus-'))
+  const stubBin = installGhStub(temp)
+  const screen = new TerminalScreen(cols, rows)
+  const label = `${cols}x${rows}`
+  let term
+  try {
+    term = spawnTerminal({ ...childEnv(stubBin, temp), LAZYHUB_GH_MANY: '30' }, [], { cols, rows })
+    term.onData(data => screen.feed(data))
+    const showing = (re, want = true) => () => (re.test(screen.text()) === want ? true : screen.text())
+    const key = async (k, pause = 120) => { term.write(k); await new Promise(resolve => setTimeout(resolve, pause)) }
+    // The row under the cursor: the marker and the number on one line.
+    const selected = number => new RegExp(`▸\\s+#${number}\\b`)
+    // The text of one dashboard section (its title row to its bottom border), since every section lists numbers.
+    const sectionOf = title => {
+      const lines = screen.text().split('\n')
+      const start = lines.findIndex(l => l.includes(title))
+      const end = lines.findIndex((l, i) => i > start && l.includes('╰'))
+      return start < 0 ? '' : lines.slice(start, end < 0 ? undefined : end).join('\n')
+    }
+
+    await waitUntil(showing(/Focus/), `${label}: Focus on start`)
+    await settle()
+    await waitUntil(showing(selected(300)), `${label}: first PR selected on Focus`)
+
+    // Section 1 (PRs): jump to the last row, so the window has scrolled away from the top.
+    await key('G')
+    await waitUntil(showing(selected(329)), `${label}: last PR selected`)
+    assert.doesNotMatch(sectionOf('Review requested'), /#300\b/, `${label}: the window scrolled past the first PR`)
+    const prView = screen.text()
+
+    await key('\r')
+    await waitUntil(showing(/Fixture body 329|#329 Fixture PR 329/), `${label}: the last PR opened in detail`)
+    await key('\x1b')
+    await waitUntil(showing(selected(329)), `${label}: PR row restored after Esc`)
+    assert.doesNotMatch(sectionOf('Review requested'), /#300\b/, `${label}: PR scroll position restored`)
+    assert.equal(screen.text().split('\n').find(l => selected(329).test(l)), prView.split('\n').find(l => selected(329).test(l)), `${label}: same row text`)
+
+    // Section 3 (issues): same dance.
+    await key(']')
+    await key(']')
+    if (single) await waitUntil(showing(/section 3\/3/), `${label}: one-section mode shows section 3/3`)
+    await waitUntil(showing(selected(400)), `${label}: first issue selected in section 3`)
+    await key('G')
+    await waitUntil(showing(selected(429)), `${label}: last issue selected`)
+    assert.doesNotMatch(sectionOf('Assigned issues'), /#400\b/, `${label}: the window scrolled past the first issue`)
+    await key('\r')
+    await waitUntil(showing(/Fixture issue body 429|#429 Fixture issue 429/), `${label}: the last issue opened in detail`)
+    await key('\x1b')
+    await waitUntil(showing(selected(429)), `${label}: issue row restored after Esc`)
+    assert.doesNotMatch(sectionOf('Assigned issues'), /#400\b/, `${label}: issue scroll position restored`)
+    if (single) assert.match(screen.text(), /section 3\/3/, `${label}: section 3 restored`)
+
+    // The PR section kept its own selection while the issue section was active.
+    await key('[')
+    await key('[')
+    await waitUntil(showing(selected(329)), `${label}: PR selection kept after visiting the issue section`)
+
+    term.write('q')
+    await waitForExit(term)
+  } finally {
+    await stopTerminal(term)
+    removeTempDir(temp)
+  }
+}
+
 // The same flow inside a real terminal emulator (tmux), which crops and reflows like a user's terminal.
 async function runTmuxResizeFlow() {
   const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-tmuxresize-'))
@@ -490,6 +559,9 @@ await runDayOneErrorFlow({
 await runPerfFlow()
 await runSwrCacheFlow()
 await runResizeFlow()
+await runFocusReturnFlow({ cols: 100, rows: 40 })
+await runFocusReturnFlow({ cols: 80, rows: 24 })
+await runFocusReturnFlow({ cols: 60, rows: 16, single: true })
 
 if (spawnSync('tmux', ['-V']).status === 0) {
   await runLazyhubFlow({ useTmux: true })
