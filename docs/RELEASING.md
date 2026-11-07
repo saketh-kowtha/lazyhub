@@ -15,8 +15,10 @@ promotion moves a soaked build to `latest` and updates Homebrew.
    GitHub prerelease. No npm token is used anywhere.
 4. Let the `next` build soak for 3-7 days.
 5. Run the `Promote` workflow manually. Enter the version twice.
-6. Promotion verifies the live `gh pr list` smoke path, moves
-   `lazyhub@<version>` to `latest`, and updates the Homebrew tap.
+6. Promotion verifies the live `gh pr list` smoke path, requires `TAP_TOKEN` (it fails
+   before anything is promoted if the secret is missing), moves `lazyhub@<version>` to
+   `latest`, updates the Homebrew tap, and fails unless the tap is on that version
+   (`docs/homebrew.md`). A weekly `Tap check` workflow flags a tap that has fallen behind.
 
 ## npm Trusted Publisher Setup (one-time, maintainer)
 

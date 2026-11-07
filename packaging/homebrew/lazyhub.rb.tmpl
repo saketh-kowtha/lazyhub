@@ -1,0 +1,20 @@
+class Lazyhub < Formula
+  desc "Lazygit-style GitHub TUI - keyboard-driven terminal UI for GitHub"
+  homepage "https://github.com/saketh-kowtha/lazyhub"
+  url "@URL@"
+  sha256 "@SHA256@"
+  version "@VERSION@"
+  license "MIT"
+
+  depends_on "node"
+
+  def install
+    system "npm", "install", *Language::Node.std_npm_install_args(libexec)
+    bin.install_symlink Dir["#{libexec}/bin/*"]
+  end
+
+  test do
+    # --version prints the package version and exits 0 (#472, #514).
+    assert_match version.to_s, shell_output("#{bin}/lazyhub --version")
+  end
+end

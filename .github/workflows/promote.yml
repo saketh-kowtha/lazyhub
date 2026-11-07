@@ -61,17 +61,39 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh pr list --repo saketh-kowtha/lazyhub --limit 1 --json number,title
 
-      - name: Verify package is on next
+      # A version that is already `latest` (promoted by hand, or by an earlier run that stopped before
+      # the Homebrew step) is allowed: the dist-tag step is skipped and the tap is still brought up to date.
+      # Before this, such a rerun failed here and the tap stayed on an old version (#472).
+      - name: Verify package is on next, or already latest
+        id: tag
         env:
           VERSION: ${{ inputs.version }}
         run: |
           NEXT="$(npm view lazyhub dist-tags.next)"
-          if [ "$NEXT" != "$VERSION" ]; then
-            echo "::error::lazyhub@$VERSION is not the current next tag (next=$NEXT)"
+          LATEST="$(npm view lazyhub dist-tags.latest)"
+          if [ "$LATEST" = "$VERSION" ]; then
+            echo "already_latest=true" >> "$GITHUB_OUTPUT"
+          elif [ "$NEXT" = "$VERSION" ]; then
+            echo "already_latest=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::lazyhub@$VERSION is neither the next tag (next=$NEXT) nor latest (latest=$LATEST)"
+            exit 1
+          fi
+
+      # The tap bump used to be skipped with a warning when TAP_TOKEN was missing, so a promotion
+      # could go green while Homebrew stayed on an old version (#472). Check it first and fail
+      # before the dist-tag moves, so a promotion is never half done.
+      - name: Require TAP_TOKEN
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::error::TAP_TOKEN is not available to this job: the Homebrew tap cannot be updated. Add it to the repository or the npm-publish environment, then rerun."
             exit 1
           fi
 
       - name: Promote npm dist-tag
+        if: steps.tag.outputs.already_latest != 'true'
         env:
           VERSION: ${{ inputs.version }}
         run: npm dist-tag add "lazyhub@${VERSION}" latest
@@ -96,45 +118,24 @@ jobs:
           echo "url=${URL}"        >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Check TAP_TOKEN presence
-        id: check_tap
-        env:
-          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
-        run: |
-          if [ -n "$TAP_TOKEN" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::TAP_TOKEN not set - skipping Homebrew formula push"
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Push Homebrew formula
-        if: steps.check_tap.outputs.present == 'true'
-        uses: actions/github-script@v9
+      - name: Render Homebrew formula
         env:
           VERSION: ${{ steps.sha.outputs.version }}
           SHA256:  ${{ steps.sha.outputs.sha }}
           URL:     ${{ steps.sha.outputs.url }}
+        run: node scripts/homebrew-formula.mjs render "$URL" "$SHA256" "$VERSION" > "$RUNNER_TEMP/lazyhub.rb"
+
+      - name: Push Homebrew formula
+        uses: actions/github-script@v9
+        env:
+          VERSION: ${{ steps.sha.outputs.version }}
+          FORMULA_FILE: ${{ runner.temp }}/lazyhub.rb
         with:
           github-token: ${{ secrets.TAP_TOKEN }}
           script: |
-            const { VERSION, SHA256, URL } = process.env
-            const formula = `class Lazyhub < Formula
-              desc "Lazygit-style GitHub TUI - keyboard-driven terminal UI for GitHub"
-              homepage "https://github.com/saketh-kowtha/lazyhub"
-              url "${URL}"
-              sha256 "${SHA256}"
-              version "${VERSION}"
-              license "MIT"
-              depends_on "node"
-              def install
-                system "npm", "install", *Language::Node.std_npm_install_args(libexec)
-                bin.install_symlink Dir["#{libexec}/bin/*"]
-              end
-              test do
-                assert_match "lazyhub", shell_output("#{bin}/lazyhub --version 2>&1", 1)
-              end
-            end`
+            const { readFileSync } = require('node:fs')
+            const { VERSION, FORMULA_FILE } = process.env
+            const formula = readFileSync(FORMULA_FILE, 'utf8')
             const owner = 'saketh-kowtha', repo = 'homebrew-tap', path = 'Formula/lazyhub.rb'
             let sha
             try {
@@ -147,3 +148,7 @@ jobs:
               content: Buffer.from(formula).toString('base64'),
               sha,
             })
+
+      # Fails the promotion when the tap does not end up on the npm version.
+      - name: Verify the tap matches npm
+        run: node scripts/homebrew-formula.mjs check --wait 120
