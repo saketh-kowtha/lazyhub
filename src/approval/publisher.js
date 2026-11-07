@@ -1,5 +1,5 @@
 /**
- * approval/publisher.js — the interface #203 codes against (docs/design/optional-approval.md 1.6).
+ * approval/publisher.js - the interface #203 codes against (docs/design/optional-approval.md 1.6).
  *
  * Contract only. There is no implementation here and no default publisher:
  * until #244 lands, UI tests inject a fake object in-process, and no

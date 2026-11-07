@@ -1,5 +1,5 @@
 /**
- * approval/index.js — barrel for the approval record module (groundwork).
+ * approval/index.js - barrel for the approval record module (groundwork).
  *
  * Nothing outside src/approval imports this barrel; src/approval/isolation.test.js
  * enforces that. See docs/design/optional-approval.md.

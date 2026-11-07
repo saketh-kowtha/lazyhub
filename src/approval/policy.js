@@ -1,5 +1,5 @@
 /**
- * approval/policy.js — the fixed approval policy constant (docs/design/optional-approval.md 1.5).
+ * approval/policy.js - the fixed approval policy constant (docs/design/optional-approval.md 1.5).
  *
  * Replaces the general policy engine for the optional-approval stage. Changing
  * any value here must bump APPROVAL_POLICY_VERSION, which invalidates existing

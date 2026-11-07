@@ -1,5 +1,5 @@
 /**
- * security-journeys.test.js — scaffold for the end-to-end security journeys (#140).
+ * security-journeys.test.js - scaffold for the end-to-end security journeys (#140).
  *
  * One table (`JOURNALS`) lists every journey from docs/design/optional-approval.md
  * section 6. A journey that can be exercised today with fixtures and a stubbed gh

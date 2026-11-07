@@ -1,5 +1,5 @@
 /**
- * approval/store.js — the local approval record store (docs/design/optional-approval.md section 4).
+ * approval/store.js - the local approval record store (docs/design/optional-approval.md section 4).
  *
  * An append-only, hash-linked NDJSON journal under the user config directory.
  * It detects corruption and fails closed; it is not tamper-proof against
@@ -65,7 +65,7 @@ function pidAlive(pid) {
   }
 }
 
-// ─── journal parsing ─────────────────────────────────────────────────────────
+// --- journal parsing ---------------------------------------------------------
 
 const hasExactKeys = (obj, required, optional = []) => {
   const keys = Object.keys(obj)
@@ -178,7 +178,7 @@ function viewOf(model, nowMs) {
   }
 }
 
-// ─── context handling ────────────────────────────────────────────────────────
+// --- context handling --------------------------------------------------------
 
 const BOUND_CONTEXT_KEYS = ['host', 'repo_node_id', 'pr_node_id', 'number', 'base_ref', 'base_sha', 'head_ref', 'head_sha', 'head_repo_node_id']
 const CREATE_CONTEXT_KEYS = [...BOUND_CONTEXT_KEYS, 'name_with_owner', 'state', 'is_cross_repository', 'fetched_at']
@@ -203,7 +203,7 @@ function escapeIntent(raw) {
   return sanitize(raw ?? '').slice(0, INTENT_MAX)
 }
 
-// ─── the store ───────────────────────────────────────────────────────────────
+// --- the store ---------------------------------------------------------------
 
 /**
  * Open (creating if needed) the approval store.

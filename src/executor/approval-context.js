@@ -1,5 +1,5 @@
 /**
- * executor/approval-context.js — typed, read-only pull-request context for the
+ * executor/approval-context.js - typed, read-only pull-request context for the
  * approval record (docs/design/optional-approval.md 4.6).
  *
  * One GraphQL read through runGh() returns the facts an approval binds

@@ -25,7 +25,7 @@ describe('canonical form (restricted JCS)', () => {
 
   it('sorts keys by UTF-16 code unit', () => {
     expect(canonicalize(KEY_ORDER_INPUT)).toBe(KEY_ORDER_CANONICAL)
-    expect(canonicalize({ '～': 2, '\u{1F600}': 1 })).toBe('{"\u{1F600}":1,"～":2}')
+    expect(canonicalize({ '\uFF5E': 2, '\u{1F600}': 1 })).toBe('{"\u{1F600}":1,"\uFF5E":2}')
   })
 
   it.each([
@@ -54,9 +54,9 @@ describe('validateRequest', () => {
   })
 
   it.each([
-    ['non-NFC ref', 'head.ref', 'café'],
-    ['bidi override in ref', 'head.ref', 'feature/‮doc'],
-    ['zero-width in ref', 'base.ref', 'ma​in'],
+    ['non-NFC ref', 'head.ref', 'cafe\u0301'],
+    ['bidi override in ref', 'head.ref', 'feature/\u202Edoc'],
+    ['zero-width in ref', 'base.ref', 'ma\u200Bin'],
     ['tag character in ref', 'base.ref', 'main\u{E0041}'],
     ['control character in ref', 'head.ref', 'a\u0007b'],
     ['empty ref', 'head.ref', ''],
@@ -73,7 +73,7 @@ describe('validateRequest', () => {
     ['bad coverage class', 'coverage_class', 'protected'],
     ['bad origin kind', 'origin.declared_kind', 'robot'],
     ['verified origin', 'origin.verified', true],
-    ['non-ASCII origin label', 'origin.label', 'café'],
+    ['non-ASCII origin label', 'origin.label', 'caf\u00E9'],
     ['long origin label', 'origin.label', 'x'.repeat(65)],
     ['other auth method', 'approver.auth_method', 'token'],
   ])('rejects %s', (_name, path, value) => {

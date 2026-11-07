@@ -28,5 +28,5 @@ export const VECTOR_1_HASH = 'ec07fe13d7b42bb4f75b98e549154896598cf43c7382b60c66
 export const VECTOR_1_REQUEST_ID = 'lzap1_ec07fe13d7b42bb4f75b98e549154896598cf43c7382b60c66368aa23e82fa70'
 
 /** Key-order vector: UTF-16 code unit order, uppercase before lowercase. */
-export const KEY_ORDER_INPUT = { b: 'é', a: 'x', B: 1 }
-export const KEY_ORDER_CANONICAL = '{"B":1,"a":"x","b":"é"}'
+export const KEY_ORDER_INPUT = { b: '\u00E9', a: 'x', B: 1 }
+export const KEY_ORDER_CANONICAL = '{"B":1,"a":"x","b":"\u00E9"}'

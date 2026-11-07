@@ -1,5 +1,5 @@
 /**
- * approval/canonical.js — restricted JCS (RFC 8785) canonical form, request
+ * approval/canonical.js - restricted JCS (RFC 8785) canonical form, request
  * validation and hashing (docs/design/optional-approval.md 4.3).
  *
  * Permitted values are plain objects, strings, safe integers and booleans.
@@ -57,7 +57,7 @@ export function hashDomain(domain, value) {
   return createHash('sha256').update(`${domain}\n${canonicalize(value)}`, 'utf8').digest('hex')
 }
 
-// ─── field validation ────────────────────────────────────────────────────────
+// --- field validation --------------------------------------------------------
 
 const HOST_RE = /^[a-z0-9.-]+(:[0-9]{1,5})?$/
 const NODE_RE = /^[A-Za-z0-9_=-]{1,100}$/
@@ -71,7 +71,7 @@ const OPERATION_RE = /^[a-z_]{1,32}$/
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
 // C0/C1 controls, DEL, bidi controls, zero-width and invisible characters, tag characters.
 // eslint-disable-next-line no-control-regex
-const FORBIDDEN_REF_RE = /[\u0000-\u001f\u007f-\u009f­؜᠎​-‏‪-‮⁠⁦-⁩﻿\u{e0000}-\u{e007f}]/u
+const FORBIDDEN_REF_RE = /[\u0000-\u001f\u007f-\u009f\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF\u{e0000}-\u{e007f}]/u
 const COVERAGE_CLASSES = ['github_enforced', 'managed_gateway', 'advisory', 'ungoverned']
 const ORIGIN_KINDS = ['human', 'agent', 'unknown']
 

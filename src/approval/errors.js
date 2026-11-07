@@ -1,5 +1,5 @@
 /**
- * approval/errors.js — the stable error catalog (docs/design/optional-approval.md 4.5).
+ * approval/errors.js - the stable error catalog (docs/design/optional-approval.md 4.5).
  *
  * Codes never change once merged. Every entry has a fixed `message` and
  * `humanHint`; raw server or file text is never copied into either, so an

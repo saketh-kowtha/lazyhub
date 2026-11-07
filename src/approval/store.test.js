@@ -276,7 +276,7 @@ describe('approval store: create', () => {
   })
 
   it('records origin as unverified metadata and escapes an unprintable label', () => {
-    const rec = approve(context(), { origin: { declared_kind: 'agent', label: 'bot‮!' } })
+    const rec = approve(context(), { origin: { declared_kind: 'agent', label: 'bot\u202E!' } })
     expect(rec.record.request.origin).toEqual({ declared_kind: 'agent', label: 'bot\\u{202E}!', verified: false })
     const dflt = approve(prCtx(2))
     expect(dflt.record.request.origin).toEqual({ declared_kind: 'unknown', label: '', verified: false })
