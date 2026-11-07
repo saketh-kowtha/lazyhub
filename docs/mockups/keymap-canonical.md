@@ -14,21 +14,22 @@ live in the registry (`defaultConfig.toml` `[actions.*]`, read through
 
 ## 1. Inventory: how keys are bound today
 
-Measured with `grep -rn "input === '" src` (tests excluded).
+Measured with `grep -rn "input === '" src` and `grep -rn "matchesAction(" src` (tests excluded), refreshed 2026-11-07 (R0 #478).
 
 | Mechanism | Where | Count |
 |---|---|---|
-| Hard-coded `input === 'x'` in view handlers | 17 non-test files, 167 matches | 167 |
-| `matchesAction(id, ...)` through TOML keymap | `app.jsx`, `prs/list.jsx`, `issues/list.jsx`, `branches`, `actions`, `notifications`, `components/dialogs/*` | 113 call sites |
+| Hard-coded `input === 'x'` in view handlers | 14 non-test files, 81 matches | 81 |
+| `matchesAction(id, ...)` through TOML keymap | 16 non-test files: `app.jsx`, `app-panels.jsx`, `prs/list.jsx`, `prs/list-dialogs.jsx`, `issues/list.jsx`, `issues/dialogs.jsx`, `branches`, `actions`, `notifications`, `config/actions.js`, `components/dialogs/*` | 121 call sites |
 | Display-only metadata (`keys` in `src/ui/actions.js`) | command palette hints | n/a |
 | Hand-written footer/help text | `VIEW_KEYS`, `PANE_KEYS.branches/actions/notifications` in `src/app-keys.js` | whole tables |
 
-Files with hard-coded matches: `prs/diff.jsx` 34, `prs/detail.jsx` 30, `prs/comments.jsx`
-15, `prs/ConflictView.jsx` 11, `prs/NewPRDialog.jsx` 10, `settings/index.jsx` 9, `logs/index.jsx`
-9, `issues/detail.jsx` 9, `config/actions.js` 9 (token matching, not a view), `components/CustomPane.jsx`
-8, `components/AIReviewPane.jsx` 6, `components/AIAssistant.jsx` 6, `utils.js` 4 (readline keys),
-`onboarding/Onboarding.jsx` 4, and one each in `config/keymap.js`, `components/ErrorBoundary.jsx`
-and `app.jsx`.
+Files with hard-coded matches today: `prs/ConflictView.jsx` 12, `settings/index.jsx` 9,
+`logs/index.jsx` 9, `config/actions.js` 9 (token matching, not a view), `components/CustomPane.jsx`
+8, `components/AIReviewPane.jsx` 6, `components/AIAssistant.jsx` 6, `prs/useNewPRForm.js` 5,
+`prs/NewPRDialogView.jsx` 5, `utils.js` 4 (readline keys), `onboarding/Onboarding.jsx` 3, and
+two in `config/keymap.js`, two in `components/ErrorBoundary.jsx` and one in `app.jsx`. The diff,
+PR detail, comments and issue detail views, which held most of the original 167 matches, now
+resolve their keys through the registry.
 
 Consequences already visible: `VIEW_KEYS.detail` in `app-keys.js` omits `c`, `E`, `C`,
 `R`, `/`, `g`; `PANE_KEYS.branches` lists `Space / Enter`, `D`, `p` as literal text, so
@@ -80,7 +81,7 @@ keep their existing confirmation dialogs.
 | Open (in app) | `Enter` | none | |
 | Open in browser | `o` | none; diff `o` opens `/files` today, becomes "this view's page" | one verb, target follows context |
 | Back | `Esc`, `q` | none | `q` quits only at root (already true) |
-| Sections / groups | `1`-`4` (PR detail), `1`-`5` (queue groups) | digits jump panes (`app.jump-pane`); the #201 sections need another key | pane jumps are `g` chords or digits |
+| Sections / groups | `1`-`4` (PR detail), `1`-`5` (queue groups) | digits jump panes from list views only (`app.jump-pane`); the #201 sections need another key | pane jumps are `g` chords or digits |
 | Prev / next item | `[` `]` | queue group, diff file | same verb: step one unit |
 | Prev / next thread | `{` `}` | **(implemented)** was `N` / `n` in diff. `n` / `N` stay as next / previous search match in the diff only (no "new" verb exists there) | frees `n` for "new" in lists |
 | Go to (prefix) | `g` then `h` Home, `p` PRs, `i` issues, `b` branches, `a` actions, `n` inbox, `l` line (diff only) | **(implemented)** `g h` replaces `g f`; `g m` (manage) is not built; `:` stays the palette only | which-key popup lists the continuations valid in the current view |
@@ -244,14 +245,14 @@ reach the end state (for example, the check log visible).
 
 Adopt the table in section 2 as the single source for #312, with the three structural
 choices that remove the most conflicts: digits become sections (pane jumps move to `g`
-chords), `g` becomes the one prefix with a which-key popup, and auto-merge becomes an
-option inside `m`. Migrate view by view (diff, detail and comments first: 79 of the 167
-matches), enforcing a duplicate-binding guard test as each file moves.
+chords; superseded: digits were restored for pane jumps in list views only, see the status above), `g` becomes the one prefix with a which-key popup, and auto-merge becomes an
+option inside `m`. Migrate view by view (diff, detail and comments went first; 86 of the original 167
+matches are gone, 81 remain), enforcing a duplicate-binding guard test as each file moves.
 
 ## Open questions for the maintainer
 
 Resolved 2026-10-22: 1 (queue is read-only; approve is measured queue -> detail) and 2
-(digits retired from pane jumps in favour of `g` chords; no compatibility alias).
+(digits retired from pane jumps in favour of `g` chords; no compatibility alias; reversed 2026-10-31: digits jump panes again, from list views only).
 Answered in the implementation: 3 (`Ctrl+X`, see Delete), 5 (breaking changes are listed
 in the #312 PR for release notes; no alias shipped). Still open: 4 and 6.
 

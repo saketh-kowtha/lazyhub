@@ -18,7 +18,10 @@
 3. **`docs/THREAT_MODEL.md`** — required for gateway, agent, policy, approval,
    audit, MCP, credential, IPC, or release work.
 4. **`docs/FILE_MAP.md`** — concept → owning file crosswalk. Consult before
-   grepping blind.
+   grepping blind. For how the pieces fit (layers, state ownership, key routing,
+   data flow, process model), read `docs/ARCHITECTURE.md` sections 1 to 6; for what is
+   shipped versus planned in the restructuring (D13 to D16), read the "Structure
+   decisions" section of `docs/ARCHITECT_DECISIONS.md`.
 5. **The issue / roadmap item body itself** — the complete spec for the picked
    item.
 6. **Any doc the issue body cites** (Doc map at the bottom of this file).
@@ -199,6 +202,15 @@ log: `docs/bugs/` and, up to B-91, `docs/ARCHITECTURE.md` §21). Check each one 
 18. **Gateway threat accounting.** Every PR touching gateway, agent, policy,
     approval, audit, MCP, credential, IPC, or release code names the applicable
     T-items from `docs/THREAT_MODEL.md`, the mitigation, and residual risk.
+19. **Fast and complete (D16).** lazyhub must feel instant and never silently hide
+    data, also on repositories with thousands of open PRs, 400-comment threads and
+    100k-line diffs. Window every list, diff, log and thread; fetch page by page
+    with cursor pages and slim rows; never block on the network for something
+    predictable (skeleton within one frame, seed from cache); and **never silently
+    truncate** - a list is complete, paged with a visible "more", or capped by GitHub
+    with a notice and a path to the rest. A new fixed-size `gh` call (`first:`,
+    `--limit`, `per_page`) must be added to `src/paging-audit.test.js` with the
+    reason it is complete. A change that regresses a measured budget is not merged.
 
 ---
 
@@ -270,7 +282,7 @@ Check job, so it is part of the gate.
 | `CLAUDE.md` | Compatibility pointer to this file | Claude sessions only |
 | `docs/ARCHITECT_DECISIONS.md` | Locked cross-cutting decisions + spec discipline rules | Every session |
 | `docs/THREAT_MODEL.md` | Security claims, T1-T21, check-integrity boundary | Security-sensitive work |
-| `docs/ARCHITECTURE.md` | Codebase architecture, CI/branch strategy, invariants, bug-fix log up to B-91 (§21) | Onboarding; any cross-cutting change |
+| `docs/ARCHITECTURE.md` | Layers, state ownership, key routing, data flow, process model, invariants (§1 to §6); frozen bug-fix log up to B-91 (§21) | Onboarding; any cross-cutting change |
 | `docs/bugs/` | Bug-fix log, one file per bug (`<issue-number>.md`) | After any bug fix; before fixing a bug (has it been seen before?) |
 | `docs/FILE_MAP.md` | Concept → owning file crosswalk | Before grepping; "where is X?" |
 | `docs/GLOSSARY.md` | Authoritative term definitions | Whenever an unfamiliar term appears |
