@@ -17,6 +17,7 @@ import { AppContext } from '../../../context.js'
 import { useKeyScope } from '../../../keyscope.js'
 import { sanitize } from '../../../utils.js'
 import { parseDiff, flattenFiles } from '../diff-parser.js'
+import { rememberMergeMethod } from '../merge-methods.js'
 import { openInEditor } from '../../../editor.js'
 import { getLang } from './highlight.js'
 import { buildTreeRows } from './tree.js'
@@ -616,6 +617,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   const submitMerge = (val) => {
     const strategy = typeof val === 'object' ? val.value : val
     const msg = typeof val === 'object' ? val.text : undefined
+    rememberMergeMethod(repo, strategy)
     setMergeChoice({ strategy, msg })
     setDialog('merge-confirm')
   }
@@ -662,6 +664,6 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
     aiReview, setAiReview, aiReviewLoading, aiReviewError, setAiReviewError,
     aiPostStatus, setAiPostStatus, files, rows, langCache, fileStartIndices,
     treeRows, commentsByLine, jumpTo, handleAiJumpTo, handleAiPost,
-    submitMerge, confirmMerge, submitApproval, submitChanges
+    repo, submitMerge, confirmMerge, submitApproval, submitChanges
   }
 }

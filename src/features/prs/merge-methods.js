@@ -3,6 +3,8 @@
  * Pure helpers shared by the PR list and PR detail merge flows.
  */
 
+import { loadState, saveState } from '../../config.js'
+
 export const MERGE_OPTIONS = [
   { value: 'merge',  label: 'Create a merge commit', description: 'All commits are kept and joined with a merge commit' },
   { value: 'squash', label: 'Squash and merge',      description: 'Combine all commits into one commit on the base branch' },
@@ -38,12 +40,39 @@ export function allowedMergeOptions(repoInfo) {
 }
 
 /**
- * Index of the preferred method: squash when the repository allows it, otherwise the first allowed one.
- * @param {Array<{value: string}>} options  result of allowedMergeOptions
+ * Index of the method last used in this repository, or -1.
+ * @param {Array<{value: string}>} options  picker options
+ * @param {string} [repo]  owner/name
  */
-export function preferredMergeIndex(options) {
+export function rememberedMergeIndex(options, repo) {
+  const last = repo ? loadState().mergeMethods?.[repo] : undefined
+  return options.findIndex(o => o.value === last)
+}
+
+/**
+ * Index of the preferred method: the one last used in this repository (#314) when it is still
+ * allowed, otherwise squash when the repository allows it, otherwise the first allowed one.
+ * @param {Array<{value: string}>} options  result of allowedMergeOptions
+ * @param {string} [repo]  owner/name, to look up the remembered method
+ */
+export function preferredMergeIndex(options, repo) {
+  const remembered = rememberedMergeIndex(options, repo)
+  if (remembered >= 0) return remembered
   const squash = options.findIndex(o => o.value === 'squash')
   return squash >= 0 ? squash : 0
+}
+
+/**
+ * Remember the merge method chosen for a repository, so the picker opens on it next time.
+ * Bypass and auto-merge entries are never remembered: they must be chosen on purpose each time.
+ * @param {string} repo  owner/name
+ * @param {string} strategy  picker value
+ */
+export function rememberMergeMethod(repo, strategy) {
+  if (!repo || !['merge', 'squash', 'rebase'].includes(strategy)) return
+  const previous = loadState().mergeMethods
+  if (previous?.[repo] === strategy) return
+  saveState({ mergeMethods: { ...(previous && typeof previous === 'object' ? previous : {}), [repo]: strategy } })
 }
 
 /**

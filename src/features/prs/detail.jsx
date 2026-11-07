@@ -36,7 +36,7 @@ import { firstActionKey, hintLine } from '../../config/actions.js'
 
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { autoMergeOption, canToggleAutoMergeFromList } from './list-row.jsx'
-import { allowedMergeOptions, ADMIN_MERGE_OPTIONS, mergeMethodLabel, preferredMergeIndex, mergeStatusLine } from './merge-methods.js'
+import { allowedMergeOptions, ADMIN_MERGE_OPTIONS, mergeMethodLabel, preferredMergeIndex, mergeStatusLine, rememberMergeMethod } from './merge-methods.js'
 import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
@@ -301,13 +301,14 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
       <OptionPicker
         title={`Merge PR #${pr.number}: ${sanitize(pr.title)}  (${mergeStatusLine(pr, checks)})`}
         options={mergeOpts}
-        initialIndex={preferredMergeIndex(methods)}
+        initialIndex={preferredMergeIndex(methods, repo)}
         promptText="Commit message (optional, Enter to skip)"
         promptKey="e"
         onSubmit={(val) => {
           const strategy = typeof val === 'object' ? val.value : val
           const msg = typeof val === 'object' ? val.text : undefined
           if (strategy === 'auto-merge') { setDialog('auto-merge'); return }
+          rememberMergeMethod(repo, strategy)
           // Choosing a method never merges by itself: a confirm (default No) always follows.
           setMergeChoice({ strategy, msg })
           setDialog('merge-confirm')
