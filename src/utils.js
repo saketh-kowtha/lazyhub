@@ -15,7 +15,7 @@ import stringWidth from 'string-width'
 import { useTheme } from './theme.js'
 import { stripAnsi } from './utils-core.js'
 
-export { logger, getLogs, resolvePath, stripAnsi, decodeHtmlEntities, sanitize } from './utils-core.js'
+export { logger, getLogs, resolvePath, stripAnsi, decodeHtmlEntities, sanitize, inkSafe } from './utils-core.js'
 
 /**
  * Safely applies a color (hex or keyword) to a chalk instance.

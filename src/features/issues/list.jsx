@@ -19,6 +19,7 @@ import { firstActionKey, matchesAction } from '../../config/actions.js'
 import { useTheme } from '../../theme.js'
 import { IssueListDialogs } from './list-dialogs.jsx'
 import { IssueListView } from './list-view.jsx'
+import { paneWidth } from '../../ui/row-layout.js'
 
 const _appConfig = loadConfig()
 const _cfg = _appConfig.issues
@@ -26,7 +27,7 @@ const _actions = _appConfig.toml
 // GitHub search never returns more than 1,000 results.
 const SEARCH_CAP = 1000
 
-export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, initialCursor = 0, initialScrollOffset = 0 }) {
+export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, onPaneState, initialCursor = 0, initialScrollOffset = 0 }) {
   useKeyScope('pane')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
@@ -313,6 +314,7 @@ export function IssueList({ repo, listHeight = 10, onSelectIssue, onPaneState, i
       actions={_actions}
       t={t}
       visibleHeight={visibleHeight}
+      width={paneWidth(innerWidth, stdout)}
       visibleIssues={visibleIssues}
       scrollOffset={scrollOffset}
       cursor={cursor}

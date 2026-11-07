@@ -132,6 +132,28 @@ export function decodeHtmlEntities(str) {
     .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(parseInt(code, 10)))
 }
 
+// Ink draws text in cells using a wide-character table that predates emoji presentation. A
+// BMP emoji such as U+2705 is ONE Ink cell but TWO terminal columns, so every line it sits on
+// comes out a column wider than Ink believes and shoves the pane border off-screen (#512).
+// Following it with a zero-width space gives Ink the second cell the terminal uses.
+// Unicode Emoji_Presentation=Yes, BMP only (astral emoji are already two cells in Ink).
+const BMP_EMOJI = /([\u231A\u231B\u23E9-\u23EC\u23F0\u23F3\u25FD\u25FE\u2614\u2615\u2648-\u2653\u267F\u2693\u26A1\u26AA\u26AB\u26BD\u26BE\u26C4\u26C5\u26CE\u26D4\u26EA\u26F2\u26F3\u26F5\u26FA\u26FD\u2705\u270A\u270B\u2728\u274C\u274E\u2753-\u2755\u2757\u2795-\u2797\u27B0\u27BF\u2B1B\u2B1C\u2B50\u2B55])(?!\u200B)/g
+
+// Joiners, emoji variation selectors and skin tones glue several code points into one glyph. Ink
+// measures per code point and terminals per glyph, so a family emoji can be columns off. Dropping
+// the glue draws the parts side by side, which every layer measures the same way.
+const GLUE = /[\u200D\uFE0F\u{1F3FB}-\u{1F3FF}]/gu
+
+/**
+ * Make text measure the same in Ink and in the terminal: no glyph-gluing code points, and a
+ * zero-width space after BMP emoji so Ink reserves both of their columns.
+ * @param {string} str text to draw
+ * @returns {string} text whose width is the same in Ink and the terminal
+ */
+export function inkSafe(str) {
+  return String(str ?? '').replace(GLUE, '').replace(BMP_EMOJI, '$1\u200B')
+}
+
 /**
  * Sanitize untrusted text for rendering by stripping ANSI codes and decoding
  * HTML entities that GitHub's API may emit in text fields.
@@ -139,5 +161,5 @@ export function decodeHtmlEntities(str) {
  * @returns {string} A safe string for Ink rendering.
  */
 export function sanitize(str) {
-  return stripAnsi(decodeHtmlEntities(String(str || ''))).replace(/[\r\n\t]/g, ' ')
+  return inkSafe(stripAnsi(decodeHtmlEntities(String(str || ''))).replace(/[\r\n\t]/g, ' '))
 }

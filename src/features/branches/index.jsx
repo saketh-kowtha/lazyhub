@@ -16,35 +16,36 @@ import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
 import { TextInput, sanitize } from '../../utils.js'
+import { fitCell, paneWidth } from '../../ui/row-layout.js'
 import { logger } from '../../utils-core.js'
 import { BranchListSkeleton } from '../../components/Skeleton.jsx'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
 
-const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t }) => {
+// One line per branch, never wider than the pane (#495): the markers and badges keep their
+// columns and only the name is cut.
+const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t, width }) => {
+  const lock = branch.protected ? 3 : 0
+  const pr = hasPR ? 3 : 0
+  const nameWidth = Math.max(4, width - 2 - 2 - 2 - lock - pr)
   return (
-    <Box key={branch.name} paddingX={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
+    <Box key={branch.name} paddingX={1} height={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
       <Text color={isSelected ? t.ui.selected : t.ui.muted}>
         {isSelected ? '▶ ' : '  '}
       </Text>
-      {isCurrent && (
-        <Text color={t.pr.open}>► </Text>
-      )}
-      <Box flexGrow={1}>
-        <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate">
-          {sanitize(branch.name)}
-        </Text>
-      </Box>
+      <Text color={t.pr.open}>{isCurrent ? '► ' : '  '}</Text>
+      <Text color={isSelected ? t.ui.selected : undefined}>{fitCell(sanitize(branch.name), nameWidth)}</Text>
       {branch.protected && <Text color={t.ci.pending}> 🔒</Text>}
       {hasPR && <Text color={t.pr.open}> PR</Text>}
     </Box>
   )
 })
 
-export function BranchList({ repo, listHeight = 10, onPaneState }) {
+export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
   useKeyScope('pane')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
+  const rowWidth = paneWidth(innerWidth, stdout)
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
   const { data: branches, loading, error, refetch, isStale } = useGh(listBranches, [repo])
@@ -341,6 +342,7 @@ export function BranchList({ repo, listHeight = 10, onPaneState }) {
               isCurrent={isCurrent}
               hasPR={hasPR}
               t={t}
+              width={rowWidth}
             />
           )
         })}
