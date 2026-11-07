@@ -49,33 +49,15 @@ export function hexThemeForBackground(env = process.env) {
   return detectBackground(env) === 'light' ? 'github-light' : 'github-dark'
 }
 
-/**
- * Compatibility view of `t` in the old `scheme.*` shape (fg/accent/border/pr/ci). It is derived from
- * `t`, so there is one palette; new code reads `t.*` directly.
- * @param {object} t
- * @returns {{fg: object, accent: object, border: object, pr: object, ci: object}}
- */
-export function tToScheme(t) {
-  return {
-    fg:     { default: t.ui.fg, muted: t.ui.muted, subtle: t.ui.dim },
-    accent: { primary: t.ui.selected, secondary: t.ui.selected },
-    border: { default: t.ui.border, focused: t.ui.borderActive, subtle: t.ui.divider },
-    pr:     { open: t.pr.open, draft: t.pr.draft, merged: t.pr.merged, closed: t.pr.closed },
-    ci:     { pass: t.ci.pass, fail: t.ci.fail, pending: t.ci.pending, skipped: t.pr.draft },
-  }
-}
-
 const ThemeContext = createContext({
   t: terminal,
-  scheme: tToScheme(terminal),
   themeName: DEFAULT_THEME_NAME,
   setTheme: () => {},
 })
 
 /**
- * The active theme: `t` (the token tree), `themeName`, `setTheme`, and `scheme` (a derived,
- * deprecated view of `t`).
- * @returns {{t: any, scheme: any, themeName: string, setTheme: (name: any) => void}}
+ * The active theme: `t` (the token tree), `themeName` and `setTheme`.
+ * @returns {{t: any, themeName: string, setTheme: (name: any) => void}}
  */
 export function useTheme() {
   return useContext(ThemeContext)
@@ -101,7 +83,7 @@ export function ThemeProvider({ children, initialTheme }) {
     setThemeName(name)
   }, [])
 
-  const value = useMemo(() => ({ t, scheme: tToScheme(t), themeName, setTheme }), [t, themeName, setTheme])
+  const value = useMemo(() => ({ t, themeName, setTheme }), [t, themeName, setTheme])
 
   return (
     <ThemeContext.Provider value={value}>

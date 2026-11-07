@@ -3,44 +3,6 @@ import React, { memo } from 'react'
 import { Box, Text } from 'ink'
 import { sanitize, shortAge, truncateToWidth, formatLogin, padEndWidth, padStartWidth } from '../../utils.js'
 
-// ─── Theme adapter ────────────────────────────────────────────────────────────
-// The PR list reads `t` from useTheme() like every other pane. This adapter only serves callers that
-// still hold the derived `scheme` view (useTheme().scheme, see tToScheme in src/theme.js) and need a
-// `t`-shaped object; new code reads `t` directly.
-/**
- * Maps the derived `scheme` view of the active theme back to a `t.*`-shaped object.
- *
- * @param {object} scheme - useTheme().scheme
- * @returns {{ ui: object, pr: object, ci: object, review: object }}
- */
-export function schemeToT(scheme) {
-  return {
-    ui: {
-      muted:    scheme.fg.muted,
-      dim:      scheme.fg.subtle,
-      selected: scheme.accent.primary,
-    },
-    pr: {
-      open:     scheme.pr.open,
-      draft:    scheme.pr.draft,
-      merged:   scheme.pr.merged,
-      closed:   scheme.pr.closed,
-      // conflict had no token; old theme used ci.pending amber — keep that.
-      conflict: scheme.ci.pending,
-    },
-    ci: {
-      pass:    scheme.ci.pass,
-      fail:    scheme.ci.fail,
-      pending: scheme.ci.pending,
-      skipped: scheme.ci.skipped,
-    },
-    review: {
-      approved: scheme.ci.pass,
-      changes:  scheme.ci.fail,
-    },
-  }
-}
-
 // ─── Badges ───────────────────────────────────────────────────────────────────
 // Colour budget (#566): the state is the glyph (● open, ◐ draft, ⟳ auto-merge, ◆ merged, ○ closed,
 // ▲ conflict) and the focused row takes the one accent. Red and yellow are kept for what needs

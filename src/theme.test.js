@@ -2,7 +2,7 @@
  * theme.test.js — the single theme system (#566): the terminal default, name mapping, bg-detect.
  */
 import { describe, it, expect } from 'vitest'
-import { BUILTIN_THEMES, THEME_NAMES, DEFAULT_THEME_NAME, resolveTheme, hexThemeForBackground, tToScheme } from './theme.js'
+import { BUILTIN_THEMES, THEME_NAMES, DEFAULT_THEME_NAME, resolveTheme, hexThemeForBackground } from './theme.js'
 import githubDark from './themes/github-dark.js'
 import terminal from './themes/terminal.js'
 
@@ -74,16 +74,5 @@ describe('bg-detect picks light or dark for the hex themes', () => {
     expect(hexThemeForBackground({})).toBe('github-dark')
     expect(hexThemeForBackground({ COLORFGBG: '0;15' })).toBe('github-light')
     expect(hexThemeForBackground({ COLORFGBG: '15;0' })).toBe('github-dark')
-  })
-})
-
-describe('compat scheme view derives from t', () => {
-  it('maps t tokens, not a second palette', () => {
-    const t = resolveTheme('github-dark')
-    const s = tToScheme(t)
-    expect(s.accent.primary).toBe(t.ui.selected)
-    expect(s.fg.muted).toBe(t.ui.muted)
-    expect(s.border.focused).toBe(t.ui.borderActive)
-    expect(s.ci.fail).toBe(t.ci.fail)
   })
 })

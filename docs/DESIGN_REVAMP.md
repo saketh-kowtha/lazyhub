@@ -118,7 +118,7 @@ See `CONFIG_REFERENCE.md` and `src/config/defaultConfig.toml` for current keys a
 
 ### 3.4 Implementation contract
 
-- `src/theme.js` exports the `useTheme()` hook and the active theme `t` (`t.ui.*`, `t.pr.*`, `t.ci.*`, `t.diff.*`, `t.syntax.*`). There is one token set; `useTheme().scheme` is a derived, deprecated view of it.
+- `src/theme.js` exports the `useTheme()` hook and the active theme `t` (`t.ui.*`, `t.pr.*`, `t.ci.*`, `t.diff.*`, `t.syntax.*`). There is one token set.
 - Theme-aware components read colors from `useTheme().t[...]`.
 - No `chalk.green(...)`, no `<Text color="green">` literals in feature code. PR review check: `git grep -E "color=[\"']\\w+[\"']" src/features` should match nothing.
 - A supported theme switch applies live, without relaunch.

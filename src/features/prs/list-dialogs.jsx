@@ -14,13 +14,11 @@ import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { buildAuthorCandidates, rankAuthors, loadRecentAuthors } from './author-candidates.js'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { useKeymapInput } from '../../config/keymap.js'
-import { useTheme } from '../../theme/index.js'
-import { schemeToT } from './list-row.jsx'
+import { useTheme } from '../../theme.js'
 
 // Shell shown while options load or fail: Esc always closes, r retries (#443, #444).
 function PickerStatus({ title, children, onCancel, onRetry = undefined }) {
-  const { scheme } = useTheme()
-  const t = schemeToT(scheme)
+  const { t } = useTheme()
   useKeyScope('dialog')
   useInput((input, key) => {
     if (matchesAction('dialog.cancel', input, key)) { onCancel(); return }
@@ -36,8 +34,7 @@ function PickerStatus({ title, children, onCancel, onRetry = undefined }) {
 }
 
 function PRSelectionDialog({ repo, pr, current: currentNow, names = {}, getOptions, field, loadingText, title = '', kind, onClose, onError, runWrite = (_label, fn) => fn() }) {
-  const { scheme } = useTheme()
-  const t = schemeToT(scheme)
+  const { t } = useTheme()
   // The diff base is what the PR had when the dialog opened; a refetch behind it must not move it.
   const [current] = useState(currentNow)
   const [saving, setSaving] = useState(false)
@@ -141,8 +138,7 @@ const AUTHOR_LIST_ROWS = 8
 const SOURCE_LABEL = { recent: 'recent', row: 'in list', collaborator: 'collaborator' }
 
 export function AuthorSearchDialog({ current, repo, rows = [], onSubmit, onCancel }) {
-  const { scheme } = useTheme()
-  const t = schemeToT(scheme)
+  const { t } = useTheme()
   const [text, setText] = useState(current || '')
   // Read once per open: loadState() is a synchronous file read, not for every render (#455).
   const [recent] = useState(() => loadRecentAuthors(repo))
@@ -224,8 +220,7 @@ export function AuthorSearchDialog({ current, repo, rows = [], onSubmit, onCance
 
 // Server-side search (#508): the text goes to GitHub search, so any PR in the repo is reachable.
 export function SearchQueryDialog({ current, onSubmit, onCancel }) {
-  const { scheme } = useTheme()
-  const t = schemeToT(scheme)
+  const { t } = useTheme()
   const [text, setText] = useState(current || '')
   const [problem, setProblem] = useState(null)
   useKeyScope('dialog')
