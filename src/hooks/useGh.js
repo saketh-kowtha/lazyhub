@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { logger } from '../utils.js'
 import { scopedCacheKey as makeDiskCacheKey, cacheIdentity, approxBytes, createLruCache, peekCache, readCacheAsync, warmCache, writeCache } from '../cache.js'
-import { recordGhFailure, recordGhSuccess } from './useGhHealth.js'
+import { recordGhFailure, recordGhSuccess, clearGhFailure } from './useGhHealth.js'
 
 // In-memory cache: key → { data, timestamp }, LRU-capped by entry count AND by
 // approximate bytes (#457) so a few huge payloads (diffs, logs) cannot grow a long
@@ -183,6 +183,7 @@ export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } 
     return () => {
       reqRef.current++ // eslint-disable-line react-hooks/exhaustive-deps
       mountedRef.current = false
+      clearGhFailure(callSite) // the owner left or its key changed: its failure is no longer current (#564)
     }
   }, [cacheKey, enabled]) // eslint-disable-line react-hooks/exhaustive-deps
 

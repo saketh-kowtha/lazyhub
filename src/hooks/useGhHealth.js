@@ -5,6 +5,23 @@
 import { useEffect, useState } from 'react'
 import { getDaemonFallback, onDaemonFallback } from '../daemon/fallback.js'
 import { getContainedToast, onContained } from '../contain.js'
+import { classifyGhFailure } from '../executor/classify.js'
+
+// Only failures of the connection, the login or the rate limit say the whole gh session is
+// degraded (#564). Anything else (a 422 for an unknown author, a missing item, a bad query)
+// is caused by that call's own input and is shown by the pane that owns it.
+const GLOBAL_KINDS = new Set([
+  'gh_missing', 'gh_too_old', 'not_signed_in', 'wrong_host', 'sso', 'scope', 'forbidden', 'repo_not_found',
+  'rate_limit', 'secondary_limit', 'offline',
+])
+
+/**
+ * True when a failure belongs in global health (connection, auth, rate limit).
+ * @param {unknown} error
+ */
+export function isGlobalGhFailure(error) {
+  try { return GLOBAL_KINDS.has(classifyGhFailure(error).kind) } catch { return false }
+}
 
 const state = {
   lastError: null,
@@ -54,6 +71,11 @@ onContained(() => emit())
  * @param {unknown} error
  */
 export function recordGhFailure(callSite, error) {
+  if (!isGlobalGhFailure(error)) {
+    // Input-caused: the owning pane shows it. A newer, scoped failure replaces an older global one.
+    clearGhFailure(callSite)
+    return
+  }
   state.failing.add(callSite)
   state.lastError = error
   emit()
@@ -65,6 +87,16 @@ export function recordGhFailure(callSite, error) {
  */
 export function recordGhSuccess(callSite) {
   state.failing.delete(callSite)
+  if (state.failing.size === 0) state.lastError = null
+  emit()
+}
+
+/**
+ * Forget a call site's failure when its owner unmounts or its query key changes (#564).
+ * @param {string} callSite
+ */
+export function clearGhFailure(callSite) {
+  if (!state.failing.delete(callSite)) return
   if (state.failing.size === 0) state.lastError = null
   emit()
 }

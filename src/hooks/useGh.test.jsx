@@ -7,6 +7,7 @@ import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { CACHE_DIR, scopedCacheKey as mkDiskKey, setCacheIdentity, writeCache } from '../cache.js'
 import { flush, waitForExpectation } from '../test/test-helpers.jsx'
+import { getGhHealthSnapshot, resetGhHealthForTest } from './useGhHealth.js'
 
 function defer() {
   let resolve
@@ -293,5 +294,71 @@ describe('useGh cache is isolated per host and account (#520)', () => {
     process.env.GH_HOST = 'ghe.example.com'
     const second = render(<View />)
     expect(second.lastFrame()).toContain('data=none')
+  })
+})
+
+describe('useGh scoped failures (#564)', () => {
+  async function failSearch(author) {
+    const err = new Error(`gh search failed for ${author}`)
+    err.stderr = 'GraphQL: Validation Failed: The listed users cannot be searched (HTTP 422)'
+    throw err
+  }
+  async function failNetwork() {
+    const err = new Error('gh failed')
+    err.stderr = 'error connecting to api.github.com'
+    throw err
+  }
+
+  afterEach(() => { cleanup(); resetGhHealthForTest(); resetGhMemoryCache() })
+
+  it('an input-caused failure (bad author, 422) stays in the pane and never reaches global health', async () => {
+    function View() {
+      const { error } = useGh(failSearch, ['o/r', 'nobody-here'])
+      return <Text>{`error=${error ? 'yes' : 'no'}`}</Text>
+    }
+    const view = render(<View />)
+    await flush(20)
+    expect(view.lastFrame()).toContain('error=yes')
+    expect(getGhHealthSnapshot().degraded).toBe(false)
+    expect(getGhHealthSnapshot().error).toBeNull()
+  })
+
+  it('a connection failure shows globally until the owner unmounts', async () => {
+    function View() {
+      useGh(failNetwork, ['o/r', 'net'])
+      return <Text>x</Text>
+    }
+    const view = render(<View />)
+    await flush(20)
+    expect(getGhHealthSnapshot().degraded).toBe(true)
+    view.unmount()
+    await flush(10)
+    expect(getGhHealthSnapshot().degraded).toBe(false)
+  })
+
+  it('a connection failure clears when the query key changes', async () => {
+    let calls = 0
+    async function flaky(repo, key) { calls += 1; if (key === 'bad') return failNetwork(); return 'ok' }
+    function View({ k }) {
+      useGh(flaky, ['o/r', k])
+      return <Text>x</Text>
+    }
+    const view = render(<View k="bad" />)
+    await flush(20)
+    expect(getGhHealthSnapshot().degraded).toBe(true)
+    view.rerender(<View k="good" />)
+    await flush(20)
+    expect(calls).toBe(2)
+    expect(getGhHealthSnapshot().degraded).toBe(false)
+  })
+
+  it('a connection failure that is not replaced stays global while mounted', async () => {
+    function View() {
+      useGh(failNetwork, ['o/r', 'still'])
+      return <Text>x</Text>
+    }
+    render(<View />)
+    await flush(30)
+    expect(getGhHealthSnapshot().degraded).toBe(true)
   })
 })
