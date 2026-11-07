@@ -9,7 +9,9 @@ import { classifyGhFailure, listLabels, listCollaborators, editPRMembers, valida
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { TextInput, sanitize } from '../../utils.js'
 import { useKeyScope } from '../../keyscope.js'
-import { matchesAction, firstActionKey } from '../../config/actions.js'
+import { matchesAction, firstActionKey, hintLine } from '../../config/actions.js'
+import { useVirtualList } from '../../hooks/useVirtualList.js'
+import { buildAuthorCandidates, rankAuthors, loadRecentAuthors } from './author-candidates.js'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useTheme } from '../../theme/index.js'
@@ -132,27 +134,89 @@ export function AssigneeDialog({ repo, pr, onClose, onError, runWrite }) {
   />
 }
 
-// Simple inline author-search box
-export function AuthorSearchDialog({ current, onSubmit, onCancel }) {
+// Author filter (#563): a searchable list seeded from the loaded rows, the repository's
+// collaborators and recent filters. Typed text that matches nothing is still applied as-is,
+// and the list never blocks typing: loading and failure only change the rows below the field.
+const AUTHOR_LIST_ROWS = 8
+const SOURCE_LABEL = { recent: 'recent', row: 'in list', collaborator: 'collaborator' }
+
+export function AuthorSearchDialog({ current, repo, rows = [], onSubmit, onCancel }) {
   const { scheme } = useTheme()
   const t = schemeToT(scheme)
   const [text, setText] = useState(current || '')
+  // Read once per open: loadState() is a synchronous file read, not for every render (#455).
+  const [recent] = useState(() => loadRecentAuthors(repo))
   useKeyScope('dialog')
+  const { data: collaborators, loading, error } = useGh(listCollaborators, [repo], { enabled: Boolean(repo) }) || {}
+  const query = text.trim().replace(/^@/, '')
 
-  useKeymapInput((input, key) => {
-    if (key.escape) { onCancel(); return }
-    if (key.return) { onSubmit(text.trim()); return }
+  const matches = React.useMemo(
+    () => rankAuthors(buildAuthorCandidates({ rows, collaborators, recent }), query),
+    [rows, collaborators, recent, query],
+  )
+  // Rows the cursor can land on: "all authors" when nothing is typed, the matches, and the typed
+  // text itself unless it is already the exact top match (so a free-typed login always works).
+  const entries = React.useMemo(() => {
+    const out = []
+    if (!query) out.push({ id: '__all__', login: '', kind: 'all' })
+    for (const m of matches) out.push({ id: `u:${m.login}`, login: m.login, kind: 'user', match: m })
+    if (query && matches[0]?.login.toLowerCase() !== query.toLowerCase()) out.push({ id: '__typed__', login: query, kind: 'typed' })
+    return out
+  }, [matches, query])
+
+  const { cursor, scrollOffset, visibleItems, moveCursor, setCursor, setScrollOffset } =
+    useVirtualList({ items: entries, height: AUTHOR_LIST_ROWS })
+
+  useInput((input, key) => {
+    if (matchesAction('dialog.cancel', input, key)) { onCancel(); return }
+    if (matchesAction('dialog.confirm', input, key)) {
+      const entry = entries[cursor]
+      onSubmit(entry ? entry.login : query)
+      return
+    }
+    if (matchesAction('dialog.filter-up', input, key)) { moveCursor(cursor - 1); return }
+    if (matchesAction('dialog.filter-down', input, key)) { moveCursor(cursor + 1); return }
   })
 
+  const truncated = collaboratorsTruncated(collaborators)
+  const reason = error ? sanitize(String(error?.message || '').split('\n').find(line => line.trim()) || '').slice(0, 100) : ''
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={2} paddingY={1}>
       <Text color={t.ui.selected} bold>Filter by author</Text>
       <Box marginTop={1} gap={1}>
         <Text color={t.ui.dim}>@</Text>
-        <TextInput value={text} onChange={setText} focus={true} placeholder="username" />
+        <TextInput value={text} onChange={v => { setText(v); setCursor(0); setScrollOffset(0) }} focus={true} placeholder="type to search, or a username" />
       </Box>
-      <Box marginTop={0}>
-        <Text color={t.ui.dim}>[Enter] apply  [Esc] cancel  (empty = show all authors)</Text>
+      {loading && !collaborators && <Text color={t.ui.muted}>Loading collaborators…</Text>}
+      {error && !collaborators && (
+        <Box flexDirection="column">
+          <FailureNotice failure={classifyGhFailure(error)} compact />
+          {reason ? <Text color={t.ui.dim}>{`  ${reason}`}</Text> : null}
+          <Text color={t.ui.dim}>Collaborators are unavailable; type a username and press Enter.</Text>
+        </Box>
+      )}
+      {truncated && <Text color={t.ci.pending}>{`showing first ${COLLAB_MAX_ROWS.toLocaleString('en-US')} collaborators`}</Text>}
+      <Box marginTop={1} flexDirection="column">
+        {visibleItems.map((entry, i) => {
+          const isCursor = scrollOffset + i === cursor
+          const color = isCursor ? t.ui.selected : undefined
+          return (
+            <Box key={entry.id}>
+              <Text color={isCursor ? t.ui.selected : t.ui.muted}>{isCursor ? '▶ ' : '  '}</Text>
+              {entry.kind === 'all' && <Text color={color}>All authors (clear filter)</Text>}
+              {entry.kind === 'typed' && <Text color={color} wrap="truncate">{`Use "${sanitize(entry.login)}" as typed`}</Text>}
+              {entry.kind === 'user' && (
+                <Text color={color} wrap="truncate">
+                  {sanitize(entry.login)}
+                  <Text color={t.ui.dim}>{`${entry.match.name ? `  ${sanitize(entry.match.name)}` : ''}  ${entry.match.sources.map(src => SOURCE_LABEL[src]).join(', ')}`}</Text>
+                </Text>
+              )}
+            </Box>
+          )
+        })}
+      </Box>
+      <Box marginTop={1}>
+        <Text color={t.ui.dim} wrap="truncate">{hintLine(['dialog.type', ['dialog.filter-down', 'nav'], 'dialog.confirm', 'dialog.cancel'])}</Text>
       </Box>
     </Box>
   )

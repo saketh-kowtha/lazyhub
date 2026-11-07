@@ -10,6 +10,7 @@ import { ReviewDialog } from '../../components/dialogs/ReviewDialog.jsx'
 import { sanitize } from '../../utils.js'
 import { NewPRDialog } from './NewPRDialog.jsx'
 import { MERGE_OPTIONS, autoMergeOption, canToggleAutoMergeFromList, mergeMethodLabel } from './list-row.jsx'
+import { rememberAuthor } from './author-candidates.js'
 import { rememberedMergeIndex, rememberMergeMethod } from './merge-methods.js'
 import { LabelDialog, AssigneeDialog, AuthorSearchDialog, ReviewerDialog, SearchQueryDialog } from './list-dialogs.jsx'
 
@@ -41,7 +42,10 @@ export function renderPRListDialog({
     return (
       <AuthorSearchDialog
         current={authorFilter}
+        repo={repo}
+        rows={items}
         onSubmit={(author) => {
+          rememberAuthor(repo, author)
           setAuthorFilter(author)
           setCursor(0); setScrollOffset(0)
           showStatus(author ? `author: @${author}` : 'author: all')
