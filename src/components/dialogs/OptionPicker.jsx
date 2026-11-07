@@ -11,7 +11,7 @@ import React, { useState } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useInput } from '../../hooks/useSafeInput.js'
 import { useTheme } from '../../theme.js'
-import { TextInput } from '../../utils.js'
+import { TextInput, sanitizeRaw } from '../../utils.js'
 import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { useKeyScope } from '../../keyscope.js'
 import { matchesAction } from '../../config/actions.js'
@@ -63,12 +63,12 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
       <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
         {title && (
           <Box marginBottom={1}>
-            <Text color={t.ui.selected} bold>{title}</Text>
+            <Text color={t.ui.selected} bold>{sanitizeRaw(title)}</Text>
           </Box>
         )}
         <Box marginBottom={1}>
           <Text color={t.ui.selected} bold>Selected: </Text>
-          <Text>{options.find(o => o.value === pickedValue)?.label ?? pickedValue}</Text>
+          <Text>{sanitizeRaw(options.find(o => o.value === pickedValue)?.label ?? pickedValue)}</Text>
         </Box>
         <Text color={t.ui.muted}>{promptText}:</Text>
         <Box borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
@@ -90,7 +90,7 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
     <Box flexDirection="column" borderStyle="round" borderColor={t.ui.selected} paddingX={1}>
       {title && (
         <Box marginBottom={1} justifyContent="space-between">
-          <Text color={t.ui.selected} bold>{title}</Text>
+          <Text color={t.ui.selected} bold>{sanitizeRaw(title)}</Text>
           {(canScrollUp || canScrollDown) && (
             <Text color={t.ui.dim}>
               {cursor + 1}/{options.length}
@@ -107,11 +107,11 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
           <Box key={option.value ?? i} flexDirection="column">
             <Box>
               <Text color={isCursor ? t.ui.selected : t.ui.muted}>{isCursor ? '▶ ' : '  '}</Text>
-              <Text color={isCursor ? t.ui.selected : undefined} bold={isCursor}>{option.label}</Text>
+              <Text color={isCursor ? t.ui.selected : undefined} bold={isCursor}>{sanitizeRaw(option.label)}</Text>
             </Box>
             {option.description && (
               <Box marginLeft={4}>
-                <Text color={t.ui.dim}>{option.description}</Text>
+                <Text color={t.ui.dim}>{sanitizeRaw(option.description)}</Text>
               </Box>
             )}
           </Box>
@@ -121,7 +121,7 @@ export function OptionPicker({ options = [], onSubmit, onCancel, title, promptTe
       <Box marginTop={1}>
         <Text color={t.ui.dim}>
           {promptKey && promptText
-            ? `[j/k] choose  [Enter] ${options[cursor]?.label ?? 'select'}  [${promptKey}] add message  [Esc] cancel`
+            ? `[j/k] choose  [Enter] ${sanitizeRaw(options[cursor]?.label ?? 'select')}  [${promptKey}] add message  [Esc] cancel`
             : '[j/k] navigate  [g/G] top/bottom  [Enter] select  [Esc] cancel'}
         </Text>
       </Box>

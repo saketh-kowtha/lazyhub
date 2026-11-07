@@ -16,7 +16,7 @@ import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
-import { TextInput, sanitize } from '../../utils.js'
+import { TextInput, sanitize, sanitizePath, sanitizeRaw } from '../../utils.js'
 import { fitCell, paneWidth } from '../../ui/row-layout.js'
 import { logger } from '../../utils-core.js'
 import { BranchListSkeleton } from '../../components/Skeleton.jsx'
@@ -34,7 +34,7 @@ const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t, width }) => {
         {isSelected ? '▶ ' : '  '}
       </Text>
       {isCurrent && <Text color={isSelected ? t.ui.selected : undefined} bold>► </Text>}
-      <Text color={isSelected ? t.ui.selected : undefined} bold={isSelected || isCurrent}>{fitCell(sanitize(branch.name), nameWidth)}</Text>
+      <Text color={isSelected ? t.ui.selected : undefined} bold={isSelected || isCurrent}>{fitCell(sanitizePath(branch.name), nameWidth)}</Text>
       {branch.protected && <Text color={isSelected ? t.ui.selected : t.ui.muted}> 🔒</Text>}
       {hasPR && <Text color={isSelected ? t.ui.selected : t.ui.muted} bold> PR</Text>}
     </Box>
@@ -187,7 +187,7 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
     if (matchesAction('branch.checkout', input, key)) {
       if (selectedBranch && requireLocal()) {
         if (selectedBranch.name === currentBranch) {
-          showStatus(`Already on "${sanitize(selectedBranch.name)}"`)
+          showStatus(`Already on "${sanitizePath(selectedBranch.name)}"`)
           return
         }
         setDialog('checkout')
@@ -217,7 +217,7 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
     return (
       <Box flexDirection="column" flexGrow={1}>
         <FuzzySearch
-          items={items.map(b => ({ ...b, title: sanitize(b.name) }))}
+          items={items.map(b => ({ ...b, title: sanitizePath(b.name) }))}
           searchFields={['name', 'title']}
           onSubmit={(item) => {
             const idx = items.findIndex(b => b.name === item.name)
@@ -234,13 +234,13 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
     return (
       <Box flexDirection="column" flexGrow={1}>
         <ConfirmDialog
-          message={`Checkout branch "${sanitize(selectedBranch.name)}"?`}
+          message={`Checkout branch "${sanitizePath(selectedBranch.name)}"?`}
           destructive={false}
           onConfirm={async () => {
             setDialog(null)
             try {
-              if (!await runWrite(`Checking out ${sanitize(selectedBranch.name)}`, () => gitCheckout(local, selectedBranch.name))) return
-              showStatus(`✓ Checked out ${sanitize(selectedBranch.name)}`)
+              if (!await runWrite(`Checking out ${sanitizePath(selectedBranch.name)}`, () => gitCheckout(local, selectedBranch.name))) return
+              showStatus(`✓ Checked out ${sanitizePath(selectedBranch.name)}`)
               refreshCurrentBranch()
             } catch (err) {
               showStatus(`Failed: ${err.message}`, true)
@@ -254,19 +254,19 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
 
   if (dialog === 'delete' && selectedBranch) {
     const msg = hasOpenPR
-      ? `⚠ Branch "${sanitize(selectedBranch.name)}" has an open PR! Delete remote branch anyway?`
-      : `Delete remote branch "${sanitize(selectedBranch.name)}"? (local branch unaffected)`
+      ? `⚠ Branch "${sanitizePath(selectedBranch.name)}" has an open PR! Delete remote branch anyway?`
+      : `Delete remote branch "${sanitizePath(selectedBranch.name)}"? (local branch unaffected)`
     return (
       <Box flexDirection="column" flexGrow={1}>
         <ConfirmDialog
           message={msg}
           destructive={true}
-          requireText={sanitize(selectedBranch.name)}
+          requireText={sanitizePath(selectedBranch.name)}
           onConfirm={async () => {
             setDialog(null)
             try {
-              if (!await runWrite(`Deleting ${sanitize(selectedBranch.name)}`, () => deleteBranch(repo, selectedBranch.name))) return
-              showStatus(`Deleted ${sanitize(selectedBranch.name)}`)
+              if (!await runWrite(`Deleting ${sanitizePath(selectedBranch.name)}`, () => deleteBranch(repo, selectedBranch.name))) return
+              showStatus(`Deleted ${sanitizePath(selectedBranch.name)}`)
               refetch()
             } catch (err) {
               showStatus(`Failed: ${err.message}`, true)
@@ -323,7 +323,7 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
       )}
       {statusMsg && (
         <Box paddingX={1}>
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
+          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{sanitizeRaw(statusMsg.msg)}{statusMsg.persist ? ' [any key]' : ''}</Text>
         </Box>
       )}
       <Box flexDirection="column" flexGrow={1}>

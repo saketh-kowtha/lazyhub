@@ -9,6 +9,7 @@ import { useInput } from '../../hooks/useSafeInput.js'
 import { useTheme } from '../../theme.js'
 import { useKeyScope } from '../../keyscope.js'
 import { matchesAction } from '../../config/actions.js'
+import { sanitizeLog } from '../../utils.js'
 
 export function ConfirmDialog({ message, destructive = false, onConfirm, onCancel, requireText = null }) {
   useKeyScope('dialog')
@@ -57,7 +58,7 @@ export function ConfirmDialog({ message, destructive = false, onConfirm, onCance
       <Box marginBottom={1}>
         <Text color={destructive ? t.ci.fail : t.ui.selected} bold>
           {destructive ? '⚠ ' : 'ℹ '}
-          {message}
+          {sanitizeLog(message)}
         </Text>
       </Box>
       {requireText && (

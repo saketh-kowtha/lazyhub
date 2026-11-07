@@ -112,12 +112,13 @@ describe('PR detail untrusted display fields', () => {
   it('sanitizes API-derived comment paths, authors and bodies', () => {
     const view = renderWithProviders(<PRComments prNumber={42} repo="owner/repo" onBack={() => {}} />)
     const frame = view.lastFrame()
-    expect(frame).toContain('safe&path extra')
+    expect(frame).toContain('safe&amp;path extra')
     expect(frame).toContain('@safe&name extra')
     expect(frame).toContain('safe&comment')
     expect(frame).toContain('conv&body')
     expect(frame).toContain('@conv&user')
     expect(frame).toContain('extra')
-    expect(frame).not.toContain('&amp;')
+    // A file path is not HTML: only the path keeps its text as written.
+    expect(frame.match(/&amp;/g)).toHaveLength(1)
   })
 })

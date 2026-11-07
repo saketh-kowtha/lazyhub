@@ -10,6 +10,7 @@ import { Box, Text } from 'ink'
 import { useTheme } from '../theme.js'
 import { failureGlyph } from '../executor.js'
 import { firstActionKey } from '../config/actions.js'
+import { sanitizeRaw } from '../utils.js'
 
 /**
  * @param {object} props
@@ -27,7 +28,7 @@ export function FailureNotice({ failure, failedRepos = [], compact = false }) {
     <Box flexDirection="column">
       <Text color={color} bold>{failureGlyph(failure.tone)} {failure.cause}</Text>
       {failedRepos.map(r => (
-        <React.Fragment key={r.repo}><Text color={t.ui.muted}>{`    ${r.repo}  ${r.reason}${r.fix ? `  (${r.fix})` : ''}`}</Text></React.Fragment>
+        <React.Fragment key={r.repo}><Text color={t.ui.muted}>{sanitizeRaw(`    ${r.repo}  ${r.reason}${r.fix ? `  (${r.fix})` : ''}`)}</Text></React.Fragment>
       ))}
       {failure.notes.map(n => <React.Fragment key={n}><Text color={t.ui.muted}>{`  ${n}`}</Text></React.Fragment>)}
       {failure.fix && (

@@ -19,13 +19,12 @@ import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { useKeyScope } from '../../keyscope.js'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { useTheme } from '../../theme.js'
-import { TextInput, sanitize, shortAge } from '../../utils.js'
+import { TextInput, sanitize, sanitizeBlock, sanitizePath, sanitizeRaw, shortAge } from '../../utils.js'
 
 
 const FILTER_MODES = ['all', 'open', 'resolved', 'conversation']
 // Start loading the next page when the cursor is within this many rows of the end of its block.
 const LOAD_MORE_MARGIN = 5
-const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
 // Row identity that survives rows being inserted above it (conversation ids and review ids can collide).
 const rowKey = c => (c._more ? `more-${c.threadId}` : `${c._conversation ? 'c' : 'r'}${c.id}`)
 const seedOf = (fp) => ({
@@ -465,7 +464,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
       <Box paddingX={1} justifyContent="space-between">
         <Text color={t.ui.selected} bold>PR #{prNumber} Comments</Text>
         <Box gap={2}>
-          {statusMsg && <Text color={t.ci.pass}>{statusMsg}</Text>}
+          {statusMsg && <Text color={t.ci.pass}>{sanitizeRaw(statusMsg)}</Text>}
           <Text color={t.ui.dim}>filter: {filterMode}  {countLabel}{incomplete ? '  (incomplete: GitHub repeated a page cursor)' : ''}{hasMore ? (moreFailed ? '  (load failed, r to retry)' : '  (loading more…)') : ''}</Text>
         </Box>
       </Box>
@@ -478,7 +477,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
           {action.type === 'delete' && (
             <>
               <Text color={t.ci.fail} bold>Delete comment by @{sanitize(action.comment.user?.login)}?</Text>
-              <Text color={t.ui.dim} wrap="truncate">  "{sanitize(stripAnsi(action.comment.body || '').slice(0, 60))}"</Text>
+              <Text color={t.ui.dim} wrap="truncate">  "{sanitize(action.comment.body).slice(0, 60)}"</Text>
               <Text color={t.ui.dim}>[y] confirm  [n / Esc] cancel</Text>
             </>
           )}
@@ -533,7 +532,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
               )}
               {comment._isRoot && !comment._conversation && (
                 <Box paddingX={1} gap={2}>
-                  <Text color={t.ui.selected} bold>{sanitize(comment.path)}</Text>
+                  <Text color={t.ui.selected} bold>{sanitizePath(comment.path)}</Text>
                   <Text color={t.ui.dim}>line {comment.line}</Text>
                 </Box>
               )}
@@ -545,10 +544,10 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
                   <Text color={t.ui.dim}>{shortAge(comment.createdAt)}</Text>
                   {isReply && <Text color={t.ui.dim}>(reply)</Text>}
                 </Box>
-                {stripAnsi(comment.body || '').split('\n').map((line, li) => (
+                {sanitizeBlock(comment.body).split('\n').map((line, li) => (
                   <Box key={li}>
                     <Text color={t.diff.threadBorder}>{isReply ? '    ' : '┃ '}</Text>
-                    <Text color={t.diff.ctxFg} wrap="truncate">{sanitize(line)}</Text>
+                    <Text color={t.diff.ctxFg} wrap="truncate">{line}</Text>
                   </Box>
                 ))}
                 {isSelected && (

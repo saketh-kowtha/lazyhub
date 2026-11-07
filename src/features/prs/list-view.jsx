@@ -8,7 +8,7 @@ import { PRListSkeleton } from '../../components/Skeleton.jsx'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { EmptyState } from '../../components/EmptyState.jsx'
 import { classifyGhFailure } from '../../executor.js'
-import { sanitize } from '../../utils.js'
+import { sanitize, sanitizeRaw } from '../../utils.js'
 import { firstActionKey } from '../../config/actions.js'
 import { Popover } from '../../ui/Popover.jsx'
 import {
@@ -90,7 +90,7 @@ export function PRListView({
         )}
         {loading && items.length > 0 && <Text color={t.ui.dim}>⟳</Text>}
         {statusMsg
-          ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
+          ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{sanitizeRaw(statusMsg.msg)}{statusMsg.persist ? ' [any key]' : ''}</Text>
           : !popoverVisible && selectedPR && !dialog
             // The preview panel is not showing: keep the focused PR's full title readable here.
             ? <Text color={t.ui.muted} wrap="truncate">#{selectedPR.number} {sanitize(selectedPR.title)}</Text>

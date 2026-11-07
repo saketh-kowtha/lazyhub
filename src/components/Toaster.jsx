@@ -9,6 +9,7 @@ import React, { useContext, useCallback } from 'react'
 import { Box, Text } from 'ink'
 import { useTheme } from '../theme.js'
 import { AppContext } from '../context.js'
+import { sanitizeRaw } from '../utils.js'
 
 const VARIANT_GLYPH = {
   success: '✓',
@@ -45,7 +46,7 @@ export function Toaster({ toasts = [] }) {
             marginTop={0}
           >
             <Text color={clr} bold>{glyph} </Text>
-            <Text color={t.ui.muted}>{toast.message}</Text>
+            <Text color={t.ui.muted}>{sanitizeRaw(toast.message)}</Text>
             {toast.variant === 'error' && (
               <Text color={t.ui.dim}> (any key)</Text>
             )}

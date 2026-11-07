@@ -6,12 +6,12 @@
 
 import React from 'react'
 import { Box, Text } from 'ink'
-import { sanitize, shortAge, authorColor } from '../utils.js'
+import { sanitize, sanitizeBlock, shortAge, authorColor } from '../utils.js'
 
 function Monogram({ login }) {
   if (!login) return <Text>[??]</Text>
   const color = authorColor(login)
-  return <Text color={color} bold>[{login.slice(0, 2).toUpperCase()}]</Text>
+  return <Text color={color} bold>[{sanitize(login).slice(0, 2).toUpperCase()}]</Text>
 }
 
 export function CommentThread({ comments = [], t }) {
@@ -35,7 +35,7 @@ export function CommentThread({ comments = [], t }) {
         <Text color={t.diff.threadBorder}>❯</Text>
         <Monogram login={comment.user?.login} />
         <Text color={pending ? t.ui.dim : t.ui.selected} bold={!pending}>
-          @{comment.user?.login || '…'}
+          @{sanitize(comment.user?.login) || '…'}
         </Text>
         <Text color={t.ui.dim}>·</Text>
         <Text color={t.ui.dim}>{age}</Text>
@@ -44,12 +44,12 @@ export function CommentThread({ comments = [], t }) {
     )
 
     // Body lines
-    const bodyLines = (comment.body || '').split('\n')
+    const bodyLines = sanitizeBlock(comment.body).split('\n')
     for (let i = 0; i < bodyLines.length; i++) {
       elements.push(
         <Box key={`${comment.id}-body-${i}`} paddingLeft={2}>
           <Text color={t.diff.threadBorder}>┃ </Text>
-          <Text color={t.diff.ctxFg} wrap="truncate">{sanitize(bodyLines[i])}</Text>
+          <Text color={t.diff.ctxFg} wrap="truncate">{bodyLines[i]}</Text>
         </Box>
       )
     }
@@ -62,15 +62,15 @@ export function CommentThread({ comments = [], t }) {
         <Box key={`${reply.id}-hdr`} gap={1} paddingLeft={2}>
           <Text color={t.diff.threadBorder}>└─ ❯</Text>
           <Monogram login={reply.user?.login} />
-          <Text color={t.ui.muted}>@{reply.user?.login || '…'}</Text>
+          <Text color={t.ui.muted}>@{sanitize(reply.user?.login) || '…'}</Text>
           <Text color={t.ui.dim}>· {replyAge}</Text>
         </Box>
       )
-      const replyLines = (reply.body || '').split('\n')
+      const replyLines = sanitizeBlock(reply.body).split('\n')
       for (let i = 0; i < replyLines.length; i++) {
         elements.push(
           <Box key={`${reply.id}-body-${i}`} paddingLeft={6}>
-            <Text color={t.diff.ctxFg} wrap="truncate">{sanitize(replyLines[i])}</Text>
+            <Text color={t.diff.ctxFg} wrap="truncate">{replyLines[i]}</Text>
           </Box>
         )
       }

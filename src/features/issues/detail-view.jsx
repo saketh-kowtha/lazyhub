@@ -5,7 +5,7 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { format } from 'timeago.js'
-import { sanitize, TextInput } from '../../utils.js'
+import { sanitize, sanitizeRaw, TextInput } from '../../utils.js'
 
 export function IssueDetailView({
   issue, t, visibleRows, cursorEntry, maxScroll, scrollY, visibleHeight, rowCount,
@@ -50,7 +50,7 @@ export function IssueDetailView({
           </Box>
         ))}
         {conversationLoading && <Text color={t.ui.muted}>  Loading conversation…</Text>}
-        {conversationError && <Text color={t.ci.fail}>  Could not load the conversation: {conversationError}</Text>}
+        {conversationError && <Text color={t.ci.fail}>  Could not load the conversation: {sanitizeRaw(conversationError)}</Text>}
       </Box>
 
       {/* ── Counts and scroll info ── */}
@@ -96,7 +96,7 @@ export function IssueDetailView({
         </Box>
       )}
 
-      {statusMsg && <Text color={statusIsError ? t.ci.fail : t.ci.pass}>{statusMsg}</Text>}
+      {statusMsg && <Text color={statusIsError ? t.ci.fail : t.ci.pass}>{sanitizeRaw(statusMsg)}</Text>}
     </Box>
   )
 }

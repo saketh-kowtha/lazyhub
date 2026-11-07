@@ -2,7 +2,7 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { useTheme } from '../../../theme.js'
-import { sanitize } from '../../../utils.js'
+import { sanitize, safeHex } from '../../../utils.js'
 
 /** @param {{assignees: Array<{login: string}>}} props */
 export function AssigneesRow({ assignees }) {
@@ -23,8 +23,8 @@ export function LabelsRow({ labels }) {
   return (
     <Box key="labels" paddingX={1} gap={1}>
       {labels.map(l => (
-        <Box key={l.name} paddingX={1} borderStyle="round" borderColor={`#${l.color}`}>
-          <Text color={`#${l.color}`}>{sanitize(l.name)}</Text>
+        <Box key={l.name} paddingX={1} borderStyle="round" borderColor={safeHex(l.color)}>
+          <Text color={safeHex(l.color)}>{sanitize(l.name)}</Text>
         </Box>
       ))}
     </Box>

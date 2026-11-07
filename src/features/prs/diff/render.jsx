@@ -14,15 +14,13 @@ import { ReviewDialog } from '../../../components/dialogs/ReviewDialog.jsx'
 import { FooterKeys } from '../../../components/FooterKeys.jsx'
 import { AIReviewPane } from '../../../components/AIReviewPane.jsx'
 import { useTheme } from '../../../theme.js'
-import { TextInput, colorChalk, applyThemeStyle, sanitize } from '../../../utils.js'
+import { TextInput, colorChalk, applyThemeStyle, sanitize, sanitizeRaw, sanitizePath } from '../../../utils.js'
 import { CommentThread } from '../../../components/CommentThread.jsx'
 import { DiffSkeleton } from '../../../components/Skeleton.jsx'
 import { FailureNotice } from '../../../components/FailureNotice.jsx'
 import { classifyGhFailure } from '../../../executor.js'
 import { syntaxHighlight, expandTabs } from './highlight.js'
 import { openEditorSync } from './editor.js'
-
-const stripAnsi = s => (s || '').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
 
 // ─── Diff line renderer ───────────────────────────────────────────────────────
 // Gutter: cursor(1) oldLn(4) newLn(4) sign(2) code
@@ -44,7 +42,7 @@ const DiffLine = React.memo(({ row, isSelected, lang, isMatch, t }) => {
 
   if (row.type === 'file-header') {
     const line =
-      colorChalk(t.ui.selected).bold(`━━ ${row.filename} `) +
+      colorChalk(t.ui.selected).bold(`━━ ${sanitizePath(row.filename)} `) +
       colorChalk(t.ci.pass)(`+${row.addCount}`) +
       colorChalk(t.syntax.default)(' / ') +
       colorChalk(t.ci.fail)(`-${row.delCount}`)
@@ -301,7 +299,7 @@ export function DiffView({ prNumber, state }) {
                 return (
                   <Box key={i} backgroundColor={isTreeSelected ? t.ui.headerBg : undefined} paddingX={1}>
                     <Text color={isTreeSelected ? t.ui.selected : (treeRow.type === 'dir' ? t.ui.muted : t.diff.ctxFg)} wrap="truncate">
-                      {treeRow.prefix.replace(/[─└├│]/g, c => ({ '─': '─', '└': '└', '├': '├', '│': '│' }[c] || c))}{fileGlyph} {sanitize(treeRow.name)}
+                      {treeRow.prefix.replace(/[─└├│]/g, c => ({ '─': '─', '└': '└', '├': '├', '│': '│' }[c] || c))}{fileGlyph} {sanitizePath(treeRow.name)}
                     </Text>
                   </Box>
                 )
@@ -360,7 +358,7 @@ export function DiffView({ prNumber, state }) {
 
       {aiReviewError && (
         <Box borderStyle="round" borderColor={t.ci.fail} paddingX={2} marginX={1}>
-          <Text color={t.ci.fail}>{aiReviewError}</Text>
+          <Text color={t.ci.fail}>{sanitizeRaw(aiReviewError)}</Text>
         </Box>
       )}
 
@@ -412,7 +410,7 @@ export function DiffView({ prNumber, state }) {
           return (
             <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={t.ci.fail} paddingX={1}>
               <Text color={t.ci.fail} bold>Delete comment?</Text>
-              <Text color={t.ui.dim} wrap="truncate">  "{stripAnsi(compose.commentBody || '').slice(0, 70)}"</Text>
+              <Text color={t.ui.dim} wrap="truncate">  "{sanitizeRaw(compose.commentBody).slice(0, 70)}"</Text>
               <Text color={t.ui.dim}>[y] confirm  [n / Esc] cancel</Text>
             </Box>
           )

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractExcerpt, extractLocations, loadFailureExcerpt, redactLine, MAX_EXCERPT_LINES, MAX_LINE_CHARS } from './ci-log.js'
+import { extractExcerpt, extractLocations, loadFailureExcerpt, redactLine, annotationLines, MAX_EXCERPT_LINES, MAX_LINE_CHARS } from './ci-log.js'
 import {
   ghLog, VITEST_LOG, NODE_ASSERT_LOG, TSC_LOG, ESLINT_LOG, STACK_TRACE_LOG, UNPARSED_LOG, ANNOTATION_ONLY_LOG, SECRET_LOG,
 } from './ci-log.fixtures.js'
@@ -133,6 +133,19 @@ describe('redaction and sanitising', () => {
 
   it('redactLine leaves ordinary text and paths alone', () => {
     expect(redactLine('    at f (src/features/prs/list.jsx:42:7)')).toBe('    at f (src/features/prs/list.jsx:42:7)')
+  })
+
+  it('redacts a token that an escape sequence split in two (cleaning runs before redaction)', () => {
+    const ESC = '\x1b'
+    expect(redactLine(`token ghp_abcdefghij${ESC}[0mklmnopqrstuvwxyz0123456789`)).not.toContain('ghp_')
+  })
+
+  it('maps check annotations to display lines with every field cleaned', () => {
+    const ESC = '\x1b'
+    const lines = annotationLines([{ level: 'failure', path: `src/a${ESC}[2J.js`, line: 3, title: `T${ESC}]0;x\x07itle`, message: `First\r\nSecond \u202e${ESC}[31mred` }])
+    expect(JSON.stringify(lines)).toBe(JSON.stringify(['FAILURE [Title] src/a\u241b[2J.js:3', '  First', '  Second red']))
+    expect(annotationLines([{ message: 'm' }])).toEqual(['NOTE', '  m'])
+    expect(annotationLines(null)).toEqual([])
   })
 
   it('redacts the job and step names too', () => {

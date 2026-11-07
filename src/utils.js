@@ -13,9 +13,9 @@ import chalk from 'chalk'
 import { getHljs } from './highlight.js'
 import stringWidth from 'string-width'
 import { useTheme } from './theme.js'
-import { stripAnsi } from './utils-core.js'
+import { sanitizeBlock, sanitizeLog, sanitizeRaw, sanitizePath } from './utils-core.js'
 
-export { logger, getLogs, resolvePath, stripAnsi, decodeHtmlEntities, sanitize, inkSafe } from './utils-core.js'
+export { logger, getLogs, resolvePath, stripAnsi, decodeHtmlEntities, sanitize, sanitizeBlock, sanitizeRaw, sanitizeLog, sanitizeCode, sanitizePath, safeHex, inkSafe } from './utils-core.js'
 
 /**
  * Safely applies a color (hex or keyword) to a chalk instance.
@@ -117,7 +117,8 @@ function highlightCode(code, lang) {
  * @returns {Array<import('react').ReactElement>} Array of Ink elements.
  */
 export function getMarkdownRows(text, maxWidth = 80, t) {
-  const safeText = String(text || '')
+  // Clean the INPUT here (once); the renderer's own styling is never cleaned afterwards.
+  const safeText = sanitizeBlock(text)
   if (!safeText) return []
 
   const lines = safeText.split('\n')
@@ -339,7 +340,7 @@ export function TextInput({ value = '', onChange, placeholder, focus, mask, onEn
     }
   })
 
-  const renderedValue = mask ? mask.repeat(safeValue.length) : safeValue
+  const renderedValue = mask ? mask.repeat(safeValue.length) : displayValue(safeValue)
   const beforeCursor = renderedValue.slice(0, cursor)
   const atCursor = renderedValue.slice(cursor, cursor + 1) || ' '
   const afterCursor = renderedValue.slice(cursor + 1)
@@ -347,7 +348,7 @@ export function TextInput({ value = '', onChange, placeholder, focus, mask, onEn
   return (
     <Box>
       {safeValue.length === 0 && !focus ? (
-        <Text color={t.ui.dim}>{placeholder}</Text>
+        <Text color={t.ui.dim}>{sanitizeRaw(placeholder)}</Text>
       ) : (
         <Box>
           <Text>{beforeCursor}</Text>
@@ -359,6 +360,22 @@ export function TextInput({ value = '', onChange, placeholder, focus, mask, onEn
       )}
     </Box>
   )
+}
+
+/**
+ * Display form of an input value: each character that cannot be drawn is replaced by a visible
+ * one of the same length, so the cursor position still lines up with the stored value.
+ * @param {string} value
+ * @returns {string}
+ */
+function displayValue(value) {
+  if (sanitizeRaw(value) === value) return value
+  let out = ''
+  for (const ch of value) {
+    const shown = sanitizePath(ch)
+    out += shown.length === ch.length ? shown : '\ufffd'.repeat(ch.length)
+  }
+  return out
 }
 
 /**
@@ -487,19 +504,13 @@ export function authorColor(login) {
   return _AUTHOR_COLOR_PALETTE[h % _AUTHOR_COLOR_PALETTE.length]
 }
 
-// C0, DEL, C1 (includes the 8-bit CSI), zero-width and bidi controls.
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHARS_RE = /[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g
-
 /**
  * Make one line of log text safe to draw (#463). Log text is raw, not HTML, so it
- * is NOT entity-decoded. ANSI sequences are stripped, a CR-overwrite keeps only the
- * text after the last CR, TABs expand to tab stops, and control characters are dropped.
+ * is NOT entity-decoded. Escape strings and control characters are removed, a CR
+ * becomes a space (nothing is hidden), and TABs expand to tab stops.
  * @param {string} line
  * @returns {string}
  */
 export function cleanLogLine(line) {
-  const text = String(line ?? '')
-  const shown = text.slice(text.lastIndexOf('\r') + 1)
-  return expandTabs(stripAnsi(shown)).replace(CONTROL_CHARS_RE, '')
+  return sanitizeLog(line).replace(/\n/g, ' ')
 }

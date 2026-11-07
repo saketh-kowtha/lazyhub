@@ -29,10 +29,9 @@ describe('LogViewer with real gh log lines (#463)', () => {
     expect(view.lastFrame()).toContain('done')
     expect(view.lastFrame()).toContain('red')
   })
-  it('keeps only the text after the last CR of a progress line', () => {
+  it('shows every part of a progress line: a CR hides nothing', () => {
     const view = renderWithProviders(<LogViewer lines={['progress 10%\r50%']} onClose={() => {}} />)
-    expect(view.lastFrame()).toContain('50%')
-    expect(view.lastFrame()).not.toContain('10%')
+    expect(view.lastFrame()).toContain('progress 10% 50%')
   })
   it('treats log text as raw, not HTML: entities are not decoded', () => {
     const view = renderWithProviders(<LogViewer lines={['x &#38; y &amp; a &lt; b']} onClose={() => {}} />)

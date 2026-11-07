@@ -6,7 +6,7 @@ import React from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useTheme } from '../../theme.js'
-import { sanitize, TextInput } from '../../utils.js'
+import { sanitizeRaw, sanitizeLog, sanitizePath, TextInput } from '../../utils.js'
 
 // ─── Screen components ────────────────────────────────────────────────────────
 
@@ -23,7 +23,7 @@ function PushRequiredScreen({ branch, onPush, onBack }) {
         <Text color={t.ci.fail} bold>⚠ Branch not on GitHub</Text>
       </Box>
       <Text color={t.ui.muted}>
-        <Text color={t.ui.selected}>'{branch}'</Text> has not been pushed to origin.
+        <Text color={t.ui.selected}>'{sanitizePath(branch)}'</Text> has not been pushed to origin.
       </Text>
       <Text color={t.ui.muted}>You cannot create a PR until the branch exists on GitHub.</Text>
       <Box marginTop={1} gap={3}>
@@ -51,7 +51,7 @@ function UnpushedCommitsScreen({ commits, onPush, onSkip, onBack }) {
       {shown.map(c => (
         <Box key={c.sha} gap={1}>
           <Text color={t.ui.dim}>{c.sha}</Text>
-          <Text color={t.ui.muted} wrap="truncate">{sanitize(c.message)}</Text>
+          <Text color={t.ui.muted} wrap="truncate">{sanitizeRaw(c.message)}</Text>
         </Box>
       ))}
       {commits.length > 8 && (
@@ -75,7 +75,7 @@ function PushingScreen({ branch }) {
   const { t } = useTheme()
   return (
     <Box flexDirection="column" paddingX={2} paddingY={1}>
-      <Text color={t.ci.pending}>⟳ Pushing '{branch}' to origin…</Text>
+      <Text color={t.ci.pending}>⟳ Pushing '{sanitizePath(branch)}' to origin…</Text>
     </Box>
   )
 }
@@ -91,8 +91,8 @@ function NoDiffScreen({ head, base, onBack }) {
       <Text color={t.ui.muted} bold>No commits to PR</Text>
       <Box marginTop={1}>
         <Text color={t.ui.dim}>
-          <Text color={t.ui.selected}>'{head}'</Text> has no commits ahead of{' '}
-          <Text color={t.ui.selected}>'{base}'</Text>.
+          <Text color={t.ui.selected}>'{sanitizePath(head)}'</Text> has no commits ahead of{' '}
+          <Text color={t.ui.selected}>'{sanitizePath(base)}'</Text>.
         </Text>
       </Box>
       <Text color={t.ui.dim}>There is nothing to merge. Try a different branch pair.</Text>
@@ -241,7 +241,7 @@ export function NewPRDialogView({ repo, state }) {
         {showBranchHint && isHeadField && !form.head && currentBranch && (
           <Box paddingX={1} marginBottom={0}>
             <Text color={t.ci.pending}>Use </Text>
-            <Text color={t.ui.selected}>'{currentBranch}'</Text>
+            <Text color={t.ui.selected}>'{sanitizePath(currentBranch)}'</Text>
             <Text color={t.ci.pending}> as head branch?  </Text>
             <Text color={t.ui.selected}>[y] Yes</Text>
             <Text color={t.ui.dim}>  [n] No  (or just type a branch name)</Text>
@@ -290,7 +290,7 @@ export function NewPRDialogView({ repo, state }) {
         </Box>
         {baseStatus === 'not-found' && (
           <Text color={t.ci.fail} paddingX={1}>
-            ✗ Branch '{form.base}' not found on GitHub
+            ✗ Branch '{sanitizePath(form.base)}' not found on GitHub
           </Text>
         )}
       </Box>
@@ -306,11 +306,11 @@ export function NewPRDialogView({ repo, state }) {
           paddingX={1} width={maxWidth}>
           {form.body ? (
             <Box flexDirection="column">
-              {form.body.split('\n').slice(0, 3).map((line, i) => (
+              {sanitizeLog(form.body).split('\n').slice(0, 3).map((line, i) => (
                 <Text key={i} wrap="truncate">{line || ' '}</Text>
               ))}
-              {form.body.split('\n').length > 3 && (
-                <Text color={t.ui.dim}>… {form.body.split('\n').length - 3} more lines</Text>
+              {sanitizeLog(form.body).split('\n').length > 3 && (
+                <Text color={t.ui.dim}>… {sanitizeLog(form.body).split('\n').length - 3} more lines</Text>
               )}
               {activeField === 'body' && <Text color={t.ui.dim}>|</Text>}
             </Box>

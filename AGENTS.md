@@ -134,8 +134,14 @@ log: `docs/bugs/` and, up to B-91, `docs/ARCHITECTURE.md` §21). Check each one 
   the fields named in `searchFields` — never bare strings.
 - [ ] Every key advertised in the Help overlay / footer hints has a real handler
   wired in the corresponding component, and vice versa (no orphaned handlers).
-- [ ] Every string sourced from the GitHub API (title, body, subject, names) is
-  wrapped in `sanitize()` before rendering or interpolating into dialog text.
+- [ ] Every string sourced from GitHub is cleaned with the shared text helpers in
+  `src/utils-core.js` before it is drawn or put in dialog text: `sanitize()` (prose
+  line), `sanitizeBlock()` (bodies, comments), `sanitizeRaw()` (raw one-liners such as
+  commit subjects and errors), `sanitizeLog()` (logs, annotations), `sanitizeCode()`
+  (diff lines) and `sanitizePath()` (paths, branch and ref names). Prose is cleaned once, at
+  render; the executor and state keep raw values (they feed writes and hashes). A new
+  view that shows GitHub fields is added to the table in
+  `src/render-checks/terminal-text.test.jsx`. Do not add control-character regexes elsewhere.
 - [ ] Mutating dialogs (assignees/labels/reviewers) diff current vs. desired
   state and call both add *and* remove endpoints — not add-only.
 - [ ] No `execa`/`execFile` calls outside `src/executor/core.js`'s `runGh()` —
@@ -185,7 +191,10 @@ log: `docs/bugs/` and, up to B-91, `docs/ARCHITECTURE.md` §21). Check each one 
 10. **`notifyDialog(true/false)`** called by any component that opens/closes a
     dialog.
 11. **`ErrorBoundary` wraps every view branch** in `app.jsx`.
-12. **`sanitize()`** every string sourced from the GitHub API before rendering.
+12. **Shared text cleanup** (`sanitize`, `sanitizeBlock`, `sanitizeRaw`, `sanitizeLog`,
+    `sanitizeCode`, `sanitizePath`): every string sourced from GitHub goes through the
+    matching helper before it is rendered. The executor returns raw data; cleanup happens in
+    display-only view-model parsers or at render, and `inkSafe()` (width only) runs last.
 13. **Pinned versions — do not bump without an issue explicitly authorizing it:**
     React `^18` (Ink 4 is incompatible with React 19), ESLint `^8` (9+ needs flat
     config migration, out of scope), Vitest `^3` (`@vitest/coverage-v8` must

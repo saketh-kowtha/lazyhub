@@ -1,9 +1,8 @@
 /**
  * diff-parser.test.js — regression tests for the diff parsing pipeline.
  *
- * Covers Bug: "HTML entities still rendered raw in diff content"
- * Root cause: parseDiff stored raw line text without calling decodeHtmlEntities(),
- * so &#39; / &quot; / &#NNN; appeared verbatim in the rendered terminal output.
+ * A diff is source text, not HTML: parseDiff leaves entities as written (a file that
+ * contains &amp; shows &amp;) and cleans control characters with visible markers.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -33,31 +32,27 @@ function makeDiff(codeLine) {
 
 // ── Bug: HTML entities in diff content ───────────────────────────────────────
 
-describe('parseDiff — HTML entity decoding', () => {
-  it('decodes &#39; (apostrophe) in added lines', () => {
+describe('parseDiff — entities are left as written', () => {
+  it('keeps &#39; (apostrophe) in added lines as written', () => {
     const files = parseDiff(makeDiff("const x = &#39;hello&#39;"))
     const addLine = files[0].lines.find(l => l.type === 'add')
-    expect(addLine.text).toBe("const x = 'hello'")
-    expect(addLine.text).not.toContain('&#39;')
+    expect(addLine.text).toBe('const x = &#39;hello&#39;')
   })
 
-  it('decodes &quot; (double-quote) in added lines', () => {
+  it('keeps &quot; (double-quote) in added lines as written', () => {
     const files = parseDiff(makeDiff('className=&quot;foo&quot;'))
     const addLine = files[0].lines.find(l => l.type === 'add')
-    expect(addLine.text).toBe('className="foo"')
-    expect(addLine.text).not.toContain('&quot;')
+    expect(addLine.text).toBe('className=&quot;foo&quot;')
   })
 
-  it('decodes &#NNN; numeric entities in added lines', () => {
+  it('keeps &#NNN; numeric entities in added lines as written', () => {
     // &#8216; = Unicode left single quotation mark U+2018
     const files = parseDiff(makeDiff('let s = &#8216;fancy&#8217;'))
     const addLine = files[0].lines.find(l => l.type === 'add')
-    expect(addLine.text).toBe('let s = ‘fancy’')
-    expect(addLine.text).not.toContain('&#8216;')
-    expect(addLine.text).not.toContain('&#8217;')
+    expect(addLine.text).toBe('let s = &#8216;fancy&#8217;')
   })
 
-  it('decodes &amp; &lt; &gt; in deleted lines', () => {
+  it('keeps &amp; &lt; &gt; in deleted lines as written', () => {
     const diff = [
       'diff --git a/src/bar.jsx b/src/bar.jsx',
       '+++ b/src/bar.jsx',
@@ -66,10 +61,10 @@ describe('parseDiff — HTML entity decoding', () => {
     ].join('\n')
     const files = parseDiff(diff)
     const delLine = files[0].lines.find(l => l.type === 'del')
-    expect(delLine.text).toBe('if (a < b && c > d) {}')
+    expect(delLine.text).toBe('if (a &lt; b &amp;&amp; c &gt; d) {}')
   })
 
-  it('decodes HTML entities in context lines', () => {
+  it('keeps entities in context lines as written', () => {
     const diff = [
       'diff --git a/README.md b/README.md',
       '+++ b/README.md',
@@ -78,7 +73,18 @@ describe('parseDiff — HTML entity decoding', () => {
     ].join('\n')
     const files = parseDiff(diff)
     const ctxLine = files[0].lines.find(l => l.type === 'ctx')
-    expect(ctxLine.text).toBe("it's a \"context\" line")
+    expect(ctxLine.text).toBe('it&#39;s a &quot;context&quot; line')
+  })
+
+  it('never throws on malformed numeric references and marks control characters', () => {
+    const diff = makeDiff('a &#99999999999; b &amp; c \u001b]0;t\u0007 d \u202e e')
+    const addLine = parseDiff(diff)[0].lines.find(l => l.type === 'add')
+    expect(JSON.stringify(addLine.text)).toBe(JSON.stringify('a &#99999999999; b &amp; c \u241b]0;t\u2407 d <U+202E> e'))
+  })
+
+  it('keeps the raw file name in the model', () => {
+    const diff = ['diff --git a/x\u202ey.js b/x\u202ey.js', '+++ b/x\u202ey.js', '@@ -1 +1 @@', '+a'].join('\n')
+    expect(parseDiff(diff)[0].filename).toBe('x\u202ey.js')
   })
 
   it('preserves plain text without entities unchanged', () => {
