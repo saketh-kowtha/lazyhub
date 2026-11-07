@@ -181,3 +181,11 @@ N-1 readable compatibility path.
 
 Current discrepancy: MCP responses and `--debug-state` do not include
 `schema_version`; this belongs with the schema-versioning work tracked separately.
+
+## Approval
+
+Approval has no machine-facing contract yet. There is no CLI command, JSON
+output, IPC message, MCP tool, event or config key for approval, and none may
+be relied on. The internal record format and error codes under `src/approval/`
+are groundwork described in `docs/design/optional-approval.md`; they are not a
+stable machine surface until an issue promotes them here.

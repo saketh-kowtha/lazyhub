@@ -1,9 +1,14 @@
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'fs'
+import { chmodSync, fsyncSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'fs'
 import { createServer } from 'net'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { appendPrivateFile, assertPrivateDir, ensurePrivateDir, prepareSocketPath, writePrivateFile } from './secure-fs.js'
+
+vi.mock('fs', async importOriginal => {
+  const actual = await importOriginal()
+  return { ...actual, fsyncSync: vi.fn(actual.fsyncSync) }
+})
 
 const posix = process.platform !== 'win32'
 const dirs = []
@@ -110,3 +115,35 @@ describe.skipIf(!posix)('secure-fs ownership and squatting', () => {
   })
 })
 
+
+describe('appendPrivateFile fsync option (#235)', () => {
+  it('does not fsync by default, so existing callers are unchanged', () => {
+    const root = tmp()
+    fsyncSync.mockClear()
+    appendPrivateFile(join(root, 'a.log'), 'one\n')
+    appendPrivateFile(join(root, 'a.log'), 'two\n', {})
+    appendPrivateFile(join(root, 'a.log'), 'three\n', { fsync: false })
+    expect(fsyncSync).not.toHaveBeenCalled()
+    expect(readFileSync(join(root, 'a.log'), 'utf8')).toBe('one\ntwo\nthree\n')
+  })
+
+  it('fsyncs the written descriptor once when asked, and still appends at 0600', () => {
+    const root = tmp()
+    fsyncSync.mockClear()
+    appendPrivateFile(join(root, 'j.ndjson'), 'a\n', { fsync: true })
+    appendPrivateFile(join(root, 'j.ndjson'), 'b\n', { fsync: true })
+    expect(fsyncSync).toHaveBeenCalledTimes(2)
+    expect(readFileSync(join(root, 'j.ndjson'), 'utf8')).toBe('a\nb\n')
+    if (posix) expect(mode(join(root, 'j.ndjson'))).toBe(0o600)
+  })
+
+  it('still refuses a symlink when fsync is requested', () => {
+    if (!posix) return
+    const root = tmp()
+    const victim = join(root, 'victim')
+    writeFileSync(victim, 'untouched')
+    symlinkSync(victim, join(root, 'j.ndjson'))
+    expect(() => appendPrivateFile(join(root, 'j.ndjson'), 'z', { fsync: true })).toThrow()
+    expect(readFileSync(victim, 'utf8')).toBe('untouched')
+  })
+})

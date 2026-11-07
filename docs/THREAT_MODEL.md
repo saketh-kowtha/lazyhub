@@ -157,7 +157,10 @@ the shared App for Alpha check operations.
 
 Mitigation: bind head/base SHAs and policy/evidence versions; invalidate stale
 approval; Alpha performs no merge. Residual risk: future execution needs
-immediate revalidation and reconciliation.
+immediate revalidation and reconciliation. In the optional-approval stage a
+passing check does not expire on GitHub: expiry and revocation reach GitHub
+only when Lazyhub publishes a failing check, so they are Lazyhub-mediated
+(`managed_gateway` at best) and depend on Lazyhub running and reaching GitHub.
 
 ### T12 - Identity spoofing
 
@@ -187,7 +190,11 @@ their existing workflow authority.
 Mitigation: Alpha only updates a commit-bound check from an exact request ID.
 Mutation markers, crash recovery, and reconciliation are Beta requirements.
 Residual risk: a network loss during check publication requires authoritative
-read-back before another update.
+read-back before another update. In the optional-approval stage a publication
+whose outcome is unknown is never resent until a read-back resolves it, and
+a revocation that could not be published leaves a passing check on GitHub;
+the only independent kill switches are turning off auto-merge or removing the
+App's repository access.
 
 ### T17 - Rate limits and account safety
 
