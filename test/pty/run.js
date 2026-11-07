@@ -486,6 +486,42 @@ async function runColdStartFlow() {
   assert.ok(hung - base < 1000, `a hung helper delayed the first frame by ${hung - base} ms`)
 }
 
+// #463: Enter on a failed PR check opens the log viewer on its failure excerpt; f shows the full log and back.
+async function runFailedLogFlow() {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-faillog-'))
+  const stubBin = installGhStub(temp)
+  const screen = new TerminalScreen(100, 40)
+  let term
+  try {
+    term = spawnTerminal({ ...childEnv(stubBin, temp), LAZYHUB_GH_FAILED_CHECK: '1' }, [], { cols: 100, rows: 40 })
+    term.onData(data => screen.feed(data))
+    const showing = (re, want = true) => () => (re.test(screen.text()) === want ? true : screen.text())
+    await waitUntil(showing(/Focus/), 'failed-log flow startup')
+    await settle()
+    await sendUntil(() => writeChord(term, 'gp'), () => screen.text(), /PTY harness fixture PR/, 'PR list for the failed-log flow')
+    term.write('\r')
+    await waitUntil(showing(/Fixture body/), 'PR detail with a failed check')
+    term.write('c')
+    await waitUntil(showing(/\[Ctrl\+R\] re-run/), 'checks mode')
+    term.write('\r')
+    await waitUntil(showing(/Failure excerpt/), 'the failure excerpt opens first')
+    assert.match(screen.text(), /AssertionError/)
+    assert.doesNotMatch(screen.text(), /RUN {2}v3\.2\.4/, 'the full log is not shown yet')
+    term.write('f')
+    await waitUntil(showing(/RUN {2}v3\.2\.4/), 'f shows the full log')
+    assert.doesNotMatch(screen.text(), /Failure excerpt/)
+    term.write('f')
+    await waitUntil(showing(/Failure excerpt/), 'f returns to the excerpt')
+    term.write('\x1b')
+    await waitUntil(showing(/Failure excerpt/, false), 'Esc closes the viewer')
+    term.write('q')
+    await waitForExit(term)
+  } finally {
+    await stopTerminal(term)
+    removeTempDir(temp)
+  }
+}
+
 // #279: Focus -> PR -> detail -> back -> issue -> detail -> back with real stdin. Coming back must
 // restore the section, the selected row and the scroll position. 30 rows per section forces the window
 // to scroll; `G` selects the last one so the first rows are provably out of view.
@@ -615,6 +651,7 @@ await runPerfFlow()
 await runSwrCacheFlow()
 await runResizeFlow()
 await runColdStartFlow()
+await runFailedLogFlow()
 await runFocusReturnFlow({ cols: 100, rows: 40 })
 await runFocusReturnFlow({ cols: 80, rows: 24 })
 await runFocusReturnFlow({ cols: 60, rows: 16, single: true })

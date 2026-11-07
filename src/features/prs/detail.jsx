@@ -29,7 +29,9 @@ import { useTheme } from '../../theme.js'
 import { sanitize, TextInput } from '../../utils.js'
 import { Spinner } from '../../components/Spinner.jsx'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
-import { classifyGhFailure } from '../../executor.js'
+import { classifyGhFailure, getFailedLog } from '../../executor.js'
+import { extractExcerpt } from './ci-log.js'
+import { toLogLines } from '../actions/log-lines.js'
 import { PRDetailSkeleton } from '../../components/Skeleton.jsx'
 import { openInEditor, editorLabel } from '../../editor.js'
 import { loadConfig } from '../../config.js'
@@ -76,6 +78,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
   const [checkCursor, setCheckCursor] = useState(null) // null = checks mode off, number = active
   const checkCursorRef = useRef(null)
   const [checkLogLines, setCheckLogLines] = useState([])
+  const [checkLogExcerpt, setCheckLogExcerpt] = useState(null)
   const [checkLogLoading, setCheckLogLoading] = useState(false)
 
   const showStatus = (msg, isError = false, sticky = false) => {
@@ -130,28 +133,52 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     showStatus(`✗ Could not open ${sanitize(check.url)} in the browser`, true)
   }
 
+  const annotationLines = (annotations) => annotations.map(a => {
+    const loc = a.path ? `${a.path}:${a.line || '?'}` : ''
+    const title = a.title ? `[${a.title}] ` : ''
+    return `${a.level?.toUpperCase() || 'NOTE'} ${title}${loc}\n  ${a.message || ''}`
+  }).join('\n').split('\n')
+
   const openCheckLogs = async (check) => {
     if (!check?.id) {
       openCheckInBrowser(check)
       return
     }
     setCheckLogLoading(true)
+    setCheckLogExcerpt(null)
     setDialog('check-logs')
+    const annotationsPromise = getCheckRunAnnotations(repo, check.id)
+    let note = null
+    // A failed check opens on the failure excerpt of its job's log (#463); `f` shows the full failed-step
+    // log, with the check's annotations first. Other checks show their annotations.
+    if (/failure|error/i.test(check.conclusion || check.status || check.state || '')) {
+      try {
+        const log = await getFailedLog(repo, { jobId: check.id })
+        const excerpt = log.state === 'ok' ? extractExcerpt(log.text) : null
+        if (excerpt) {
+          const annotations = await annotationsPromise.catch(() => [])
+          setCheckLogLines([...(annotations?.length ? [...annotationLines(annotations), ''] : []), ...toLogLines(log.text)])
+          setCheckLogExcerpt({ state: 'ok', detail: '', excerpt })
+          setCheckLogLoading(false)
+          return
+        }
+        note = { state: log.state === 'ok' ? 'empty' : log.state, detail: log.detail || 'The failed-step log has no content', excerpt: null }
+      } catch {
+        note = { state: 'unavailable', detail: 'Could not fetch the failed-step log', excerpt: null }
+      }
+      setCheckLogExcerpt(note)
+    }
     try {
-      const annotations = await getCheckRunAnnotations(repo, check.id)
+      const annotations = await annotationsPromise
       if (!annotations || annotations.length === 0) {
         // No annotations — fall back to opening in browser
         setDialog(null)
+        setCheckLogExcerpt(null)
         setCheckLogLoading(false)
         openCheckInBrowser(check, 'No annotations for this check; opened it in the browser')
         return
       }
-      const lines = annotations.map(a => {
-        const loc = a.path ? `${a.path}:${a.line || '?'}` : ''
-        const title = a.title ? `[${a.title}] ` : ''
-        return `${a.level?.toUpperCase() || 'NOTE'} ${title}${loc}\n  ${a.message || ''}`
-      }).join('\n').split('\n')
-      setCheckLogLines(lines)
+      setCheckLogLines(annotationLines(annotations))
     } catch (err) {
       setCheckLogLines([`Error loading annotations: ${err.message}`])
     }
@@ -494,6 +521,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     return (
       <LogViewer
         lines={checkLogLines}
+        excerpt={checkLogExcerpt}
         onClose={() => setDialog(null)}
       />
     )

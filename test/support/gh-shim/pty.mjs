@@ -3,6 +3,7 @@
 // LAZYHUB_GH_LATENCY_MS (slow search/list), LAZYHUB_GH_FAIL_ONCE_FILE (first search fails),
 // LAZYHUB_GH_STUB_STDERR + LAZYHUB_GH_STUB_EXIT (search fails with stderr),
 // LAZYHUB_GH_STUB_EMPTY (search returns no results),
+// LAZYHUB_GH_FAILED_CHECK=1 (the PR has one failed Actions check, job 9001, whose failed-step log is the vitest fixture),
 // LAZYHUB_GH_MANY=N (N numbered PRs #300.. and issues #400.. so lists scroll; detail views echo the number asked for).
 import { appendFileSync, writeFileSync } from 'node:fs'
 import { VITEST_LOG } from '../../../src/features/prs/ci-log.fixtures.js'
@@ -83,6 +84,9 @@ export default function handle(args, out) {
       const n = Number(args[2])
       out({ ...ISSUE, number: n, title: `Fixture issue ${n}`, body: `Fixture issue body ${n}` })
     }
+  }
+  if (process.env.LAZYHUB_GH_FAILED_CHECK && a0 === 'api' && /check-runs\?/.test(a1 || '')) {
+    out([{ id: 9001, name: 'test (20)', status: 'completed', conclusion: 'failure', appName: 'GitHub Actions', url: 'https://github.com/saketh-kowtha/lazyhub/actions/runs/1/job/9001' }])
   }
   if (args.includes('--version')) out('gh version 2.0.0\n')
   if (a0 === 'auth' && a1 === 'token') out('stub-auth\n')

@@ -50,6 +50,8 @@ export const DIALOG_KEYS = {
   compose: actionHints(['dialog.next-field', 'dialog.editor', 'dialog.submit', 'dialog.cancel'], _config.toml),
   // The log viewer closes with Esc and has no re-run key; its own footer says the same (#463).
   logs: actionHints(['cursor.down', 'cursor.top', 'log.filter', 'dialog.cancel'], _config.toml).map(h => (h.label === 'cancel' ? { ...h, label: 'close' } : h)),
+  // A failed run's log opens on its failure excerpt; `f` switches to the full log and back (#463).
+  failedLogs: actionHints(['cursor.down', 'cursor.top', 'log.filter', 'log.excerpt', 'dialog.cancel'], _config.toml).map(h => (h.label === 'cancel' ? { ...h, label: 'close' } : h)),
   comment: actionHints(['dialog.next-field', 'dialog.editor', 'dialog.submit', 'dialog.cancel'], _config.toml),
 }
 

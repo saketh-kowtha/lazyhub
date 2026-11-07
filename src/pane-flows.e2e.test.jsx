@@ -270,6 +270,10 @@ describe('Pane E2E user flows', () => {
 
     await flush(20)
     expect(getRunLogs).toHaveBeenCalledWith('owner/repo', 301)
+    // The run failed, so the viewer opens on its failure excerpt; `f` shows the full log (#463).
+    expect(logView.lastFrame()).toContain('Failure excerpt')
+    await sendInput('f')
+    await flush(5)
     expect(logView.lastFrame()).toContain('=== Build ===')
     expect(logView.lastFrame()).not.toContain('##[endgroup]')
     logView.unmount()

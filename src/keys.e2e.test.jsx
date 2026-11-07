@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sendInput } from './test/input-bus.js'
 import { App } from './app.jsx'
 import { getGhCallHistory } from './executor.js'
+import { VITEST_LOG } from './features/prs/ci-log.fixtures.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
 const fake = vi.hoisted(() => ({ calls: [], respond: null, failOpen: false }))
@@ -182,8 +183,27 @@ describe('advertised keys work (#511)', () => {
     expect(text).not.toMatch(/Tab\s+pane/)
   })
 
+  it('Enter on a failed check opens its failure excerpt; f shows the full log and back (#463)', async () => {
+    overrides['--log-failed'] = VITEST_LOG
+    const view = await openPrDetail()
+    await press('c')
+    await waitForExpectation(() => expect(frame(view)).toContain('[Ctrl+R] re-run'))
+    await press(K.enter)
+    await waitForExpectation(() => expect(frame(view)).toContain('Failure excerpt'))
+    expect(frame(view)).toContain('AssertionError')
+    expect(frame(view)).not.toContain('RUN  v3.2.4')
+    await press('f')
+    await waitForExpectation(() => expect(frame(view)).toContain('RUN  v3.2.4'))
+    expect(frame(view)).not.toContain('Failure excerpt')
+    await press('f')
+    await waitForExpectation(() => expect(frame(view)).toContain('Failure excerpt'))
+    await press(K.esc)
+    await waitForExpectation(() => expect(frame(view)).not.toContain('Failure excerpt'))
+  })
+
   it('Enter on a check with no annotations reports a failed browser open instead of swallowing it (#463)', async () => {
     overrides['annotations'] = []
+    overrides['--log-failed'] = '' // no failed-step log either: nothing to show in the viewer
     fake.failOpen = true
     const view = await openPrDetail()
     await press('c')
