@@ -272,6 +272,24 @@ describe('agent default scope', () => {
   })
 })
 
+describe('validateConfig - [features.issues].refresh_seconds (#565)', () => {
+  it('defaults to 30 seconds', () => {
+    expect(DEFAULT_CONFIG.features.issues.refresh_seconds).toBe(30)
+  })
+
+  it('accepts 15 and above', () => {
+    const { config, warnings } = validateConfig({ features: { issues: { refresh_seconds: 15 } } })
+    expect(config.features.issues.refresh_seconds).toBe(15)
+    expect(warnings).toEqual([])
+  })
+
+  it('rejects anything below the 15 second minimum with a warning', () => {
+    const { config, warnings } = validateConfig({ features: { issues: { refresh_seconds: 5 } } })
+    expect(config.features.issues).toEqual({})
+    expect(warnings.some(w => w.includes('refresh_seconds') && w.includes('at least 15'))).toBe(true)
+  })
+})
+
 describe('default pane icons', () => {
   // Terminals and Ink disagree on the width of emoji-presentation and East Asian
   // ambiguous glyphs, which shifts box borders. Defaults must be 1 column everywhere.

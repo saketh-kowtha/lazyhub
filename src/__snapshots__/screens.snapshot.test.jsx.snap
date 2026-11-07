@@ -159,7 +159,7 @@ assignee @octocat
 
  ⚑  Issues  ·  owner/repo                                                                ⟳ just now
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- j/k nav │ c reply │ l labels │ A assignees │ o browser │ q / Esc back                     │ ? help"
+ j/k nav │ c reply │ Q quote │ l labels │ A assignees │ o browser │ q / Esc back           │ ? help"
 `;
 
 exports[`major screen golden snapshots > covers all 80-column major screens > 80x24 issue list 1`] = `

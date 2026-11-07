@@ -58,7 +58,7 @@ vi.mock('./components/StatusBar.jsx', () => ({ StatusBar: () => null }))
 
 vi.mock('./executor.js', () => {
   const fns = [
-    'listPRs', 'listIssues', 'getPR', 'getIssue', 'getRepoInfo', 'getPRChecks', 'getBranchProtection',
+    'listPRs', 'listIssues', 'getPR', 'getIssue', 'getIssueHeader', 'listIssueTimelinePage', 'getRepoInfo', 'getPRChecks', 'getBranchProtection',
     'listLabels', 'listCollaborators', 'getCurrentBranch', 'listBranches', 'listRuns',
   ]
   return { ...Object.fromEntries(fns.map(name => [name, vi.fn()])), classifyGhFailure: () => ({ message: 'x' }) }
@@ -112,7 +112,7 @@ describe('Focus dashboard is interactive (#279)', () => {
       if (fn === executor.listPRs) return ghResult(deps[1]?.reviewer ? reviewItems : MINE)
       if (fn === executor.listIssues) return ghResult(ASSIGNED)
       if (fn === executor.getPR) return ghResult([...REVIEW, ...MINE].find(p => p.number === deps[1]))
-      if (fn === executor.getIssue) return ghResult(ASSIGNED.find(i => i.number === deps[1]))
+      if (fn === executor.getIssueHeader) return ghResult(ASSIGNED.find(i => i.number === deps[1]))
       if (fn === executor.getRepoInfo) return ghResult({ squashMergeAllowed: true, viewerPermission: 'WRITE' })
       if (fn === executor.getPRChecks) return ghResult([])
       if (fn === executor.getBranchProtection) return ghResult({ requiredReviews: 1 })
@@ -144,7 +144,7 @@ describe('Focus dashboard is interactive (#279)', () => {
   it('moves between sections with ] and [ and opens an issue in the issue detail', async () => {
     const view = await mount()
     await press([key(']'), key(']'), key('j'), ENTER])
-    await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.getIssue, ['owner/repo', 302]))
+    await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.getIssueHeader, ['owner/repo', 302]))
     await waitForExpectation(() => expect(view.lastFrame()).toContain('body 302'))
     await press([ESC])
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue delta'))

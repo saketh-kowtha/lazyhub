@@ -10,11 +10,11 @@ afterEach(() => resetGhHealthForTest())
 
 describe('useGhHealth state machine', () => {
   it('enters degraded state on failures and clears only after all call sites recover', () => {
-    recordGhFailure('listPRs:a', new Error('gh list failed'))
+    recordGhFailure('listPRs:a', Object.assign(new Error('gh list failed'), { stderr: 'dial tcp: no such host' }))
     expect(getGhHealthSnapshot()).toMatchObject({ degraded: true, failingCount: 1 })
     expect(getGhHealthSnapshot().error.message).toBe('gh list failed')
 
-    recordGhFailure('listIssues:b', new Error('gh issue failed'))
+    recordGhFailure('listIssues:b', Object.assign(new Error('gh issue failed'), { stderr: 'dial tcp: no such host' }))
     expect(getGhHealthSnapshot()).toMatchObject({ degraded: true, failingCount: 2 })
 
     recordGhSuccess('listPRs:a')
