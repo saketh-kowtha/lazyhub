@@ -72,7 +72,6 @@
       "files": [
         "src/executor.js",
         "src/executor/**/*.js",
-        "src/editor.js",
         "src/services/**/*.js",
         "src/bootstrap.js",
         "src/**/*.test.js",

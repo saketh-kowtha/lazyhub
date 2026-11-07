@@ -5,7 +5,8 @@ import { logger } from '../../utils-core.js'
 import { execa } from 'execa'
 import { renderWithProviders, waitForInputReady, waitForExpectation } from '../../test/test-helpers.jsx'
 import { useGh } from '../../hooks/useGh.js'
-import { listBranches, listPRs, listOpenPRBranches, clearLocalCheckoutCache } from '../../executor.js'
+import { listBranches, listPRs, listOpenPRBranches } from '../../executor.js'
+import { clearLocalCheckoutCache } from '../../services/git.js'
 import { BranchList } from './index.jsx'
 
 vi.mock('execa', () => ({ execa: vi.fn() }))
@@ -23,9 +24,9 @@ beforeEach(() => {
     loading: false, refetch: vi.fn(),
   }))
   execa.mockImplementation(async (_cmd, args) => {
-    if (args[0] === 'remote') return { stdout: 'origin\thttps://github.com/o/r.git (fetch)' }
+    if (args[0] === 'remote') return { exitCode: 0, stdout: 'origin\thttps://github.com/o/r.git (fetch)' }
     if (args[0] === 'checkout') head = args[1]
-    return { stdout: head }
+    return { exitCode: 0, stdout: head }
   })
 })
 
@@ -70,8 +71,8 @@ it('keeps a valid selection when a refetch returns fewer branches', async () => 
 
 it('does not run local git when the launch directory is not a clone of the viewed repo (#471)', async () => {
   execa.mockImplementation(async (_cmd, args) => {
-    if (args[0] === 'remote') return { stdout: 'origin\tgit@github.com:someone/else.git (fetch)' }
-    return { stdout: 'main' }
+    if (args[0] === 'remote') return { exitCode: 0, stdout: 'origin\tgit@github.com:someone/else.git (fetch)' }
+    return { exitCode: 0, stdout: 'main' }
   })
   const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
   await waitForInputReady(view)
@@ -96,8 +97,8 @@ it('runs local commands only in the matching checkout (#471)', async () => {
 
 it('pushes to the remote that points at the viewed repo, not a hardcoded origin (#471)', async () => {
   execa.mockImplementation(async (_cmd, args) => {
-    if (args[0] === 'remote') return { stdout: 'origin\tgit@github.com:me/r.git (fetch)\nupstream\tgit@github.com:o/r.git (fetch)' }
-    return { stdout: 'main' }
+    if (args[0] === 'remote') return { exitCode: 0, stdout: 'origin\tgit@github.com:me/r.git (fetch)\nupstream\tgit@github.com:o/r.git (fetch)' }
+    return { exitCode: 0, stdout: 'main' }
   })
   const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
   await waitForInputReady(view)
@@ -111,9 +112,9 @@ it('pushes to the remote that points at the viewed repo, not a hardcoded origin 
 it('shows a pending status while a push runs and ignores a second push (#453)', async () => {
   let release
   execa.mockImplementation(async (_cmd, args) => {
-    if (args[0] === 'remote') return { stdout: 'origin\thttps://github.com/o/r.git (fetch)' }
+    if (args[0] === 'remote') return { exitCode: 0, stdout: 'origin\thttps://github.com/o/r.git (fetch)' }
     if (args[0] === 'push') return new Promise(r => { release = r })
-    return { stdout: 'main' }
+    return { exitCode: 0, stdout: 'main' }
   })
   const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
   await waitForInputReady(view)
@@ -125,7 +126,7 @@ it('shows a pending status while a push runs and ignores a second push (#453)', 
   view.stdin.write('p')
   await waitForExpectation(() => expect(view.lastFrame()).toContain('still in progress'))
   expect(execa.mock.calls.filter(([, args]) => args[0] === 'push')).toHaveLength(1)
-  release({ stdout: '' })
+  release({ exitCode: 0, stdout: '' })
   await waitForExpectation(() => expect(view.lastFrame()).toContain('Pushed'))
 })
 

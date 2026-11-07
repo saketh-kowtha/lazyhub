@@ -6,10 +6,8 @@ import { logSwallowed } from '../../contain.js'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { editTextInEditor } from '../../services/platform.js'
 import { useKeymapInput } from '../../config/keymap.js'
-import {
-  getRemoteBranch, compareBranches, getUnpushedCommits,
-  getCurrentBranch, pushBranch, getRepoInfo, createPR,
-} from '../../executor.js'
+import { getRemoteBranch, compareBranches, getRepoInfo, createPR } from '../../executor.js'
+import { findLocalCheckout, currentBranch as gitCurrentBranch, unpushedCommits, push, noLocalCheckoutMessage } from '../../services/git.js'
 
 const FIELDS = ['title', 'head', 'base', 'body']
 
@@ -45,10 +43,17 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
 
   const [submitError, setSubmitError] = useState(null)
 
+  // The clone of `repo` that branch hints and pushes use (#471, #479): a promise of the checkout, or of
+  // null when this directory is not a clone of the repo, in which case nothing local is read or pushed.
+  const localReady = useRef(null)
+  if (localReady.current === null) {
+    localReady.current = findLocalCheckout(repo).catch(() => null)
+  }
+
   // ── On mount: detect current branch + default base ──────────────────────────
   useEffect(() => {
-    getCurrentBranch().then(branch => {
-      setCurrentBranch(branch)
+    localReady.current.then(found => (found ? gitCurrentBranch(found.dir) : null)).then(branch => {
+      setCurrentBranch(branch || null)
       if (branch) setShowBranchHint(true)
     }).catch(err => logSwallowed('prs.new.current-branch', err))
 
@@ -74,8 +79,9 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
       if (!remote) {
         setHeadStatus('not-in-remote')
       } else {
+        const found = await localReady.current
         const [unpushed, comparison] = await Promise.all([
-          getUnpushedCommits(branch),
+          found ? unpushedCommits(found.dir, found.remote, branch) : Promise.resolve(null),
           base ? compareBranches(repo, base, branch) : Promise.resolve(null),
         ])
         if (comparison && comparison.ahead_by === 0 && !unpushed?.length) {
@@ -134,7 +140,9 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
   const doPush = useCallback(async () => {
     setScreen('pushing')
     try {
-      await pushBranch(form.head)
+      const found = await localReady.current
+      if (!found) throw new Error(noLocalCheckoutMessage(repo))
+      await push(found.dir, found.remote, form.head)
       // Re-validate after push
       lastValidatedHead.current = ''
       setScreen('form')
@@ -144,7 +152,7 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
       setSubmitError(`Push failed: ${err.message}`)
       setTimeout(() => setSubmitError(null), 5000)
     }
-  }, [form.head, form.base, validateHead])
+  }, [form.head, form.base, validateHead, repo])
 
   // ── Submit ───────────────────────────────────────────────────────────────────
 

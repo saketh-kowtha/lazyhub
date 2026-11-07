@@ -28,12 +28,11 @@ import { loadConfig } from '../../config.js'
 import { sanitize, TextInput } from '../../utils.js'
 import { Spinner } from '../../components/Spinner.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
+import { checkoutBranch } from '../../executor.js'
 import {
-  getCurrentBranch, checkoutBranch,
-  isInMerge, getConflictedFiles, countFileConflicts,
-  gitAdd, gitUnstage, gitMergeAbort, gitCommit, gitMergeBranch,
-  getMergeCommitMessage, pushBranch,
-} from '../../executor.js'
+  findLocalCheckout, noLocalCheckoutMessage, currentBranch, isInMerge, conflictedFiles, countConflictMarkers,
+  stage, unstage, mergeAbort, commit, mergeBranch, mergeMessage, push,
+} from '../../services/git.js'
 import { openInEditor } from '../../editor.js'
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 
@@ -41,6 +40,7 @@ const _editorCfg = loadConfig().editor
 
 const PHASE = Object.freeze({
   CHECKING:    'checking',
+  NO_CHECKOUT: 'no-checkout',
   SETUP:       'setup',
   CONFLICTS:   'conflicts',
   COMMITTING:  'committing',
@@ -75,6 +75,8 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
   const [dialog,      setDialog]      = useState(null)
   const [busy,        setBusy]        = useState(false)
   const [setupStep,   setSetupStep]   = useState('')  // progress label during setup
+  // The clone of `repo` every local git command runs in (#471, #479); null until probed, or when there is none.
+  const local = useRef(null)
   // The commit-message editor shows once every file is staged; typed text must not arm the `g` prefix.
   useKeyScope('input', files.length > 0 && files.every(f => f.staged))
 
@@ -99,10 +101,10 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
 
   // ── Probe local git state ─────────────────────────────────────────────────
   const loadFiles = useCallback(async () => {
-    const raw = await getConflictedFiles()
+    const raw = await conflictedFiles(local.current.dir)
     const withHunks = await Promise.all(
       raw.map(async (f) => {
-        const hunks  = await countFileConflicts(f.path)
+        const hunks  = await countConflictMarkers(local.current.dir, f.path)
         // staged = no conflict markers left (user resolved and it's an unmerged file)
         const staged = hunks === 0
         return { ...f, hunks, staged }
@@ -115,7 +117,13 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
   const probe = useCallback(async () => {
     setPhase(PHASE.CHECKING)
     try {
-      const [branch, inMerge] = await Promise.all([getCurrentBranch(), isInMerge()])
+      local.current = await findLocalCheckout(repo)
+      if (!local.current) {
+        setPhase(PHASE.NO_CHECKOUT)
+        return
+      }
+      const dir = local.current.dir
+      const [branch, inMerge] = await Promise.all([currentBranch(dir).then(b => b || null).catch(() => null), isInMerge(dir)])
       setLocalBranch(branch)
 
       if (!inMerge) {
@@ -127,7 +135,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
       const allResolved = fs.length === 0 || fs.every(f => f.staged)
 
       if (allResolved && fs.length > 0) {
-        const msg = await getMergeCommitMessage()
+        const msg = await mergeMessage(dir)
         setCommitMsg(msg)
         // Still show CONFLICTS phase so user can review before committing
         setPhase(PHASE.CONFLICTS)
@@ -138,7 +146,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
       showStatus(`✗ ${err.message}`, true)
       setPhase(PHASE.SETUP)
     }
-  }, [loadFiles, showStatus])
+  }, [loadFiles, showStatus, repo])
 
   useEffect(() => { probe() }, [probe])
 
@@ -150,6 +158,11 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
     if (key.escape || input === 'q') { onBack(); return }
 
     if (phase === PHASE.DONE) return
+
+    if (phase === PHASE.NO_CHECKOUT) {
+      if (input === 'o') openInBrowser()
+      return
+    }
 
     if (phase === PHASE.SETUP) {
       if (key.return || input === 's') { guard('Setting up merge', doSetup); return }
@@ -181,7 +194,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
           setFiles(fs)
           const allResolved = fs.every(f => f.staged)
           if (allResolved && fs.length > 0) {
-            getMergeCommitMessage().then(msg => setCommitMsg(prev => prev || msg))
+            mergeMessage(local.current.dir).then(msg => setCommitMsg(prev => prev || msg))
           }
         })
         .catch(err => showStatus(`✗ ${err.message}`, true))
@@ -227,7 +240,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
 
       // Step 2: merge base to surface conflicts
       setSetupStep(`Merging ${baseBranch} into ${prBranch}…`)
-      await gitMergeBranch(baseBranch)
+      await mergeBranch(local.current.dir, baseBranch)
 
       // Step 3: probe again (merge may have completed cleanly or left conflicts)
       await probe()
@@ -247,12 +260,12 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
     }
     setBusy(true)
     try {
-      await gitAdd([file.path])
+      await stage(local.current.dir, [file.path])
       const fs = await loadFiles()
       setFiles(fs)
       const allStaged = fs.every(f => f.staged)
       if (allStaged && fs.length > 0) {
-        const msg = await getMergeCommitMessage()
+        const msg = await mergeMessage(local.current.dir)
         setCommitMsg(prev => prev || msg)
         showStatus('✓ All files staged — press [c] to commit and push')
       } else {
@@ -268,7 +281,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
   const doUnstage = useCallback(async (file) => {
     setBusy(true)
     try {
-      await gitUnstage([file.path])
+      await unstage(local.current.dir, [file.path])
       const fs = await loadFiles()
       setFiles(fs)
       showStatus(`Unstaged ${file.path}`)
@@ -287,9 +300,9 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
     setBusy(true)
     try {
       // Commit
-      await gitCommit(msg)
+      await commit(local.current.dir, msg)
       // Immediately push — this is what updates the PR on GitHub
-      await pushBranch(pr.headRefName)
+      await push(local.current.dir, local.current.remote, pr.headRefName)
       setPhase(PHASE.DONE)
       if (onResolved) onResolved()
     } catch (err) {
@@ -304,7 +317,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
     setDialog(null)
     setBusy(true)
     try {
-      await gitMergeAbort()
+      await mergeAbort(local.current.dir)
       setFiles([])
       setPhase(PHASE.SETUP)
       showStatus('✓ Merge aborted')
@@ -347,6 +360,22 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
             onConfirm={() => { setDialog(null); guard('Aborting merge', doAbort) }}
             onCancel={() => setDialog(null)}
           />
+        </Box>
+      </Box>
+    )
+  }
+
+  // ── No clone of this repo here ────────────────────────────────────────────
+  if (phase === PHASE.NO_CHECKOUT) {
+    return (
+      <Box flexDirection="column" flexGrow={1}>
+        {header}
+        <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1} gap={1}>
+          <Text color={t.ci.fail}>{noLocalCheckoutMessage(sanitize(repo))}</Text>
+          <Box gap={3}>
+            <Text color={t.ui.dim}>[o] open in GitHub browser editor</Text>
+            <Text color={t.ui.dim}>[Esc] back</Text>
+          </Box>
         </Box>
       </Box>
     )

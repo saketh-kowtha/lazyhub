@@ -29,7 +29,6 @@ import {
   listCollaborators,
   editIssueMembers,
   listOpenPRBranches,
-  gitAdd, gitUnstage, gitMergeAbort, gitCommit, gitMergeBranch, pushBranch, GIT_OP_TIMEOUT_MS,
   OPEN_PR_HEADS_MAX_PAGES,
   collaboratorsTruncated,
   COLLAB_MAX_ROWS,
@@ -558,22 +557,6 @@ describe('listOpenPRBranches() (#456)', () => {
     const res = await listOpenPRBranches('owner/repo')
     expect(execa).toHaveBeenCalledTimes(OPEN_PR_HEADS_MAX_PAGES)
     expect(res.truncated).toBe(true)
-  })
-})
-
-describe('git write operations time out instead of hanging (#453)', () => {
-  it.each([
-    ['gitAdd', () => gitAdd(['a.js'])],
-    ['gitUnstage', () => gitUnstage(['a.js'])],
-    ['gitMergeAbort', () => gitMergeAbort()],
-    ['gitCommit', () => gitCommit('msg')],
-    ['gitMergeBranch', () => gitMergeBranch('main')],
-    ['pushBranch', () => pushBranch('feat')],
-  ])('%s passes a 60 s timeout to git and reports a timeout', async (_name, call) => {
-    expect(GIT_OP_TIMEOUT_MS).toBe(60_000)
-    execa.mockResolvedValue({ exitCode: undefined, timedOut: true, stdout: '', stderr: '' })
-    await expect(call()).rejects.toThrow(/timed out after 60 s/)
-    expect(execa.mock.calls[0][2]).toMatchObject({ timeout: 60_000 })
   })
 })
 
