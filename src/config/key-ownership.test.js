@@ -126,3 +126,13 @@ describe('every action a context advertises has a handler', () => {
     })
   }
 })
+
+describe('log viewer footer (#463)', () => {
+  it('says close, like the box, and does not offer a re-run the viewer lacks', async () => {
+    const { DIALOG_KEYS } = await import('../app-keys.js')
+    const labels = DIALOG_KEYS.logs.map(h => h.label)
+    expect(labels).toContain('close')
+    expect(labels).not.toContain('cancel')
+    expect(labels).not.toContain('re-run')
+  })
+})

@@ -121,9 +121,12 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
   const maxScroll     = Math.max(0, filteredRows.length - visibleHeight)
   const visibleRows   = filteredRows.slice(scrollY, scrollY + visibleHeight)
 
-  const openCheckInBrowser = (check) => {
-    if (!check?.url) return
-    openUrl(check.url)
+  // A failed opener is reported, never swallowed (#463).
+  const openCheckInBrowser = async (check, note = '') => {
+    if (!check?.url) { showStatus('This check has no URL to open', true); return }
+    const opened = await openUrl(check.url)
+    if (opened) { if (note) showStatus(note); return }
+    showStatus(`✗ Could not open ${sanitize(check.url)} in the browser`, true)
   }
 
   const openCheckLogs = async (check) => {
@@ -139,7 +142,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
         // No annotations — fall back to opening in browser
         setDialog(null)
         setCheckLogLoading(false)
-        openCheckInBrowser(check)
+        openCheckInBrowser(check, 'No annotations for this check; opened it in the browser')
         return
       }
       const lines = annotations.map(a => {

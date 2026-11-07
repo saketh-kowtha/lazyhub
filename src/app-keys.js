@@ -48,7 +48,8 @@ export const DIALOG_KEYS = {
   multiselect: actionHints(['dialog.type', 'dialog.filter-down', 'dialog.toggle', 'dialog.confirm', 'dialog.cancel'], _config.toml),
   confirm: actionHints(['dialog.yes', 'dialog.no'], _config.toml),
   compose: actionHints(['dialog.next-field', 'dialog.editor', 'dialog.submit', 'dialog.cancel'], _config.toml),
-  logs: actionHints(['cursor.down', 'cursor.top', 'log.filter', 'workflow.rerun', 'dialog.cancel'], _config.toml),
+  // The log viewer closes with Esc and has no re-run key; its own footer says the same (#463).
+  logs: actionHints(['cursor.down', 'cursor.top', 'log.filter', 'dialog.cancel'], _config.toml).map(h => (h.label === 'cancel' ? { ...h, label: 'close' } : h)),
   comment: actionHints(['dialog.next-field', 'dialog.editor', 'dialog.submit', 'dialog.cancel'], _config.toml),
 }
 
