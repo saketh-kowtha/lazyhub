@@ -161,5 +161,5 @@ export function inkSafe(str) {
  * @returns {string} A safe string for Ink rendering.
  */
 export function sanitize(str) {
-  return inkSafe(stripAnsi(decodeHtmlEntities(String(str || ''))).replace(/[\r\n\t]/g, ' '))
+  return stripAnsi(decodeHtmlEntities(String(str || ''))).replace(/[\r\n\t]/g, ' ')
 }
