@@ -79,6 +79,7 @@ page_size      = 100
 [features.issues]
 default_filter = "open"
 page_size      = 50
+refresh_seconds = 30
 
 [features.actions]
 page_size = 30
@@ -1118,6 +1119,38 @@ label = "reply"
 description = "Comment on the issue"
 scope = "issue-detail"
 group = "action"
+
+[actions."issue.quote"]
+keys = ["Q"]
+hint = "Q"
+label = "quote"
+description = "Quote-reply to the selected comment"
+scope = "issue-detail"
+group = "action"
+
+[actions."issue.comment-edit"]
+keys = ["e"]
+hint = "e"
+label = "edit"
+description = "Edit your selected comment"
+scope = "issue-detail"
+group = "action"
+
+[actions."issue.comment-delete"]
+keys = ["Ctrl+X"]
+hint = "Ctrl+X"
+label = "delete"
+description = "Delete your selected comment (confirms)"
+scope = "issue-detail"
+group = "action"
+
+[actions."issue.show-new"]
+keys = ["n"]
+hint = "n"
+label = "show new"
+description = "Load comments that arrived while you were reading"
+scope = "issue-detail"
+group = "nav"
 
 # ── Agent settings (ARCHITECT_DECISIONS §3–7) ───────────────────────────
 [agent]

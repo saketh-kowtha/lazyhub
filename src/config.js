@@ -146,6 +146,7 @@ export function legacyFromToml(toml) {
     issues: {
       defaultFilter: issueFeature.default_filter,
       pageSize:      issueFeature.page_size,
+      refreshSeconds: issueFeature.refresh_seconds ?? DEFAULT_CONFIG.features.issues.refresh_seconds,
       keys: {
         filterOpen:   firstActionKey(toml.actions, 'issue.filter-open', 'O'),
         filterClosed: firstActionKey(toml.actions, 'issue.filter-closed', 'C'),

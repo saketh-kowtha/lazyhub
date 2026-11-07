@@ -44,6 +44,93 @@ describe('PR list dialogs', () => {
     await waitForExpectation(() => expect(onSubmit).toHaveBeenCalledWith('octocat'))
   })
 
+  describe('author filter list (#563)', () => {
+    const rows = [{ author: { login: 'alice' } }, { author: { login: 'bob' } }]
+    const open = (props = {}) => {
+      const onSubmit = vi.fn()
+      const onCancel = vi.fn()
+      const view = renderWithProviders(<CatchRenderError><AuthorSearchDialog current="" repo="o/r" rows={rows} onSubmit={onSubmit} onCancel={onCancel} {...props} /></CatchRenderError>)
+      return { view, onSubmit, onCancel }
+    }
+
+    it('two letters then Enter filters by the suggested author', async () => {
+      useGh.mockReturnValue({ loading: false, data: [{ login: 'carol', name: 'Carol C' }] })
+      const { view, onSubmit } = open()
+      await waitForInputReady(view)
+      view.stdin.write('CA')
+      await waitForExpectation(() => expect(view.lastFrame()).toContain('carol'))
+      expect(view.lastFrame()).toContain('collaborator')
+      await waitForInputReady(view)
+      view.stdin.write('\r')
+      await waitForExpectation(() => expect(onSubmit).toHaveBeenCalledWith('carol'))
+    })
+
+    it('Enter on text that matches nothing uses the text as typed', async () => {
+      useGh.mockReturnValue({ loading: false, data: [{ login: 'carol' }] })
+      const { view, onSubmit } = open()
+      await waitForInputReady(view)
+      view.stdin.write('zzz-new')
+      await waitForExpectation(() => expect(view.lastFrame()).toContain('Use "zzz-new" as typed'))
+      await waitForInputReady(view)
+      view.stdin.write('\r')
+      await waitForExpectation(() => expect(onSubmit).toHaveBeenCalledWith('zzz-new'))
+    })
+
+    it('Enter with nothing typed clears the filter, and the arrow keys move to a suggestion', async () => {
+      useGh.mockReturnValue({ loading: false, data: [] })
+      const { view, onSubmit } = open()
+      await waitForInputReady(view)
+      expect(view.lastFrame()).toContain('All authors')
+      expect(view.lastFrame()).toContain('in list')
+      view.stdin.write('\u001b[B')
+      await waitForExpectation(() => expect(view.lastFrame()).toContain('▶ alice'))
+      await waitForInputReady(view)
+      view.stdin.write('\r')
+      await waitForExpectation(() => expect(onSubmit).toHaveBeenCalledWith('alice'))
+    })
+
+    it('shows a loading row, keeps typing working and Esc closes while collaborators load', async () => {
+      useGh.mockReturnValue({ loading: true })
+      const { view, onSubmit, onCancel } = open()
+      expect(view.lastFrame()).toContain('Loading collaborators')
+      await waitForInputReady(view)
+      view.stdin.write('bo')
+      await waitForExpectation(() => expect(view.lastFrame()).toContain('bob'))
+      await waitForInputReady(view)
+      view.stdin.write('\r')
+      await waitForExpectation(() => expect(onSubmit).toHaveBeenCalledWith('bob'))
+      view.stdin.write('\u001b')
+      await waitForExpectation(() => expect(onCancel).toHaveBeenCalledOnce())
+    })
+
+    it('on failure shows the cause and the free-text field still works', async () => {
+      useGh.mockReturnValue({ loading: false, error: new Error('HTTP 403: Must have push access') })
+      const { view, onSubmit } = open()
+      expect(view.lastFrame()).toMatch(/cannot read|403|push access/i)
+      expect(view.lastFrame()).toContain('type a username')
+      await waitForInputReady(view)
+      view.stdin.write('dave')
+      await waitForExpectation(() => expect(view.lastFrame()).toContain('Use "dave" as typed'))
+      await waitForInputReady(view)
+      view.stdin.write('\r')
+      await waitForExpectation(() => expect(onSubmit).toHaveBeenCalledWith('dave'))
+    })
+
+    it('says "showing first N" when the collaborator list is capped', () => {
+      const data = Array.from({ length: COLLAB_MAX_ROWS }, (_, i) => ({ login: `user${i}` }))
+      useGh.mockReturnValue({ loading: false, data })
+      const { view } = open()
+      expect(view.lastFrame()).toContain(`showing first ${COLLAB_MAX_ROWS.toLocaleString('en-US')} collaborators`)
+    })
+
+    it('sanitizes API names', () => {
+      useGh.mockReturnValue({ loading: false, data: [{ login: 'safe&amp;user' }] })
+      const { view } = open()
+      expect(view.lastFrame()).toContain('safe&user')
+      expect(view.lastFrame()).not.toContain('&amp;')
+    })
+  })
+
   for (const [name, Dialog, data, pr] of [
     ['labels', LabelDialog, [{ name: 'safe&amp;label' }], { number: 1 }],
     ['assignees', AssigneeDialog, [{ login: 'safe&amp;user' }], { number: 1 }],

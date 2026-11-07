@@ -28,7 +28,7 @@ const WRITABLE_AI = new Set(['provider', 'model', 'anthropic_api_key', 'openai_a
 const WRITABLE_OPENAI_COMPATIBLE = new Set(['base_url', 'api_key', 'model', 'timeout_ms'])
 const WRITABLE_FEATURES = {
   'features.prs': new Set(['default_filter', 'default_scope', 'page_size']),
-  'features.issues': new Set(['default_filter', 'page_size']),
+  'features.issues': new Set(['default_filter', 'page_size', 'refresh_seconds']),
   'features.actions': new Set(['page_size']),
 }
 

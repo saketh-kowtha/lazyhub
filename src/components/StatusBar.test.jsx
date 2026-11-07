@@ -23,7 +23,7 @@ describe('status bar notice (#491)', () => {
 
   it('never hides a real failure behind the notice', () => {
     noteDaemonFallback('unavailable')
-    recordGhFailure('listPRs:a', new Error('gh list failed'))
+    recordGhFailure('listPRs:a', Object.assign(new Error('gh list failed'), { stderr: 'dial tcp: no such host' }))
     const frame = bar(getGhHealthSnapshot())
     expect(frame).toMatch(/gh list failed/)
     expect(frame).not.toMatch(/background helper/)

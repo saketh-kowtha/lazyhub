@@ -100,7 +100,7 @@ export const DEFAULT_CONFIG = {
   },
   features: {
     prs:     { default_filter: 'open', default_scope: 'mine', page_size: 100 },
-    issues:  { default_filter: 'open', page_size: 50 },
+    issues:  { default_filter: 'open', page_size: 50, refresh_seconds: 30 },
     actions: { page_size: 30 },
   },
   layout: {
@@ -282,6 +282,10 @@ export const DEFAULT_CONFIG = {
     'comment.filter':        { keys: ['f'], hint: 'f', label: 'filter', description: 'Cycle all / open / resolved', scope: 'pr-comments', group: 'filter' },
     'comment.jump':          { keys: ['J'], hint: 'J', label: 'jump to diff', description: 'Jump to this line in the diff', scope: 'pr-comments', group: 'nav' },
     'issue.reply':           { keys: ['c'], hint: 'c', label: 'reply', description: 'Comment on the issue', scope: 'issue-detail', group: 'action' },
+    'issue.quote':           { keys: ['Q'], hint: 'Q', label: 'quote', description: 'Quote-reply to the selected comment', scope: 'issue-detail', group: 'action' },
+    'issue.comment-edit':    { keys: ['e'], hint: 'e', label: 'edit', description: 'Edit your selected comment', scope: 'issue-detail', group: 'action' },
+    'issue.comment-delete':  { keys: ['Ctrl+X'], hint: 'Ctrl+X', label: 'delete', description: 'Delete your selected comment (confirms)', scope: 'issue-detail', group: 'action' },
+    'issue.show-new':        { keys: ['n'], hint: 'n', label: 'show new', description: 'Load comments that arrived while you were reading', scope: 'issue-detail', group: 'nav' },
   },
   agent: {
     auto_spawn_daemon: true,
@@ -435,6 +439,8 @@ const PRS_FEATURE_SPEC = {
 const ISSUES_FEATURE_SPEC = {
   default_filter: { type: 'string', enum: ['open', 'closed'] },
   page_size:      { type: 'integer', validate: (v) => (v > 0 ? null : 'must be positive') },
+  // How often an open issue refreshes its first timeline page in the background (#565).
+  refresh_seconds: { type: 'integer', validate: (v) => (v >= 15 ? null : 'must be at least 15') },
 }
 
 const ACTIONS_FEATURE_SPEC = {
