@@ -25,7 +25,7 @@ import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
 import { loadConfig } from '../../config.js'
-import { sanitize, TextInput } from '../../utils.js'
+import { sanitize, sanitizePath, sanitizeRaw, TextInput } from '../../utils.js'
 import { Spinner } from '../../components/Spinner.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { checkoutBranch } from '../../executor.js'
@@ -440,7 +440,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
           <Box gap={1}>
             <Text color={t.pr.conflict || t.ci.pending} bold>↯ PR #{pr.number}</Text>
             <Text color={t.ui.muted}>has conflicts with</Text>
-            <Text color={t.ui.selected} bold>{sanitize(pr.baseRefName)}</Text>
+            <Text color={t.ui.selected} bold>{sanitizePath(pr.baseRefName)}</Text>
           </Box>
 
           <Text color={t.ui.dim}>
@@ -452,14 +452,14 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
             <Box gap={1}>
               <Text color={isOnBranch ? t.ci.pass : t.ui.dim}>{isOnBranch ? '✓' : '1.'}</Text>
               <Text color={isOnBranch ? t.ui.dim : t.ui.muted}>
-                Checkout <Text color={t.ui.selected}>{sanitize(pr.headRefName)}</Text>
+                Checkout <Text color={t.ui.selected}>{sanitizePath(pr.headRefName)}</Text>
               </Text>
               {isOnBranch && <Text color={t.ui.dim}>(current branch)</Text>}
             </Box>
             <Box gap={1}>
               <Text color={t.ui.dim}>{isOnBranch ? '1.' : '2.'}</Text>
               <Text color={t.ui.muted}>
-                Merge <Text color={t.ui.selected}>{sanitize(pr.baseRefName)}</Text> → surfaces conflicts locally
+                Merge <Text color={t.ui.selected}>{sanitizePath(pr.baseRefName)}</Text> → surfaces conflicts locally
               </Text>
             </Box>
             <Box gap={1}>
@@ -481,7 +481,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
               <Box gap={3} marginTop={1}>
                 <Box backgroundColor={t.ui.headerBg} paddingX={1}>
                   <Text color={t.ui.selected} bold>
-                    [Enter/s] {isOnBranch ? `Merge ${sanitize(pr.baseRefName)} locally` : `Checkout + merge`}
+                    [Enter/s] {isOnBranch ? `Merge ${sanitizePath(pr.baseRefName)} locally` : `Checkout + merge`}
                   </Text>
                 </Box>
                 <Text color={t.ui.dim}>[o] open in GitHub browser editor</Text>
@@ -491,7 +491,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
           }
 
           {statusMsg && (
-            <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}</Text>
+            <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{sanitizeRaw(statusMsg.msg)}</Text>
           )}
         </Box>
       </Box>
@@ -539,7 +539,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
                 <Text
                   color={isCursor ? t.ui.selected : (file.staged ? t.ui.dim : undefined)}
                   wrap="truncate">
-                  {sanitize(file.path)}
+                  {sanitizePath(file.path)}
                 </Text>
               </Box>
               <Text color={t.ui.dim}>  </Text>
@@ -575,7 +575,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
       {/* Hint / status bar */}
       <Box paddingX={1} flexDirection="column">
         {statusMsg
-          ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}</Text>
+          ? <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{sanitizeRaw(statusMsg.msg)}</Text>
           : !allStaged
             ? <Text color={t.ui.dim}>
                 [e/Enter] open editor  [Space] stage/unstage  [r] refresh  [c] commit  [A] abort  [o] browser

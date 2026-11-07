@@ -8,7 +8,7 @@ import React, { useState, useMemo, useEffect, useContext } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { format } from 'timeago.js'
-import { getLogs, logger, TextInput } from '../../utils.js'
+import { getLogs, logger, sanitizeRaw, TextInput } from '../../utils.js'
 import { copyToClipboard } from '../../services/platform.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
@@ -133,11 +133,11 @@ export function LogPane({ onBack }) {
         <Box flexDirection="column" marginTop={1}>
           <Text color={t.ui.dim}>Time:  <Text color={t.ui.muted}>{selectedLog.timestamp}</Text></Text>
           <Text color={t.ui.dim}>Level: <Text color={levelColor(selectedLog.level, t)}>{selectedLog.level}</Text></Text>
-          <Text color={t.ui.dim}>Msg:   <Text color={t.ui.selected}>{selectedLog.message}</Text></Text>
+          <Text color={t.ui.dim}>Msg:   <Text color={t.ui.selected}>{sanitizeRaw(selectedLog.message)}</Text></Text>
           {Object.entries(selectedLog).map(([k, v]) => {
             if (['timestamp', 'level', 'message'].includes(k)) return null
             return (
-              <Text key={k} color={t.ui.dim}>{k.padEnd(6)}: <Text color={t.ui.muted}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</Text></Text>
+              <Text key={k} color={t.ui.dim}>{k.padEnd(6)}: <Text color={t.ui.muted}>{sanitizeRaw(typeof v === 'object' ? JSON.stringify(v) : String(v))}</Text></Text>
             )
           })}
         </Box>
@@ -176,7 +176,7 @@ export function LogPane({ onBack }) {
               <Text color={t.ui.dim}>{log.timestamp.split('T')[1].slice(0, 8)} </Text>
               <Text color={levelColor(log.level, t)} bold width={6}>{log.level.padEnd(6)}</Text>
               <Text color={isSelected ? t.ui.selected : undefined} wrap="truncate" flexGrow={1}>
-                {log.message}
+                {sanitizeRaw(log.message)}
               </Text>
               {log.component && <Text color={t.ui.dim}> [{log.component}]</Text>}
             </Box>

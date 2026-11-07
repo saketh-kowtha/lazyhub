@@ -11,6 +11,7 @@
  */
 
 import { scrub } from '../../executor/classify.js'
+import { stripAnsi, sanitizeRaw, sanitizeLog, sanitizePath } from '../../utils-core.js'
 import { getFailedLog } from '../../executor/ci-logs.js'
 
 export const MAX_INPUT_CHARS = 4 * 1024 * 1024
@@ -18,11 +19,7 @@ export const MAX_EXCERPT_LINES = 40
 export const MAX_LINE_CHARS = 200
 const MAX_REFS = 20
 
-// eslint-disable-next-line no-control-regex
-const CONTROL_RE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g
 const TS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z ?/
-// eslint-disable-next-line no-control-regex
-const ANSI_RE = /\u001b\[[0-9;?]*[ -/]*[@-~]/g
 
 /**
  * Redact one log line: ANSI/control stripped, then the shared scrubber
@@ -33,7 +30,7 @@ const ANSI_RE = /\u001b\[[0-9;?]*[ -/]*[@-~]/g
  * @returns {string}
  */
 export function redactLine(line) {
-  const clean = String(line).replace(ANSI_RE, '').replace(CONTROL_RE, '')
+  const clean = sanitizeRaw(line)
   return scrub(clean)
     .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----.*/g, '[REDACTED PRIVATE KEY]')
     .replace(/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, '[REDACTED]')
@@ -55,7 +52,7 @@ export function parseLogLines(raw) {
   for (const rawLine of text.split('\n')) {
     let job = null
     let step = null
-    let body = rawLine.replace(/\r$/, '').replace(ANSI_RE, '')
+    let body = stripAnsi(rawLine.replace(/\r$/, '')).replace(/\n/g, ' ')
     const parts = body.split('\t')
     if (parts.length >= 3) {
       job = parts[0].trim() || null
@@ -70,6 +67,22 @@ export function parseLogLines(raw) {
 }
 
 // ── Failure detectors ────────────────────────────────────────────────────────
+
+/**
+ * Display lines for a check's annotations. Path, title and message are all
+ * GitHub-provided text, cleaned here; the model keeps the raw values.
+ *
+ * @param {{level?: string, path?: string, line?: number, title?: string, message?: string}[]} annotations
+ * @returns {string[]}
+ */
+export function annotationLines(annotations) {
+  return (annotations || []).flatMap(a => {
+    const loc = a.path ? `${sanitizePath(a.path)}:${a.line || '?'}` : ''
+    const title = a.title ? `[${sanitizeRaw(a.title)}] ` : ''
+    const head = `${a.level ? sanitizeRaw(a.level).toUpperCase() : 'NOTE'} ${title}${loc}`
+    return [head.trimEnd(), ...sanitizeLog(a.message || '').split('\n').map(l => `  ${l}`)]
+  })
+}
 
 const isFrame = s => /^\s*(?:at |❯ )/.test(s) || /^\s+\d+\s*\|/.test(s) || /^\s*\^+\s*$/.test(s)
 const isAnnotation = s => /^##\[(?:error|warning|notice)\]/.test(s)

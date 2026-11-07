@@ -21,7 +21,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Box, Text } from 'ink'
 import { useInput } from '../hooks/useSafeInput.js'
 import { useTheme } from '../theme.js'
-import { TextInput } from '../utils.js'
+import { TextInput, sanitizeLog, sanitizePath, sanitizeRaw } from '../utils.js'
 import { useKeyScope } from '../keyscope.js'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ export function AIReviewPane({
     if (phase === 'step' && suggestions[index]) {
       const s = suggestions[index]
       if (s.file) onJumpTo(s.file, s.line)
-      setDraft(s.comment)
+      setDraft(sanitizeLog(s.comment))
       setEditing(false)
     }
   }, [phase, index])   // eslint-disable-line react-hooks/exhaustive-deps
@@ -164,14 +164,14 @@ export function AIReviewPane({
 
         {summary ? (
           <Box marginBottom={1}>
-            <Text color={t.ui.fg} wrap="wrap">{summary}</Text>
+            <Text color={t.ui.fg} wrap="wrap">{sanitizeLog(summary)}</Text>
           </Box>
         ) : null}
 
         {provenance ? (
           <Box marginBottom={1}>
             <Text color={provenance.fallback ? t.ci.pending : t.ui.muted}>
-              second opinion: reviewed by {provenance.selected} for {provenance.authorFamily}{provenance.fallback ? ' author (fallback)' : ' author'}
+              second opinion: reviewed by {sanitizeRaw(provenance.selected)} for {sanitizeRaw(provenance.authorFamily)}{provenance.fallback ? ' author (fallback)' : ' author'}
             </Text>
           </Box>
         ) : null}
@@ -234,12 +234,12 @@ export function AIReviewPane({
           <Text color={t.ui.dim}>{index + 1}/{total}</Text>
           <Text color={SEV_COLOR(t, s.severity)} bold>{SEV_BADGE(s.severity)}</Text>
           <Text color={t.ui.muted}>
-            {s.file}{s.line != null ? `:${s.line}` : ''}
+            {sanitizePath(s.file)}{s.line != null ? `:${s.line}` : ''}
           </Text>
         </Box>
         {postStatus && (
           <Text color={postStatus.startsWith('error') ? t.ci.fail : t.ci.pass}>
-            {postStatus}
+            {sanitizeRaw(postStatus)}
           </Text>
         )}
       </Box>
@@ -258,7 +258,7 @@ export function AIReviewPane({
             focus={true}
           />
         ) : (
-          <Text color={t.ui.fg} wrap="wrap">{draft || s.comment}</Text>
+          <Text color={t.ui.fg} wrap="wrap">{sanitizeLog(draft || s.comment)}</Text>
         )}
       </Box>
 

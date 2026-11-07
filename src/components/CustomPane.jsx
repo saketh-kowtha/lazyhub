@@ -39,7 +39,7 @@ import { format } from 'timeago.js'
 import { FuzzySearch } from './dialogs/FuzzySearch.jsx'
 import { AppContext } from '../context.js'
 import { useTheme } from '../theme.js'
-import { sanitize, resolvePath, formatLogin, padEndWidth } from '../utils.js'
+import { sanitize, sanitizeRaw, resolvePath, formatLogin, padEndWidth } from '../utils.js'
 
 // Resolve {repo}, {owner}, {name} placeholders in a command string and return as array for execa
 function resolveCommandArgs(cmd, repo) {
@@ -249,7 +249,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
         {items.length > 0 && <Text color={t.ui.dim}>({items.length})</Text>}
         <Text color={t.ui.dim}>[r] refresh  [/] search  [y] copy url  [o] browser</Text>
         {statusMsg && (
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}</Text>
+          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {sanitizeRaw(statusMsg.msg)}</Text>
         )}
       </Box>
 

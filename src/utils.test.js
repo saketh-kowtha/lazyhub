@@ -49,6 +49,21 @@ describe('getMarkdownRows', () => {
   })
 })
 
+describe('TextInput with text that cannot be drawn', () => {
+  it('shows a visible stand-in of the same length and keeps the cursor aligned', () => {
+    const value = 'a\u001bb\u202ec'
+    const { lastFrame } = render(
+      React.createElement(ThemeProvider, { initialTheme: 'ansi-16' },
+        React.createElement(TextInput, { value, focus: true })
+      )
+    )
+    const frame = lastFrame()
+    expect(frame).toContain('a\u241bb\ufffdc')
+    expect(frame).not.toContain('\u001b')
+    expect(frame).not.toContain('\u202e')
+  })
+})
+
 describe('TextInput', () => {
   it('should render value', () => {
     const { lastFrame } = render(

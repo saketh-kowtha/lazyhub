@@ -11,6 +11,7 @@ import { useTheme } from '../../theme.js'
 import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { useKeyScope } from '../../keyscope.js'
 import { hintLine, matchesAction } from '../../config/actions.js'
+import { sanitizeRaw } from '../../utils.js'
 
 export function MultiSelect({ items = [], onSubmit, onCancel, title = '' }) {
   useKeyScope('dialog')
@@ -98,7 +99,7 @@ export function MultiSelect({ items = [], onSubmit, onCancel, title = '' }) {
               <Text color={isCursor   ? t.ui.selected : t.ui.muted}>{isCursor ? '▶ ' : '  '}</Text>
               <Text color={isSelected ? t.ui.selected : t.ui.muted}>{isSelected ? '◉' : '○'} </Text>
               <Text color={isCursor   ? t.ui.selected : undefined} wrap="truncate">
-                {item.color ? `● ${item.name}` : item.name}
+                {item.color ? `● ${sanitizeRaw(item.name)}` : sanitizeRaw(item.name)}
               </Text>
             </Box>
           )

@@ -5,7 +5,7 @@
  * Ink/chalk/hljs stack.
  */
 
-import { decodeHtmlEntities } from '../../utils.js'
+import { sanitizeCode } from '../../utils.js'
 
 /**
  * Parse a unified diff text (as returned by `gh pr diff`) into a tree of
@@ -17,8 +17,10 @@ import { decodeHtmlEntities } from '../../utils.js'
  *   { type: 'del',   text, oldLine: number, newLine: null }
  *   { type: 'ctx',   text, oldLine: number, newLine: number }
  *
- * `text` is the code content with the leading +/-/ stripped and HTML entities
- * decoded so that downstream renderers never see raw &amp;, &#39;, &#NNN; etc.
+ * `text` is the code content with the leading +/-/ stripped. A diff is not HTML, so
+ * entities are left as written. Control characters are shown as visible markers
+ * (sanitizeCode), so renderers never receive them. `filename` stays the raw path;
+ * clean it with sanitizePath() where it is displayed.
  *
  * @param {string} diffText — raw output of `gh pr diff`
  * @returns {Array<{header:string, filename:string, addCount:number, delCount:number, lines:Array}>}
@@ -45,19 +47,19 @@ export function parseDiff(diffText) {
       inHunk = true
       const m = raw.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
       if (m) { oldLine = parseInt(m[1], 10); newLine = parseInt(m[2], 10) }
-      currentFile.lines.push({ type: 'hunk', text: raw, oldLine: null, newLine: null })
+      currentFile.lines.push({ type: 'hunk', text: sanitizeCode(raw), oldLine: null, newLine: null })
     } else if (currentFile) {
       if (raw.startsWith('\\')) continue // "\ No newline at end of file"
       if (raw.startsWith('+')) {
-        currentFile.lines.push({ type: 'add', text: decodeHtmlEntities(raw.slice(1)), oldLine: null, newLine: newLine++ })
+        currentFile.lines.push({ type: 'add', text: sanitizeCode(raw.slice(1)), oldLine: null, newLine: newLine++ })
         currentFile.addCount++
       } else if (raw.startsWith('-')) {
-        currentFile.lines.push({ type: 'del', text: decodeHtmlEntities(raw.slice(1)), oldLine: oldLine++, newLine: null })
+        currentFile.lines.push({ type: 'del', text: sanitizeCode(raw.slice(1)), oldLine: oldLine++, newLine: null })
         currentFile.delCount++
       } else {
         currentFile.lines.push({
           type: 'ctx',
-          text: decodeHtmlEntities(raw.startsWith(' ') ? raw.slice(1) : raw),
+          text: sanitizeCode(raw.startsWith(' ') ? raw.slice(1) : raw),
           oldLine: oldLine++,
           newLine: newLine++,
         })

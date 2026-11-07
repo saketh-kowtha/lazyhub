@@ -175,7 +175,7 @@ function ExcerptView({ title, result }) {
         ) : (
           <>
             <Text color={t.ui.muted} wrap="truncate">
-              {[ex.kind, ex.job && cleanLogLine(ex.job), ex.step && cleanLogLine(ex.step)].filter(Boolean).join(' · ')}
+              {[ex.kind && cleanLogLine(ex.kind), ex.job && cleanLogLine(ex.job), ex.step && cleanLogLine(ex.step)].filter(Boolean).join(' · ')}
             </Text>
             {ex.lines.map((line, i) => (
               <Box key={i}><Text color={t.diff.ctxFg} wrap="truncate">{cleanLogLine(line)}</Text></Box>

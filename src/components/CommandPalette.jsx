@@ -18,6 +18,7 @@ import { Box, Text } from 'ink'
 import { useInput } from '../hooks/useSafeInput.js'
 import { useTheme }   from '../theme.js'
 import { useKeyScope } from '../keyscope.js'
+import { sanitizeRaw } from '../utils.js'
 import { buildActions, confirmationFor, filterActions, recordActionUse, resolveContext } from '../ui/actions.js'
 import { ConfirmDialog } from './dialogs/ConfirmDialog.jsx'
 
@@ -161,7 +162,7 @@ export function CommandPalette({ context, onClose, onNavigate, onTheme, onQuit, 
         <Text color={t.ui.selected}>{query || ''}</Text>
         <Text color={t.ui.muted}>▍</Text>
         {status && (
-          <Text color={status.startsWith('✓') ? t.ci.pass : t.ci.fail}>{status}</Text>
+          <Text color={status.startsWith('✓') ? t.ci.pass : t.ci.fail}>{sanitizeRaw(status)}</Text>
         )}
         {!status && (
           <Text color={t.ui.dim}>{activeContext}</Text>

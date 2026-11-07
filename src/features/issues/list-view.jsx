@@ -10,6 +10,7 @@ import { IssueListSkeleton } from '../../components/Skeleton.jsx'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { EmptyState } from '../../components/EmptyState.jsx'
 import { IssueRow } from './list-row.jsx'
+import { sanitizeRaw } from '../../utils.js'
 
 export function IssueListView({ items, loading, error, filterState, sortMode, statusMsg, filterKeys: FK, actions, t, visibleHeight, visibleIssues, scrollOffset, cursor, paging, width }) {
   return (
@@ -21,7 +22,7 @@ export function IssueListView({ items, loading, error, filterState, sortMode, st
           {sortMode === 'oldest' && <Text color={t.ci.pending} bold> ↑ oldest</Text>}
           <Text color={t.ui.dim}>  [{FK.filterOpen}] open  [{FK.filterClosed}] closed  [s] sort  [n] new</Text>
           {statusMsg && (
-            <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
+            <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {sanitizeRaw(statusMsg.msg)}{statusMsg.persist ? ' [any key]' : ''}</Text>
           )}
         </Text>
       </Box>

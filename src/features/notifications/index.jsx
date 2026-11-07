@@ -10,7 +10,7 @@ import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { classifyGhFailure, listNotifications, markNotificationRead, markAllNotificationsRead } from '../../executor.js'
-import { sanitize } from '../../utils.js'
+import { sanitize, sanitizeRaw } from '../../utils.js'
 import { fitCell, paneWidth, planRow } from '../../ui/row-layout.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
@@ -205,7 +205,7 @@ export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigate
     <Box flexDirection="column" flexGrow={1}>
       {statusMsg && (
         <Box paddingX={1}>
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? ' [any key]' : ''}</Text>
+          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{sanitizeRaw(statusMsg.msg)}{statusMsg.persist ? ' [any key]' : ''}</Text>
         </Box>
       )}
       <Box flexDirection="column" flexGrow={1}>

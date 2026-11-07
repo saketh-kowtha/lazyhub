@@ -8,7 +8,7 @@ import React, { useMemo } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useInput } from '../../hooks/useSafeInput.js'
 import { useTheme } from '../../theme.js'
-import { TextInput } from '../../utils.js'
+import { TextInput, sanitizeRaw } from '../../utils.js'
 import { useVirtualList } from '../../hooks/useVirtualList.js'
 import { useState } from 'react'
 import { useKeyScope } from '../../keyscope.js'
@@ -21,9 +21,9 @@ function matchesQuery(item, query, searchFields) {
 }
 
 function getDisplayText(item, searchFields) {
-  if (item.title != null) return `${item.number != null ? '#' + item.number + ' ' : ''}${item.title}`
-  if (item.name  != null) return item.name
-  return String(item[searchFields[0]] ?? '')
+  if (item.title != null) return sanitizeRaw(`${item.number != null ? '#' + item.number + ' ' : ''}${item.title}`)
+  if (item.name  != null) return sanitizeRaw(item.name)
+  return sanitizeRaw(item[searchFields[0]])
 }
 
 export function FuzzySearch({ items = [], onSubmit, onCancel, searchFields = ['title', 'name'] }) {

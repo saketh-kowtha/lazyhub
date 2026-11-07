@@ -6,7 +6,7 @@
 
 import React from 'react'
 import { Box, Text } from 'ink'
-import { sanitize, shortAge, displayWidth, getMarkdownRows } from '../../utils.js'
+import { sanitize, sanitizeBlock, safeHex, shortAge, displayWidth, getMarkdownRows } from '../../utils.js'
 import { wrapLine } from './timeline-state.js'
 
 const ROLE = {
@@ -76,13 +76,13 @@ export function buildTimelineRows({ issue, items, width, t, repo = '' }) {
   if (issue?.labels?.length > 0) {
     push(0, 'labels', (
       <Text wrap="truncate">
-        {issue.labels.map(l => <React.Fragment key={l.name}><Text color={`#${l.color}`}>{`[${sanitize(l.name)}] `}</Text></React.Fragment>)}
+        {issue.labels.map(l => <React.Fragment key={l.name}><Text color={safeHex(l.color)}>{`[${sanitize(l.name)}] `}</Text></React.Fragment>)}
       </Text>
     ))
   }
   if (issue?.body) {
     push(0, 'hdr', <Text color={t.ui.muted} bold>Description:</Text>)
-    const md = getMarkdownRows(issue.body.split('\n').map(sanitize).join('\n'), bodyWidth, t)
+    const md = getMarkdownRows(issue.body, bodyWidth, t)
     md.forEach((row, i) => push(0, `b${i}`, row))
   } else {
     push(0, 'hdr', <Text color={t.ui.dim}>No description provided.</Text>)
@@ -116,8 +116,8 @@ export function buildTimelineRows({ issue, items, width, t, repo = '' }) {
     if (item.isMinimized) {
       push(entry, 'min', <Text color={t.ui.dim} wrap="truncate">{'┃ This comment is hidden. Open the issue in the browser to read it.'}</Text>)
     } else {
-      String(item.body || '').split('\n').forEach((line, li) => {
-        wrapLine(sanitize(line), bodyWidth, displayWidth).forEach((chunk, ci) => {
+      sanitizeBlock(item.body).split('\n').forEach((line, li) => {
+        wrapLine(line, bodyWidth, displayWidth).forEach((chunk, ci) => {
           push(entry, `l${li}.${ci}`, (
             <Box><Text color={t.diff.threadBorder}>{'┃ '}</Text><Text color={t.diff.ctxFg} wrap="truncate">{chunk}</Text></Box>
           ))

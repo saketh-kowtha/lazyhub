@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cellWidth, fitCell, planRow } from './row-layout.js'
-import { displayWidth, inkSafe } from '../utils.js'
+import { displayWidth, inkSafe, sanitize } from '../utils.js'
 
 describe('planRow', () => {
   it('keeps every optional cell while the title has room', () => {
@@ -34,6 +34,15 @@ describe('Ink-safe text', () => {
     expect(inkSafe('done \u{2705}')).toBe('done \u{2705}​')
     expect(inkSafe('done \u{2705}​')).toBe('done \u{2705}​')
     expect(cellWidth('done \u{2705}')).toBe(7)
+  })
+
+  it('cleaning a title does not change how wide it is next to an emoji', () => {
+    const dirty = 'fix\u200b \x1b[31m\u2705\u202e done\x07'
+    const clean = sanitize(dirty)
+    expect(clean).toBe('fix \u2705 done')
+    expect(cellWidth(clean)).toBe(displayWidth(inkSafe('fix \u2705 done')))
+    expect(fitCell(clean, 20)).toBe(fitCell('fix \u2705 done', 20))
+    expect(displayWidth(fitCell(clean, 20))).toBe(20)
   })
 
   it('removes joiners and variation selectors that Ink and terminals measure differently', () => {

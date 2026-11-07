@@ -26,11 +26,11 @@ import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
-import { sanitize, TextInput } from '../../utils.js'
+import { sanitize, sanitizePath, sanitizeRaw, TextInput } from '../../utils.js'
 import { Spinner } from '../../components/Spinner.jsx'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { classifyGhFailure, getFailedLog } from '../../executor.js'
-import { extractExcerpt } from './ci-log.js'
+import { extractExcerpt, annotationLines } from './ci-log.js'
 import { toLogLines } from '../actions/log-lines.js'
 import { PRDetailSkeleton } from '../../components/Skeleton.jsx'
 import { openInEditor, editorLabel } from '../../editor.js'
@@ -133,12 +133,6 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     showStatus(`✗ Could not open ${sanitize(check.url)} in the browser`, true)
   }
 
-  const annotationLines = (annotations) => annotations.map(a => {
-    const loc = a.path ? `${a.path}:${a.line || '?'}` : ''
-    const title = a.title ? `[${a.title}] ` : ''
-    return `${a.level?.toUpperCase() || 'NOTE'} ${title}${loc}\n  ${a.message || ''}`
-  }).join('\n').split('\n')
-
   const openCheckLogs = async (check) => {
     if (!check?.id) {
       openCheckInBrowser(check)
@@ -180,7 +174,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
       }
       setCheckLogLines(annotationLines(annotations))
     } catch (err) {
-      setCheckLogLines([`Error loading annotations: ${err.message}`])
+      setCheckLogLines([`Error loading annotations: ${sanitizeRaw(err.message)}`])
     }
     setCheckLogLoading(false)
   }
@@ -449,13 +443,13 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     return (
       <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
         <Text color={t.ui.selected} bold>Change base branch</Text>
-        <Text color={t.ui.dim}>Current: {sanitize(pr.baseRefName)}</Text>
+        <Text color={t.ui.dim}>Current: {sanitizePath(pr.baseRefName)}</Text>
         <Box marginTop={1} gap={1}>
           <Text color={t.ui.muted}>New base: </Text>
           <TextInput
             value={baseInput}
             onChange={setBaseInput}
-            placeholder={pr.baseRefName}
+            placeholder={sanitizePath(pr.baseRefName)}
             focus={true}
             onEnter={async () => {
               const newBase = baseInput.trim()
@@ -557,7 +551,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
       {/* ── State line: status, scroll position or a conflict notice. Key hints live in the footer only (#468). ── */}
       <Box paddingX={1} justifyContent="space-between" height={1} overflow="hidden">
         {statusMsg
-          ? <Text wrap="truncate" color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{statusMsg.msg}{statusMsg.persist ? '  [any key to dismiss]' : ''}</Text>
+          ? <Text wrap="truncate" color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{sanitizeRaw(statusMsg.msg)}{statusMsg.persist ? '  [any key to dismiss]' : ''}</Text>
           : maxScroll > 0
             ? <Text wrap="truncate" color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}</Text>
             : pr?.mergeable === 'CONFLICTING'

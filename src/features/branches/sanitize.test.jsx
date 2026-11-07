@@ -25,12 +25,13 @@ beforeEach(() => {
   ))
 })
 
-it('strips terminal escapes from branch names in rows and the checkout dialog', async () => {
+it('shows control characters in branch names as visible markers in rows and the checkout dialog', async () => {
   const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
   await waitForInputReady(view)
   await waitForExpectation(() => expect(view.lastFrame()).toContain('feat/'))
-  expect(view.lastFrame()).toContain('feat/wipe')
+  expect(view.lastFrame()).toContain('feat/\u241b[2Jwipe')
   view.stdin.write('\r')
   await waitForExpectation(() => expect(view.lastFrame()).toContain('Checkout branch'))
-  expect(view.lastFrame()).toContain('feat/wipe')
+  expect(view.lastFrame()).toContain('feat/\u241b[2Jwipe')
+  expect(view.lastFrame()).not.toContain('\u001b[2J')
 })

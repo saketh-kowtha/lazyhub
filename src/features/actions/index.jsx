@@ -21,7 +21,7 @@ import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { Spinner } from '../../components/Spinner.jsx'
 import { ActionListSkeleton } from '../../components/Skeleton.jsx'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
-import { sanitize } from '../../utils.js'
+import { sanitize, sanitizeRaw } from '../../utils.js'
 import { fitCell, paneWidth, planRow } from '../../ui/row-layout.js'
 
 function StatusBadge({ run }) {
@@ -282,7 +282,7 @@ export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, ini
         }
         {statusMsg && (
           <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>
-            {statusMsg.msg}{statusMsg.persist ? '  [any key to dismiss]' : ''}
+            {sanitizeRaw(statusMsg.msg)}{statusMsg.persist ? '  [any key to dismiss]' : ''}
           </Text>
         )}
       </Box>
