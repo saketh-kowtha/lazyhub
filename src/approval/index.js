@@ -11,3 +11,4 @@ export {
   APPROVABLE_OPERATIONS, APPROVAL_POLICY_VERSION, CLOCK_SKEW_MAX_MS, FRESHNESS_MAX_MS, TTL_DEFAULT_MIN, TTL_MAX_MIN, TTL_MIN_MIN,
 } from './policy.js'
 export { openApprovalStore } from './store.js'
+export { PUBLICATION_KINDS, PUBLICATION_RESULT_STATES, assertPublisher, assertPublisherResult } from './publisher.js'
