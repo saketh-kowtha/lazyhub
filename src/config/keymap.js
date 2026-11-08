@@ -7,7 +7,7 @@ import { useCallback, useMemo, useRef } from 'react'
 import { loadConfig } from './loader.js'
 import { getActionConfig } from './actions.js'
 
-const SPECIAL = {
+/** @type {Record<string, any>} */ const SPECIAL = {
   enter: 'Enter',
   return: 'Enter',
   esc: 'Esc',
@@ -22,7 +22,7 @@ const SPECIAL = {
   pagedown: 'PageDown',
 }
 
-function normalizeKeyName(name) {
+function normalizeKeyName(/** @type {any} */ name) {
   const raw = String(name || '').trim()
   if (!raw) return ''
   const angle = raw.match(/^<(.+)>$/)
@@ -43,7 +43,7 @@ function normalizeKeyName(name) {
  *
  * @param token
  */
-export function normalizeKeyToken(token) {
+export function normalizeKeyToken(/** @type {any} */ token) {
   const raw = String(token || '').trim()
   if (!raw) return ''
   if (raw === '<space><space>') return raw
@@ -55,7 +55,7 @@ export function normalizeKeyToken(token) {
  * @param input
  * @param key
  */
-export function eventToTokens(input, key = {}) {
+export function eventToTokens(/** @type {any} */ input, /** @type {Record<string, any>} */ key = {}) {
   const tokens = new Set()
   // A modified key (Ctrl+R) must not also read as its bare character (`r`).
   if (input && !key.ctrl && !key.meta) tokens.add(input)
@@ -80,7 +80,7 @@ export function eventToTokens(input, key = {}) {
  * @param config
  */
 export function buildEffectiveActionKeys(config = loadConfig()) {
-  const byAction = {}
+  /** @type {Record<string, any>} */ const byAction = {}
   for (const [id, action] of Object.entries(config?.actions || {})) {
     byAction[id] = new Set((action.keys || []).map(normalizeKeyToken).filter(Boolean))
   }
@@ -121,7 +121,7 @@ export function actionScopeMatches(actionScope, keymapScope) {
   })
 }
 
-function buildScopeBindings(scopes, config) {
+function buildScopeBindings(/** @type {any} */ scopes, /** @type {any} */ config) {
   const bindings = new Map()
   for (const scope of scopes) {
     for (const [actionId, action] of Object.entries(config?.actions || {})) {
@@ -153,7 +153,7 @@ function buildScopeBindings(scopes, config) {
  * @param scope
  * @param config
  */
-export function createKeymap(scope, config = loadConfig()) {
+export function createKeymap(/** @type {any} */ scope, config = loadConfig()) {
   const scopeBindings = buildScopeBindings([].concat(scope), config)
   return {
     /**
@@ -164,21 +164,21 @@ export function createKeymap(scope, config = loadConfig()) {
     resolveToken(token) {
       return scopeBindings.get(token) ?? null
     },
-    resolve(input, key) {
+    resolve(/** @type {any} */ input, /** @type {any} */ key) {
       const event = eventToTokens(input, key)
       for (const [token, actionId] of scopeBindings.entries()) {
         if (event.has(token)) return actionId
       }
       return null
     },
-    matches(actionId, input, key) {
+    matches(/** @type {any} */ actionId, /** @type {any} */ input, /** @type {any} */ key) {
       const event = eventToTokens(input, key)
       for (const [token, mappedAction] of scopeBindings.entries()) {
         if (mappedAction === actionId && event.has(token)) return true
       }
       return false
     },
-    keys(actionId) {
+    keys(/** @type {any} */ actionId) {
       return [...scopeBindings.entries()]
         .filter(([, mappedAction]) => mappedAction === actionId)
         .map(([token]) => token)
@@ -191,7 +191,7 @@ export function createKeymap(scope, config = loadConfig()) {
  * @param scope
  * @param config
  */
-export function useKeymap(scope, config) {
+export function useKeymap(/** @type {any} */ scope, /** @type {any} */ config) {
   return useMemo(() => createKeymap(scope, config), [scope, config])
 }
 
@@ -215,7 +215,7 @@ export function resolveChord(keymap, first, second) {
  * function where its old `input === 'x'` chain began and branches on the action
  * id, so the TOML keymap decides which key means which verb.
  * @param {string|string[]} scopes keymap scopes, in precedence order
- * @param {object} [config] effective config (defaults to the cached app config)
+ * @param {Record<string, any>} [config] effective config (defaults to the cached app config)
  * @returns {(input: string, key: object) => string|null} resolver
  */
 export function useActionResolver(scopes, config) {
@@ -225,7 +225,7 @@ export function useActionResolver(scopes, config) {
     [scopeKey, config],
   )
   const last = useRef({ input: null, at: 0 })
-  return useCallback((input, key) => {
+  return useCallback((/** @type {any} */ input, /** @type {any} */ key) => {
     const now = Date.now()
     const prev = last.current
     const plain = input && input.length === 1 && !key.ctrl && !key.meta ? input : null
@@ -245,6 +245,7 @@ export function useActionResolver(scopes, config) {
 // must not also act on the continuation key. This module state is the single
 // place that coordination lives.
 
+/** @type {any} */
 let armedPrefix = null
 
 /**
@@ -272,7 +273,7 @@ export function getArmedPrefix() {
 /**
  * True when this event belongs to the armed prefix and must not reach view handlers.
  * @param {string} input typed character
- * @param {object} [key] Ink key flags
+ * @param {Record<string, any>} [key] Ink key flags
  * @returns {boolean} whether view handlers must skip the event
  */
 export function prefixConsumes(input, key = {}) {
@@ -288,7 +289,7 @@ export function prefixConsumes(input, key = {}) {
  * @param handler
  * @param opts
  */
-export function useKeymapInput(handler, opts) {
+export function useKeymapInput(/** @type {any} */ handler, /** @type {any} */ opts) {
   return useInput((input, key) => {
     if (prefixConsumes(input, key)) return
     handler(input, key)

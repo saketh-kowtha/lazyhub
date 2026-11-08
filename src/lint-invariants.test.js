@@ -175,6 +175,38 @@ describe('colours come from the theme (#489)', () => {
   })
 })
 
+describe('colour props are not literals either (#489)', () => {
+  // Named, rgb() and hsl() colours on Ink props: the hex scan above cannot see these.
+  const NAMED = /\b(?:color|backgroundColor|borderColor)=(?:"(?:[a-zA-Z]+|(?:rgb|hsl)a?\([^"]*\))"|\{\s*['"`](?:[a-zA-Z]+|(?:rgb|hsl)a?\([^'"`]*\))['"`]\s*\})/g
+  const hits = () => SCANNED.flatMap(f => (readFileSync(f, 'utf8').match(NAMED) || []).map(m => `${relative(ROOT, f)}: ${m}`))
+
+  it('no UI file passes a literal colour name or rgb() to an Ink colour prop', () => {
+    expect(hits()).toEqual([])
+  })
+
+  it('the pattern catches what it guards against', () => {
+    for (const code of ['<Text color="red">', "<Text color={'green'}>", '<Box borderColor="rgb(1,2,3)">', '<Text backgroundColor={"blue"}>']) {
+      expect(code.match(NAMED), code).not.toBeNull()
+    }
+    for (const code of ['<Text color={t.ui.dim}>', '<Text color={color}>', '<Text color={pr.ok ? t.ci.pass : t.ci.fail}>']) {
+      expect(code.match(NAMED), code).toBeNull()
+    }
+  })
+})
+
+describe('noImplicitAny ratchet (#489)', () => {
+  const strict = JSON.parse(readFileSync(join(ROOT, 'tsconfig.strict.json'), 'utf8'))
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
+
+  it('is on for the opted-in directories and runs as part of npm run typecheck', () => {
+    expect(strict.compilerOptions.noImplicitAny).toBe(true)
+    for (const dir of ['src/executor/', 'src/config/', 'src/daemon/protocol.js']) {
+      expect(strict.include.some(p => p.startsWith(dir)), dir).toBe(true)
+    }
+    expect(pkg.scripts.typecheck).toMatch(/typecheck-strict/)
+  })
+})
+
 describe('no double dimming (#566)', () => {
   // The text of every <Text ...> opening tag: attributes may hold `=>` and nested braces.
   function textTags(src) {

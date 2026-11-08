@@ -50,6 +50,7 @@ const CACHE_PATH = join(CONFIG_DIR, '.config-cache.toml')
 // Unknown action ids found in the user's [keymaps]/[actions] (#475). Reported once per id
 // so a config that is loaded repeatedly does not repeat the warning; the UI drains it.
 const reportedUnknownActions = new Set()
+/** @type {any[]} */
 let pendingUnknownActions = []
 
 /**
@@ -86,7 +87,7 @@ export function formatError(err, source) {
 /**
  * Parse the bundled defaults. Falls back to the in-code DEFAULT_CONFIG if the
  * shipped file is somehow missing/unreadable, so the app never starts config-less.
- * @returns {Object} the base (full) default config, raw (unexpanded paths)
+ * @returns {Record<string, any>} the base (full) default config, raw (unexpanded paths)
  */
 function loadDefaults() {
   try {
@@ -105,7 +106,7 @@ function loadDefaults() {
  * @param {Object} [opts]
  * @param {string} [opts.configPath] user config path (defaults to USER_CONFIG_PATH)
  * @param {string} [opts.platform]   OS platform for keymap folding (defaults to os.platform())
- * @returns {Object} the merged, path-expanded config
+ * @returns {Record<string, any>} the merged, path-expanded config
  */
 export function loadConfig(opts = {}) {
   const { configPath = USER_CONFIG_PATH, platform = osPlatform() } = opts
@@ -149,8 +150,8 @@ export function loadConfig(opts = {}) {
 /**
  * Filter a parsed remote config down to the keys a remote source may set,
  * warning (by key name only) about each dropped key.
- * @param {Object} parsed raw parsed remote/cached config
- * @returns {Object} the allowed subset
+ * @param {Record<string, any>} parsed raw parsed remote/cached config
+ * @returns {Record<string, any>} the allowed subset
  */
 function restrictRemote(parsed) {
   const { config, dropped } = restrictRemoteConfig(parsed)
@@ -161,7 +162,7 @@ function restrictRemote(parsed) {
 /**
  * Read and parse the local remote-config cache, if present.
  * @param {string} cachePath path to the cache file
- * @returns {Object|null} parsed config or null when missing/unreadable
+ * @returns {Record<string, any>|null} parsed config or null when missing/unreadable
  */
 function readCache(cachePath) {
   if (!existsSync(cachePath)) return null

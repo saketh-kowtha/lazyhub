@@ -11,7 +11,7 @@
     "dev": "node build.js --watch & sleep 1 && node --watch dist/lazyhub.js",
     "start": "node build.js && node dist/lazyhub.js",
     "lint": "eslint src/ --max-warnings 20",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && node scripts/typecheck-strict.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "docs:refresh": "node scripts/refresh-file-map.js",

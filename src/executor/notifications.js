@@ -11,7 +11,7 @@ const NOTIFICATION_PAGE_TIMEOUT = 60_000
  * already fetched are kept) so the pane can say so instead of silently stopping.
  * @param filter
  */
-export async function listNotifications(filter = {}) {
+export async function listNotifications(/** @type {Record<string, any>} */ filter = {}) {
   const out = []
   let truncated = false
   let partialError = null
@@ -54,7 +54,7 @@ export async function markAllNotificationsRead() {
  * Mark a notification as read.
  * @param notificationId
  */
-export async function markNotificationRead(notificationId) {
+export async function markNotificationRead(/** @type {any} */ notificationId) {
   const args = [
     'api', `notifications/threads/${encodeURIComponent(notificationId)}`,
     '--method', 'PATCH',
