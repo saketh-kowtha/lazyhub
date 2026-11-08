@@ -171,6 +171,8 @@ were the current code. The sections of `docs/ARCHITECTURE.md` describe the code 
 
 ### D13 - Focus manager: one key owner
 
+**Date and status.** Partly shipped. Decision approved 2026-10-31. Focus manager proper planned (R5 #483, R6 #484).
+
 **Decision.** One root `useInput`; an explicit stack of focus entries; only the top
 entry receives keys, then registry-resolved globals. `notifyDialog`,
 `dialogActiveRef` and per-pane `if (dialog) return` are retired.
@@ -189,6 +191,8 @@ a component that opens a dialog still calls `notifyDialog(true/false)`.
 
 ### D14 - Query layer
 
+**Date and status.** Partly shipped under the name `useGh`. Decision approved 2026-10-31. `useQuery` / `useMutation` planned (R2 #480, R3 #481, R8 #486).
+
 **Decision.** All reads go through `useQuery(key, fetcher)`; all writes through
 `useMutation(fn, {invalidates})`. Structured keys, in-flight dedupe, cancellation,
 a synchronous cache seed, invalidation by key prefix.
@@ -205,6 +209,8 @@ prefix invalidation, in-flight dedupe and cancellation, list-to-detail seeding, 
 the shared list primitives. There is no in-flight dedupe or cancellation today.
 
 ### D15 - Services layer
+
+**Date and status.** Mostly shipped (R1 #479). Decision approved 2026-10-31. Lint enforcement of the full layer rule is open.
 
 **Decision.** UI code never spawns processes. Browser, clipboard, editor and git go
 through `src/services/`; git writes get the executor's classifier and audit.
