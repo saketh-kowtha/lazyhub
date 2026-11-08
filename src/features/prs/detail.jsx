@@ -32,6 +32,7 @@ import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { classifyGhFailure, getFailedLog } from '../../executor.js'
 import { extractExcerpt, annotationLines } from './ci-log.js'
 import { toLogLines } from '../actions/log-lines.js'
+import { WhyRed } from './WhyRed.jsx'
 import { PRDetailSkeleton } from '../../components/Skeleton.jsx'
 import { openInEditor, editorLabel } from '../../editor.js'
 import { loadConfig } from '../../config.js'
@@ -103,11 +104,12 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
 
   // Tell the footer which actions can run for this PR (registry preconditions).
   const hasChecks = allChecksForNav.length > 0
+  const hasFailingChecks = allChecksForNav.some(c => /failure|error|timed_out/i.test(c.conclusion || c.status || c.state || ''))
   React.useEffect(() => {
     if (!onPaneState || !pr) return undefined
-    onPaneState({ actionCtx: { prOpen: pr.state === 'OPEN', isDraft: !!pr.isDraft, hasChecks } })
+    onPaneState({ actionCtx: { prOpen: pr.state === 'OPEN', isDraft: !!pr.isDraft, hasChecks, hasFailingChecks } })
     return () => onPaneState({ actionCtx: undefined })
-  }, [onPaneState, pr?.state, pr?.isDraft, hasChecks]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onPaneState, pr?.state, pr?.isDraft, hasChecks, hasFailingChecks]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredRows = useMemo(() => {
     if (!searchText) return contentRows
@@ -226,6 +228,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
       const id = resolveChecksAction(input, key)
       const check = allChecksForNav[activeCheckCursor]
       if (id === 'check.exit') { checkCursorRef.current = null; setCheckCursor(null); return }
+      if (id === 'pr.why-red') { setDialog('why-red'); return }
       if (id === 'cursor.down') {
         setCheckCursor(c => {
           const next = Math.min(allChecksForNav.length - 1, c + 1)
@@ -283,6 +286,12 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
     // on a clean PR → jump to Actions pane filtered to this branch
     if (id === 'pr.conflicts' && pr && onOpenActions && pr.mergeable === 'MERGEABLE') {
       onOpenActions(pr.headRefName)
+      return
+    }
+    // Why is CI red? (#359): failing check, log excerpt, PR-changed lines, base-branch history
+    if (id === 'pr.why-red') {
+      if (allChecksForNav.length === 0) { showStatus('No CI checks for this PR'); return }
+      setDialog('why-red')
       return
     }
     // enter checks navigation mode
@@ -528,6 +537,19 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
 
   if (dialog === 'reviewers') {
     return <ReviewerDialog repo={repo} pr={pr} runWrite={runWrite} onClose={() => { setDialog(null); refetch() }} onError={(err) => { setDialog(null); showStatus(`✗ Reviewer update failed: ${sanitize(err.message)}`, true) }} />
+  }
+
+  if (dialog === 'why-red') {
+    return (
+      <WhyRed
+        repo={repo}
+        prNumber={pr.number}
+        baseBranch={pr.baseRefName || rowBaseRefName || ''}
+        checks={allChecksForNav}
+        onClose={() => setDialog(null)}
+        onOpenDiff={() => { setDialog(null); onOpenDiff(pr) }}
+      />
+    )
   }
 
   if (dialog === 'collisions') {

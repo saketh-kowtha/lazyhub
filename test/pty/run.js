@@ -519,6 +519,18 @@ async function runFailedLogFlow() {
     await waitUntil(showing(/Failure excerpt/), 'f returns to the excerpt')
     term.write('\x1b')
     await waitUntil(showing(/Failure excerpt/, false), 'Esc closes the viewer')
+    term.write('\x1b')
+    await waitUntil(showing(/\[Ctrl\+R\] re-run/, false), 'Esc leaves checks mode')
+    // #359: f on the PR opens "Why is CI red?" with the failing check, step, excerpt and an explicit unknown for the rest.
+    term.write('f')
+    await waitUntil(showing(/Why is CI red\?/), 'f opens Why is CI red')
+    await waitUntil(showing(/failing step: Run npm test/), 'the failing step is shown')
+    assert.match(screen.text(), /test \(20\)/)
+    // The excerpt and the base-branch comparison arrive after the step ("still loading").
+    await waitUntil(showing(/AssertionError/), 'the log excerpt is shown')
+    await waitUntil(showing(/unknown/), 'what could not be determined is labelled unknown')
+    term.write('\x1b')
+    await waitUntil(showing(/Why is CI red\?/, false), 'Esc closes the view')
     term.write('q')
     await waitForExit(term)
   } finally {

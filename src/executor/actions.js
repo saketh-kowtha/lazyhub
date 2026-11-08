@@ -86,7 +86,7 @@ export async function getPRChecks(/** @type {any} */ repo, /** @type {any} */ nu
   }
   if (!pr?.headRefOid) return []
   const base = `repos/${encodeURIComponent(r).replace('%2F', '/')}/commits/${encodeURIComponent(pr.headRefOid)}/check-runs`
-  const jq = '[.check_runs[] | {id: .id, name: .name, status: .status, conclusion: .conclusion, appName: .app.name, url: .html_url}]'
+  const jq = '[.check_runs[] | {id: .id, name: .name, status: .status, conclusion: .conclusion, appName: .app.name, url: .html_url, startedAt: .started_at, completedAt: .completed_at}]'
   const checks = []
   let truncated = false
   let error = null
