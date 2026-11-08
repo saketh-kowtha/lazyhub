@@ -41,6 +41,7 @@ import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { autoMergeOption, canToggleAutoMergeFromList } from './list-row.jsx'
 import { allowedMergeOptions, ADMIN_MERGE_OPTIONS, mergeMethodLabel, preferredMergeIndex, mergeStatusLine, rememberMergeMethod } from './merge-methods.js'
 import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
+import { CollisionRadar } from './collisions/view.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
 import { sortChecks } from './detail/Checks.jsx'
@@ -230,6 +231,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
 
     if (id === 'list.refresh') { refetch(); return }
     if (id === 'pr.diff' && pr) { onOpenDiff(pr); return }
+    if (id === 'pr.collisions' && pr) { setDialog('collisions'); return }
     if (id === 'pr.comments' && onViewComments) { onViewComments(); return }
     if (id === 'pr.open-browser' && pr?.url) {
       openUrl(pr.url)
@@ -502,6 +504,10 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
 
   if (dialog === 'reviewers') {
     return <ReviewerDialog repo={repo} pr={pr} runWrite={runWrite} onClose={() => { setDialog(null); refetch() }} onError={(err) => { setDialog(null); showStatus(`✗ Reviewer update failed: ${sanitize(err.message)}`, true) }} />
+  }
+
+  if (dialog === 'collisions') {
+    return <CollisionRadar repo={repo} prNumber={prNumber} onClose={() => setDialog(null)} />
   }
 
   if (dialog === 'check-logs') {

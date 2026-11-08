@@ -791,6 +791,14 @@ export const LEGACY_ACTION_VALUES = {
     scope: ["pr-detail"],
     group: ["action"],
   },
+  "pr.collisions": {
+    keys: [["K"]],
+    hint: ["K"],
+    label: ["collisions"],
+    description: ["Show open PRs that overlap this one and a suggested merge order"],
+    scope: ["pr-detail"],
+    group: ["action"],
+  },
   "pr.comments": {
     keys: [["v"]],
     hint: ["v"],

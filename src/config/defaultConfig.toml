@@ -75,6 +75,9 @@ description = "Review GitHub notifications"
 default_filter = "open"
 default_scope  = "mine"
 page_size      = 100
+# Extra generated files for the collision radar (glob; no slash matches the file name anywhere). Added to the
+# built-in list (docs/FILE_MAP.md and common lockfiles); PRs sharing them are told to merge one at a time.
+generated_files = []
 
 [features.issues]
 default_filter = "open"
@@ -901,6 +904,14 @@ keys = ["B"]
 hint = "B"
 label = "base"
 description = "Change the base branch"
+scope = "pr-detail"
+group = "action"
+
+[actions."pr.collisions"]
+keys = ["K"]
+hint = "K"
+label = "collisions"
+description = "Show open PRs that overlap this one and a suggested merge order"
 scope = "pr-detail"
 group = "action"
 
