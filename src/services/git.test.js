@@ -22,7 +22,7 @@ beforeEach(() => { vi.clearAllMocks(); execa.mockResolvedValue({ exitCode: 0, st
 
 describe('spawn sites (#479)', () => {
   const ROOT = fileURLToPath(new URL('..', import.meta.url))
-  const ALLOWED = [/^services\//, /^executor\//, /^bootstrap\.js$/, /^daemon\//, /^ai\/providers\//, /^test\//]
+  const ALLOWED = [/^services\//, /^executor\//, /^bootstrap\.js$/, /^daemon\//, /^test\//]
   const SPAWN = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)['"](?:execa|(?:node:)?child_process)['"]/
   const walk = dir => readdirSync(dir, { withFileTypes: true }).flatMap(e => {
     const full = join(dir, e.name)
@@ -30,7 +30,7 @@ describe('spawn sites (#479)', () => {
     return /\.(?:js|jsx|mjs|cjs)$/.test(e.name) && !/\.test\./.test(e.name) ? [full] : []
   })
 
-  it('no file outside services/, executor/, bootstrap.js, daemon/ and ai/providers/ can start a process', () => {
+  it('no file outside services/, executor/, bootstrap.js, and daemon/ can start a process', () => {
     const offenders = walk(ROOT)
       .map(f => relative(ROOT, f))
       .filter(f => !ALLOWED.some(re => re.test(f)))

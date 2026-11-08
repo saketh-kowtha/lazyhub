@@ -34,7 +34,7 @@ const PROVIDER_FAMILY = {
 }
 
 /**
- * @type {Array<{provider: object, result: {available: boolean, version?: string, reason?: string}}>|null}
+ * @type {Array<{provider: object, result: {available: boolean, version?: string, reason?: string, authMode?: string}}>|null}
  */
 let _detectionCache = null
 
@@ -173,7 +173,7 @@ export async function selectProvider({ authorHint } = {}) {
  * Return a summary of all providers and their detection status.
  * Useful for the settings UI and `listProviders()` in index.js.
  *
- * @returns {Promise<Array<{id: string, displayName: string, available: boolean, version?: string, reason?: string}>>}
+ * @returns {Promise<Array<{id: string, displayName: string, available: boolean, version?: string, reason?: string, authMode?: string}>>}
  */
 export async function listProviderStatus() {
   const allResults = await detectAll()
@@ -183,5 +183,6 @@ export async function listProviderStatus() {
     available:   result.available,
     version:     result.version,
     reason:      result.reason,
+    authMode:    result.authMode,
   }))
 }

@@ -75,6 +75,9 @@ description = "Review GitHub notifications"
 default_filter = "open"
 default_scope  = "mine"
 page_size      = 100
+# Extra generated files for the collision radar (glob; no slash matches the file name anywhere). Added to the
+# built-in list (docs/FILE_MAP.md and common lockfiles); PRs sharing them are told to merge one at a time.
+generated_files = []
 
 [features.issues]
 default_filter = "open"
@@ -920,6 +923,14 @@ description = "Change the base branch"
 scope = "pr-detail"
 group = "action"
 
+[actions."pr.collisions"]
+keys = ["K"]
+hint = "K"
+label = "collisions"
+description = "Show open PRs that overlap this one and a suggested merge order"
+scope = "pr-detail"
+group = "action"
+
 [actions."pr.comments"]
 keys = ["v"]
 hint = "v"
@@ -1291,6 +1302,14 @@ base_url   = "http://localhost:11434/v1"
 api_key    = ""
 model      = "qwen2.5-coder:32b"
 timeout_ms = 60000
+
+# #364: opt in per CLI to use its own subscription login in place (real HOME, tools off).
+# Needs a CLI version whose --help proves the hardening flags; otherwise it stays unavailable.
+# Revoke by setting false. See docs/AI_PROVIDERS_SPEC.md and docs/THREAT_MODEL.md.
+[ai.login]
+codex      = false
+gemini_cli = false
+agy        = false
 
 [ai.second_opinion]
 enabled = true

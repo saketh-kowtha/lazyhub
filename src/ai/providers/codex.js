@@ -16,8 +16,10 @@
  * (`message`) — and concatenate their text.
  */
 
-import { spawnAndPipe, pickEnv } from './_base.js'
+import { spawnAndPipe, pickEnv, clampTimeout } from './_base.js'
 import { AIError } from '../error.js'
+import { mapCliError } from './_errors.js'
+import { hasLoginConsent, resolveBin, checkManifest, isLoggedIn } from '../login.js'
 
 // ── Provider metadata ─────────────────────────────────────────────────────────
 
@@ -44,11 +46,51 @@ function resolveAuth() {
   return { env: keys, homeEnv: { CODEX_HOME: '.codex' } }
 }
 
+// ── Login mode (#364, opt-in) ─────────────────────────────────────────────────
+// Capability manifest: login mode needs every flag below to be present in the
+// installed CLI's help, otherwise it is unavailable (fail closed). The shell-tool
+// switch is NOT verified against a real release; the manifest requires `--disable`
+// in `exec --help` and `shell_tool` in `features list` so a CLI without it fails.
+
+export const loginCapability = {
+  helpChecks: [{
+    args: ['exec', '--help'],
+    flags: ['--json', '--skip-git-repo-check', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--sandbox', '--disable'],
+  }],
+  textChecks: [{ args: ['features', 'list'], includes: ['shell_tool'] }],
+}
+
+const LOGIN_ARGS = ['--disable', 'shell_tool']
+
+/** Env for login mode: CODEX_HOME only when the user set it. API keys are withheld. */
+function loginEnv() {
+  return pickEnv(['CODEX_HOME'])
+}
+
+/**
+ * Resolve how codex will run: consented + capable + logged-in login mode, else the
+ * API-key sandbox, else unavailable with a reason.
+ * @returns {Promise<{mode:string, cmd?:string, reason?:string}>}
+ */
+async function resolveMode() {
+  const keyAuth = resolveAuth()
+  if (!hasLoginConsent(id)) return keyAuth ? { mode: 'sandbox' } : { mode: 'none', reason: AUTH_HELP }
+  const fallback = keyAuth ? { mode: 'sandbox' } : null
+  const cmd = resolveBin('codex')
+  if (!cmd) return { mode: 'none', reason: 'codex CLI not found on PATH' }
+  const cap = await checkManifest(cmd, loginCapability)
+  if (!cap.ok) return fallback || { mode: 'none', reason: `unavailable: codex login mode ${cap.reason}` }
+  if (!(await isLoggedIn(cmd, ['login', 'status'], loginEnv()))) {
+    return fallback || { mode: 'none', reason: 'unavailable: not logged in (run `codex login`)' }
+  }
+  return { mode: 'login', cmd }
+}
+
 // ── Detection ─────────────────────────────────────────────────────────────────
 
 /**
  * Detect whether the Codex CLI is available on PATH.
- * @returns {Promise<{available: boolean, version?: string, reason?: string}>}
+ * @returns {Promise<{available: boolean, version?: string, reason?: string, authMode?: string}>}
  */
 export async function detect() {
   try {
@@ -59,8 +101,9 @@ export async function detect() {
       timeoutMs: 5_000,
     })
     const version = stdout.trim().split('\n')[0] || 'unknown'
-    if (!resolveAuth()) return { available: false, version, reason: AUTH_HELP }
-    return { available: true, version }
+    const m = await resolveMode()
+    if (m.mode === 'none') return { available: false, version, reason: m.reason }
+    return { available: true, version, authMode: m.mode }
   } catch (err) {
     if (err.isNotFound) {
       return { available: false, reason: 'codex CLI not found on PATH' }
@@ -89,8 +132,10 @@ export async function detect() {
  * @returns {Promise<{text: string, modelUsed: string, tokensIn: null, tokensOut: null}>}
  */
 export async function complete({ system, user, _model, timeoutMs }) {
-  const auth = resolveAuth()
-  if (!auth) throw new AIError(AUTH_HELP, { code: 'auth-required', provider: id })
+  const m = await resolveMode()
+  if (m.mode === 'none') throw new AIError(m.reason, { code: 'auth-required', provider: id })
+  const login = m.mode === 'login'
+  const auth = login ? { env: loginEnv() } : resolveAuth()
 
   // Combine system + user into a single stdin payload
   const stdinPayload = system
@@ -105,36 +150,21 @@ export async function complete({ system, user, _model, timeoutMs }) {
     '--ignore-rules',           // no execpolicy .rules files
     '--ephemeral',              // no session files
     '--sandbox', 'read-only',
+    ...(login ? LOGIN_ARGS : []),
   ]
 
   let rawOutput
   try {
     rawOutput = await spawnAndPipe({
-      cmd:       'codex',
+      cmd:       login ? m.cmd : 'codex',
       args:      argv,
       stdin:     stdinPayload,
-      timeoutMs: timeoutMs || 60_000,
+      timeoutMs: clampTimeout(timeoutMs),
+      profile:   login ? 'login' : 'sandbox',
       auth,
     })
   } catch (err) {
-    if (err.isIsolationFailure) {
-      throw new AIError(`Codex unavailable: ${err.message}`, { code: 'provider-unavailable', provider: id })
-    }
-    if (err.isTimeout) {
-      throw new AIError('Codex CLI timed out', { code: 'timeout', provider: id })
-    }
-    if (err.isNotFound) {
-      throw new AIError('codex CLI not found on PATH', { code: 'spawn-failed', provider: id })
-    }
-    if (err.isOutputCap) {
-      throw new AIError('Codex CLI output exceeded size cap', { code: 'malformed-response', provider: id })
-    }
-    // Non-zero exit — could be auth failure or other error
-    const msg = err.message || 'codex CLI failed'
-    if (/not logged in|unauthenticated|login/i.test(msg)) {
-      throw new AIError(AUTH_HELP, { code: 'auth-required', provider: id })
-    }
-    throw new AIError(`Codex CLI error: ${msg}`, { code: 'provider-unavailable', provider: id })
+    throw mapCliError(err, { id, name: 'Codex CLI', bin: 'codex', authHelp: AUTH_HELP })
   }
 
   // Parse NDJSON output: each line is a JSON event object

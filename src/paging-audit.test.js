@@ -27,6 +27,7 @@ const COVERED = {
   'src/executor/actions.js': [2, 'runs list shows the newest 30 (workflow runs are a feed); check pages walk to the end'],
   'src/executor/issues.js': [5, 'issue pages by cursor with N of M; collaborators page to a ceiling with a truncated flag; nested label/assignee previews'],
   'src/executor/notifications.js': [1, 'pages to a ceiling and reports truncated / partialError'],
+  'src/executor/collisions.js': [2, 'files(first: 100) is the first page of a PR\'s files: filesTotal/filesCursor drive extra pages and the view lists every PR whose list is still incomplete; REST per_page=100 is walked page by page to a ceiling with a truncated flag (open PRs themselves page by cursor via $limit, capped with a visible "not scanned" count)'],
   'src/executor/claims.js': [1, 'claims check: the REST file list is read with --paginate to the end; GitHub caps a PR at 3000 files and the view says so'],
   'src/executor/pr-files.js': [2, 'per-file patch lookup: the page a file is on, else --paginate to the end; the file list itself walks after: cursors'],
   'src/executor/ci-why.js': [3, 'PR file paths walk pages up to a ceiling and report truncated, which the view shows; base-branch history is a bounded sample (N commits, shown as N of N) and flags partial'],

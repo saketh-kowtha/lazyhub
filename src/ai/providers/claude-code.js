@@ -15,6 +15,7 @@
 
 import { spawnAndPipe, pickEnv } from './_base.js'
 import { AIError } from '../error.js'
+import { mapCliError } from './_errors.js'
 import { DEFAULT_MODEL } from '../prompt.js'
 
 // ── Provider metadata ─────────────────────────────────────────────────────────
@@ -127,24 +128,7 @@ export async function complete({ system, user, model, timeoutMs }) {
       auth:      resolved.auth,
     })
   } catch (err) {
-    if (err.isIsolationFailure) {
-      throw new AIError(`Claude Code unavailable: ${err.message}`, { code: 'provider-unavailable', provider: id })
-    }
-    if (err.isTimeout) {
-      throw new AIError('Claude Code CLI timed out', { code: 'timeout', provider: id })
-    }
-    if (err.isNotFound) {
-      throw new AIError('claude CLI not found on PATH', { code: 'spawn-failed', provider: id })
-    }
-    if (err.isOutputCap) {
-      throw new AIError('Claude Code CLI output exceeded size cap', { code: 'malformed-response', provider: id })
-    }
-    // Non-zero exit — could be auth failure or other error
-    const msg = err.message || 'claude CLI failed'
-    if (/not logged in|unauthenticated|login/i.test(msg)) {
-      throw new AIError(AUTH_HELP, { code: 'auth-required', provider: id })
-    }
-    throw new AIError(`Claude Code CLI error: ${msg}`, { code: 'provider-unavailable', provider: id })
+    throw mapCliError(err, { id, name: 'Claude Code CLI', bin: 'claude', authHelp: AUTH_HELP })
   }
 
   // Parse JSON output: { type: 'result', result: '<assistant text>', ... }

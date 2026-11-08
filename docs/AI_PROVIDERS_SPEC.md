@@ -423,3 +423,32 @@ Acceptance:
 2. **Should we expose `model` selection per provider?** Recommendation: no in Phase 1 — use each CLI's default model. Phase 4 adds an advanced override.
 3. **Prompt caching on Anthropic API.** Current code uses `cache_control`. CLI providers can't. This means anthropic-api may be measurably cheaper at scale — surface this in settings? Recommendation: only if a user asks.
 4. **Telemetry on provider mix.** Useful product data ("80% of users on claude-code") but requires opt-in. Defer.
+
+## 14. Subscription login mode (#364)
+
+Two auth modes per CLI provider.
+
+| Provider | `sandbox` (default, #252) | `login` (opt-in) |
+|---|---|---|
+| claude-code | `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`, the subscription path) or `ANTHROPIC_API_KEY` | not offered |
+| codex | `CODEX_API_KEY` / `OPENAI_API_KEY` | shipped: real HOME and `CODEX_HOME`, tools off |
+| gemini-cli | `GEMINI_API_KEY` | follow-up |
+| agy | none | follow-up |
+
+Spawning lives in `src/services/ai-cli.js` (`runAiCli`, profiles `sandbox` and `login`).
+Providers build argv + auth and map errors with `providers/_errors.js`.
+
+Enable with `lazyhub ai login enable codex` (typed consent), revoke with
+`lazyhub ai login disable codex`, inspect with `lazyhub ai status`. TOML:
+
+```toml
+[ai.login]
+codex = false   # gemini_cli and agy are reserved
+```
+
+Codex capability manifest (`loginCapability` in `providers/codex.js`): `exec --help` must list
+`--json --skip-git-repo-check --ignore-user-config --ignore-rules --ephemeral --sandbox --disable`,
+`codex features list` must list `shell_tool`, and `codex login status` must exit 0 (output discarded).
+Login-mode argv adds `--disable shell_tool`. Login env: `PATH USER LANG LC_ALL HOME` plus the sandbox
+`TMPDIR`, `TERM=dumb`, `NO_COLOR=1`, and `CODEX_HOME` only if the user set it.
+`LAZYHUB_AI_PROVIDER` cannot turn login mode on; consent is read from config only.

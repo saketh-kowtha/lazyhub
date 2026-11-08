@@ -137,6 +137,7 @@ export function legacyFromToml(toml) {
       defaultFilter: prFeature.default_filter,
       defaultScope:  scopeFromToml(defaultPrScope(toml, prFeature)),
       pageSize:      prFeature.page_size,
+      generatedFiles: Array.isArray(prFeature.generated_files) ? prFeature.generated_files.filter(x => typeof x === 'string') : [],
       keys: {
         filterOpen:   firstActionKey(toml.actions, 'pr.filter-open', 'O'),
         filterClosed: firstActionKey(toml.actions, 'pr.filter-closed', 'C'),

@@ -42,6 +42,11 @@ if (process.argv[2] === 'doctor') {
   process.exit(await runDoctor(process.argv.slice(3)))
 }
 
+if (process.argv[2] === 'ai') {
+  const { runAi } = await import('../src/cli/ai-login.js')
+  process.exit(await runAi(process.argv.slice(3)))
+}
+
 if (process.argv[2] === 'feedback') {
   const { runFeedback } = await import('../src/cli/feedback.js')
   const { loadConfig: loadTomlConfig } = await import('../src/config/loader.js')
