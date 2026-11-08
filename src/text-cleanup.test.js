@@ -283,7 +283,9 @@ function repeatTo(unit, bytes) {
   return unit.repeat(Math.ceil(bytes / unit.length)).slice(0, bytes)
 }
 
-describe('size bounds', () => {
+// Each case times two functions on 1 MB and 10 MB inputs, several runs each. The time bounds
+// below are the real check; the test timeout only has to outlast them on a slow runner.
+describe('size bounds', { timeout: 30_000 }, () => {
   it('sanitizeLog handles a 10 MB log within one second', () => {
     const line = `build\tTest step\t2026-01-02T03:04:05.1234567Z ${ESC}[32mok${ESC}[0m  \ttimestamped message with some text and a tab\r\n`
     const log = repeatTo(line, 10 * 1024 * 1024)
