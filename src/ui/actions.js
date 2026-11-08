@@ -77,6 +77,7 @@ function effectiveKeys(config) {
  */
 export function contextScopes(pane, view = 'list', config = undefined) {
   if (view === 'diff') return ['global', 'diff']
+  if (view === 'story') return ['global', 'pr-story']
   if (view === 'comments') return ['global', 'pr-comments']
   if (view === 'detail') return ['global', pane === 'issues' ? 'issue-detail' : 'pr-detail']
   const listScope = {
