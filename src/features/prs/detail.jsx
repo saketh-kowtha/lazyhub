@@ -47,7 +47,7 @@ import { sortChecks } from './detail/Checks.jsx'
 
 const _editorCfg = loadConfig().editor
 
-export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
+export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, onBack, onOpenDiff, onOpenStory, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
   useKeyScope('view')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
@@ -251,6 +251,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
 
     if (id === 'list.refresh') { refetch(); return }
     if (id === 'pr.diff' && pr) { onOpenDiff(pr); return }
+    if (id === 'pr.story' && pr && onOpenStory) { onOpenStory(pr); return }
     if (id === 'pr.comments' && onViewComments) { onViewComments(); return }
     if (id === 'pr.open-browser' && pr?.url) {
       openUrl(pr.url)
