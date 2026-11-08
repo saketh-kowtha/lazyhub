@@ -273,8 +273,10 @@ describe('Pane E2E user flows', () => {
     // The run failed, so the viewer opens on its failure excerpt; `f` shows the full log (#463).
     expect(logView.lastFrame()).toContain('Failure excerpt')
     await sendInput('f')
-    await flush(5)
-    expect(logView.lastFrame()).toContain('=== Build ===')
+    // The full log renders a few ticks after the key on a slow runner; wait for it instead of a fixed flush.
+    await waitForExpectation(() => {
+      expect(logView.lastFrame()).toContain('=== Build ===')
+    }, { timeout: 1500 })
     expect(logView.lastFrame()).not.toContain('##[endgroup]')
     logView.unmount()
 

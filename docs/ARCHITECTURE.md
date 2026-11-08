@@ -1,6 +1,6 @@
 # lazyhub — Architecture & Point of Truth
 
-> **Purpose of this file:** how the code is organized today: layers, state ownership, key routing, data flow, process model and invariants (§1 to §6), plus the frozen bug-fix log (§21). Cross-cutting decisions, and what is shipped versus planned, are in `docs/ARCHITECT_DECISIONS.md`; newer bug fixes are in `docs/bugs/`.
+> **Purpose of this file:** how the code is organized today: layers, state ownership, key routing, data flow, process model and invariants (§1 to §6), the target structure (§7), plus the frozen bug-fix log (§21). Cross-cutting decisions, and what is shipped versus planned, are in `docs/ARCHITECT_DECISIONS.md`; newer bug fixes are in `docs/bugs/`.
 
 ---
 
@@ -103,6 +103,28 @@ The full, numbered list is "Hard invariants" in `AGENTS.md`; `docs/ARCHITECT_DEC
 8. Fast and complete: windowed rendering, page-by-page fetching, no silent truncation (D16).
 9. No telemetry. Default agent capability is read-only; there is no ungoverned write fallback.
 10. Pinned: React 18, ESLint 8, Vitest 3 (with the matching coverage plugin).
+
+---
+
+## 7. Target (R2-R14), not built yet
+
+Everything above is the code as it is. This section is the destination, so every refactor PR builds the same thing. Nothing here is true of the code until its ticket merges, and the ticket's PR updates the matching section above in the same change. Decisions: D13 to D16 in `docs/ARCHITECT_DECISIONS.md` ("Structure decisions"). The refactor is strangler-style: the new module lands beside the old one, callers migrate in later PRs, the old code is deleted last.
+
+| Area | Target | Replaces today | Tickets |
+|---|---|---|---|
+| Layer rule | `components/features -> hooks -> services -> executor -> gh/git`, enforced by lint, not convention | features and components import `executor.js` directly | R1 #479 (services), R11 #489 (lint ratchet) |
+| Query layer (D14) | `useQuery(key, fetcher)` for all reads and `useMutation(fn, {invalidates})` for all writes; structured keys, in-flight dedupe, cancellation, synchronous cache seed, invalidation by key prefix | `useGh(fetchFn, deps)` with coarse `invalidateRepoCache`; no dedupe or cancellation | R2 #480, R3 #481 (invalidation, list-to-detail seeding, async disk cache), R8 #486 |
+| Diff open | the diff is fetched first, the rest deferred, and the likely next view prefetched when the cursor rests | detail and diff load independently | R4 #482 |
+| Focus manager (D13) | one root `useInput`; an explicit stack of focus entries; only the top entry gets keys, then registry-resolved globals; claims are synchronous | scope stack in `keyscope.js` plus `dialogActiveRef` / `notifyDialog` and per-pane `if (dialog) return` | R5 #483 (core), R6 #484 (migrate App, dialogs, overlays; delete `notifyDialog`) |
+| Key ownership | tests generated from the registry; every hint derived from it | hand-written key-ownership tests | R7 #485 |
+| Shared pane primitives | `useListController`, `QueryBoundary`, `useMutation`; one pane per PR | each pane owns its list, loading and error code | R8 #486 (Notifications first), R9 #487 (the rest) |
+| Shell | one app shell and one width contract; overlays layer instead of swapping the tree | view branches swap the tree | R10 #488 |
+| Tooling | the invariants machine-checked | partly convention | R11 #489 |
+| Errors | handler exceptions never kill the app; `ErrorBoundary` can reset | largely done (`containHandler`) | R12 #490 |
+| Process | lazy daemon spawn, one IPC auth model, visible fallback | largely done (`scheduleDaemon`, `wire.js`, status notice) | R13 #491 |
+| Performance | large-repo budgets as a CI gate (D16) | `paging-audit.test.js`, PTY cold start, `test:memory` | R14 #510 |
+
+Rules for every refactor PR: behaviour-preserving unless a linked bug says otherwise; one step per PR; no dependency upgrades (Ink, React, ESLint, Vitest stay pinned); update the relevant section above in the same PR.
 
 ---
 

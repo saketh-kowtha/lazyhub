@@ -912,12 +912,60 @@ description = "Open the comments view"
 scope = "pr-detail,diff"
 group = "action"
 
+[actions."pr.claims"]
+keys = ["V"]
+hint = "V"
+label = "claims"
+description = "Check the claims in the PR description against the diff"
+scope = "pr-detail"
+group = "action"
+
 [actions."pr.open-editor"]
 keys = ["E"]
 hint = "E"
 label = "editor"
 description = "Open the first changed file, or the cursor line in the diff, in $EDITOR"
 scope = "pr-detail,diff"
+group = "action"
+
+[actions."pr.story"]
+keys = ["s"]
+hint = "s"
+label = "story"
+description = "Review story: a guided step-by-step walkthrough of the diff"
+scope = "pr-detail"
+group = "action"
+
+[actions."story.next"]
+keys = ["n"]
+hint = "n / p"
+label = "next step"
+description = "Next step of the review story"
+scope = "pr-story"
+group = "nav"
+
+[actions."story.prev"]
+keys = ["p"]
+hint = "n / p"
+label = "prev step"
+description = "Previous step of the review story"
+scope = "pr-story"
+group = "nav"
+
+[actions."story.open"]
+keys = ["Enter"]
+hint = "Enter"
+label = "open diff"
+description = "Open the diff at the selected file"
+scope = "pr-story"
+group = "action"
+
+[actions."story.toggle"]
+keys = ["Space"]
+hint = "Space"
+label = "expand"
+description = "Expand or collapse the noise step"
+scope = "pr-story"
 group = "action"
 
 [actions."check.log"]

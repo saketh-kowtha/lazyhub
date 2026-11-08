@@ -44,10 +44,11 @@ import { LabelDialog, AssigneeDialog, ReviewerDialog } from './list-dialogs.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
 import { sortChecks } from './detail/Checks.jsx'
+import { ClaimsView } from './ClaimsView.jsx'
 
 const _editorCfg = loadConfig().editor
 
-export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
+export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, onOpenDiff, onOpenStory, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
   useKeyScope('view')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
@@ -230,7 +231,9 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
 
     if (id === 'list.refresh') { refetch(); return }
     if (id === 'pr.diff' && pr) { onOpenDiff(pr); return }
+    if (id === 'pr.story' && pr && onOpenStory) { onOpenStory(pr); return }
     if (id === 'pr.comments' && onViewComments) { onViewComments(); return }
+    if (id === 'pr.claims' && pr) { setDialog('claims'); return }
     if (id === 'pr.open-browser' && pr?.url) {
       openUrl(pr.url)
       return
@@ -502,6 +505,10 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
 
   if (dialog === 'reviewers') {
     return <ReviewerDialog repo={repo} pr={pr} runWrite={runWrite} onClose={() => { setDialog(null); refetch() }} onError={(err) => { setDialog(null); showStatus(`✗ Reviewer update failed: ${sanitize(err.message)}`, true) }} />
+  }
+
+  if (dialog === 'claims') {
+    return <ClaimsView pr={pr} repo={repo} onClose={() => setDialog(null)} onOpenDiff={onOpenDiff} />
   }
 
   if (dialog === 'check-logs') {

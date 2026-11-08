@@ -326,6 +326,8 @@ export function App({ repo, onSwitchRepo }) {
       if (view === 'logs')       { setView('list'); return }
       if (view === 'comments')   { setView('diff'); return }
       if (view === 'conflict')   { setView('detail'); return }
+      if (view === 'story')      { setStoryNav(null); setView('detail'); return }
+      if (view === 'diff' && storyNav?.active) { setView('story'); return }
       if (view === 'diff')       { setView(selectedItem?._fromList ? 'list' : 'detail'); return }
       if (view === 'detail')     { setSelectedItem(null); setView('list'); return }
       // At the root only `q` quits; a stray Esc must never kill the app.
@@ -403,9 +405,14 @@ export function App({ repo, onSwitchRepo }) {
   }, [])
   // The detail pane hands back its own fetched PR; keep the dashboard identity (_repo/_kind) of the item (#493).
   const goToDiff       = useCallback((item) => {
+    setStoryNav(null)
     setSelectedItem(prev => ({ ...item, _kind: item._kind ?? prev?._kind, _repo: item._repo ?? prev?._repo, _fromList: view === 'list' }))
     setView('diff')
   }, [view])
+  // Review story (#362): position and the file the diff should open at survive the round trip.
+  const [storyNav, setStoryNav] = useState(null)
+  const goToStory      = useCallback(() => { setStoryNav(prev => ({ ...prev, active: false, file: null })); setView('story') }, [])
+  const openStoryFile  = useCallback((file, pos) => { setStoryNav({ file, pos, active: true }); setView('diff') }, [])
   const goToComments   = useCallback(() => setView('comments'), [])
   // An item opened from a dashboard section can belong to another repo (#493).
   // Local-git views (conflict resolution, checkout) run in the launch directory, so they
@@ -431,16 +438,18 @@ export function App({ repo, onSwitchRepo }) {
   const goBack         = useCallback(() => {
     if (view === 'comments') { setView('diff'); return }
     if (view === 'conflict') { setView('detail'); return }
+    if (view === 'story')    { setStoryNav(null); setView('detail'); return }
+    if (view === 'diff' && storyNav?.active) { setView('story'); return }
     if (view === 'diff')     { setView(selectedItem?._fromList ? 'list' : 'detail'); return }
     setSelectedItem(null); setView('list')
-  }, [view, selectedItem])
+  }, [view, selectedItem, storyNav])
 
   const onPaneState = useCallback((s) => setPaneState(prev => ({ ...prev, ...s })), [])
 
   const tree = renderAppView({
     actionsBranch, actionsRepo, itemIsForeign, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
     exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail,
-    goToDiff, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
+    goToDiff, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
     showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
