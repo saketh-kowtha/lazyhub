@@ -42,12 +42,12 @@ const QUERY = `
   }
 `
 
-const missing = field => approvalError('ERR_APPROVAL_INVALID_INPUT', [field])
-const str = (value, field) => {
+const missing = (/** @type {any} */ field) => approvalError('ERR_APPROVAL_INVALID_INPUT', [field])
+const str = (/** @type {any} */ value, /** @type {any} */ field) => {
   if (typeof value !== 'string' || value === '') throw missing(field)
   return value
 }
-const bool = (value, field) => {
+const bool = (/** @type {any} */ value, /** @type {any} */ field) => {
   if (typeof value !== 'boolean') throw missing(field)
   return value
 }

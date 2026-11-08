@@ -35,7 +35,7 @@ const SCOPE_ARRAY_KEYS = ['repo_allowlist', 'branch_denylist']
 
 /** @typedef {{allow_reads:boolean,allow_writes:boolean,allow_approvals:boolean,allow_merges:boolean,allow_comments:boolean}} Scope */
 
-function scope(reads, writes, approvals, merges, comments) {
+function scope(/** @type {any} */ reads, /** @type {any} */ writes, /** @type {any} */ approvals, /** @type {any} */ merges, /** @type {any} */ comments) {
   return {
     allow_reads: reads,
     allow_writes: writes,
@@ -164,7 +164,7 @@ export const DEFAULT_CONFIG = {
     'app.jump-pane':         { keys: ['1', '2', '3', '4', '5', '6', '7', '8', '9'], hint: '1-9', label: 'jump to pane', description: 'Jump to the Nth active pane (list views only)', scope: 'global', group: 'nav' },
     'app.help':              { keys: ['?'], hint: '?', label: 'help', description: 'Toggle contextual help', scope: 'global', group: 'meta' },
     'app.settings':          { keys: [','], hint: ',', label: 'settings', description: 'Open settings', scope: 'global', group: 'meta' },
-    'app.open-config':       { keys: [], hint: 'palette', label: 'edit config', description: 'Open lazyhub.toml in the editor (command palette)', scope: 'global', group: 'meta' },
+    'app.open-config':       { keys: /** @type {string[]} */ ([]), hint: 'palette', label: 'edit config', description: 'Open lazyhub.toml in the editor (command palette)', scope: 'global', group: 'meta' },
     'app.back':              { keys: ['q', 'Esc'], hint: 'q / Esc', label: 'back', description: 'Back one level; q quits at the root, Esc never does', scope: 'global', group: 'global' },
     'command-palette.open':  { keys: [':', '<space><space>'], hint: ':', label: 'command palette', description: 'Open the command palette', scope: 'global', group: 'global' },
     'app.logs':              { keys: ['L'], hint: 'L', label: 'logs', description: 'Open debug logs when LAZYHUB_DEBUG=1', scope: 'global', group: 'debug' },
@@ -201,7 +201,7 @@ export const DEFAULT_CONFIG = {
     'pr.open-selected':      { keys: ['Enter'], hint: 'Enter', label: 'open', description: 'Open PR detail', scope: 'pr-list', group: 'action' },
     'pr.diff':               { keys: ['d'], hint: 'd', label: 'diff', description: 'Open PR diff', scope: 'pr-list,pr-detail', group: 'action' },
     'pr.merge':              { keys: ['m'], hint: 'm', label: 'merge', description: 'Merge selected PR', scope: 'pr-list,pr-detail,diff', group: 'action' },
-    'pr.auto-merge':         { keys: [], hint: 'palette', label: 'auto-merge', description: 'Toggle auto-merge for selected PR (merge picker m, or command palette)', scope: 'pr-list,pr-detail', group: 'action' },
+    'pr.auto-merge':         { keys: /** @type {string[]} */ ([]), hint: 'palette', label: 'auto-merge', description: 'Toggle auto-merge for selected PR (merge picker m, or command palette)', scope: 'pr-list,pr-detail', group: 'action' },
     'pr.approve':            { keys: ['a'], hint: 'a', label: 'approve', description: 'Approve selected PR', scope: 'pr-list,pr-detail,diff', group: 'action' },
     'pr.request-changes':    { keys: ['x'], hint: 'x', label: 'request changes', description: 'Request changes on selected PR', scope: 'pr-list,pr-detail,diff', group: 'action' },
     'pr.comment':            { keys: ['c'], hint: 'c', label: 'comment', description: 'Comment on the selected PR without opening it', scope: 'pr-list', group: 'action' },
@@ -348,7 +348,7 @@ export function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v)
 }
 
-function checkType(val, type) {
+function checkType(/** @type {any} */ val, /** @type {any} */ type) {
   switch (type) {
     case 'array':   return Array.isArray(val)
     case 'object':  return isPlainObject(val)
@@ -362,20 +362,20 @@ function checkType(val, type) {
  * Validate a flat table of typed scalar fields against a field-spec map.
  * Unknown keys and type/enum/validate violations are dropped with a warning.
  * @param {*} val       raw value (expected to be a table)
- * @param {Object} spec map of key → { type, enum?, validate? }
+ * @param {Record<string, any>} spec map of key → { type, enum?, validate? }
  * @param {string[]} warnings sink for warning strings
  * @param {string} path dotted section path for messages
- * @returns {Object|undefined} cleaned object, or undefined if `val` isn't a table
+ * @returns {Record<string, any>|undefined} cleaned object, or undefined if `val` isn't a table
  */
 /** Spec marker for an option that was removed because nothing read it: old files keep loading without a warning. */
 const RETIRED = Object.freeze({ retired: true })
 
-function validateFlat(val, spec, warnings, path) {
+function validateFlat(/** @type {any} */ val, /** @type {any} */ spec, /** @type {any} */ warnings, /** @type {any} */ path) {
   if (!isPlainObject(val)) {
     warnings.push(`[${path}] must be a table — section ignored`)
     return undefined
   }
-  const out = {}
+  /** @type {Record<string, any>} */ const out = {}
   for (const [k, v] of Object.entries(val)) {
     const fs = spec[k]
     if (fs === RETIRED) continue
@@ -409,13 +409,13 @@ const META_SPEC = {
   schema_version: { type: 'string' },
   config_url: {
     type: 'string',
-    validate: (v) => (v === '' || /^https:\/\//i.test(v) ? null : 'must be an HTTPS URL'),
+    validate: (/** @type {any} */ v) => (v === '' || /^https:\/\//i.test(v) ? null : 'must be an HTTPS URL'),
   },
 }
 
 const DEFAULTS_SPEC = {
-  repo:        { type: 'string', validate: (v) => (v === '' || isOwnerName(v) ? null : 'must be owner/name') },
-  repo_host:   { type: 'string', validate: (v) => (v === '' || /^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:\d{1,5})?$/.test(v) ? null : 'must be a host name') },
+  repo:        { type: 'string', validate: (/** @type {any} */ v) => (v === '' || isOwnerName(v) ? null : 'must be owner/name') },
+  repo_host:   { type: 'string', validate: (/** @type {any} */ v) => (v === '' || /^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:\d{1,5})?$/.test(v) ? null : 'must be a host name') },
   // Legacy alias of [features.prs].default_scope (used only while that key is still at its default).
   pr_scope:    { type: 'string', enum: ['mine', 'reviewing', 'all'] },
   ai_provider: { type: 'string', enum: ['claude-code', 'codex', 'gemini-cli', 'anthropic-api', 'openai-compatible'] },
@@ -429,10 +429,10 @@ const APP_SPEC = {
 }
 
 const LAYOUT_SPEC = {
-  sidebar_width:  { type: 'integer', validate: (v) => (v >= 16 && v <= 40 ? null : 'must be between 16 and 40') },
+  sidebar_width:  { type: 'integer', validate: (/** @type {any} */ v) => (v >= 16 && v <= 40 ? null : 'must be between 16 and 40') },
   sidebar:        { type: 'boolean' },
   preview_panel:  { type: 'boolean' },
-  preview_width:  { type: 'integer', validate: (v) => (v >= 24 && v <= 80 ? null : 'must be between 24 and 80') },
+  preview_width:  { type: 'integer', validate: (/** @type {any} */ v) => (v >= 24 && v <= 80 ? null : 'must be between 24 and 80') },
   border_style:   { type: 'string', enum: ['round', 'single', 'double', 'bold', 'classic', 'none'] },
   compact_footer: { type: 'boolean' },
 }
@@ -440,18 +440,18 @@ const LAYOUT_SPEC = {
 const PRS_FEATURE_SPEC = {
   default_filter: { type: 'string', enum: ['open', 'closed', 'merged'] },
   default_scope:  { type: 'string', enum: ['mine', 'own', 'reviewing', 'all'] },
-  page_size:      { type: 'integer', validate: (v) => (v > 0 ? null : 'must be positive') },
+  page_size:      { type: 'integer', validate: (/** @type {any} */ v) => (v > 0 ? null : 'must be positive') },
 }
 
 const ISSUES_FEATURE_SPEC = {
   default_filter: { type: 'string', enum: ['open', 'closed'] },
-  page_size:      { type: 'integer', validate: (v) => (v > 0 ? null : 'must be positive') },
+  page_size:      { type: 'integer', validate: (/** @type {any} */ v) => (v > 0 ? null : 'must be positive') },
   // How often an open issue refreshes its first timeline page in the background (#565).
-  refresh_seconds: { type: 'integer', validate: (v) => (v >= 15 ? null : 'must be at least 15') },
+  refresh_seconds: { type: 'integer', validate: (/** @type {any} */ v) => (v >= 15 ? null : 'must be at least 15') },
 }
 
 const ACTIONS_FEATURE_SPEC = {
-  page_size: { type: 'integer', validate: (v) => (v > 0 ? null : 'must be positive') },
+  page_size: { type: 'integer', validate: (/** @type {any} */ v) => (v > 0 ? null : 'must be positive') },
 }
 
 const DIFF_SPEC = {
@@ -487,18 +487,18 @@ const AGENT_SPEC = {
 }
 
 const DAEMON_SPEC = {
-  idle_timeout_minutes: { type: 'integer', validate: (v) => (v > 0 ? null : 'must be a positive integer') },
+  idle_timeout_minutes: { type: 'integer', validate: (/** @type {any} */ v) => (v > 0 ? null : 'must be a positive integer') },
   socket_path:          { type: 'string' },
   pid_file:             { type: 'string' },
 }
 
 const BUDGET_SPEC = {
-  monthly_usd_cap:  { type: 'number', validate: (v) => (v >= 0 ? null : 'must be >= 0') },
-  per_call_usd_cap: { type: 'number', validate: (v) => (v >= 0 ? null : 'must be >= 0') },
+  monthly_usd_cap:  { type: 'number', validate: (/** @type {any} */ v) => (v >= 0 ? null : 'must be >= 0') },
+  per_call_usd_cap: { type: 'number', validate: (/** @type {any} */ v) => (v >= 0 ? null : 'must be >= 0') },
   on_cap_exceeded:  { type: 'string', enum: ['warn', 'block'] },
 }
 
-const AI_SPEC = {
+/** @type {Record<string, any>} */ const AI_SPEC = {
   provider:          { type: 'string', enum: ['anthropic', 'openai', 'ollama', 'openai-compatible'] },
   model:             { type: 'string' },
   anthropic_api_key: { type: 'string' },
@@ -507,10 +507,10 @@ const AI_SPEC = {
 }
 
 const OPENAI_COMPATIBLE_SPEC = {
-  base_url:   { type: 'string', validate: (v) => (v.trim() ? null : 'must not be empty') },
+  base_url:   { type: 'string', validate: (/** @type {any} */ v) => (v.trim() ? null : 'must not be empty') },
   api_key:    { type: 'string' },
-  model:      { type: 'string', validate: (v) => (v.trim() ? null : 'must not be empty') },
-  timeout_ms: { type: 'integer', validate: (v) => (v > 0 ? null : 'must be positive') },
+  model:      { type: 'string', validate: (/** @type {any} */ v) => (v.trim() ? null : 'must not be empty') },
+  timeout_ms: { type: 'integer', validate: (/** @type {any} */ v) => (v > 0 ? null : 'must be positive') },
 }
 
 const SECOND_OPINION_SPEC = {
@@ -520,7 +520,7 @@ const SECOND_OPINION_SPEC = {
 
 // ─── Section validators with bespoke shapes ─────────────────────────────────────
 
-function validateTheme(val, warnings) {
+function validateTheme(/** @type {any} */ val, /** @type {any} */ warnings) {
   if (!isPlainObject(val)) {
     warnings.push('[theme] must be a table — section ignored')
     return undefined
@@ -534,7 +534,7 @@ function validateTheme(val, warnings) {
     if (!isPlainObject(val.overrides)) {
       warnings.push('[theme.overrides] must be a table — ignored')
     } else {
-      const ov = {}
+      /** @type {Record<string, any>} */ const ov = {}
       for (const [token, def] of Object.entries(val.overrides)) {
         // A token value is either a hex/color string or a { fg?, bg? } table.
         if (typeof def === 'string') {
@@ -560,20 +560,20 @@ function validateTheme(val, warnings) {
   return out
 }
 
-function validateKeymaps(val, warnings) {
+function validateKeymaps(/** @type {any} */ val, /** @type {any} */ warnings) {
   if (!isPlainObject(val)) {
     warnings.push('[keymaps] must be a table — section ignored')
     return undefined
   }
-  const out = {}
+  /** @type {Record<string, any>} */ const out = {}
   for (const [ctx, bindings] of Object.entries(val)) {
     if (!isPlainObject(bindings)) {
       warnings.push(`[keymaps.${ctx}] must be a table — ignored`)
       continue
     }
-    const cleaned = {}
+    /** @type {Record<string, any>} */ const cleaned = {}
     const seen = new Map()
-    const remember = (key) => {
+    const remember = (/** @type {any} */ key) => {
       const normalized = normalizeKeyForValidation(key)
       const prior = seen.get(normalized)
       if (prior && prior !== key) {
@@ -589,7 +589,7 @@ function validateKeymaps(val, warnings) {
       } else if (isPlainObject(action) && PLATFORMS.includes(key)) {
         // Platform sub-section, e.g. [keymaps.pr-list.darwin]. Keep its string bindings;
         // mergePlatformKeymaps() folds it onto the base at load time.
-        const sub = {}
+        /** @type {Record<string, any>} */ const sub = {}
         const platformSeen = new Map()
         for (const [pk, pv] of Object.entries(action)) {
           if (typeof pv === 'string') {
@@ -604,7 +604,7 @@ function validateKeymaps(val, warnings) {
         }
         cleaned[key] = sub
       } else if (key === 'unbind' && isPlainObject(action)) {
-        const sub = {}
+        /** @type {Record<string, any>} */ const sub = {}
         for (const [pk, pv] of Object.entries(action)) {
           if (typeof pv === 'boolean') sub[pk] = pv
           else warnings.push(`[keymaps.${ctx}.unbind].${pk} expected boolean — ignored`)
@@ -619,7 +619,7 @@ function validateKeymaps(val, warnings) {
   return out
 }
 
-function normalizeKeyForValidation(key) {
+function normalizeKeyForValidation(/** @type {any} */ key) {
   const raw = String(key || '').trim()
   const angle = raw.match(/^<(.+)>$/)
   const rawBody = angle ? angle[1] : raw
@@ -634,14 +634,14 @@ function normalizeKeyForValidation(key) {
   return body
 }
 
-function actionScopeMatchesKeymap(actionScope, keymapScope) {
+function actionScopeMatchesKeymap(/** @type {any} */ actionScope, /** @type {any} */ keymapScope) {
   return String(actionScope || '').split(',').some(declared => {
     if (declared === keymapScope) return true
     return declared === 'list' && (keymapScope.endsWith('-list') || ['pr-detail', 'pr-checks', 'pr-story', 'diff', 'pr-comments', 'issue-detail'].includes(keymapScope))
   })
 }
 
-function validateKeymapReferences(config, warnings) {
+function validateKeymapReferences(/** @type {any} */ config, /** @type {any} */ warnings) {
   const actions = config?.actions || {}
   const keymaps = config?.keymaps || {}
   for (const [scope, bindings] of Object.entries(keymaps)) {
@@ -667,18 +667,19 @@ function validateKeymapReferences(config, warnings) {
   }
 }
 
-function validateTabs(val, warnings) {
+function validateTabs(/** @type {any} */ val, /** @type {any} */ warnings) {
   if (!Array.isArray(val)) {
     warnings.push('[[tabs]] must be an array of tables — ignored')
     return undefined
   }
+  /** @type {any[]} */
   const out = []
   val.forEach((tab, i) => {
     if (!isPlainObject(tab)) {
       warnings.push(`[[tabs]] entry #${i} must be a table — ignored`)
       return
     }
-    const cleaned = {}
+    /** @type {Record<string, any>} */ const cleaned = {}
     for (const f of ['id', 'label', 'key']) {
       if (f in tab) {
         if (typeof tab[f] === 'string') cleaned[f] = tab[f]
@@ -702,18 +703,18 @@ function validateTabs(val, warnings) {
   return out
 }
 
-function validatePanes(val, warnings) {
+function validatePanes(/** @type {any} */ val, /** @type {any} */ warnings) {
   if (!isPlainObject(val)) {
     warnings.push('[panes] must be a table — section ignored')
     return undefined
   }
-  const out = {}
+  /** @type {Record<string, any>} */ const out = {}
   for (const [id, pane] of Object.entries(val)) {
     if (!isPlainObject(pane)) {
       warnings.push(`[panes.${id}] must be a table — ignored`)
       continue
     }
-    const cleaned = {}
+    /** @type {Record<string, any>} */ const cleaned = {}
     for (const [k, v] of Object.entries(pane)) {
       if (['label', 'icon', 'description', 'command'].includes(k)) {
         if (typeof v === 'string') cleaned[k] = v
@@ -730,7 +731,7 @@ function validatePanes(val, warnings) {
   return out
 }
 
-function validateFeatures(val, warnings) {
+function validateFeatures(/** @type {any} */ val, /** @type {any} */ warnings) {
   if (!isPlainObject(val)) {
     warnings.push('[features] must be a table — section ignored')
     return undefined
@@ -745,18 +746,18 @@ function validateFeatures(val, warnings) {
   return out
 }
 
-function validateActions(val, warnings) {
+function validateActions(/** @type {any} */ val, /** @type {any} */ warnings) {
   if (!isPlainObject(val)) {
     warnings.push('[actions] must be a table — section ignored')
     return undefined
   }
-  const out = {}
+  /** @type {Record<string, any>} */ const out = {}
   for (const [id, action] of Object.entries(val)) {
     if (!isPlainObject(action)) {
       warnings.push(`[actions.${id}] must be a table — ignored`)
       continue
     }
-    const cleaned = {}
+    /** @type {Record<string, any>} */ const cleaned = {}
     for (const [k, v] of Object.entries(action)) {
       if (k === 'keys') {
         if (Array.isArray(v) && v.every(key => typeof key === 'string')) cleaned.keys = v
@@ -773,18 +774,18 @@ function validateActions(val, warnings) {
   return out
 }
 
-function validateScopes(val, warnings) {
+function validateScopes(/** @type {any} */ val, /** @type {any} */ warnings) {
   if (!isPlainObject(val)) {
     warnings.push('[scopes] must be a table — section ignored')
     return undefined
   }
-  const out = {}
+  /** @type {Record<string, any>} */ const out = {}
   for (const [name, def] of Object.entries(val)) {
     if (!isPlainObject(def)) {
       warnings.push(`[scopes.${name}] must be a table — ignored`)
       continue
     }
-    const cleaned = {}
+    /** @type {Record<string, any>} */ const cleaned = {}
     for (const [k, v] of Object.entries(def)) {
       if (SCOPE_BOOL_KEYS.includes(k)) {
         if (typeof v === 'boolean') cleaned[k] = v
@@ -801,12 +802,12 @@ function validateScopes(val, warnings) {
   return out
 }
 
-function validateAi(val, warnings) {
+function validateAi(/** @type {any} */ val, /** @type {any} */ warnings) {
   if (!isPlainObject(val)) {
     warnings.push('[ai] must be a table — section ignored')
     return undefined
   }
-  const out = {}
+  /** @type {Record<string, any>} */ const out = {}
   for (const [k, v] of Object.entries(val)) {
     if (k === 'budget') {
       const budget = validateFlat(v, BUDGET_SPEC, warnings, 'ai.budget')
@@ -817,7 +818,7 @@ function validateAi(val, warnings) {
     } else if (k === 'second_opinion') {
       const cfg = validateFlat(v, SECOND_OPINION_SPEC, warnings, 'ai.second_opinion')
       if (cfg?.map) {
-        const cleaned = {}
+        /** @type {Record<string, any>} */ const cleaned = {}
         for (const [family, providerId] of Object.entries(cfg.map)) {
           if (typeof providerId === 'string' && ['claude-code', 'codex', 'gemini-cli', 'anthropic-api', 'openai-compatible'].includes(providerId)) {
             cleaned[family] = providerId
@@ -838,7 +839,7 @@ function validateAi(val, warnings) {
   return out
 }
 
-function validateState(val, warnings) {
+function validateState(/** @type {any} */ val, /** @type {any} */ warnings) {
   if (!isPlainObject(val)) {
     warnings.push('[state] must be a table — section ignored')
     return undefined
@@ -861,8 +862,8 @@ export function validateConfig(raw) {
     warnings.push('config root is not a table — using defaults')
     return { config: {}, warnings }
   }
-  const out = {}
-  const set = (key, value) => { if (value !== undefined) out[key] = value }
+  /** @type {Record<string, any>} */ const out = {}
+  const set = (/** @type {any} */ key, /** @type {any} */ value) => { if (value !== undefined) out[key] = value }
 
   for (const [key, val] of Object.entries(raw)) {
     switch (key) {
@@ -923,14 +924,15 @@ const REMOTE_ALLOWED_PANE_FIELDS = ['label', 'icon', 'description']
  * @returns {{ config: Object, dropped: string[] }} filtered raw config + dotted names of dropped keys (never values)
  */
 export function restrictRemoteConfig(raw) {
-  const config = {}
+  /** @type {Record<string, any>} */ const config = {}
+  /** @type {any[]} */
   const dropped = []
   if (!isPlainObject(raw)) return { config, dropped }
   for (const [key, val] of Object.entries(raw)) {
     if (REMOTE_ALLOWED_SECTIONS.includes(key)) {
       config[key] = val
     } else if (key === 'panes' && isPlainObject(val)) {
-      const panes = {}
+      /** @type {Record<string, any>} */ const panes = {}
       for (const [id, pane] of Object.entries(val)) {
         if (!isPlainObject(pane)) { dropped.push(`panes.${id}`); continue }
         panes[id] = {}
@@ -972,16 +974,16 @@ export function mergeConfig(base, override) {
  * Fold platform sub-sections in keymaps onto their base context bindings.
  * e.g. `[keymaps.pr-list.darwin]` overrides `[keymaps.pr-list]` on macOS, and the
  * platform key is removed from the result. Other platforms' blocks are dropped.
- * @param {Object} keymaps merged keymaps table
+ * @param {Record<string, any>} keymaps merged keymaps table
  * @param {string} platform process.platform value (darwin|linux|win32|…)
- * @returns {Object} keymaps with platform blocks resolved away
+ * @returns {Record<string, any>} keymaps with platform blocks resolved away
  */
 export function mergePlatformKeymaps(keymaps, platform) {
   if (!isPlainObject(keymaps)) return keymaps
-  const out = {}
+  /** @type {Record<string, any>} */ const out = {}
   for (const [ctx, bindings] of Object.entries(keymaps)) {
     if (!isPlainObject(bindings)) { out[ctx] = bindings; continue }
-    const base = {}
+    /** @type {Record<string, any>} */ const base = {}
     let platformOverride = {}
     for (const [key, val] of Object.entries(bindings)) {
       if (PLATFORMS.includes(key) && isPlainObject(val)) {
@@ -1013,8 +1015,8 @@ export function expandHome(p) {
 /**
  * Return a copy of `config` with known path fields (`~`) expanded to homedir().
  * Fields: agent.audit_log_path, daemon.socket_path, daemon.pid_file.
- * @param {Object} config merged config
- * @returns {Object} config copy with expanded paths
+ * @param {Record<string, any>} config merged config
+ * @returns {Record<string, any>} config copy with expanded paths
  */
 export function expandConfigPaths(config) {
   if (!isPlainObject(config)) return config

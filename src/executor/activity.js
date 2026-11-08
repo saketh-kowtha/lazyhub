@@ -186,19 +186,19 @@ function evidenceHost() {
   return process.env.GH_HOST || 'github.com'
 }
 
-function normalizeRateLimit(rl) {
+function normalizeRateLimit(/** @type {any} */ rl) {
   if (!rl) return { remaining: UNKNOWN, cost: UNKNOWN, reset_at: UNKNOWN, low: UNKNOWN }
   return { remaining: rl.remaining, cost: rl.cost, reset_at: rl.resetAt, low: rl.remaining <= rl.cost * 5 }
 }
 
 // Scope values become search qualifiers, so each must be a well-formed owner or
 // owner/name (config/schema.js isOwnerName): no spaces, no extra qualifiers.
-function scopeQualifiers(scope = {}) {
+function scopeQualifiers(/** @type {Record<string, any>} */ scope = {}) {
   const org = scope.org
   if (org && !isOwnerName(`${org}/x`)) throw new Error(`invalid scope org "${org}"`)
   const repos = scope.repos || []
   for (const r of repos) if (!isOwnerName(String(r))) throw new Error(`invalid scope repo "${r}", expected owner/name`)
-  return [...(org ? [`org:${org}`] : []), ...repos.map(r => `repo:${r}`)].join(' ')
+  return [...(org ? [`org:${org}`] : []), ...repos.map((/** @type {any} */ r) => `repo:${r}`)].join(' ')
 }
 
 /**
@@ -237,7 +237,7 @@ export async function fetchReviewQueueEvidence({ limit = QUEUE_DEFAULT_LIMIT, sc
   const fetchedAt = new Date(now()).toISOString()
   const account = data.viewer?.login || null
   const byKey = new Map()
-  const collect = (group, membership, source) => {
+  const collect = (/** @type {any} */ group, /** @type {any} */ membership, /** @type {any} */ source) => {
     for (const node of group.nodes || []) {
       if (node?.__typename !== 'PullRequest') continue
       const key = `${node.repository?.nameWithOwner}#${node.number}`
@@ -251,7 +251,7 @@ export async function fetchReviewQueueEvidence({ limit = QUEUE_DEFAULT_LIMIT, sc
   collect(data.authored, 'authored', 'github.graphql.search(author:@me)')
   const items = [...byKey.values()]
   for (const item of items) cache?.set({ host, account: account || UNKNOWN, repo: item.identity.repo, number: item.identity.number }, item, now())
-  const truncation = group => ({
+  const truncation = (/** @type {any} */ group) => ({
     total: group.issueCount ?? UNKNOWN,
     returned: (group.nodes || []).length,
     has_more: Boolean(group.pageInfo?.hasNextPage),
