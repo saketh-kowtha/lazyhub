@@ -14,7 +14,7 @@ import { isPlainObject } from './schema.js'
 
 const LEGACY_STATE_PATH = join(homedir(), '.config', 'lazyhub', 'state.json')
 
-function readTomlState(configPath) {
+function readTomlState(/** @type {any} */ configPath) {
   if (!existsSync(configPath)) return undefined
   try {
     const raw = parse(readFileSync(configPath, 'utf8'))
@@ -93,7 +93,7 @@ export function migrateStateJsonToToml(opts = {}) {
 
 // Pane icons shipped as defaults before #275 swapped them for single-width glyphs.
 // Older releases copied the whole bundled config into the user file, pinning these.
-const LEGACY_PANE_ICONS = {
+/** @type {Record<string, any>} */ const LEGACY_PANE_ICONS = {
   issues: '◎',
   branches: '⑂',
   actions: '⚡',
@@ -124,6 +124,7 @@ export function migrateLegacyPaneIcons(opts = {}) {
     return { migrated: false, removed: [] }
   }
 
+  /** @type {any[]} */
   const removed = []
   /** @type {string|null} */
   let pane = null

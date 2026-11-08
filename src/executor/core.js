@@ -24,11 +24,12 @@ export { GhError }
 /** Default per-call timeout for the gh CLI (ms). Override via opts.timeout. */
 const GH_TIMEOUT = 30_000
 const GH_HISTORY_LIMIT = 20
+/** @type {any[]} */
 const ghCallHistory = []
 
-function pushGhCall(entry) {
+function pushGhCall(/** @type {any} */ entry) {
   ghCallHistory.push({
-    args: Array.isArray(entry.args) ? entry.args.map(arg => String(arg)) : [],
+    args: Array.isArray(entry.args) ? entry.args.map((/** @type {any} */ arg) => String(arg)) : [],
     durationMs: Math.max(0, Math.round(entry.durationMs || 0)),
     exitCode: Number.isInteger(entry.exitCode) ? entry.exitCode : 1,
     ...(entry.error ? { error: String(entry.error).slice(0, 240) } : {}),
@@ -49,11 +50,11 @@ function redactArgs(args) {
     : []
 }
 
-function ghOpName(args) {
+function ghOpName(/** @type {any} */ args) {
   return args.slice(0, 2).join(' ') || 'gh'
 }
 
-function repoFromArgs(args) {
+function repoFromArgs(/** @type {any} */ args) {
   const repoIndex = args.indexOf('--repo')
   if (repoIndex >= 0 && args[repoIndex + 1]) return args[repoIndex + 1]
   const apiPath = args[0] === 'api' ? args[1] : null
@@ -172,6 +173,7 @@ async function invalidateDaemonCache(repo) {
 
 /** Default cap on simultaneous gh child processes; override with LAZYHUB_GH_CONCURRENCY. */
 const GH_CONCURRENCY_DEFAULT = 4
+/** @type {any[]} */
 const ghWaiters = []
 let ghInFlight = 0
 

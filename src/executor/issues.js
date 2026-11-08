@@ -42,7 +42,7 @@ function searchLogin(value) {
  * One cursor page of issues (GraphQL search). Never refetches earlier pages:
  * pass the previous page's `endCursor` as `filter.after`.
  * @param {string} repo
- * @param {object} filter  state, author, label, assignee, milestone, limit, after
+ * @param {Record<string, any>} filter  state, author, label, assignee, milestone, limit, after
  * @returns {Promise<{items: object[], hasNextPage: boolean, endCursor: string|null, totalCount: number}>}
  */
 export async function listIssuesPage(repo, filter = {}) {

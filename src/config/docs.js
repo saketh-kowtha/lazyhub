@@ -4,17 +4,23 @@
 
 import { loadConfig } from './loader.js'
 
-function table(headers, rows) {
+/**
+ * Render a Markdown table. Backslashes are escaped before pipes so a cell cannot end its own escape.
+ * @param {string[]} headers
+ * @param {any[][]} rows
+ * @returns {string}
+ */
+export function table(headers, rows) {
   const head = `| ${headers.join(' | ')} |`
   const sep = `| ${headers.map(() => '---').join(' | ')} |`
-  const body = rows.map(row => `| ${row.map(cell => String(cell ?? '').replace(/\|/g, '\\|')).join(' | ')} |`)
+  const body = rows.map(row => `| ${row.map(cell => String(cell ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|')).join(' | ')} |`)
   return [head, sep, ...body].join('\n')
 }
 
 /**
  * Return structured config metadata suitable for docs or AI assist.
- * @param {Object} [config] merged TOML config
- * @returns {{panes:Array, actions:Array, theme:Object, defaults:Object, features:Object}}
+ * @param {Record<string, any>} [config] merged TOML config
+ * @returns {{panes:any[], actions:any[], theme:Record<string, any>, defaults:Record<string, any>, features:Record<string, any>}}
  */
 export function getConfigDocumentationModel(config = loadConfig()) {
   const panes = Object.entries(config.panes || {}).map(([id, pane]) => ({
@@ -45,7 +51,7 @@ export function getConfigDocumentationModel(config = loadConfig()) {
 
 /**
  * Generate a Markdown reference from the TOML metadata.
- * @param {Object} [config] merged TOML config
+ * @param {Record<string, any>} [config] merged TOML config
  * @returns {string} markdown document
  */
 export function generateConfigReferenceMarkdown(config = loadConfig()) {

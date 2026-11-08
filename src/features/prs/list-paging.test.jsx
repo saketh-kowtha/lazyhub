@@ -1,6 +1,7 @@
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PRList } from './list.jsx'
+import { saveState } from '../../config.js'
 import { useGh } from '../../hooks/useGh.js'
 import { listPRsPage, getPRRow, getPRPreview, reviewPR, closePR } from '../../executor.js'
 import { sendInput } from '../../test/input-bus.js'
@@ -33,6 +34,7 @@ let previewResult
 let previewOpts
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r }); return { promise, resolve } }
 beforeEach(() => {
+  saveState({ prFilters: {} }) // the remembered filter (#314) must not leak between tests
   term.columns = 60
   vi.clearAllMocks(); listPRsPage.mockReset(); getPRRow.mockReset(); reviewPR.mockReset(); closePR.mockReset()
   listPRsPage.mockResolvedValue({ items: [], hasNextPage: false, endCursor: null, totalCount: 0 })

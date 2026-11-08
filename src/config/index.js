@@ -21,9 +21,9 @@ export const ConfigContext = createContext({ ...DEFAULT_CONFIG, write: () => DEF
 /**
  * Provides the merged user config to the React tree.
  * @param {Object} props
- * @param {import('react').ReactNode} props.children child tree
- * @param {Object} [props.initialConfig] preloaded config (mainly for tests); skips loadConfig()
- * @returns {import('react').ReactElement} provider element
+ * @param {any} props.children child tree
+ * @param {Record<string, any>} [props.initialConfig] preloaded config (mainly for tests); skips loadConfig()
+ * @returns {any} provider element
  */
 export function ConfigProvider({ children, initialConfig }) {
   const [config, setConfig] = useState(() => initialConfig ?? loadConfig())
@@ -37,13 +37,13 @@ export function ConfigProvider({ children, initialConfig }) {
       .then((remoteRaw) => {
         if (cancelled || !remoteRaw) return
         const { config: validated } = validateConfig(remoteRaw)
-        setConfig((prev) => mergeConfig(prev, validated))
+        setConfig((/** @type {any} */ prev) => mergeConfig(prev, validated))
       })
       .catch(() => { /* fetchRemoteConfig already handles + logs failures */ })
     return () => { cancelled = true }
   }, [configUrl])
 
-  const write = useCallback((patch) => {
+  const write = useCallback((/** @type {any} */ patch) => {
     try {
       writeConfig(patch)
     } catch (err) {
@@ -61,7 +61,7 @@ export function ConfigProvider({ children, initialConfig }) {
 
 /**
  * Read the merged user config.
- * @returns {Object} the current config object
+ * @returns {Record<string, any>} the current config object
  */
 export function useConfig() {
   return useContext(ConfigContext)

@@ -1,5 +1,6 @@
 import React from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { saveState } from '../../config.js'
 import { PRList } from './list.jsx'
 import { useGh } from '../../hooks/useGh.js'
 import { listPRsPage } from '../../executor.js'
@@ -12,6 +13,7 @@ vi.mock('ink', async () => {
 })
 vi.mock('../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
 
+beforeEach(() => { saveState({ prFilters: {} }) }) // the remembered filter (#314) must not leak between tests
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 const page = (items) => ({ items, hasNextPage: false, endCursor: null, totalCount: items.length })
@@ -33,6 +35,6 @@ describe('PR list cursor after the list shrinks', () => {
     await waitForExpectation(() => expect(view.lastFrame()).not.toContain('PR number 2'))
     await flush(20)
     await sendInput('', { return: true })
-    expect(onSelectPR).toHaveBeenCalledWith(expect.objectContaining({ number: 1 }))
+    expect(onSelectPR).toHaveBeenCalledWith(expect.objectContaining({ number: 1 }), expect.anything())
   })
 })

@@ -16,7 +16,7 @@ import { sanitize } from '../utils-core.js'
 /**
  * @typedef {'gh_missing'|'gh_too_old'|'not_signed_in'|'wrong_host'|'sso'|'scope'|'rate_limit'|'secondary_limit'|'repo_not_found'|'not_found'|'offline'|'forbidden'|'unknown'} FailureKind
  * @typedef {'blocked'|'degraded'|'waiting'|'offline'} FailureTone
- * @typedef {object} Failure
+ * @typedef {Record<string, any>} Failure
  * @property {FailureKind} kind
  * @property {FailureTone} tone   - blocked (✗), degraded (⚠), waiting (◷), offline (⊘)
  * @property {string} cause       - one-line plain-language cause
@@ -87,7 +87,7 @@ function targetOf(args) {
   const list = Array.isArray(args) ? args.filter(a => typeof a === 'string') : []
   let owner = null
   let repo = null
-  const kv = {}
+  /** @type {Record<string, any>} */ const kv = {}
   for (let i = 0; i < list.length; i += 1) {
     const a = list[i]
     if (/^query=/.test(a)) continue
@@ -145,7 +145,7 @@ export function localTime(epochSeconds) {
  * @returns {Failure}
  */
 function failure(kind, tone, cause, rest = {}) {
-  const out = { kind, tone, cause: scrub(cause), notes: [], fix: null, fixHint: null, subject: {}, ...rest }
+  const out = { kind, tone, cause: scrub(cause), notes: /** @type {string[]} */ ([]), fix: /** @type {any} */ (null), fixHint: /** @type {any} */ (null), subject: {}, ...rest }
   out.notes = out.notes.map(scrub)
   if (out.fixHint) out.fixHint = scrub(out.fixHint)
   return out
@@ -355,7 +355,7 @@ export function classifyHostMismatch({ needed, signedIn }) {
 export function classifyPartial(failures, total, ctx = {}) {
   const failed = failures.map(({ repo, error }) => {
     const f = classifyGhFailure(error, { ...ctx })
-    const reason = { sso: `SAML SSO not authorized${f.subject.org ? ` for ${f.subject.org}` : ''}`, repo_not_found: 'not found, or you have no access', scope: `missing ${f.subject.scope || 'a token scope'}`, rate_limit: 'rate limited', secondary_limit: 'rate limited', offline: 'network unreachable' }[f.kind] || f.cause
+    const reason = /** @type {Record<string, string>} */ ({ sso: `SAML SSO not authorized${f.subject.org ? ` for ${f.subject.org}` : ''}`, repo_not_found: 'not found, or you have no access', scope: `missing ${f.subject.scope || 'a token scope'}`, rate_limit: 'rate limited', secondary_limit: 'rate limited', offline: 'network unreachable' })[f.kind] || f.cause
     return { repo: scrub(repo), kind: f.kind, reason: scrub(reason), fix: f.fix }
   })
   const loaded = Math.max(0, total - failed.length)

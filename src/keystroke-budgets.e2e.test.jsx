@@ -20,6 +20,7 @@ import { useGh } from './hooks/useGh.js'
 import * as executor from './executor.js'
 import { diffFilesPage, fakeFilePatch } from './test/diff-fixtures.js'
 import { disarmPrefix } from './config/keymap.js'
+import { saveState } from './config.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 import { timelinePage } from './test/timeline.js'
 
@@ -71,7 +72,7 @@ vi.mock('./executor.js', () => {
     'reviewPR', 'mergePR', 'closePR', 'checkoutBranch', 'enableAutoMerge', 'disableAutoMerge', 'markPRReady',
     'convertPRToDraft', 'editPRBase', 'requestReviewers', 'removeReviewers', 'addPRAssignees', 'removePRAssignees',
     'addLabels', 'removeLabels', 'listLabels', 'listCollaborators', 'rerunCheckRun', 'getCheckRunAnnotations',
-    'getCurrentBranch', 'createPR', 'listBranches', 'listRuns', 'rerunRun', 'searchOwnsState', 'validatePRSearch',
+    'addPRComment', 'getCurrentBranch', 'createPR', 'listBranches', 'listRuns', 'rerunRun', 'searchOwnsState', 'validatePRSearch',
   ]
   return Object.fromEntries(fns.map(name => [name, vi.fn()]))
 })
@@ -97,6 +98,8 @@ const PR = {
   autoMergeRequest: null,
   statusCheckRollup: [{ id: 9001, name: 'CI / test', conclusion: 'FAILURE', url: 'https://example.test/check/1' }],
 }
+// The same PR with passing CI: Enter opens Conversation (smart Enter sends a failing PR to its check log).
+const PR_GREEN = { ...PR, statusCheckRollup: [{ ...PR.statusCheckRollup[0], conclusion: 'SUCCESS' }] }
 const RUN = { databaseId: 77, workflowName: 'CI', headBranch: 'main', status: 'completed', conclusion: 'failure', displayTitle: 'CI run', event: 'push', createdAt: '2026-06-06T10:00:00Z', updatedAt: '2026-06-06T10:00:00Z' }
 const DIFF = [
   'diff --git a/src/send.js b/src/send.js',
@@ -139,16 +142,16 @@ async function press(steps) {
 // PR list (the queue stand-in) with the first row selected. Typed text is free.
 const TASKS = [
   {
-    name: 'approve a review-requested PR (queue -> detail)',
+    name: 'approve a review-requested PR (from its row, was 4 keys via detail)',
     // Enter on the comment form opens "Approve PR #N?" (default No); y confirms (#468).
-    budget: 4,
-    steps: [ENTER, key('a'), ENTER, key('y')],
+    budget: 3,
+    steps: [key('a'), ENTER, key('y')],
     done: () => expect(executor.reviewPR).toHaveBeenCalledWith('owner/repo', 412, 'approve', ''),
   },
   {
-    name: 'open the log of a failing check',
-    budget: 3,
-    steps: [ENTER, key('c'), ENTER],
+    name: 'open the log of a failing check (smart Enter, was 3 keys)',
+    budget: 1,
+    steps: [ENTER],
     done: () => expect(executor.getCheckRunAnnotations).toHaveBeenCalledWith('owner/repo', 9001),
   },
   {
@@ -177,6 +180,7 @@ const TASKS = [
   },
   {
     name: 'resolve a review thread',
+    pr: PR_GREEN,
     budget: 3,
     steps: [ENTER, key('v'), key('z')],
     done: () => expect(executor.resolveThread).toHaveBeenCalledWith('PRRT_1'),
@@ -188,6 +192,27 @@ const TASKS = [
     done: () => expect(executor.checkoutBranch).toHaveBeenCalled(),
   },
   {
+    name: 'comment on a PR from its row (c, text, Ctrl+G)',
+    budget: 2,
+    steps: [key('c'), text('looks good'), CTRL_G],
+    done: () => expect(executor.addPRComment).toHaveBeenCalledWith('owner/repo', 412, 'looks good'),
+  },
+  {
+    name: 'read the files of a review-requested PR (smart Enter, was d)',
+    pr: PR_GREEN,
+    scope: 'reviewing',
+    budget: 1,
+    steps: [ENTER],
+    done: (view) => expect(view.lastFrame()).toContain('const b = 2'),
+  },
+  {
+    name: 'see why a conflicting PR cannot merge (smart Enter)',
+    pr: { ...PR_GREEN, mergeable: 'CONFLICTING', mergeStateStatus: 'DIRTY' },
+    budget: 1,
+    steps: [ENTER],
+    done: (view) => expect(view.lastFrame()).toContain('Has conflicts'),
+  },
+  {
     name: 'open the PR in the browser',
     budget: 1,
     steps: [key('o')],
@@ -195,16 +220,20 @@ const TASKS = [
   },
 ]
 
+let currentPR = PR
+
 describe('keystroke budgets', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     executor.getPRRow.mockResolvedValue({ ...PR })
     executor.getPRFilePatch.mockImplementation(fakeFilePatch(DIFF))
+    executor.addPRComment.mockResolvedValue(undefined)
     useGh.mockImplementation((fn) => {
-      if (fn === executor.listPRsPage) return ghResult({ items: [PR], hasNextPage: false, endCursor: null, totalCount: 1 })
-      if (fn === executor.getPR) return ghResult(PR)
+      const pr = currentPR
+      if (fn === executor.listPRsPage) return ghResult({ items: [pr], hasNextPage: false, endCursor: null, totalCount: 1 })
+      if (fn === executor.getPR) return ghResult(pr)
       if (fn === executor.getRepoInfo) return ghResult({ squashMergeAllowed: true, viewerPermission: 'WRITE' })
-      if (fn === executor.getPRChecks) return ghResult(PR.statusCheckRollup)
+      if (fn === executor.getPRChecks) return ghResult(pr.statusCheckRollup)
       if (fn === executor.getBranchProtection) return ghResult({ requiredReviews: 1 })
       if (fn === executor.getPRDiffStats) return ghResult({ additions: 2, deletions: 0, changedFiles: 1 })
       if (fn === executor.listPRFilesPage) return ghResult(diffFilesPage(DIFF))
@@ -229,6 +258,8 @@ describe('keystroke budgets', () => {
   for (const cols of [80, 120]) for (const task of TASKS) {
     it(`${task.name}: at most ${task.budget} keys at ${cols} columns`, async () => {
       layoutState.cols = cols
+      currentPR = task.pr || PR
+      saveState({ prScope: task.scope || 'all', prFilters: {} })
       const view = renderWithProviders(<App repo="owner/repo" />)
       await waitForExpectation(() => expect(view.lastFrame()).toContain('Retry in webhook sender'))
       await flush(30)
@@ -262,13 +293,14 @@ const WRITE_KEYS = [
 describe('write keys confirm first and cancel does nothing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    executor.getPRRow.mockResolvedValue({ ...PR })
+    executor.getPRRow.mockResolvedValue({ ...PR_GREEN })
     layoutState.cols = 120
+    saveState({ prScope: 'all', prFilters: {} })
     useGh.mockImplementation((fn) => {
-      if (fn === executor.listPRsPage) return ghResult({ items: [PR], hasNextPage: false, endCursor: null, totalCount: 1 })
-      if (fn === executor.getPR) return ghResult(PR)
+      if (fn === executor.listPRsPage) return ghResult({ items: [PR_GREEN], hasNextPage: false, endCursor: null, totalCount: 1 })
+      if (fn === executor.getPR) return ghResult(PR_GREEN)
       if (fn === executor.getRepoInfo) return ghResult({ squashMergeAllowed: true, viewerPermission: 'WRITE' })
-      if (fn === executor.getPRChecks) return ghResult(PR.statusCheckRollup)
+      if (fn === executor.getPRChecks) return ghResult(PR_GREEN.statusCheckRollup)
       if (fn === executor.getBranchProtection) return ghResult({ requiredReviews: 1 })
       if (fn === executor.listPRCommentsPage) return ghResult({ comments: COMMENTS, truncated: false })
       if (fn === executor.listPRTimelinePage) return ghResult(timelinePage(COMMENTS))

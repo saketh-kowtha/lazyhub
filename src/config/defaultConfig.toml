@@ -499,6 +499,14 @@ description = "Request changes on selected PR"
 scope = "pr-list,pr-detail,diff"
 group = "action"
 
+[actions."pr.comment"]
+keys = ["c"]
+hint = "c"
+label = "comment"
+description = "Comment on the selected PR without opening it"
+scope = "pr-list"
+group = "action"
+
 [actions."pr.close"]
 keys = ["X"]
 hint = "X"
