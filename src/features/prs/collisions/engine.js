@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * src/features/prs/collisions/engine.js -- pure overlap and merge-order logic (#360).
  *
@@ -55,7 +54,7 @@ export function isGenerated(path, patterns = DEFAULT_GENERATED) {
 
 /**
  * Parse one file's unified patch into the old-side line ranges it changes and the function headings
- * (git's `@@ ... @@ heading`) of the hunks that hold a change.
+ * (the text after the second pair of at-signs in a hunk header) of the hunks that hold a change.
  * @param {string} patch
  * @returns {{ ranges: {lo:number, hi:number}[], symbols: string[] }}
  */
@@ -331,13 +330,12 @@ export function suggestMergeOrder(prs, pairs) {
     if (!p.generatedOnly) { x.overlaps.add(p.b); y.overlaps.add(p.a) }
   }
   const byNum = new Map(prs.map(p => [p.number, p]))
-  const rows = [...info.entries()].map(([number, v]) => ({
-    number,
-    pr: byNum.get(number) || {},
-    overlapsWith: [...v.overlaps].sort((a, b) => a - b),
-    serial: [...v.serial].sort((a, b) => a - b),
-  }))
-  for (const r of rows) { r.overlaps = r.overlapsWith.length; r.size = sizeOf(r.pr) }
+  const rows = [...info.entries()].map(([number, v]) => {
+    /** @type {any} */
+    const pr = byNum.get(number) || {}
+    const overlapsWith = [...v.overlaps].sort((a, b) => a - b)
+    return { number, pr, overlapsWith, overlaps: overlapsWith.length, size: sizeOf(pr), serial: [...v.serial].sort((a, b) => a - b) }
+  })
   rows.sort((a, b) => a.overlaps - b.overlaps || a.size - b.size || a.number - b.number)
   const position = new Map(rows.map((r, i) => [r.number, i]))
   const steps = rows.map((r, i) => {

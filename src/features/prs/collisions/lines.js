@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * src/features/prs/collisions/lines.js -- the radar's text, as plain {text, tone} rows (#360).
  *
@@ -69,7 +68,7 @@ function verdict(p) {
  * @param {object} scan from getCollisionScan
  * @param {'pr'|'repo'} tab
  * @param {{ now?: number }} [opts]
- * @returns {{ text: string, tone: 'head'|'likely'|'warn'|'dim'|'normal'|'ok' }[]}
+ * @returns {{ text: string, tone: string }[]} tone is one of head, likely, warn, dim, normal, ok
  */
 export function radarLines(scan, tab, { now = Date.now() } = {}) {
   const rows = []
