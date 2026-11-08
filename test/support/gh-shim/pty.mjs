@@ -44,7 +44,9 @@ const ISSUE = {
 
 const RUN = { databaseId: 1, name: 'CI', status: 'completed', conclusion: 'success', workflowName: 'CI', headBranch: 'main', event: 'push', createdAt: '2026-06-13T00:00:00Z', updatedAt: '2026-06-13T00:01:00Z', url: 'https://github.com/saketh-kowtha/lazyhub/actions/runs/1' }
 
-const searchNode = pr => ({ __typename: 'PullRequest', ...pr, labels: { nodes: pr.labels }, reviewRequests: { nodes: [] }, statusCheckRollup: { nodes: pr.statusCheckRollup }, assignees: { nodes: pr.assignees } })
+// With LAZYHUB_GH_FAILED_CHECK the list row also reports the failing check, so smart Enter (#314) sees it.
+const failedRollup = { contexts: { checkRunCountsByState: [{ state: 'FAILURE', count: 1 }], statusContextCountsByState: [] } }
+const searchNode = pr => ({ __typename: 'PullRequest', ...pr, labels: { nodes: pr.labels }, reviewRequests: { nodes: [] }, statusCheckRollup: process.env.LAZYHUB_GH_FAILED_CHECK ? failedRollup : { nodes: pr.statusCheckRollup }, assignees: { nodes: pr.assignees } })
 
 const MANY = Number(process.env.LAZYHUB_GH_MANY || 0)
 const manyPRs = () => Array.from({ length: MANY }, (_, i) => ({ ...PR, number: 300 + i, title: `Fixture PR ${300 + i}` }))
