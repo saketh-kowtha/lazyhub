@@ -35,6 +35,7 @@ import { useDiffState } from '../features/prs/diff/state.js'
 import { DiffView } from '../features/prs/diff/render.jsx'
 import { toLogLines, logTitle } from '../features/actions/log-lines.js'
 import { annotationLines } from '../features/prs/ci-log.js'
+import { whyRedRows } from '../features/prs/why-red-rows.js'
 import { resolveTheme, useTheme } from '../theme.js'
 
 vi.mock('ink', async () => ({
@@ -377,6 +378,19 @@ describe('log viewer and annotations', () => {
   it('failure excerpt', () => {
     const excerpt = { state: 'ok', detail: '', excerpt: { kind: `kind${CANARY}`, job: `job${CANARY}`, step: `step${CANARY}`, lines: [`line${CANARY}`], truncated: false, locations: [{ path: `p${CANARY}`, line: 3, col: 1 }] } }
     const view = renderWithProviders(<LogViewer lines={[]} title={`T${CANARY}`} excerpt={excerpt} onClose={() => {}} />)
+    expect(frameOf(view)).toContain('CANARY')
+    expectClean(frameOf(view))
+  })
+
+  it('why is CI red rows', () => {
+    const model = poison({ state: 'ok', pending: 0, totalFailing: 1, notAnalysed: 0, filesNote: 'note', checks: [{
+      name: 'n', duration: '1s', step: 's', job: 'j', log: { state: 'ok', detail: '' }, url: null, blameNote: 'b',
+      excerpt: { kind: 'tsc', job: 'j', step: 's', lines: ['l'], locations: [], truncated: false },
+      blame: { items: [{ path: 'p', line: 1, failLine: 1, kind: 'changed', via: 'exact', text: 'code' }], unmatched: 0, ambiguous: 0, capped: false },
+      base: { verdict: 'unknown', text: 'unknown: x' },
+    }] })
+    const lines = whyRedRows(model, { prNumber: 1 }).map(r => r.text)
+    const view = renderWithProviders(<LogViewer lines={lines} onClose={() => {}} />)
     expect(frameOf(view)).toContain('CANARY')
     expectClean(frameOf(view))
   })

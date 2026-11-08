@@ -28,6 +28,7 @@ const COVERED = {
   'src/executor/issues.js': [5, 'issue pages by cursor with N of M; collaborators page to a ceiling with a truncated flag; nested label/assignee previews'],
   'src/executor/notifications.js': [1, 'pages to a ceiling and reports truncated / partialError'],
   'src/executor/pr-files.js': [2, 'per-file patch lookup: the page a file is on, else --paginate to the end; the file list itself walks after: cursors'],
+  'src/executor/ci-why.js': [3, 'PR file paths walk pages up to a ceiling and report truncated, which the view shows; base-branch history is a bounded sample (N commits, shown as N of N) and flags partial'],
   'src/executor/prs.js': [8, 'PR list pages by cursor; nested label/reviewer/context previews have totalCount or pageInfo'],
   'src/watch-only/report.js': [1, 'message text only'],
 }

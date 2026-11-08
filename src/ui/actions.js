@@ -101,6 +101,7 @@ const WHEN = {
   'pr.base':             c => c.prOpen !== false,
   'pr.auto-merge':       c => c.prOpen !== false && c.isDraft !== true,
   'pr.checks':           c => c.hasChecks !== false,
+  'pr.why-red':          c => c.hasFailingChecks === true,
   'diff.edit-comment':   c => c.lineHasThread !== false,
   'diff.delete-comment': c => c.lineHasThread !== false,
 }
@@ -113,7 +114,7 @@ const FOOTER_IDS = {
   'workflow-list': ['cursor.down', 'workflow.logs', 'workflow.rerun', 'workflow.cancel', 'list.search'],
   'notification-list': ['cursor.down', 'notification.open', 'notification.mark-read', 'notification.mark-all'],
   'tab-list': ['cursor.down', 'tab.open-selected', 'tab.open-browser', 'tab.next-section'],
-  'pr-detail': ['cursor.down', 'pr.diff', 'pr.checks', 'pr.approve', 'pr.merge', 'pr.comments', 'pr.open-browser', 'app.back'],
+  'pr-detail': ['cursor.down', 'pr.diff', 'pr.checks', 'pr.approve', 'pr.merge', 'pr.comments', 'pr.open-browser', 'app.back', 'pr.why-red'],
   'issue-detail': ['cursor.down', 'issue.reply', 'issue.quote', 'issue.labels', 'issue.assignees', 'issue.open-browser', 'app.back'],
   'diff': ['cursor.down', 'diff.next-file', 'diff.next-thread', 'diff.comment', 'diff.file-jump', 'diff.split', 'list.search', 'app.back'],
   global: ['cursor.down'],

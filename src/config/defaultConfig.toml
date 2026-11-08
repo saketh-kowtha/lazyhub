@@ -880,6 +880,14 @@ description = "Enter checks navigation mode"
 scope = "pr-detail"
 group = "action"
 
+[actions."pr.why-red"]
+keys = ["f"]
+hint = "f"
+label = "why red"
+description = "Why is CI red? Failing check, log excerpt and the PR lines that likely caused it"
+scope = "pr-detail,pr-checks"
+group = "action"
+
 [actions."pr.conflicts"]
 keys = ["C"]
 hint = "C"

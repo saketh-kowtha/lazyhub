@@ -252,6 +252,7 @@ export const DEFAULT_CONFIG = {
     'go.actions':            { keys: ['g a'], hint: 'g a', label: 'actions', description: 'Go to Actions', scope: 'global', group: 'go' },
     'go.notifications':      { keys: ['g n'], hint: 'g n', label: 'inbox', description: 'Go to Notifications', scope: 'global', group: 'go' },
     'pr.checks':             { keys: ['c'], hint: 'c', label: 'checks', description: 'Enter checks navigation mode', scope: 'pr-detail', group: 'action' },
+    'pr.why-red':            { keys: ['f'], hint: 'f', label: 'why red', description: 'Why is CI red? Failing check, log excerpt and the PR lines that likely caused it', scope: 'pr-detail,pr-checks', group: 'action' },
     'pr.conflicts':          { keys: ['C'], hint: 'C', label: 'conflicts / CI', description: 'Resolve conflicts, or open Actions for this branch', scope: 'pr-detail', group: 'action' },
     'pr.draft':              { keys: ['D'], hint: 'D', label: 'draft', description: 'Toggle draft / ready for review', scope: 'pr-detail', group: 'action' },
     'pr.base':               { keys: ['B'], hint: 'B', label: 'base', description: 'Change the base branch', scope: 'pr-detail', group: 'action' },

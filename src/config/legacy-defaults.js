@@ -767,6 +767,14 @@ export const LEGACY_ACTION_VALUES = {
     scope: ["pr-detail"],
     group: ["action"],
   },
+  "pr.why-red": {
+    keys: [["f"]],
+    hint: ["f"],
+    label: ["why red"],
+    description: ["Why is CI red? Failing check, log excerpt and the PR lines that likely caused it"],
+    scope: ["pr-detail,pr-checks"],
+    group: ["action"],
+  },
   "pr.conflicts": {
     keys: [["C"]],
     hint: ["C"],
