@@ -1,0 +1,95 @@
+/**
+ * src/focus/FocusProvider.js — React binding for the focus router (#483).
+ *
+ * One root useInput feeds every key event to the router. Components register through
+ * useFocusEntry(); the claim happens in a layout effect against a ref-held stack, so
+ * the commit that mounts a dialog already routes keys to it (no one-commit lag).
+ */
+
+import React, { createContext, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useRootInput } from '../hooks/useSafeInput.js'
+import { focusRouter } from './router.js'
+
+const FocusContext = createContext({ router: focusRouter, activeScope: 'global', provided: false })
+
+/**
+ * Owns the single root useInput and re-renders consumers when the stack changes.
+ * @param {{ children: import('react').ReactNode, router?: object, globals?: (input: string, key: object) => void }} props
+ * @returns {import('react').ReactElement} provider element
+ */
+export function FocusProvider({ children, router = focusRouter, globals }) {
+  const [activeScope, setActiveScope] = useState(() => router.activeScope())
+
+  useLayoutEffect(() => {
+    const sync = () => setActiveScope(router.activeScope())
+    sync()
+    return router.subscribe(sync)
+  }, [router])
+
+  const globalsRef = useRef(globals)
+  globalsRef.current = globals
+  useLayoutEffect(() => {
+    if (!globals) return undefined
+    router.setGlobals((input, key) => globalsRef.current?.(input, key))
+    return () => router.setGlobals(null)
+  }, [router, Boolean(globals)]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useRootInput((input, key) => { router.dispatch(input, key) })
+
+  const value = useMemo(() => ({ router, activeScope, provided: true }), [router, activeScope])
+  return React.createElement(FocusContext.Provider, { value }, children)
+}
+
+/** The scope on top of the stack, read without claiming one. */
+export function useFocusScope() {
+  return useContext(FocusContext).activeScope
+}
+
+let anonymous = 0
+
+/**
+ * Register a key handler with the focus manager.
+ *
+ * @param {string|null} id stable name for describeFocus (null: generated)
+ * @param {((input: string, key: object) => void)|null} handler latest handler; kept in a ref so it may change every render
+ * @param {object} [opts]
+ * @param {string|null} [opts.scope] scope to claim; the handler only fires while it is the active scope
+ * @param {boolean} [opts.active=true] false neither claims nor receives keys
+ * @param {boolean} [opts.captures] take keys exclusively
+ * @param {boolean} [opts.skipOnPrefix] ignore the continuation of an armed prefix
+ * @param {boolean} [opts.isActive] extra live gate for scope-less listeners
+ * @returns {{ isActive: boolean, activeScope: string }} activation state
+ */
+export function useFocusEntry(id, handler, opts = {}) {
+  const ctx = useContext(FocusContext)
+  const { scope = null, active = true, captures = false, skipOnPrefix = false } = opts
+  const gate = opts.isActive
+  const latest = useRef({ handler, gate })
+  latest.current = { handler, gate }
+  const idRef = useRef(null)
+  if (idRef.current === null) idRef.current = id ?? `entry-${++anonymous}`
+  const hasHandler = Boolean(handler)
+
+  useLayoutEffect(() => {
+    if (!active || !ctx.provided) return undefined
+    return ctx.router.claim({
+      id: idRef.current,
+      scope,
+      captures,
+      skipOnPrefix,
+      handler: hasHandler ? (input, key) => latest.current.handler?.(input, key) : null,
+      isActive: () => latest.current.gate !== false,
+    })
+  }, [ctx.router, ctx.provided, active, scope, captures, skipOnPrefix, hasHandler])
+
+  // Outside a FocusProvider nothing feeds the router, so fall back to a plain listener.
+  // The handler re-checks the gate itself: it must stay inert inside a provider even
+  // where a test double ignores `isActive`.
+  const standalone = !ctx.provided && active && hasHandler && gate !== false
+  useRootInput((input, key) => { if (standalone) latest.current.handler?.(input, key) }, {
+    isActive: standalone,
+  })
+
+  const live = ctx.router.activeScope()
+  return { isActive: active && (scope ? live === scope : true), activeScope: ctx.provided ? live : ctx.activeScope }
+}

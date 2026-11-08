@@ -3,6 +3,7 @@ import { homedir } from 'os'
 import { join } from 'path'
 import { getGhCallHistory } from './executor.js'
 import { getSwallowed } from './contain.js'
+import { describeFocus } from './focus/router.js'
 import { ensurePrivateDir, writePrivateFile } from './secure-fs.js'
 
 const CACHE_DIR = join(homedir(), '.cache', 'lazyhub')
@@ -136,6 +137,8 @@ export function collectDebugState(appState = {}) {
       dialog: state.dialog ?? null,
       mode: state.mode ?? null,
     },
+    // Who owns the keyboard: scope stack ids and flags only (#483).
+    focus: describeFocus(),
     ghCalls: getGhCallHistory().map(redactGhCall),
     // Absorbed errors (LAZYHUB_DEBUG only): where, and a scrubbed first line.
     swallowed: getSwallowed().map(e => ({ scope: cleanString(e.scope).slice(0, 80), message: cleanString(e.message), at: e.at })),
