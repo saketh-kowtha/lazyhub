@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noImplicitAny": true },
+  "include": [
+    "src/executor/**/*.js",
+    "src/config/**/*.js",
+    "src/daemon/protocol.js",
+    "src/**/*.d.ts",
+    "tsconfig.strict-shims.d.ts"
+  ]
+}

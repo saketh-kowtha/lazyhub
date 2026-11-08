@@ -43,12 +43,12 @@ export function fact(value, source, fetchedAt) {
   return { value: value === undefined || value === null ? UNKNOWN : value, source, fetched_at: fetchedAt }
 }
 
-const bounded = (value, max) => {
+const bounded = (/** @type {any} */ value, /** @type {any} */ max) => {
   const text = sanitize(value == null ? '' : String(value))
   return text.length > max ? { text: text.slice(0, max), truncated: true } : { text, truncated: false }
 }
 
-function summarizeChecks(commitNode) {
+function summarizeChecks(/** @type {any} */ commitNode) {
   const rollup = commitNode?.statusCheckRollup
   if (!commitNode) return { state: UNKNOWN, total: UNKNOWN, passed: UNKNOWN, failed: UNKNOWN, pending: UNKNOWN, truncated: false }
   // A head commit with no rollup means GitHub reports no checks at all (a known, distinct state).
@@ -75,40 +75,40 @@ function summarizeChecks(commitNode) {
   }
 }
 
-function summarizeReviews(node, viewer) {
+function summarizeReviews(/** @type {any} */ node, /** @type {any} */ viewer) {
   const latest = node.latestOpinionatedReviews
   if (!latest) return { approvals: UNKNOWN, staleApprovals: UNKNOWN, changesRequested: UNKNOWN, truncated: false }
   const rows = latest.nodes || []
-  const approved = rows.filter(r => r.state === 'APPROVED')
+  const approved = rows.filter((/** @type {any} */ r) => r.state === 'APPROVED')
   return {
     approvals: approved.length,
     // Stale means the approval was given on a commit other than the current head.
     // A review with no commit oid cannot be judged, so it counts as stale-unknown.
-    staleApprovals: approved.filter(r => !r.commit?.oid || r.commit.oid !== node.headRefOid).length,
-    changesRequested: rows.filter(r => r.state === 'CHANGES_REQUESTED').length,
-    mine: viewer ? rows.find(r => r.author?.login === viewer)?.state ?? 'NONE' : UNKNOWN,
+    staleApprovals: approved.filter((/** @type {any} */ r) => !r.commit?.oid || r.commit.oid !== node.headRefOid).length,
+    changesRequested: rows.filter((/** @type {any} */ r) => r.state === 'CHANGES_REQUESTED').length,
+    mine: viewer ? rows.find((/** @type {any} */ r) => r.author?.login === viewer)?.state ?? 'NONE' : UNKNOWN,
     truncated: Boolean(latest.pageInfo?.hasNextPage),
   }
 }
 
-function summarizeRequests(node, viewer) {
+function summarizeRequests(/** @type {any} */ node, /** @type {any} */ viewer) {
   const nodes = node.reviewRequests?.nodes
   if (!nodes) return { via: UNKNOWN, teams: [], truncated: false }
-  const reviewers = nodes.map(n => n?.requestedReviewer).filter(Boolean)
-  const teams = reviewers.filter(r => r.__typename === 'Team').map(r => r.slug).filter(Boolean)
+  const reviewers = nodes.map((/** @type {any} */ n) => n?.requestedReviewer).filter(Boolean)
+  const teams = reviewers.filter((/** @type {any} */ r) => r.__typename === 'Team').map((/** @type {any} */ r) => r.slug).filter(Boolean)
   let via = 'none'
-  if (viewer && reviewers.some(r => r.__typename === 'User' && r.login === viewer)) via = 'direct'
+  if (viewer && reviewers.some((/** @type {any} */ r) => r.__typename === 'User' && r.login === viewer)) via = 'direct'
   // GitHub does not say which of the user's teams matched; only that a team was requested.
   else if (teams.length > 0) via = 'team_unverified'
   return { via, teams, truncated: Boolean(node.reviewRequests?.pageInfo?.hasNextPage) }
 }
 
-function summarizeThreads(node) {
+function summarizeThreads(/** @type {any} */ node) {
   const threads = node.reviewThreads
   if (!threads) return { unresolved: UNKNOWN, total: UNKNOWN, truncated: false }
   const rows = threads.nodes || []
   return {
-    unresolved: rows.filter(t => !t.isResolved).length,
+    unresolved: rows.filter((/** @type {any} */ t) => !t.isResolved).length,
     total: threads.totalCount ?? rows.length,
     // Unresolved is a lower bound when more threads exist than were fetched.
     truncated: Boolean(threads.pageInfo?.hasNextPage) || (threads.totalCount ?? 0) > rows.length,
@@ -119,12 +119,13 @@ function summarizeThreads(node) {
  * Deterministic attention reasons, ordered, each citing its fact. A reason is a
  * pointer to evidence a human should look at, not a verdict about safety.
  *
- * @param {object} facts
+ * @param {Record<string, any>} facts
  * @param {boolean} reviewRequestedOfMe
  */
 export function attentionReasons(facts, reviewRequestedOfMe) {
+  /** @type {any[]} */
   const out = []
-  const add = (code, factPath, f, detail) => out.push({ code, fact: factPath, value: f.value, source: f.source, ...(detail ? { detail } : {}) })
+  const add = (/** @type {any} */ code, /** @type {any} */ factPath, /** @type {any} */ f, /** @type {any} */ detail) => out.push({ code, fact: factPath, value: f.value, source: f.source, ...(detail ? { detail } : {}) })
   if (reviewRequestedOfMe) add('review_requested', 'review_requests', facts.review_requests)
   if (facts.checks.value.state === UNKNOWN) add('checks_unavailable', 'checks', facts.checks)
   else if (facts.checks.value.failed > 0 || ['FAILURE', 'ERROR'].includes(facts.checks.value.state)) add('ci_failing', 'checks', facts.checks)
@@ -144,11 +145,11 @@ export function attentionReasons(facts, reviewRequestedOfMe) {
  * reason it came from. A PR with unavailable key facts is `unknown`, never
  * `ready`.
  *
- * @param {object[]} reasons from attentionReasons()
- * @param {object} facts
+ * @param {Record<string, any>[]} reasons from attentionReasons()
+ * @param {Record<string, any>} facts
  */
 export function queueGroup(reasons, facts) {
-  const has = code => reasons.some(r => r.code === code)
+  const has = (/** @type {any} */ code) => reasons.some(r => r.code === code)
   if (has('review_requested')) return { group: 'needs_my_review', because: 'review_requested' }
   if (has('ci_failing')) return { group: 'ci_failing', because: 'ci_failing' }
   if (has('changes_requested')) return { group: 'changes_requested', because: 'changes_requested' }
@@ -165,7 +166,7 @@ export function queueGroup(reasons, facts) {
 /**
  * Normalize one GraphQL PullRequest node into an evidence record.
  *
- * @param {object} node GraphQL PullRequest (see EVIDENCE_FIELDS in activity.js)
+ * @param {Record<string, any>} node GraphQL PullRequest (see EVIDENCE_FIELDS in activity.js)
  * @param {object} ctx
  * @param {string} ctx.host
  * @param {string|null} ctx.account  viewer login, or null when not returned
@@ -174,8 +175,8 @@ export function queueGroup(reasons, facts) {
  * @param {string} [ctx.source]      provenance label for the read
  */
 export function normalizePullRequestEvidence(node, { host, account, fetchedAt, reviewRequestedOfMe = false, source = 'github.graphql' }) {
-  const s = path => `${source}:${path}`
-  const f = (value, path) => fact(value, s(path), fetchedAt)
+  const s = (/** @type {any} */ path) => `${source}:${path}`
+  const f = (/** @type {any} */ value, /** @type {any} */ path) => fact(value, s(path), fetchedAt)
   const headCommit = node.commits?.nodes?.[0]?.commit || null
   const requests = summarizeRequests(node, account)
 
@@ -222,7 +223,7 @@ export function normalizePullRequestEvidence(node, { host, account, fetchedAt, r
       body: node.body === undefined ? UNKNOWN : body.text,
       body_truncated: body.truncated,
       title_truncated: title.truncated,
-      threads: (node.reviewThreads?.nodes || []).filter(t => !t.isResolved).map(t => {
+      threads: (node.reviewThreads?.nodes || []).filter((/** @type {any} */ t) => !t.isResolved).map((/** @type {any} */ t) => {
         const c = t.comments?.nodes?.[0]
         const text = bounded(c?.bodyText, EXCERPT_MAX)
         return { path: sanitize(t.path || ''), author: sanitize(c?.author?.login || ''), excerpt: text.text, truncated: text.truncated }
@@ -251,15 +252,15 @@ export function evidencePartition(ref) {
 export function createEvidenceCache({ ttlMs = 60_000, max = 200 } = {}) {
   const store = createLruCache(max)
   const accounts = new Map() // host -> last seen account login
-  const keyOf = ({ host, account, repo, number }) => `${evidencePartition({ host, account, repo })}:${number ?? '*'}`
+  const keyOf = (/** @type {{host?: string, account?: string, repo?: string, number?: number | string}} */ { host, account, repo, number }) => `${evidencePartition({ host, account, repo })}:${number ?? '*'}`
   return {
-    knownAccount: host => accounts.get(host) || null,
-    get(ref, now = Date.now()) {
+    knownAccount: (/** @type {any} */ host) => accounts.get(host) || null,
+    get(/** @type {any} */ ref, now = Date.now()) {
       const entry = store.get(keyOf(ref))
       if (!entry) return null
       return { value: entry.value, stale: now - entry.at > ttlMs, age_ms: now - entry.at }
     },
-    set(ref, value, now = Date.now()) {
+    set(/** @type {any} */ ref, /** @type {any} */ value, now = Date.now()) {
       if (ref.account && ref.account !== UNKNOWN) accounts.set(ref.host, ref.account)
       store.set(keyOf(ref), { value, at: now })
     },

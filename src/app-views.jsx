@@ -37,7 +37,7 @@ import { contextFooterHints } from './ui/actions.js'
 export function renderAppView(ctx) {
   const {
     actionsBranch, actionsRepo, itemIsForeign, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
-    exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail,
+    exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail, goToPRRow,
     goToDiff, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
@@ -309,7 +309,7 @@ export function renderAppView(ctx) {
               <DetailPane
                 {...(detailKind === 'issues'
                   ? { issueNumber: selectedItem.number }
-                  : { prNumber: selectedItem.number, baseRefName: selectedItem.baseRefName })}
+                  : { prNumber: selectedItem.number, baseRefName: selectedItem.baseRefName, entry: selectedItem._entry })}
                 repo={itemRepo}
                 onBack={goBack}
                 onOpenDiff={goToDiff}
@@ -336,7 +336,7 @@ export function renderAppView(ctx) {
       case 'prs': return (
         <PRList repo={repo} listHeight={listHeight}
           innerWidth={listInnerWidth}
-          onSelectPR={goToDetail}
+          onSelectPR={goToPRRow}
           onOpenDiff={goToDiff} onPaneState={onPaneState} />
       )
       case 'issues': return (
@@ -379,6 +379,7 @@ export function renderAppView(ctx) {
     'reviewers':     DIALOG_KEYS.multiselect,
     'approve-body':  DIALOG_KEYS.compose,
     'reqchanges-body': DIALOG_KEYS.compose,
+    'comment-pr':    DIALOG_KEYS.compose,
     'new-pr':        DIALOG_KEYS.compose,
     'close-pr':      DIALOG_KEYS.confirm,
     'checkout':      DIALOG_KEYS.confirm,

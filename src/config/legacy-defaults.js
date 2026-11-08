@@ -383,6 +383,14 @@ export const LEGACY_ACTION_VALUES = {
     scope: ["pr-list,pr-detail,diff", "pr-list"],
     group: ["action"],
   },
+  "pr.comment": {
+    keys: [["c"]],
+    hint: ["c"],
+    label: ["comment"],
+    description: ["Comment on the selected PR without opening it"],
+    scope: ["pr-list"],
+    group: ["action"],
+  },
   "pr.close": {
     keys: [["X"]],
     hint: ["X"],

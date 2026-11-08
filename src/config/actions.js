@@ -5,6 +5,7 @@
 import { loadConfig } from './loader.js'
 import { buildEffectiveActionKeys, eventToTokens } from './keymap.js'
 
+/** @type {any} */
 let cachedConfig = null
 
 /**
@@ -27,7 +28,7 @@ export function resetActionConfigCache() {
  * @param id
  * @param config
  */
-export function getAction(id, config = getActionConfig()) {
+export function getAction(/** @type {any} */ id, config = getActionConfig()) {
   return config?.actions?.[id] || null
 }
 
@@ -36,7 +37,7 @@ export function getAction(id, config = getActionConfig()) {
  * @param id
  * @param config
  */
-export function actionHint(id, config = getActionConfig()) {
+export function actionHint(/** @type {any} */ id, config = getActionConfig()) {
   const action = getAction(id, config)
   if (!action) return null
   return {
@@ -52,7 +53,7 @@ export function actionHint(id, config = getActionConfig()) {
  * @param ids
  * @param config
  */
-export function actionHints(ids, config = getActionConfig()) {
+export function actionHints(/** @type {any} */ ids, config = getActionConfig()) {
   const seen = new Set()
   const hints = []
   for (const id of ids) {
@@ -73,7 +74,7 @@ const effectiveKeyCache = new WeakMap()
  * rebinds, or null when the action is unbound. This is what every hint line
  * renders, so a hint can never name a key the keymap does not bind (#511).
  * @param {string} id registry action id
- * @param {object} [config] effective config
+ * @param {Record<string, any>} [config] effective config
  * @returns {string|null} key label, e.g. 'Ctrl+R'
  */
 export function effectiveHintKey(id, config = getActionConfig()) {
@@ -93,7 +94,7 @@ export function effectiveHintKey(id, config = getActionConfig()) {
  * Unbound actions are left out. An entry is an action id, or `[id, label]` to
  * override the registry label with a shorter one.
  * @param {(string|[string, string])[]} entries action ids
- * @param {object} [config] effective config
+ * @param {Record<string, any>} [config] effective config
  * @returns {string} hint line
  */
 export function hintLine(entries, config = getActionConfig()) {
@@ -107,7 +108,7 @@ export function hintLine(entries, config = getActionConfig()) {
   return parts.join('  ')
 }
 
-function matchesKeyToken(token, input, key) {
+function matchesKeyToken(/** @type {any} */ token, /** @type {any} */ input, /** @type {any} */ key) {
   switch (token) {
     case 'Enter': return key.return
     case 'Esc': return key.escape
@@ -140,11 +141,11 @@ function matchesKeyToken(token, input, key) {
  * @param key
  * @param config
  */
-export function matchesAction(id, input, key, config = getActionConfig()) {
+export function matchesAction(/** @type {any} */ id, /** @type {any} */ input, /** @type {any} */ key, config = getActionConfig()) {
   const action = getAction(id, config)
   const effective = buildEffectiveActionKeys(config)[id] || action?.keys || []
   const event = eventToTokens(input, key)
-  return Boolean(effective.some(token => event.has(token) || matchesKeyToken(token, input, key)))
+  return Boolean(effective.some((/** @type {any} */ token) => event.has(token) || matchesKeyToken(token, input, key)))
 }
 
 /**
@@ -153,7 +154,7 @@ export function matchesAction(id, input, key, config = getActionConfig()) {
  * @param fallback
  * @param config
  */
-export function firstActionKey(id, fallback, config = getActionConfig()) {
+export function firstActionKey(/** @type {any} */ id, /** @type {any} */ fallback, config = getActionConfig()) {
   const action = getAction(id, config)
   return buildEffectiveActionKeys(config)[id]?.[0] || action?.keys?.[0] || fallback
 }
@@ -163,7 +164,7 @@ export function firstActionKey(id, fallback, config = getActionConfig()) {
  * @param scope
  * @param config
  */
-export function actionsByScope(scope, config = getActionConfig()) {
+export function actionsByScope(/** @type {any} */ scope, config = getActionConfig()) {
   return Object.entries(config?.actions || {})
     .filter(([, action]) => action.scope === scope)
     .map(([id, action]) => ({ id, ...action }))

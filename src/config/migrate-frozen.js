@@ -18,11 +18,11 @@ import { isPlainObject } from './schema.js'
 
 const PLATFORM_OR_UNBIND = new Set(['unbind', 'darwin', 'linux', 'win32'])
 
-function sameValue(a, b) {
+function sameValue(/** @type {any} */ a, /** @type {any} */ b) {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
-function isShippedValue(id, field, value, current) {
+function isShippedValue(/** @type {any} */ id, /** @type {any} */ field, /** @type {any} */ value, /** @type {any} */ current) {
   if (current !== undefined && sameValue(current[field], value)) return true
   return (LEGACY_ACTION_VALUES[id]?.[field] || []).some(shipped => sameValue(shipped, value))
 }
@@ -31,8 +31,8 @@ function isShippedValue(id, field, value, current) {
  * Remove frozen default copies from a parsed (raw, unvalidated) user config.
  * Does not mutate its input.
  *
- * @param {Object} userRaw parsed user TOML
- * @param {Object} defaults the current bundled defaults (needs `.actions`)
+ * @param {Record<string, any>} userRaw parsed user TOML
+ * @param {Record<string, any>} defaults the current bundled defaults (needs `.actions`)
  * @returns {{ config: Object, dropped: number, unknown: string[] }}
  *   config: user config without frozen defaults; dropped: number of entries removed;
  *   unknown: sorted, de-duplicated action ids bound in [keymaps.*] that exist nowhere:
@@ -48,7 +48,7 @@ export function stripFrozenDefaults(userRaw, defaults) {
   let dropped = 0
 
   if (isPlainObject(userRaw.actions)) {
-    const actions = {}
+    /** @type {Record<string, any>} */ const actions = {}
     for (const [id, entry] of Object.entries(userRaw.actions)) {
       if (!isPlainObject(entry)) { actions[id] = entry; continue }
       if (!knownActions[id]) {
@@ -57,7 +57,7 @@ export function stripFrozenDefaults(userRaw, defaults) {
         actions[id] = entry
         continue
       }
-      const kept = {}
+      /** @type {Record<string, any>} */ const kept = {}
       for (const [field, value] of Object.entries(entry)) {
         if (isShippedValue(id, field, value, knownActions[id])) dropped += 1
         else kept[field] = value
@@ -69,10 +69,10 @@ export function stripFrozenDefaults(userRaw, defaults) {
   }
 
   if (isPlainObject(userRaw.keymaps)) {
-    const keymaps = {}
+    /** @type {Record<string, any>} */ const keymaps = {}
     for (const [scope, bindings] of Object.entries(userRaw.keymaps)) {
       if (!isPlainObject(bindings)) { keymaps[scope] = bindings; continue }
-      const kept = {}
+      /** @type {Record<string, any>} */ const kept = {}
       for (const [key, actionId] of Object.entries(bindings)) {
         if (typeof actionId !== 'string' || PLATFORM_OR_UNBIND.has(key)) { kept[key] = actionId; continue }
         if ((LEGACY_KEYMAP_BINDINGS[scope]?.[key] || []).includes(actionId)) { dropped += 1; continue }

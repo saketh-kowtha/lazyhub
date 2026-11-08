@@ -26,7 +26,7 @@ const WRITABLE_DEFAULTS = new Set(['pr_scope', 'ai_provider', 'repo', 'repo_host
 const WRITABLE_APP = new Set(['active_panes', 'default_pane', 'mouse', 'ai_review_enabled'])
 const WRITABLE_AI = new Set(['provider', 'model', 'anthropic_api_key', 'openai_api_key', 'openai_base_url'])
 const WRITABLE_OPENAI_COMPATIBLE = new Set(['base_url', 'api_key', 'model', 'timeout_ms'])
-const WRITABLE_FEATURES = {
+/** @type {Record<string, any>} */ const WRITABLE_FEATURES = {
   'features.prs': new Set(['default_filter', 'default_scope', 'page_size']),
   'features.issues': new Set(['default_filter', 'page_size', 'refresh_seconds']),
   'features.actions': new Set(['page_size']),
@@ -37,7 +37,9 @@ const WRITABLE_FEATURES = {
 // logged and handed to whoever registered a notifier (the app shows a toast); until
 // one is registered, messages queue so a failure before the UI mounts is not lost.
 const MAX_PENDING_NOTICES = 5
+/** @type {any} */
 let writeNotifier = null
+/** @type {any[]} */
 const pendingWriteNotices = []
 
 /**
@@ -66,16 +68,20 @@ export function reportConfigWriteFailure(err, configPath = USER_CONFIG_PATH) {
   }
 }
 
-function readToml(configPath) {
+function readToml(/** @type {any} */ configPath) {
   return existsSync(configPath) ? readFileSync(configPath, 'utf8') : ''
 }
 
+/**
+ * @param {any} value
+ * @returns {any}
+ */
 function ensureTomlSafe(value) {
   if (value === null || value === undefined) return undefined
   if (['string', 'number', 'boolean', 'bigint'].includes(typeof value)) return value
   if (Array.isArray(value)) return value.map(ensureTomlSafe).filter(v => v !== undefined)
   if (!isPlainObject(value)) return undefined
-  const out = {}
+  /** @type {Record<string, any>} */ const out = {}
   for (const [key, val] of Object.entries(value)) {
     const safe = ensureTomlSafe(val)
     if (safe !== undefined) out[key] = safe
@@ -83,17 +89,17 @@ function ensureTomlSafe(value) {
   return out
 }
 
-function splitLines(text) {
+function splitLines(/** @type {any} */ text) {
   if (!text) return []
   return text.match(/[^\n]*\n|[^\n]+/g) || []
 }
 
-function sectionName(line) {
+function sectionName(/** @type {any} */ line) {
   const match = line.match(SECTION_RE)
   return match ? match[2].trim() : null
 }
 
-function isSectionTree(name, root) {
+function isSectionTree(/** @type {any} */ name, /** @type {any} */ root) {
   return name === root || name.startsWith(`${root}.`)
 }
 
@@ -119,23 +125,23 @@ export function removeSectionTree(text, root) {
   return kept.join('')
 }
 
-function appendBlock(text, block) {
+function appendBlock(/** @type {any} */ text, /** @type {any} */ block) {
   const trimmedBlock = block.trimEnd()
   if (!trimmedBlock) return text
   const prefix = text.trim().length === 0 ? '' : (text.endsWith('\n') ? '\n' : '\n\n')
   return `${text}${prefix}${trimmedBlock}\n`
 }
 
-function serializeState(state) {
+function serializeState(/** @type {any} */ state) {
   const safe = ensureTomlSafe(state) || {}
   return stringify({ state: safe })
 }
 
-function scalarAssignment(key, value) {
+function scalarAssignment(/** @type {any} */ key, /** @type {any} */ value) {
   return stringify({ [key]: value }).trim()
 }
 
-function bracketDelta(line, state, startIndex = 0) {
+function bracketDelta(/** @type {any} */ line, /** @type {any} */ state, startIndex = 0) {
   for (let i = startIndex; i < line.length; i += 1) {
     const ch = line[i]
     if (state.quote) {
@@ -152,10 +158,10 @@ function bracketDelta(line, state, startIndex = 0) {
   }
 }
 
-function assignmentEnd(lines, start, sectionEnd) {
+function assignmentEnd(/** @type {any} */ lines, /** @type {any} */ start, /** @type {any} */ sectionEnd) {
   const eq = lines[start].indexOf('=')
   if (eq === -1) return start
-  const state = { square: 0, curly: 0, quote: null, seen: false }
+  const state = { square: 0, curly: 0, quote: /** @type {string | null} */ (null), seen: false }
   for (let i = start; i < sectionEnd; i += 1) {
     bracketDelta(lines[i], state, i === start ? eq + 1 : 0)
     if (state.seen && state.square === 0 && state.curly === 0 && !state.quote) return i
@@ -164,7 +170,7 @@ function assignmentEnd(lines, start, sectionEnd) {
   return start
 }
 
-function upsertScalar(text, section, key, value) {
+function upsertScalar(/** @type {any} */ text, /** @type {any} */ section, /** @type {any} */ key, /** @type {any} */ value) {
   const assignment = scalarAssignment(key, value)
   const lines = splitLines(text)
   let sectionStart = -1
@@ -200,7 +206,7 @@ function upsertScalar(text, section, key, value) {
   return lines.join('')
 }
 
-function upsertAllowedScalars(text, section, patch, allowed) {
+function upsertAllowedScalars(/** @type {any} */ text, /** @type {any} */ section, /** @type {any} */ patch, /** @type {any} */ allowed) {
   if (!isPlainObject(patch)) return text
   let next = text
   for (const [key, value] of Object.entries(patch)) {
@@ -212,7 +218,7 @@ function upsertAllowedScalars(text, section, patch, allowed) {
   return next
 }
 
-function parseUserConfig(text, _configPath) {
+function parseUserConfig(/** @type {any} */ text, /** @type {any} */ _configPath) {
   if (!text.trim()) return {}
   return parse(text)
 }
@@ -221,13 +227,13 @@ function parseUserConfig(text, _configPath) {
  * Read the raw persisted runtime state from lazyhub.toml.
  * @param {Object} [opts]
  * @param {string} [opts.configPath]
- * @returns {Object} state table, or {}
+ * @returns {Record<string, any>} state table, or {}
  */
 export function readState(opts = {}) {
   const { configPath = USER_CONFIG_PATH } = opts
   try {
     const raw = parseUserConfig(readToml(configPath), configPath)
-    return isPlainObject(raw.state) ? raw.state : {}
+    return isPlainObject(raw.state) ? /** @type {any} */ (raw.state) : {}
   } catch {
     return {}
   }
@@ -235,10 +241,10 @@ export function readState(opts = {}) {
 
 /**
  * Persist a partial patch into [state] in lazyhub.toml.
- * @param {Object} patch partial state values
+ * @param {Record<string, any>} patch partial state values
  * @param {Object} [opts]
  * @param {string} [opts.configPath]
- * @returns {Object} full state after the write
+ * @returns {Record<string, any>} full state after the write
  */
 export function writeState(patch, opts = {}) {
   const { configPath = USER_CONFIG_PATH } = opts
@@ -256,10 +262,10 @@ export function writeState(patch, opts = {}) {
 
 /**
  * Write settings-owned TOML fields while preserving unrelated user content.
- * @param {Object} patch settings-owned config/state patch
+ * @param {Record<string, any>} patch settings-owned config/state patch
  * @param {Object} [opts]
  * @param {string} [opts.configPath]
- * @returns {Object} parsed user TOML after the write
+ * @returns {Record<string, any>} parsed user TOML after the write
  */
 export function writeConfig(patch, opts = {}) {
   const { configPath = USER_CONFIG_PATH } = opts

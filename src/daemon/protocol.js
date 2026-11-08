@@ -53,35 +53,35 @@ const SAFE_VALUE_RE = /^[^\s\u0000-\u001f-][^\u0000-\u001f]*$/
  * @param {RegExp} re
  * @param {number} max
  */
-const str = (re, max) => v => typeof v === 'string' && v.length <= max && re.test(v)
-const posInt = max => v => Number.isInteger(v) && v >= 1 && v <= max
+const str = (re, max) => (/** @type {any} */ v) => typeof v === 'string' && v.length <= max && re.test(v)
+const posInt = (/** @type {any} */ max) => (/** @type {any} */ v) => Number.isInteger(v) && v >= 1 && v <= max
 
 const isRepoShape = str(REPO_RE, 200)
-const validRepo = v => isRepoShape(v) && !v.split('/').some(seg => seg === '.' || seg === '..')
+const validRepo = (/** @type {any} */ v) => isRepoShape(v) && !v.split('/').some((/** @type {any} */ seg) => seg === '.' || seg === '..')
 const validFields = str(FIELDS_RE, 600)
 const validValue = str(SAFE_VALUE_RE, 200)
 
 /**
  * op name -> { params: required validators, optional: param -> gh flag, build }
  */
-export const READ_OPS = {
+/** @type {Record<string, any>} */ export const READ_OPS = {
   'pr.view': {
     params: { repo: validRepo, number: posInt(1e9), fields: validFields },
-    build: p => ['pr', 'view', String(p.number), '--repo', p.repo, '--json', p.fields],
+    build: (/** @type {any} */ p) => ['pr', 'view', String(p.number), '--repo', p.repo, '--json', p.fields],
   },
   'pr.diff': {
     params: { repo: validRepo, number: posInt(1e9) },
-    build: p => ['pr', 'diff', String(p.number), '--repo', p.repo],
+    build: (/** @type {any} */ p) => ['pr', 'diff', String(p.number), '--repo', p.repo],
   },
   'issue.list': {
     params: { repo: validRepo, limit: posInt(1000), fields: validFields },
     optional: { state: '--state', author: '--author', label: '--label', assignee: '--assignee', milestone: '--milestone' },
-    build: (p, opt) => ['issue', 'list', '--repo', p.repo, '--limit', String(p.limit), ...opt, '--json', p.fields],
+    build: (/** @type {any} */ p, /** @type {any} */ opt) => ['issue', 'list', '--repo', p.repo, '--limit', String(p.limit), ...opt, '--json', p.fields],
   },
   'run.list': {
     params: { repo: validRepo, limit: posInt(1000), fields: validFields },
     optional: { workflow: '--workflow', branch: '--branch', status: '--status' },
-    build: (p, opt) => ['run', 'list', '--repo', p.repo, '--json', p.fields, '--limit', String(p.limit), ...opt],
+    build: (/** @type {any} */ p, /** @type {any} */ opt) => ['run', 'list', '--repo', p.repo, '--json', p.fields, '--limit', String(p.limit), ...opt],
   },
 }
 
@@ -89,7 +89,7 @@ export const READ_OPS = {
  * Validate a typed read request and build its gh argv.
  *
  * @param {string} op
- * @param {unknown} params
+ * @param {any} params untrusted wire input, validated below
  * @returns {string[]}
  * @throws {ProtocolError}
  */
@@ -133,14 +133,14 @@ export function toTypedRead(args, env = process.env) {
   if (IDENTITY_ENV.some(k => env[k]) || (env.GH_HOST && env.GH_HOST !== 'github.com')) return null
   const op = `${args[0]}.${args[1]}`
   if (!Object.hasOwn(READ_OPS, op)) return null
-  const params = {}
+  /** @type {Record<string, any>} */ const params = {}
   let rest = args.slice(2)
   if (args[0] === 'pr') {
     if (!/^[0-9]{1,9}$/.test(args[2] ?? '')) return null
     params.number = Number(args[2])
     rest = args.slice(3)
   }
-  const flags = { '--repo': 'repo', '--json': 'fields', '--limit': 'limit' }
+  /** @type {Record<string, any>} */ const flags = { '--repo': 'repo', '--json': 'fields', '--limit': 'limit' }
   for (const [key, flag] of Object.entries(READ_OPS[op].optional || {})) flags[flag] = key
   for (let i = 0; i < rest.length; i += 2) {
     const key = flags[rest[i]]
@@ -345,7 +345,7 @@ const UNSAFE_ENV_RE = /^(GH_|GITHUB_|ANTHROPIC_|CLAUDE|CODEX_|NODE_OPTIONS$)/
  * @param {NodeJS.ProcessEnv} [env]
  */
 export function daemonSpawnEnv(env = process.env) {
-  const out = { LAZYHUB_DAEMON_CHILD: '1' }
+  /** @type {Record<string, any>} */ const out = { LAZYHUB_DAEMON_CHILD: '1' }
   for (const key of ENV_ALLOWLIST) if (env[key]) out[key] = env[key]
   return out
 }

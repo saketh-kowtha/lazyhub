@@ -4,7 +4,7 @@ import { runGh } from './core.js'
  * View raw content of a gist.
  * @param id
  */
-export async function getGist(id) {
+export async function getGist(/** @type {any} */ id) {
   return runGh(['gist', 'view', id, '--raw'])
 }
 
@@ -12,6 +12,6 @@ export async function getGist(id) {
  * Delete a gist by ID.
  * @param id
  */
-export async function deleteGist(id) {
+export async function deleteGist(/** @type {any} */ id) {
   return runGh(['gist', 'delete', id, '--yes'])
 }

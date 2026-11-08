@@ -499,8 +499,14 @@ async function runFailedLogFlow() {
     await waitUntil(showing(/Focus/), 'failed-log flow startup')
     await settle()
     await sendUntil(() => writeChord(term, 'gp'), () => screen.text(), /PTY harness fixture PR/, 'PR list for the failed-log flow')
+    // Smart Enter (#314): a PR with failing CI opens the failed check's log directly and says why.
     // Resend Enter if the first one lands before the list has focus (slow CI runners).
-    await sendUntil(() => term.write('\r'), () => screen.text(), /Fixture body/, 'PR detail with a failed check', { tries: 3, eachMs: 4000 })
+    await sendUntil(() => term.write('\r'), () => screen.text(), /Failure excerpt/, 'smart Enter opens the failure excerpt of the failed check', { tries: 3, eachMs: 4000 })
+    assert.match(screen.text(), /AssertionError/)
+    term.write('\x1b')
+    await waitUntil(showing(/Failure excerpt/, false), 'Esc closes the smart-Enter log')
+    await waitUntil(showing(/Fixture body/), 'Esc from the smart-Enter log lands on PR detail')
+    // The #463 path from detail: c -> checks mode -> Enter opens the failure excerpt first.
     term.write('c')
     await waitUntil(showing(/\[Ctrl\+R\] re-run/), 'checks mode')
     await sendUntil(() => term.write('\r'), () => screen.text(), /Failure excerpt/, 'the failure excerpt opens first', { tries: 3, eachMs: 4000 })

@@ -6,7 +6,7 @@ import { encodeRefPath } from './branches.js'
  * @param repo
  * @param filter
  */
-export async function listRuns(repo, filter = {}) {
+export async function listRuns(/** @type {any} */ repo, /** @type {Record<string, any>} */ filter = {}) {
   const args = [
     'run', 'list',
     '--repo', getRepo(repo),
@@ -24,7 +24,7 @@ export async function listRuns(repo, filter = {}) {
  * @param repo
  * @param runId
  */
-export async function getRunLogs(repo, runId) {
+export async function getRunLogs(/** @type {any} */ repo, /** @type {any} */ runId) {
   const args = [
     'run', 'view', String(runId),
     '--repo', getRepo(repo),
@@ -38,7 +38,7 @@ export async function getRunLogs(repo, runId) {
  * @param repo
  * @param runId
  */
-export async function rerunRun(repo, runId) {
+export async function rerunRun(/** @type {any} */ repo, /** @type {any} */ runId) {
   const args = [
     'run', 'rerun', String(runId),
     '--repo', getRepo(repo),
@@ -52,7 +52,7 @@ export async function rerunRun(repo, runId) {
  * @param repo
  * @param runId
  */
-export async function cancelRun(repo, runId) {
+export async function cancelRun(/** @type {any} */ repo, /** @type {any} */ runId) {
   const args = [
     'run', 'cancel', String(runId),
     '--repo', getRepo(repo),
@@ -73,8 +73,9 @@ const CHECK_MAX_PAGES = 20
  * empty or complete when it is not. The array also carries `truncated` / `error`.
  * @param repo
  * @param number
+ * @returns {Promise<any>}
  */
-export async function getPRChecks(repo, number) {
+export async function getPRChecks(/** @type {any} */ repo, /** @type {any} */ number) {
   const r = getRepo(repo)
   // Use the PR view to get the head SHA first, then fetch checks
   let pr
@@ -116,7 +117,7 @@ export async function getPRChecks(repo, number) {
  * @param repo
  * @param checkRunId
  */
-export async function rerunCheckRun(repo, checkRunId) {
+export async function rerunCheckRun(/** @type {any} */ repo, /** @type {any} */ checkRunId) {
   const r = getRepo(repo)
   return runGh([
     'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/check-runs/${checkRunId}/rerequest`,
@@ -129,7 +130,7 @@ export async function rerunCheckRun(repo, checkRunId) {
  * @param repo
  * @param checkRunId
  */
-export async function getCheckRunAnnotations(repo, checkRunId) {
+export async function getCheckRunAnnotations(/** @type {any} */ repo, /** @type {any} */ checkRunId) {
   const r = getRepo(repo)
   try {
     return await runGh([
@@ -146,7 +147,7 @@ export async function getCheckRunAnnotations(repo, checkRunId) {
  * @param repo
  * @param branch
  */
-export async function getBranchProtection(repo, branch) {
+export async function getBranchProtection(/** @type {any} */ repo, /** @type {any} */ branch) {
   if (!branch) return null
   const r = getRepo(repo)
   const args = [

@@ -7,7 +7,7 @@ import { logger } from '../utils-core.js'
  * @param number
  * @param reviewers
  */
-export async function requestReviewers(repo, number, reviewers) {
+export async function requestReviewers(/** @type {any} */ repo, /** @type {any} */ number, /** @type {any} */ reviewers) {
   const args = [
     'pr', 'edit', String(number),
     '--repo', getRepo(repo),
@@ -22,7 +22,7 @@ export async function requestReviewers(repo, number, reviewers) {
  * @param number
  * @param reviewers
  */
-export async function removeReviewers(repo, number, reviewers) {
+export async function removeReviewers(/** @type {any} */ repo, /** @type {any} */ number, /** @type {any} */ reviewers) {
   const args = [
     'pr', 'edit', String(number),
     '--repo', getRepo(repo),
@@ -50,7 +50,7 @@ export const BRANCH_MAX_PAGES = 10
  * List branches in a repo, following pages until a short page or BRANCH_MAX_PAGES.
  * @param repo
  */
-export async function listBranches(repo) {
+export async function listBranches(/** @type {any} */ repo) {
   const r = getRepo(repo)
   const all = []
   for (let page = 1; page <= BRANCH_MAX_PAGES; page++) {
@@ -87,7 +87,7 @@ export const OPEN_PR_HEADS_MAX_PAGES = 50
  * @param repo
  * @returns {Promise<{ heads: string[], truncated: boolean }>}
  */
-export async function listOpenPRBranches(repo) {
+export async function listOpenPRBranches(/** @type {any} */ repo) {
   const [owner, name] = getRepo(repo).split('/')
   const heads = []
   let after = null
@@ -115,7 +115,7 @@ export async function listOpenPRBranches(repo) {
  * @param repo
  * @param number
  */
-export async function checkoutBranch(repo, number) {
+export async function checkoutBranch(/** @type {any} */ repo, /** @type {any} */ number) {
   const args = ['pr', 'checkout', String(number), '--repo', getRepo(repo)]
   return runGh(args)
 }
@@ -125,7 +125,7 @@ export async function checkoutBranch(repo, number) {
  * @param repo
  * @param branchName
  */
-export async function deleteBranch(repo, branchName) {
+export async function deleteBranch(/** @type {any} */ repo, /** @type {any} */ branchName) {
   const r = getRepo(repo)
   const args = [
     'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/git/refs/heads/${encodeRefPath(branchName)}`,
@@ -213,7 +213,7 @@ export async function getPRStateForBranch(branch, repo) {
  * @param repo
  * @param branch
  */
-export async function getRemoteBranch(repo, branch) {
+export async function getRemoteBranch(/** @type {any} */ repo, /** @type {any} */ branch) {
   if (!branch) return null
   try {
     const r = getRepo(repo)
@@ -230,7 +230,7 @@ export async function getRemoteBranch(repo, branch) {
  * @param base
  * @param head
  */
-export async function compareBranches(repo, base, head) {
+export async function compareBranches(/** @type {any} */ repo, /** @type {any} */ base, /** @type {any} */ head) {
   if (!base || !head) return null
   try {
     const r = getRepo(repo)

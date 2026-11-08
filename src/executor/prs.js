@@ -72,8 +72,8 @@ function normalizeStatusCheck(node) {
  * Normalize the PR list GraphQL response to the legacy gh `pr list --json`
  * shape consumed by the list pane.
  *
- * @param {object} result
- * @returns {object[]}
+ * @param {Record<string, any>} result
+ * @returns {Record<string, any>[]}
  */
 export function normalizePRListGraphQL(result) {
   const nodes = result?.data?.search?.nodes || []
@@ -298,7 +298,7 @@ function checkSummaryOf(rollup) {
 
 /**
  * Normalize one slim GraphQL pull request node to a list row.
- * @param {object} pr
+ * @param {Record<string, any>} pr
  */
 export function normalizePRRow(pr) {
   return {
@@ -325,7 +325,7 @@ export function normalizePRRow(pr) {
  * One cursor page of PR list rows (GraphQL search). Never refetches earlier pages:
  * pass the previous page's `endCursor` as `filter.after`.
  * @param {string} repo
- * @param {object} filter  states[], scope, author, sort, limit, after
+ * @param {Record<string, any>} filter  states[], scope, author, sort, limit, after
  * @returns {Promise<{items: object[], hasNextPage: boolean, endCursor: string|null, totalCount: number, exactTotal: boolean}>}
  */
 export async function listPRsPage(repo, filter = {}) {

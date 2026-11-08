@@ -3,7 +3,8 @@
 /** Active PR list dialog rendering and confirmed actions; no list state is owned here. */
 import React from 'react'
 import { Box } from 'ink'
-import { enableAutoMerge, disableAutoMerge, mergePR, closePR, checkoutBranch, reviewPR } from '../../executor.js'
+import { enableAutoMerge, disableAutoMerge, mergePR, closePR, checkoutBranch, reviewPR, addPRComment } from '../../executor.js'
+import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { OptionPicker } from '../../components/dialogs/OptionPicker.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { ReviewDialog } from '../../components/dialogs/ReviewDialog.jsx'
@@ -184,6 +185,29 @@ export function renderPRListDialog({
               await reviewPR(repo, selectedPR.number, approving ? 'approve' : 'request-changes', body)
               showStatus(approving ? `✓ Approved PR #${selectedPR.number}` : `✓ Requested changes on PR #${selectedPR.number}`)
               refreshPR(selectedPR.number) // the row's review state is stale otherwise (#439)
+            } catch (err) {
+              showStatus(`✗ ${err.message}`, true)
+            }
+          })
+        }}
+        onCancel={closeDialog}
+      />
+    )
+  }
+
+  // A plain comment from the row (#314): the typed text is the deliberate step, like request changes.
+  if (dialog === 'comment-pr' && selectedPR) {
+    return (
+      <FormCompose
+        title={`Comment on PR #${selectedPR.number}`}
+        fields={[{ name: 'body', label: 'Comment (required)', type: 'text' }]}
+        validate={(v) => ((v.body || '').trim() ? null : 'a comment is required')}
+        onSubmit={async (values) => {
+          closeDialog()
+          await runWrite(`Commenting on #${selectedPR.number}`, async () => {
+            try {
+              await addPRComment(repo, selectedPR.number, values.body.trim())
+              showStatus(`✓ Commented on PR #${selectedPR.number}`)
             } catch (err) {
               showStatus(`✗ ${err.message}`, true)
             }

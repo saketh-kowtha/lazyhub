@@ -403,6 +403,17 @@ export function App({ repo, onSwitchRepo }) {
   const goToDetail   = useCallback((item) => {
     setSelectedItem(item); setView('detail')
   }, [])
+  // Enter on a PR row goes to the most useful place and says why (#314). Files changed is the diff
+  // view (Esc returns to the list); the failed check log and the conflict summary are entered by the
+  // detail pane itself, once, from `_entry`.
+  const goToPRRow = useCallback((item, entry) => {
+    if (entry?.reason) addToast({ message: entry.reason, variant: 'info' })
+    if (entry?.target === 'files') {
+      setSelectedItem({ ...item, _fromList: true }); setView('diff'); return
+    }
+    setSelectedItem(entry?.target === 'checks-log' || entry?.target === 'conflict' ? { ...item, _entry: entry.target } : item)
+    setView('detail')
+  }, [addToast])
   // The detail pane hands back its own fetched PR; keep the dashboard identity (_repo/_kind) of the item (#493).
   const goToDiff       = useCallback((item) => {
     setStoryNav(null)
@@ -448,7 +459,7 @@ export function App({ repo, onSwitchRepo }) {
 
   const tree = renderAppView({
     actionsBranch, actionsRepo, itemIsForeign, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
-    exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail,
+    exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail, goToPRRow,
     goToDiff, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
