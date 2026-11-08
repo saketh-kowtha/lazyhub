@@ -45,6 +45,7 @@ import { CollisionRadar } from './collisions/view.jsx'
 import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
 import { sortChecks } from './detail/Checks.jsx'
+import { ClaimsView } from './ClaimsView.jsx'
 
 const _editorCfg = loadConfig().editor
 
@@ -234,6 +235,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     if (id === 'pr.collisions' && pr) { setDialog('collisions'); return }
     if (id === 'pr.story' && pr && onOpenStory) { onOpenStory(pr); return }
     if (id === 'pr.comments' && onViewComments) { onViewComments(); return }
+    if (id === 'pr.claims' && pr) { setDialog('claims'); return }
     if (id === 'pr.open-browser' && pr?.url) {
       openUrl(pr.url)
       return
@@ -509,6 +511,10 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
 
   if (dialog === 'collisions') {
     return <CollisionRadar repo={repo} prNumber={prNumber} onClose={() => setDialog(null)} />
+  }
+
+  if (dialog === 'claims') {
+    return <ClaimsView pr={pr} repo={repo} onClose={() => setDialog(null)} onOpenDiff={onOpenDiff} />
   }
 
   if (dialog === 'check-logs') {
