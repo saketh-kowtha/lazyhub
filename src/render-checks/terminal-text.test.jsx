@@ -27,6 +27,8 @@ import { BranchList } from '../features/branches/index.jsx'
 import { ActionList } from '../features/actions/index.jsx'
 import { NotificationList } from '../features/notifications/index.jsx'
 import { LogViewer } from '../components/dialogs/LogViewer.jsx'
+import { CollisionRadar } from '../features/prs/collisions/view.jsx'
+import { parsePatchChanges } from '../features/prs/collisions/engine.js'
 import { PRComments } from '../features/prs/comments.jsx'
 import { ConflictView } from '../features/prs/ConflictView.jsx'
 import { AIReviewPane } from '../components/AIReviewPane.jsx'
@@ -387,6 +389,31 @@ describe('log viewer and annotations', () => {
     expect(frameOf(view)).toContain('CANARY')
     expectClean(frameOf(view))
   })
+})
+
+describe('collision radar', () => {
+  const file = (path, changes) => ({ path, additions: 1, deletions: 1, changeType: 'MODIFIED', changes })
+  const patch = '@@ -3,2 +3,2 @@ heading'
+  const scan = () => poison({
+    repo: 'o/r', number: 1, fetchedAt: Date.now(), totalOpen: 9, notScanned: 3, currentOutside: false,
+    filesCapped: [{ number: 2, shown: 100, total: 300 }], hunkChecked: [2], hunkSkipped: [], patchTruncated: [],
+    errors: [{ number: 2, message: 'bad' }],
+    prs: [
+      { number: 1, title: 'Mine', author: 'me', state: 'OPEN', baseRefName: 'main', additions: 1, deletions: 1, files: [file('src/a.js', parsePatchChanges(`${patch}\n-a\n+b`))] },
+      { number: 2, title: 'Theirs', author: 'you', state: 'OPEN', baseRefName: 'main', additions: 1, deletions: 1, files: [file('src/a.js', parsePatchChanges(`${patch}\n-a\n+b`))] },
+    ],
+  })
+
+  for (const tab of ['pr', 'repo']) {
+    it(`${tab} tab`, async () => {
+      useGh.mockImplementation(() => result(scan()))
+      const view = renderWithProviders(<CollisionRadar repo="o/r" prNumber={1} onClose={() => {}} />)
+      await flush(20)
+      if (tab === 'repo') { await sendInput('', { tab: true }); await flush(20) }
+      expect(frameOf(view)).toContain('CANARY')
+      expectClean(frameOf(view))
+    })
+  }
 })
 
 describe('AI review pane', () => {

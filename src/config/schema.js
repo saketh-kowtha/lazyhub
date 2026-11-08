@@ -99,7 +99,7 @@ export const DEFAULT_CONFIG = {
     notifications: { label: 'Notifications', icon: '✦', description: 'Review GitHub notifications' },
   },
   features: {
-    prs:     { default_filter: 'open', default_scope: 'mine', page_size: 100 },
+    prs:     { default_filter: 'open', default_scope: 'mine', page_size: 100, generated_files: /** @type {string[]} */ ([]) },
     issues:  { default_filter: 'open', page_size: 50, refresh_seconds: 30 },
     actions: { page_size: 30 },
   },
@@ -255,6 +255,7 @@ export const DEFAULT_CONFIG = {
     'pr.checks':             { keys: ['c'], hint: 'c', label: 'checks', description: 'Enter checks navigation mode', scope: 'pr-detail', group: 'action' },
     'pr.conflicts':          { keys: ['C'], hint: 'C', label: 'conflicts / CI', description: 'Resolve conflicts, or open Actions for this branch', scope: 'pr-detail', group: 'action' },
     'pr.draft':              { keys: ['D'], hint: 'D', label: 'draft', description: 'Toggle draft / ready for review', scope: 'pr-detail', group: 'action' },
+    'pr.collisions':         { keys: ['K'], hint: 'K', label: 'collisions', description: 'Show open PRs that overlap this one and a suggested merge order', scope: 'pr-detail', group: 'action' },
     'pr.base':               { keys: ['B'], hint: 'B', label: 'base', description: 'Change the base branch', scope: 'pr-detail', group: 'action' },
     'pr.comments':           { keys: ['v'], hint: 'v', label: 'comments', description: 'Open the comments view', scope: 'pr-detail,diff', group: 'action' },
     'pr.claims':             { keys: ['V'], hint: 'V', label: 'claims', description: 'Check the claims in the PR description against the diff', scope: 'pr-detail', group: 'action' },
@@ -441,6 +442,7 @@ const PRS_FEATURE_SPEC = {
   default_filter: { type: 'string', enum: ['open', 'closed', 'merged'] },
   default_scope:  { type: 'string', enum: ['mine', 'own', 'reviewing', 'all'] },
   page_size:      { type: 'integer', validate: (/** @type {any} */ v) => (v > 0 ? null : 'must be positive') },
+  generated_files: { type: 'array', validate: (/** @type {any} */ v) => (v.every((/** @type {any} */ x) => typeof x === 'string') ? null : 'must be a list of strings') },
 }
 
 const ISSUES_FEATURE_SPEC = {
