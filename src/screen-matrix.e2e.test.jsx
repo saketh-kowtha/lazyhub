@@ -20,7 +20,7 @@
  * Debug a frame: MATRIX_DUMP=80x24 npx vitest run src/screen-matrix.e2e.test.jsx
  */
 
-import React, { useState } from 'react'
+import React from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 const size = vi.hoisted(() => {
@@ -104,24 +104,14 @@ function hasColourParam(seq) {
 }
 
 // Mount the App on a fake stdout that reports the given size, as a real TTY does.
-// Ink re-renders the whole tree on a resize; ink-testing-library does not, so the harness
-// does it. (It used to ride on a re-render caused by deferred scope claims, #483.)
-let bumpRender = () => {}
-function ResizeBump({ render }) {
-  const [, set] = useState(0)
-  bumpRender = () => set(n => n + 1)
-  return render()
-}
-
 function mount(cols, rows, theme = THEMES[0]) {
   size.columns = cols
   size.rows = rows
-  const view = renderWithProviders(<ResizeBump render={() => <App repo="owner/repo" />} />, { theme: theme.theme })
+  const view = renderWithProviders(<App repo="owner/repo" />, { theme: theme.theme })
   // ink-testing-library's stdout is fixed at 100 columns; Ink lays out against stdout.columns.
   Object.defineProperty(view.stdout, 'columns', { value: cols, configurable: true })
   Object.defineProperty(view.stdout, 'rows', { value: rows, configurable: true })
   view.stdout.emit('resize')
-  bumpRender()
   return view
 }
 

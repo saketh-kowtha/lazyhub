@@ -21,9 +21,14 @@ export function FocusProvider({ children, router = focusRouter, globals }) {
   const [activeScope, setActiveScope] = useState(() => router.activeScope())
 
   useLayoutEffect(() => {
+    // The router's own answer is synchronous; only the React-visible copy (context
+    // consumers re-rendering) trails by a microtask, as the old passive-effect claim did.
+    let live = true
     const sync = () => setActiveScope(router.activeScope())
-    sync()
-    return router.subscribe(sync)
+    const later = () => { Promise.resolve().then(() => { if (live) sync() }) }
+    later() // claims made by children's layout effects, before this subscription existed
+    const off = router.subscribe(later)
+    return () => { live = false; off() }
   }, [router])
 
   const globalsRef = useRef(globals)
