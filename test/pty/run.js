@@ -526,8 +526,9 @@ async function runFailedLogFlow() {
     await waitUntil(showing(/Why is CI red\?/), 'f opens Why is CI red')
     await waitUntil(showing(/failing step: Run npm test/), 'the failing step is shown')
     assert.match(screen.text(), /test \(20\)/)
-    assert.match(screen.text(), /AssertionError/)
-    assert.match(screen.text(), /unknown/, 'what could not be determined is labelled unknown')
+    // The excerpt and the base-branch comparison arrive after the step ("still loading").
+    await waitUntil(showing(/AssertionError/), 'the log excerpt is shown')
+    await waitUntil(showing(/unknown/), 'what could not be determined is labelled unknown')
     term.write('\x1b')
     await waitUntil(showing(/Why is CI red\?/, false), 'Esc closes the view')
     term.write('q')
