@@ -799,6 +799,14 @@ export const LEGACY_ACTION_VALUES = {
     scope: ["pr-detail,diff"],
     group: ["action"],
   },
+  "pr.claims": {
+    keys: [["V"]],
+    hint: ["V"],
+    label: ["claims"],
+    description: ["Check the claims in the PR description against the diff"],
+    scope: ["pr-detail"],
+    group: ["action"],
+  },
   "pr.open-editor": {
     keys: [["E"]],
     hint: ["E"],

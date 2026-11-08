@@ -256,6 +256,7 @@ export const DEFAULT_CONFIG = {
     'pr.draft':              { keys: ['D'], hint: 'D', label: 'draft', description: 'Toggle draft / ready for review', scope: 'pr-detail', group: 'action' },
     'pr.base':               { keys: ['B'], hint: 'B', label: 'base', description: 'Change the base branch', scope: 'pr-detail', group: 'action' },
     'pr.comments':           { keys: ['v'], hint: 'v', label: 'comments', description: 'Open the comments view', scope: 'pr-detail,diff', group: 'action' },
+    'pr.claims':             { keys: ['V'], hint: 'V', label: 'claims', description: 'Check the claims in the PR description against the diff', scope: 'pr-detail', group: 'action' },
     'pr.open-editor':        { keys: ['E'], hint: 'E', label: 'editor', description: 'Open the first changed file, or the cursor line in the diff, in $EDITOR', scope: 'pr-detail,diff', group: 'action' },
     'check.log':             { keys: ['Enter'], hint: 'Enter', label: 'log', description: 'Show the selected check log', scope: 'pr-checks', group: 'action' },
     'check.open-browser':    { keys: ['o'], hint: 'o', label: 'browser', description: 'Open the selected check in the browser', scope: 'pr-checks', group: 'action' },

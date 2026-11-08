@@ -912,6 +912,14 @@ description = "Open the comments view"
 scope = "pr-detail,diff"
 group = "action"
 
+[actions."pr.claims"]
+keys = ["V"]
+hint = "V"
+label = "claims"
+description = "Check the claims in the PR description against the diff"
+scope = "pr-detail"
+group = "action"
+
 [actions."pr.open-editor"]
 keys = ["E"]
 hint = "E"
