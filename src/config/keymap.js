@@ -2,7 +2,9 @@
  * config/keymap.js — TOML-backed keymap resolution.
  */
 
-import { useInput } from '../hooks/useSafeInput.js'
+import { useFocusEntry } from '../focus/FocusProvider.js'
+import { focusRouter } from '../focus/router.js'
+import { chordSpellings, createChordTracker } from '../focus/chords.js'
 import { useCallback, useMemo, useRef } from 'react'
 import { loadConfig } from './loader.js'
 import { getActionConfig } from './actions.js'
@@ -104,7 +106,7 @@ export function buildEffectiveActionKeys(config = loadConfig()) {
 
 // Scrolling/refresh/search actions (scope 'list') are shared by the full-screen
 // views, so `j`, `gg`, `r` and `/` mean the same thing there (#312).
-const VIEW_SCOPES = new Set(['pr-detail', 'pr-checks', 'diff', 'pr-comments', 'issue-detail'])
+const VIEW_SCOPES = new Set(['pr-detail', 'pr-checks', 'pr-story', 'diff', 'pr-comments', 'issue-detail'])
 
 /**
  * Whether an action declared for `actionScope` is live in the keymap scope.
@@ -206,7 +208,11 @@ const CHORD_WINDOW_MS = 400
  * @returns {string|null} action id
  */
 export function resolveChord(keymap, first, second) {
-  return keymap.resolveToken(`${first}${second}`) ?? keymap.resolveToken(`${first} ${second}`)
+  for (const spelling of chordSpellings(first, second)) {
+    const hit = keymap.resolveToken(spelling)
+    if (hit) return hit
+  }
+  return null
 }
 
 /**
@@ -224,15 +230,13 @@ export function useActionResolver(scopes, config) {
     () => createKeymap(scopeKey.split('|'), config || getActionConfig()),
     [scopeKey, config],
   )
-  const last = useRef({ input: null, at: 0 })
+  const tracker = useRef(null)
+  if (!tracker.current) tracker.current = createChordTracker({ windowMs: CHORD_WINDOW_MS })
   return useCallback((input, key) => {
-    const now = Date.now()
-    const prev = last.current
-    const plain = input && input.length === 1 && !key.ctrl && !key.meta ? input : null
-    last.current = { input: plain, at: now }
-    if (plain && prev.input && now - prev.at <= CHORD_WINDOW_MS) {
-      const chord = resolveChord(keymap, prev.input, plain)
-      if (chord) { last.current = { input: null, at: 0 }; return chord }
+    const prev = tracker.current.feed(input, key)
+    if (prev) {
+      const chord = resolveChord(keymap, prev, input)
+      if (chord) { tracker.current.reset(); return chord }
     }
     return keymap.resolve(input, key)
   }, [keymap])
@@ -242,10 +246,8 @@ export function useActionResolver(scopes, config) {
 // A prefix key (`g`) arms a short window in which the next key picks a
 // continuation. Handlers registered through useKeymapInput run before the root
 // handler (children's effects register first), so while a prefix is armed they
-// must not also act on the continuation key. This module state is the single
-// place that coordination lives.
-
-let armedPrefix = null
+// must not also act on the continuation key. The armed state lives in the focus
+// router (src/focus, #483); these are the long-standing entry points to it.
 
 /**
  * Arm a prefix. `continuations` are the keys that complete it.
@@ -253,12 +255,12 @@ let armedPrefix = null
  * @param {Iterable<string>} continuations keys that complete the prefix
  */
 export function armPrefix(prefix, continuations) {
-  armedPrefix = { prefix, continuations: new Set(continuations) }
+  focusRouter.armPrefix(prefix, continuations)
 }
 
 /** Clear any armed prefix. */
 export function disarmPrefix() {
-  armedPrefix = null
+  focusRouter.disarmPrefix()
 }
 
 /**
@@ -266,7 +268,7 @@ export function disarmPrefix() {
  * @returns {{ prefix: string, continuations: Set<string> }|null} snapshot
  */
 export function getArmedPrefix() {
-  return armedPrefix
+  return focusRouter.getArmedPrefix()
 }
 
 /**
@@ -276,9 +278,7 @@ export function getArmedPrefix() {
  * @returns {boolean} whether view handlers must skip the event
  */
 export function prefixConsumes(input, key = {}) {
-  if (!armedPrefix) return false
-  if (key.escape) return true
-  return armedPrefix.continuations.has(input)
+  return focusRouter.prefixConsumes(input, key)
 }
 
 /**
@@ -289,8 +289,6 @@ export function prefixConsumes(input, key = {}) {
  * @param opts
  */
 export function useKeymapInput(handler, opts) {
-  return useInput((input, key) => {
-    if (prefixConsumes(input, key)) return
-    handler(input, key)
-  }, opts)
+  // skipOnPrefix: the router keeps an armed prefix's continuation (`g p`) away from views.
+  useFocusEntry(null, handler, { skipOnPrefix: true, isActive: opts?.isActive })
 }

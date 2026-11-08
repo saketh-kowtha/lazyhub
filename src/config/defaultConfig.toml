@@ -931,6 +931,46 @@ description = "Open the first changed file, or the cursor line in the diff, in $
 scope = "pr-detail,diff"
 group = "action"
 
+[actions."pr.story"]
+keys = ["s"]
+hint = "s"
+label = "story"
+description = "Review story: a guided step-by-step walkthrough of the diff"
+scope = "pr-detail"
+group = "action"
+
+[actions."story.next"]
+keys = ["n"]
+hint = "n / p"
+label = "next step"
+description = "Next step of the review story"
+scope = "pr-story"
+group = "nav"
+
+[actions."story.prev"]
+keys = ["p"]
+hint = "n / p"
+label = "prev step"
+description = "Previous step of the review story"
+scope = "pr-story"
+group = "nav"
+
+[actions."story.open"]
+keys = ["Enter"]
+hint = "Enter"
+label = "open diff"
+description = "Open the diff at the selected file"
+scope = "pr-story"
+group = "action"
+
+[actions."story.toggle"]
+keys = ["Space"]
+hint = "Space"
+label = "expand"
+description = "Expand or collapse the noise step"
+scope = "pr-story"
+group = "action"
+
 [actions."check.log"]
 keys = ["Enter"]
 hint = "Enter"
