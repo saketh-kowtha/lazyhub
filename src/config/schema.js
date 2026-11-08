@@ -258,6 +258,11 @@ export const DEFAULT_CONFIG = {
     'pr.comments':           { keys: ['v'], hint: 'v', label: 'comments', description: 'Open the comments view', scope: 'pr-detail,diff', group: 'action' },
     'pr.claims':             { keys: ['V'], hint: 'V', label: 'claims', description: 'Check the claims in the PR description against the diff', scope: 'pr-detail', group: 'action' },
     'pr.open-editor':        { keys: ['E'], hint: 'E', label: 'editor', description: 'Open the first changed file, or the cursor line in the diff, in $EDITOR', scope: 'pr-detail,diff', group: 'action' },
+    'pr.story':              { keys: ['s'], hint: 's', label: 'story', description: 'Review story: a guided step-by-step walkthrough of the diff', scope: 'pr-detail', group: 'action' },
+    'story.next':            { keys: ['n'], hint: 'n / p', label: 'next step', description: 'Next step of the review story', scope: 'pr-story', group: 'nav' },
+    'story.prev':            { keys: ['p'], hint: 'n / p', label: 'prev step', description: 'Previous step of the review story', scope: 'pr-story', group: 'nav' },
+    'story.open':            { keys: ['Enter'], hint: 'Enter', label: 'open diff', description: 'Open the diff at the selected file', scope: 'pr-story', group: 'action' },
+    'story.toggle':          { keys: ['Space'], hint: 'Space', label: 'expand', description: 'Expand or collapse the noise step', scope: 'pr-story', group: 'action' },
     'check.log':             { keys: ['Enter'], hint: 'Enter', label: 'log', description: 'Show the selected check log', scope: 'pr-checks', group: 'action' },
     'check.open-browser':    { keys: ['o'], hint: 'o', label: 'browser', description: 'Open the selected check in the browser', scope: 'pr-checks', group: 'action' },
     'check.rerun':           { keys: ['Ctrl+R'], hint: 'Ctrl+R', label: 're-run', description: 'Re-run the selected check', scope: 'pr-checks', group: 'action' },
@@ -631,7 +636,7 @@ function normalizeKeyForValidation(key) {
 function actionScopeMatchesKeymap(actionScope, keymapScope) {
   return String(actionScope || '').split(',').some(declared => {
     if (declared === keymapScope) return true
-    return declared === 'list' && (keymapScope.endsWith('-list') || ['pr-detail', 'pr-checks', 'diff', 'pr-comments', 'issue-detail'].includes(keymapScope))
+    return declared === 'list' && (keymapScope.endsWith('-list') || ['pr-detail', 'pr-checks', 'pr-story', 'diff', 'pr-comments', 'issue-detail'].includes(keymapScope))
   })
 }
 

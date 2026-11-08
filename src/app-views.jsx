@@ -14,6 +14,7 @@ import { FooterKeys } from './components/FooterKeys.jsx'
 import { PRList } from './features/prs/list.jsx'
 import { PRDetail } from './features/prs/detail.jsx'
 import { PRDiff } from './features/prs/diff.jsx'
+import { StoryView } from './features/prs/story/StoryView.jsx'
 import { PRComments } from './features/prs/comments.jsx'
 import { ConflictView } from './features/prs/ConflictView.jsx'
 import { IssueList } from './features/issues/list.jsx'
@@ -37,7 +38,7 @@ export function renderAppView(ctx) {
   const {
     actionsBranch, actionsRepo, itemIsForeign, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
     exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail,
-    goToDiff, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
+    goToDiff, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
     showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
@@ -189,8 +190,32 @@ export function renderAppView(ctx) {
               repo={itemRepo}
               onBack={goBack}
               onViewComments={goToComments}
+              initialFile={storyNav?.active ? storyNav.file : undefined}
             />
           </ErrorBoundary>
+        </Box>
+      </AppContext.Provider>
+    )
+  }
+
+  if (view === 'story' && selectedItem) {
+    return (
+      <AppContext.Provider value={appCtx}>
+        <Box flexDirection="column" height={rows}>
+          <Box flexDirection="column" flexGrow={1} overflow="hidden">
+            <ErrorBoundary>
+              <StoryView prNumber={selectedItem.number} repo={itemRepo} onBack={goBack}
+                onOpenFile={openStoryFile} initial={storyNav?.pos} />
+            </ErrorBoundary>
+          </Box>
+          <StatusBar repo={itemRepo} pane={pane} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
+          <FooterKeys hidden={compactFooter} keys={[
+            { key: 'n/p', label: 'step' },
+            { key: 'j/k', label: 'file' },
+            { key: 'Enter', label: 'open diff' },
+            { key: 'Space', label: 'expand' },
+            { key: 'Esc', label: 'back' },
+          ]} />
         </Box>
       </AppContext.Provider>
     )
@@ -288,6 +313,7 @@ export function renderAppView(ctx) {
                 repo={itemRepo}
                 onBack={goBack}
                 onOpenDiff={goToDiff}
+                onOpenStory={detailKind === 'prs' ? goToStory : undefined}
                 onOpenConflict={detailKind === 'prs' ? goToConflict : undefined}
                 onOpenActions={detailKind === 'prs' ? goToActions : undefined}
                 onViewComments={detailKind === 'prs' ? goToComments : undefined}

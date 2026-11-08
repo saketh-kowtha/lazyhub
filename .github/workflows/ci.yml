@@ -286,6 +286,35 @@ jobs:
             -v "$PWD:/app" -w /app node:22-bookworm \
             node test/pty/memory.js
 
+  # Large-repo budgets (#510): the built TUI against a generated fake gh (5,000 open PRs, 2,000
+  # issues, a 3,000-file diff, a 400-comment conversation) at 300 ms per call. Fails on a slow first
+  # row or diff, a list that does not page to GitHub's 1,000-result cap (or pages a cursor twice),
+  # a whole-diff download, a lost conversation page, or peak RSS above 512 MB. Budgets and the
+  # measured baseline: docs/PERF_BUDGETS.md. Make it a required check once it has been stable a week.
+  performance-budget:
+    name: Performance budget
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (locked)
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Large-repo budgets
+        run: npm run test:perf
+
   # Terminal portability (#311): ASCII-only, uncolored 80x24 journey on TERM=linux.
   portability-smoke:
     name: TERM=linux PTY smoke

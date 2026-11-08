@@ -29,6 +29,7 @@ const COVERED = {
   'src/executor/notifications.js': [1, 'pages to a ceiling and reports truncated / partialError'],
   'src/executor/claims.js': [1, 'claims check: the REST file list is read with --paginate to the end; GitHub caps a PR at 3000 files and the view says so'],
   'src/executor/pr-files.js': [2, 'per-file patch lookup: the page a file is on, else --paginate to the end; the file list itself walks after: cursors'],
+  'src/executor/pr-story.js': [1, 'compare call for "since your last review": per_page=1 only trims the commit list; the file list is GitHub\'s own (capped at 300) and `capped` is reported to the user'],
   'src/executor/prs.js': [8, 'PR list pages by cursor; nested label/reviewer/context previews have totalCount or pageInfo'],
   'src/watch-only/report.js': [1, 'message text only'],
 }
