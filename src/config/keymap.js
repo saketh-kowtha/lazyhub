@@ -104,7 +104,7 @@ export function buildEffectiveActionKeys(config = loadConfig()) {
 
 // Scrolling/refresh/search actions (scope 'list') are shared by the full-screen
 // views, so `j`, `gg`, `r` and `/` mean the same thing there (#312).
-const VIEW_SCOPES = new Set(['pr-detail', 'pr-checks', 'diff', 'pr-comments', 'issue-detail'])
+const VIEW_SCOPES = new Set(['pr-detail', 'pr-checks', 'pr-story', 'diff', 'pr-comments', 'issue-detail'])
 
 /**
  * Whether an action declared for `actionScope` is live in the keymap scope.
