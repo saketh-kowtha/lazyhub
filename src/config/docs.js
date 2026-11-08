@@ -4,10 +4,16 @@
 
 import { loadConfig } from './loader.js'
 
-function table(/** @type {any} */ headers, /** @type {any} */ rows) {
+/**
+ * Render a Markdown table. Backslashes are escaped before pipes so a cell cannot end its own escape.
+ * @param {string[]} headers
+ * @param {any[][]} rows
+ * @returns {string}
+ */
+export function table(headers, rows) {
   const head = `| ${headers.join(' | ')} |`
   const sep = `| ${headers.map(() => '---').join(' | ')} |`
-  const body = rows.map((/** @type {any} */ row) => `| ${row.map((/** @type {any} */ cell) => String(cell ?? '').replace(/\|/g, '\\|')).join(' | ')} |`)
+  const body = rows.map(row => `| ${row.map(cell => String(cell ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|')).join(' | ')} |`)
   return [head, sep, ...body].join('\n')
 }
 
