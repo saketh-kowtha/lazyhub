@@ -1228,6 +1228,14 @@ api_key    = ""
 model      = "qwen2.5-coder:32b"
 timeout_ms = 60000
 
+# #364: opt in per CLI to use its own subscription login in place (real HOME, tools off).
+# Needs a CLI version whose --help proves the hardening flags; otherwise it stays unavailable.
+# Revoke by setting false. See docs/AI_PROVIDERS_SPEC.md and docs/THREAT_MODEL.md.
+[ai.login]
+codex      = false
+gemini_cli = false
+agy        = false
+
 [ai.second_opinion]
 enabled = true
 

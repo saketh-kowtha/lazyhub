@@ -166,7 +166,7 @@ export async function runAIChat({ aiConfig, system, messages, tools, maxTokens, 
  * Return detection status for all known providers.
  * Useful for settings UI and diagnostics.
  *
- * @returns {Promise<Array<{id: string, displayName: string, available: boolean, version?: string, reason?: string}>>}
+ * @returns {Promise<Array<{id: string, displayName: string, available: boolean, version?: string, reason?: string, authMode?: string}>>}
  */
 export async function listProviders() {
   return listProviderStatus()

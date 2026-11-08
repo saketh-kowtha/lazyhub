@@ -23,6 +23,8 @@ Reference forms:
 
 Commands:
   doctor [--json]                 check setup, auth and review-coverage evidence
+  ai status | login enable|disable <cli>
+                                  AI providers; opt in to a CLI's own subscription login
   feedback [--print]              open a pre-filled issue with redacted diagnostics
   status                          print ambient review/CI/notification counts
   watch-only [--repo owner/name]  read-only coverage report

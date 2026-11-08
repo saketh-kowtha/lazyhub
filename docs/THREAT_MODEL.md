@@ -225,6 +225,25 @@ Mitigation: typed cache keys include host, account, repository node ID, session,
 and operation class; sensitive payloads are not cached. Residual risk: shared
 OS resources and logs remain defense-in-depth boundaries.
 
+## AI login mode (#364)
+
+Threats: T2, T4, T6, T7, T9, T19, T20, T21.
+
+Login mode (opt-in per CLI) runs the CLI with the user's real HOME so its own
+subscription login works. Controls: explicit consent; capability manifest from
+`--help` (fail closed); tools off by flags; empty 0700 working directory; strict
+env allowlist (no `GH_TOKEN`, API keys, proxies, `NODE_OPTIONS`, `SSH_AUTH_SOCK`);
+prompt on stdin only; credentials used in place and never read or copied; stdout
+256KB cap, stderr capped and never shown or logged; process-group kill on timeout;
+output sanitised, labelled as AI and never posted or used for authority.
+
+Residual risk (stated, not mitigated): lazyhub does not sandbox the network or the
+filesystem. The real HOME holds the `gh` hosts file, SSH keys and more. A
+same-user CLI that ignored its own no-tools flags could read them; prompt
+injection is lowered by framing, not prevented (T4). A compromised or buggy CLI
+release is T19 and outside the prevention boundary. Use the API-key sandbox mode
+when this residual is not acceptable.
+
 ## Reporting and response
 
 Do not publish working exploit instructions, tokens, private repository data, or
