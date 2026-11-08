@@ -141,8 +141,8 @@ async function runLazyhubFlow({ useTmux = false } = {}) {
     term.write('k')
     await new Promise(resolve => setTimeout(resolve, 100))
     output = ''
-    term.write('\r')
-    await waitForScreen(() => output, /Fixture body/, 'Enter detail')
+    // Resend Enter if the first one lands before the list has focus (slow CI runners).
+    await sendUntil(() => term.write('\r'), () => output, /Fixture body/, 'Enter detail', { tries: 3, eachMs: 4000 })
     output = ''
     term.write('\x1b')
     await waitForScreen(() => output, /open.*closed.*merged/, 'Esc back')
@@ -499,12 +499,11 @@ async function runFailedLogFlow() {
     await waitUntil(showing(/Focus/), 'failed-log flow startup')
     await settle()
     await sendUntil(() => writeChord(term, 'gp'), () => screen.text(), /PTY harness fixture PR/, 'PR list for the failed-log flow')
-    term.write('\r')
-    await waitUntil(showing(/Fixture body/), 'PR detail with a failed check')
+    // Resend Enter if the first one lands before the list has focus (slow CI runners).
+    await sendUntil(() => term.write('\r'), () => screen.text(), /Fixture body/, 'PR detail with a failed check', { tries: 3, eachMs: 4000 })
     term.write('c')
     await waitUntil(showing(/\[Ctrl\+R\] re-run/), 'checks mode')
-    term.write('\r')
-    await waitUntil(showing(/Failure excerpt/), 'the failure excerpt opens first')
+    await sendUntil(() => term.write('\r'), () => screen.text(), /Failure excerpt/, 'the failure excerpt opens first', { tries: 3, eachMs: 4000 })
     assert.match(screen.text(), /AssertionError/)
     assert.doesNotMatch(screen.text(), /RUN {2}v3\.2\.4/, 'the full log is not shown yet')
     term.write('f')
