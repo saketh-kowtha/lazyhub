@@ -25,6 +25,7 @@ const SECTION_RE = /^\s*(\[\[?)([^\]]+)(\]\]?)\s*(?:#.*)?$/
 const WRITABLE_DEFAULTS = new Set(['pr_scope', 'ai_provider', 'repo', 'repo_host'])
 const WRITABLE_APP = new Set(['active_panes', 'default_pane', 'mouse', 'ai_review_enabled'])
 const WRITABLE_AI = new Set(['provider', 'model', 'anthropic_api_key', 'openai_api_key', 'openai_base_url'])
+const WRITABLE_AI_LOGIN = new Set(['codex', 'gemini_cli', 'agy'])
 const WRITABLE_OPENAI_COMPATIBLE = new Set(['base_url', 'api_key', 'model', 'timeout_ms'])
 /** @type {Record<string, any>} */ const WRITABLE_FEATURES = {
   'features.prs': new Set(['default_filter', 'default_scope', 'page_size']),
@@ -298,6 +299,9 @@ export function writeConfig(patch, opts = {}) {
 
   if (isPlainObject(patch.ai)) {
     text = upsertAllowedScalars(text, 'ai', patch.ai, WRITABLE_AI)
+    if (isPlainObject(patch.ai.login)) {
+      text = upsertAllowedScalars(text, 'ai.login', patch.ai.login, WRITABLE_AI_LOGIN)
+    }
     if (isPlainObject(patch.ai.openai_compatible)) {
       text = upsertAllowedScalars(text, 'ai.openai_compatible', patch.ai.openai_compatible, WRITABLE_OPENAI_COMPATIBLE)
     }

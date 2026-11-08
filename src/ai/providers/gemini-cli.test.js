@@ -14,13 +14,8 @@ import { AIError } from '../error.js'
 
 // ─── Mock child_process.execFile ─────────────────────────────────────────────
 
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual = await importOriginal()
-  return {
-    ...actual,
-    execFile: vi.fn(),
-  }
-})
+vi.mock('node:child_process', async (importOriginal) =>
+  (await import('../../test/spawn-adapter.js')).mockChildProcess(await importOriginal(), vi.fn))
 
 // Import after mock is set up
 const childProcess = await import('node:child_process')

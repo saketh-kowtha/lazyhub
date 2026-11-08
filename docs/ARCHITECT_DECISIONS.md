@@ -583,3 +583,21 @@ Expiry and revocation of an already-passing check are Lazyhub-mediated
 are never reported as `github_enforced`. Coverage stays `advisory` until the
 live proof in #141 passes. Activating agent-submitted approval requests requires
 a new decision.
+
+## AI on existing subscriptions (#364)
+
+### D18 — CLI login mode is opt-in, capability-gated and tools-off; chat stays API-only
+
+- The #252 sandbox (throwaway HOME, API key or `CLAUDE_CODE_OAUTH_TOKEN`) stays the
+  default. Claude subscriptions use `claude setup-token`; no Claude login mode exists.
+- A CLI may use its own login in place (real HOME) only when the user consented under
+  `[ai.login]` (default false, revocable), the installed CLI's `--help` proves every
+  hardening flag in the provider's capability manifest, and the CLI reports being logged
+  in (exit code only). A missing flag means unavailable, never degraded.
+- Lazyhub never reads, copies, moves or rewrites a credential file, and never prints or
+  logs CLI status output or stderr.
+- All AI CLI processes start in `src/services/ai-cli.js` (own process group, 256KB stdout
+  cap, 16KB stderr cap used for classification only). `src/ai/providers/` imports no
+  `child_process`; the spawn-site scan allows only `src/services` for them.
+- The in-TUI assistant needs tool use, so it stays on `anthropic-api` / `openai-compatible`.
+- Status: codex login mode shipped; gemini-cli and agy login modes are follow-ups.

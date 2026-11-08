@@ -329,6 +329,7 @@ export const DEFAULT_CONFIG = {
         gemini: 'anthropic-api',
       },
     },
+    login: { codex: false, gemini_cli: false, agy: false },
     budget: {
       monthly_usd_cap: 0,
       per_call_usd_cap: 0,
@@ -506,6 +507,13 @@ const BUDGET_SPEC = {
   anthropic_api_key: { type: 'string' },
   openai_api_key:    { type: 'string' },
   openai_base_url:   { type: 'string' },
+}
+
+// #364: per-CLI consent to use the CLI's own subscription login in place (default off).
+const AI_LOGIN_SPEC = {
+  codex:      { type: 'boolean' },
+  gemini_cli: { type: 'boolean' },
+  agy:        { type: 'boolean' },
 }
 
 const OPENAI_COMPATIBLE_SPEC = {
@@ -817,6 +825,9 @@ function validateAi(/** @type {any} */ val, /** @type {any} */ warnings) {
     } else if (k === 'openai_compatible') {
       const cfg = validateFlat(v, OPENAI_COMPATIBLE_SPEC, warnings, 'ai.openai_compatible')
       if (cfg !== undefined) out.openai_compatible = cfg
+    } else if (k === 'login') {
+      const cfg = validateFlat(v, AI_LOGIN_SPEC, warnings, 'ai.login')
+      if (cfg !== undefined) out.login = cfg
     } else if (k === 'second_opinion') {
       const cfg = validateFlat(v, SECOND_OPINION_SPEC, warnings, 'ai.second_opinion')
       if (cfg?.map) {

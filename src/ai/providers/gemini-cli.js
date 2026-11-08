@@ -13,6 +13,7 @@
 
 import { spawnAndPipe, pickEnv } from './_base.js'
 import { AIError } from '../error.js'
+import { mapCliError } from './_errors.js'
 
 // ── Provider metadata ─────────────────────────────────────────────────────────
 
@@ -112,24 +113,7 @@ export async function complete({ system, user, _model, timeoutMs }) {
       auth,
     })
   } catch (err) {
-    if (err.isIsolationFailure) {
-      throw new AIError(`Gemini CLI unavailable: ${err.message}`, { code: 'provider-unavailable', provider: id })
-    }
-    if (err.isTimeout) {
-      throw new AIError('Gemini CLI timed out', { code: 'timeout', provider: id })
-    }
-    if (err.isNotFound) {
-      throw new AIError('gemini CLI not found on PATH', { code: 'spawn-failed', provider: id })
-    }
-    if (err.isOutputCap) {
-      throw new AIError('Gemini CLI output exceeded size cap', { code: 'malformed-response', provider: id })
-    }
-    // Non-zero exit — could be auth failure or other error
-    const msg = err.message || 'gemini CLI failed'
-    if (/not logged in|unauthenticated|login/i.test(msg)) {
-      throw new AIError(AUTH_HELP, { code: 'auth-required', provider: id })
-    }
-    throw new AIError(`Gemini CLI error: ${msg}`, { code: 'provider-unavailable', provider: id })
+    throw mapCliError(err, { id, name: 'Gemini CLI', bin: 'gemini', authHelp: AUTH_HELP })
   }
 
   // Parse JSON output: single object
