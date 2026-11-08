@@ -33,6 +33,8 @@ import {
 import { usePendingWrite } from '../../hooks/usePendingWrite.js'
 import { renderPRListDialog } from './list-dialog-view.jsx'
 import { PRListView } from './list-view.jsx'
+import { smartEnterTarget } from './smart-enter.js'
+import { rememberedPRFilter, rememberPRFilter } from './remembered-filter.js'
 
 const _appConfig = loadConfig()
 const _cfg = _appConfig.pr
@@ -68,7 +70,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   if (persistedScopeRef.current === undefined) persistedScopeRef.current = loadState().prScope ?? null
   const _persistedScope = persistedScopeRef.current
   const [savedState, setSavedState] = usePaneState('prs', {
-    filterStates: [_cfg.defaultFilter],
+    filterStates: rememberedPRFilter(repo) || [_cfg.defaultFilter],
     scope: _persistedScope || _cfg.defaultScope,
     sortMode: 'default',
     authorFilter: '',
@@ -144,6 +146,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     const arr = Array.from(next)
     setFilterStatesArr(arr)
     setSavedState({ filterStates: arr })
+    rememberPRFilter(repo, arr)
   }
   const setScope = (v) => { setScopeRaw(v); setSavedState({ scope: v }); saveState({ prScope: v }) }
   const setSortMode = (v) => { setSortModeRaw(v); setSavedState({ sortMode: v }) }
@@ -371,7 +374,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     const pr = items[cursor]
     if (!pr) return
 
-    if (matchesAction('pr.open-selected', input, key, _actions)) { onSelectPR(pr); return }
+    if (matchesAction('pr.open-selected', input, key, _actions)) { onSelectPR(pr, smartEnterTarget(pr, { scope, enabled: loadState().smartEnter !== false })); return }
     if (matchesAction('pr.diff', input, key, _actions)) { onOpenDiff(pr); return }
     if (matchesAction('pr.merge', input, key, _actions)) { openDialog('merge'); return }
     if (matchesAction('pr.labels', input, key, _actions)) { openDialog('labels'); return }
@@ -380,6 +383,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     if (matchesAction('pr.approve', input, key, _actions)) { openDialog('approve-body'); return }
     if (matchesAction('pr.request-changes', input, key, _actions)) { openDialog('reqchanges-body'); return }
     if (matchesAction('pr.close', input, key, _actions)) { openDialog('close-pr'); return }
+    if (matchesAction('pr.comment', input, key, _actions)) { openDialog('comment-pr'); return }
 
     if (matchesAction('pr.checkout', input, key, _actions)) { openDialog('checkout'); return }
 

@@ -47,7 +47,7 @@ import { sortChecks } from './detail/Checks.jsx'
 
 const _editorCfg = loadConfig().editor
 
-export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
+export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, onBack, onOpenDiff, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
   useKeyScope('view')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
@@ -178,6 +178,27 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, onBack, 
     }
     setCheckLogLoading(false)
   }
+
+  // Smart Enter from the list (#314): land on the failed check's log, or on the conflict summary, once.
+  const entryDone = useRef(false)
+  React.useEffect(() => {
+    if (entryDone.current || !entry || !pr) return
+    if (entry === 'conflict') {
+      entryDone.current = true
+      const row = filteredRows.findIndex(r => r.id === 'merge-hdr')
+      if (row >= 0) setScrollY(Math.min(row, maxScroll))
+      return
+    }
+    if (entry === 'checks-log') {
+      if (!Array.isArray(checks)) return // checks still loading
+      entryDone.current = true
+      const failing = allChecksForNav.findIndex(c => /failure|error/i.test(c.conclusion || c.status || c.state || ''))
+      if (failing < 0) { showStatus('No failing check to open'); return }
+      checkCursorRef.current = failing
+      setCheckCursor(failing)
+      openCheckLogs(allChecksForNav[failing])
+    }
+  }) // eslint-disable-line react-hooks/exhaustive-deps
 
   useKeymapInput((input, key) => {
     if (statusMsg?.persist) { setStatusMsg(null) }

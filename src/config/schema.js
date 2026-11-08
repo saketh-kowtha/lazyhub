@@ -204,6 +204,7 @@ export const DEFAULT_CONFIG = {
     'pr.auto-merge':         { keys: [], hint: 'palette', label: 'auto-merge', description: 'Toggle auto-merge for selected PR (merge picker m, or command palette)', scope: 'pr-list,pr-detail', group: 'action' },
     'pr.approve':            { keys: ['a'], hint: 'a', label: 'approve', description: 'Approve selected PR', scope: 'pr-list,pr-detail,diff', group: 'action' },
     'pr.request-changes':    { keys: ['x'], hint: 'x', label: 'request changes', description: 'Request changes on selected PR', scope: 'pr-list,pr-detail,diff', group: 'action' },
+    'pr.comment':            { keys: ['c'], hint: 'c', label: 'comment', description: 'Comment on the selected PR without opening it', scope: 'pr-list', group: 'action' },
     'pr.close':              { keys: ['X'], hint: 'X', label: 'close', description: 'Close selected PR', scope: 'pr-list,pr-detail', group: 'action' },
     'pr.labels':             { keys: ['l'], hint: 'l', label: 'labels', description: 'Edit PR labels', scope: 'pr-list,pr-detail', group: 'action' },
     'pr.assignees':          { keys: ['A'], hint: 'A', label: 'assignees', description: 'Edit PR assignees', scope: 'pr-list,pr-detail', group: 'action' },
