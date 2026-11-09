@@ -3,14 +3,11 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { APP_CONFIG as _config, DIALOG_KEYS, PANES, PANE_ICONS, PANE_LABELS } from './app-keys.js'
-import { AppContext } from './context.js'
 import { hintLine } from './config/actions.js'
-import { Sidebar } from './components/Sidebar.jsx'
 import { TooSmall } from './components/TooSmall.jsx'
 import { TabStrip } from './components/TabStrip.jsx'
-import { Toaster } from './components/Toaster.jsx'
-import { StatusBar } from './components/StatusBar.jsx'
-import { FooterKeys } from './components/FooterKeys.jsx'
+import { Shell, LeaderHint } from './shell/Shell.jsx'
+import { scopeIndicator } from './shell/scopeIndicator.js'
 import { PRList } from './features/prs/list.jsx'
 import { PRDetail } from './features/prs/detail.jsx'
 import { EvidenceView } from './features/prs/EvidenceView.jsx'
@@ -49,109 +46,89 @@ export function renderAppView(ctx) {
   } = ctx
   // Items opened from a dashboard section keep that section's repository (#493).
   const itemRepo = selectedItem?._repo || repo
+  // What differs per view is passed to <Shell>; the frame itself is defined once there (#488).
+  const scopeChip = scopeIndicator(activeScope)
+  const statusFor = (extra) => ({ repo, pane, count: paneState.count, scopeIndicator: scopeChip, mode: appMode, ghHealth, ...extra })
+  const sidebarFor = (onSelect, extra) => showSidebar ? {
+    currentPane: pane, visiblePanes: PANES, width: sidebarWidth, borderStyle, paneLabels: PANE_LABELS,
+    paneIcons: PANE_ICONS, repo, onSelect, ...extra,
+  } : null
+  const toList = (p) => { setPane(p); setSelectedItem(null); setView('list') }
+  const frame = { appCtx, rows, compactFooter }
   // ─── Below the minimum size: one clear message instead of a broken frame ──
   if (tooSmall) return <TooSmall cols={columns} rows={rows} minCols={minCols} minRows={minRows} />
   // ─── AI assistant overlay ─────────────────────────────────────────────────
   if (showAI) {
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows} overflow="hidden">
-          <Box flexDirection="row" flexGrow={1} overflow="hidden">
-            {showSidebar && (
-              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
-                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
-                onSelect={(p) => { setPane(p); setShowAI(false); setSelectedItem(null); setView('list') }}
-                height={rows - (compactFooter ? 2 : 3)}
-              />
-            )}
-            <ErrorBoundary>
-              <AIAssistant
-                repo={repo}
-                pane={pane}
-                selectedItem={selectedItem}
-                onClose={() => setShowAI(false)}
-                onNavigate={handleAINavigate}
-                aiConfig={_config.ai}
-                rows={rows - 2}
-              />
-            </ErrorBoundary>
-          </Box>
-          <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
-          <FooterKeys hidden={compactFooter} keys={[{ key: 'Esc', label: 'close AI' }, { key: 'j/k', label: 'scroll' }, { key: 'Enter', label: 'send' }]} />
-        </Box>
-      </AppContext.Provider>
+      <Shell {...frame} overflow="hidden" bodyProps={{ overflow: 'hidden' }}
+        sidebar={sidebarFor((p) => { setPane(p); setShowAI(false); setSelectedItem(null); setView('list') })}
+        status={statusFor()}
+        footer={[{ key: 'Esc', label: 'close AI' }, { key: 'j/k', label: 'scroll' }, { key: 'Enter', label: 'send' }]}>
+        <ErrorBoundary>
+          <AIAssistant
+            repo={repo}
+            pane={pane}
+            selectedItem={selectedItem}
+            onClose={() => setShowAI(false)}
+            onNavigate={handleAINavigate}
+            aiConfig={_config.ai}
+            rows={rows - 2}
+          />
+        </ErrorBoundary>
+      </Shell>
     )
   }
 
   // ─── Repository picker (palette: Switch repository, #466) ───────────────
   if (showRepoPicker) {
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows} overflow="hidden">
-          <Box flexDirection="row" flexGrow={1} overflow="hidden" justifyContent="center" alignItems="flex-start" paddingY={1}>
-            <ErrorBoundary>
-              <RepoSwitcher onDone={(result) => {
-                setShowRepoPicker(false)
-                if (result.status === 'completed' && result.repo.toLowerCase() !== String(repo).toLowerCase()) onSwitchRepo?.(result.repo)
-              }} />
-            </ErrorBoundary>
-          </Box>
-          <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={null} mode="COMMAND" ghHealth={ghHealth} />
-        </Box>
-      </AppContext.Provider>
+      <Shell {...frame} overflow="hidden" bodyProps={{ overflow: 'hidden', justifyContent: 'center', alignItems: 'flex-start', paddingY: 1 }}
+        status={statusFor({ scopeIndicator: null, mode: 'COMMAND' })}>
+        <ErrorBoundary>
+          <RepoSwitcher onDone={(result) => {
+            setShowRepoPicker(false)
+            if (result.status === 'completed' && result.repo.toLowerCase() !== String(repo).toLowerCase()) onSwitchRepo?.(result.repo)
+          }} />
+        </ErrorBoundary>
+      </Shell>
     )
   }
 
   // ─── Command palette overlay ──────────────────────────────────────────────
   if (showPalette) {
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows} overflow="hidden">
-          <Box flexDirection="row" flexGrow={1} overflow="hidden" justifyContent="center" alignItems="flex-start" paddingY={2}>
-            <Box width={Math.min(columns - 4, 80)}>
-              <CommandPalette
-                context={{ pane, view, selectedItem, repo: itemRepo, localGit: !itemIsForeign, themeName: _config.theme, onSwitchRepo: () => setShowRepoPicker(true) }}
-                onClose={() => { setShowPalette(false); setAppMode('NORMAL') }}
-                onNavigate={(opts) => {
-                  setShowPalette(false); setAppMode('NORMAL')
-                  handleAINavigate(opts)
-                }}
-                onTheme={(name) => { setShowPalette(false); setAppMode('NORMAL'); setTheme(name) }}
-                onQuit={() => exit()}
-                themes={THEME_NAMES}
-              />
-            </Box>
-          </Box>
-          <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={null} mode="COMMAND" ghHealth={ghHealth} />
-          <FooterKeys hidden={compactFooter} keys={[{ key: '↑↓', label: 'nav' }, { key: 'Tab', label: 'complete' }, { key: 'Enter', label: 'run' }, { key: 'Esc', label: 'cancel' }]} />
+      <Shell {...frame} overflow="hidden" bodyProps={{ overflow: 'hidden', justifyContent: 'center', alignItems: 'flex-start', paddingY: 2 }}
+        status={statusFor({ scopeIndicator: null, mode: 'COMMAND' })}
+        footer={[{ key: '↑↓', label: 'nav' }, { key: 'Tab', label: 'complete' }, { key: 'Enter', label: 'run' }, { key: 'Esc', label: 'cancel' }]}>
+        <Box width={Math.min(columns - 4, 80)}>
+          <CommandPalette
+            context={{ pane, view, selectedItem, repo: itemRepo, localGit: !itemIsForeign, themeName: _config.theme, onSwitchRepo: () => setShowRepoPicker(true) }}
+            onClose={() => { setShowPalette(false); setAppMode('NORMAL') }}
+            onNavigate={(opts) => {
+              setShowPalette(false); setAppMode('NORMAL')
+              handleAINavigate(opts)
+            }}
+            onTheme={(name) => { setShowPalette(false); setAppMode('NORMAL'); setTheme(name) }}
+            onQuit={() => exit()}
+            themes={THEME_NAMES}
+          />
         </Box>
-      </AppContext.Provider>
+      </Shell>
     )
   }
 
   // ─── Help overlay — rendered first so ? works from every view ────────────
   if (showHelp) {
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows} overflow="hidden">
-          <Box flexDirection="row" flexGrow={1} overflow="hidden">
-            {showSidebar && (
-              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
-                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
-                onSelect={(p) => { setPane(p); setShowHelp(false); setSelectedItem(null); setView('list') }}
-                height={rows - (compactFooter ? 2 : 3)}
-              />
-            )}
-          <Box flexDirection="column" flexGrow={1} overflow="hidden"
-              justifyContent="center" alignItems="center">
-            <HelpOverlay pane={view === 'detail' && selectedItem?._kind ? selectedItem._kind : pane} view={view} actionCtx={paneState.actionCtx} onClose={() => setShowHelp(false)}
-              availableWidth={columns - (showSidebar ? sidebarWidth : 0)} availableHeight={rows - (compactFooter ? 1 : 3)} />
-          </Box>
-          </Box>
-          <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
-          <FooterKeys hidden={compactFooter} keys={[{ key: '? / Esc / Enter', label: 'close help' }]} />
+      <Shell {...frame} overflow="hidden" bodyProps={{ overflow: 'hidden' }}
+        sidebar={sidebarFor((p) => { setPane(p); setShowHelp(false); setSelectedItem(null); setView('list') })}
+        status={statusFor()}
+        footer={[{ key: '? / Esc / Enter', label: 'close help' }]}>
+        <Box flexDirection="column" flexGrow={1} overflow="hidden" justifyContent="center" alignItems="center">
+          <HelpOverlay pane={view === 'detail' && selectedItem?._kind ? selectedItem._kind : pane} view={view} actionCtx={paneState.actionCtx} onClose={() => setShowHelp(false)}
+            availableWidth={columns - (showSidebar ? sidebarWidth : 0)} availableHeight={rows - (compactFooter ? 1 : 3)} />
         </Box>
-      </AppContext.Provider>
+      </Shell>
     )
   }
 
@@ -159,187 +136,135 @@ export function renderAppView(ctx) {
   if (view === 'evidence' && selectedItem) {
     const evRepo = itemRepo
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows}>
-          <ErrorBoundary>
-            <EvidenceView
-              pr={{ number: selectedItem.number, title: selectedItem.title }}
-              repo={evRepo}
-              onClose={() => returnFromEvidence(selectedItem._fromQueue ? { view: 'queue' } : undefined)}
-              onOpenDiff={goToDiff}
-              onOpenDetail={goToEvidenceDetail}
-              returnTo={selectedItem._fromQueue ? returnTarget({ view: 'queue', key: `${evRepo}#${selectedItem.number}` }) : undefined}
-              onReturn={returnFromEvidence}
-            />
-          </ErrorBoundary>
-        </Box>
-      </AppContext.Provider>
+      <Shell {...frame} bodyProps={null}>
+        <ErrorBoundary>
+          <EvidenceView
+            pr={{ number: selectedItem.number, title: selectedItem.title }}
+            repo={evRepo}
+            onClose={() => returnFromEvidence(selectedItem._fromQueue ? { view: 'queue' } : undefined)}
+            onOpenDiff={goToDiff}
+            onOpenDetail={goToEvidenceDetail}
+            returnTo={selectedItem._fromQueue ? returnTarget({ view: 'queue', key: `${evRepo}#${selectedItem.number}` }) : undefined}
+            onReturn={returnFromEvidence}
+          />
+        </ErrorBoundary>
+      </Shell>
     )
   }
 
   if (view === 'conflict' && selectedItem) {
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows}>
-          <Box flexDirection="row" flexGrow={1} overflow="hidden">
-            <ErrorBoundary>
-              <ConflictView
-                pr={selectedItem}
-                repo={itemRepo}
-                onBack={goBack}
-                onResolved={() => setView('detail')}
-              />
-            </ErrorBoundary>
-          </Box>
-          <StatusBar repo={itemRepo} pane={pane} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
-          <FooterKeys hidden={compactFooter} keys={[
-            { key: 'j/k', label: 'navigate' },
-            { key: 'e/Enter', label: 'open editor' },
-            { key: 'Space', label: 'stage/unstage' },
-            { key: 'c', label: 'commit + push' },
-            { key: 'Esc', label: 'back' },
-          ]} />
-        </Box>
-      </AppContext.Provider>
+      <Shell {...frame} bodyProps={{ overflow: 'hidden' }}
+        status={statusFor({ repo: itemRepo, count: undefined })}
+        footer={[
+          { key: 'j/k', label: 'navigate' },
+          { key: 'e/Enter', label: 'open editor' },
+          { key: 'Space', label: 'stage/unstage' },
+          { key: 'c', label: 'commit + push' },
+          { key: 'Esc', label: 'back' },
+        ]}>
+        <ErrorBoundary>
+          <ConflictView pr={selectedItem} repo={itemRepo} onBack={goBack} onResolved={() => setView('detail')} />
+        </ErrorBoundary>
+      </Shell>
     )
   }
 
   if (view === 'diff' && selectedItem) {
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows} overflow="hidden">
-          <ErrorBoundary>
-            <PRDiff
-              prNumber={selectedItem.number}
-              repo={itemRepo}
-              onBack={goBack}
-              onViewComments={goToComments}
-              initialFile={storyNav?.active ? storyNav.file : undefined}
-            />
-          </ErrorBoundary>
-        </Box>
-      </AppContext.Provider>
+      <Shell {...frame} overflow="hidden" bodyProps={null}>
+        <ErrorBoundary>
+          <PRDiff
+            prNumber={selectedItem.number}
+            repo={itemRepo}
+            onBack={goBack}
+            onViewComments={goToComments}
+            initialFile={storyNav?.active ? storyNav.file : undefined}
+          />
+        </ErrorBoundary>
+      </Shell>
     )
   }
 
   if (view === 'story' && selectedItem) {
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows}>
-          <Box flexDirection="column" flexGrow={1} overflow="hidden">
-            <ErrorBoundary>
-              <StoryView prNumber={selectedItem.number} repo={itemRepo} onBack={goBack}
-                onOpenFile={openStoryFile} initial={storyNav?.pos} />
-            </ErrorBoundary>
-          </Box>
-          <StatusBar repo={itemRepo} pane={pane} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
-          <FooterKeys hidden={compactFooter} keys={[
-            { key: 'n/p', label: 'step' },
-            { key: 'j/k', label: 'file' },
-            { key: 'Enter', label: 'open diff' },
-            { key: 'Space', label: 'expand' },
-            { key: 'Esc', label: 'back' },
-          ]} />
-        </Box>
-      </AppContext.Provider>
+      <Shell {...frame} bodyProps={{ flexDirection: 'column', overflow: 'hidden' }}
+        status={statusFor({ repo: itemRepo, count: undefined })}
+        footer={[
+          { key: 'n/p', label: 'step' },
+          { key: 'j/k', label: 'file' },
+          { key: 'Enter', label: 'open diff' },
+          { key: 'Space', label: 'expand' },
+          { key: 'Esc', label: 'back' },
+        ]}>
+        <ErrorBoundary>
+          <StoryView prNumber={selectedItem.number} repo={itemRepo} onBack={goBack}
+            onOpenFile={openStoryFile} initial={storyNav?.pos} />
+        </ErrorBoundary>
+      </Shell>
     )
   }
 
   if (view === 'comments' && selectedItem) {
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows} overflow="hidden">
-          <ErrorBoundary>
-            <PRComments
-              prNumber={selectedItem.number}
-              repo={itemRepo}
-              onBack={goBack}
-              onJumpToDiff={() => setView('diff')}
-            />
-          </ErrorBoundary>
-        </Box>
-      </AppContext.Provider>
+      <Shell {...frame} overflow="hidden" bodyProps={null}>
+        <ErrorBoundary>
+          <PRComments
+            prNumber={selectedItem.number}
+            repo={itemRepo}
+            onBack={goBack}
+            onJumpToDiff={() => setView('diff')}
+          />
+        </ErrorBoundary>
+      </Shell>
     )
   }
 
   if (view === 'logs') {
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows}>
-          <Box flexDirection="row" flexGrow={1}>
-            {showSidebar && (
-              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
-                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
-                onSelect={(p) => { setPane(p); setSelectedItem(null); setView('list') }}
-                height={rows - (compactFooter ? 2 : 3)}
-              />
-            )}
-            <ErrorBoundary>
-              <LogPane onBack={() => setView('list')} />
-            </ErrorBoundary>
-          </Box>
-          <StatusBar repo={repo} pane="logs" scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
-          <FooterKeys hidden={compactFooter} keys={[
-            { key: 'j/k', label: 'navigate' },
-            { key: 'Enter', label: 'detail' },
-            { key: 'f', label: 'level' },
-            { key: '/', label: 'search' },
-            { key: 'Esc', label: 'back' }
-          ]} />
-        </Box>
-      </AppContext.Provider>
+      <Shell {...frame} sidebar={sidebarFor(toList)}
+        status={statusFor({ pane: 'logs', count: undefined })}
+        footer={[
+          { key: 'j/k', label: 'navigate' },
+          { key: 'Enter', label: 'detail' },
+          { key: 'f', label: 'level' },
+          { key: '/', label: 'search' },
+          { key: 'Esc', label: 'back' }
+        ]}>
+        <ErrorBoundary>
+          <LogPane onBack={() => setView('list')} />
+        </ErrorBoundary>
+      </Shell>
     )
   }
 
   if (view === 'queue') {
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows}>
-          <Box flexDirection="row" flexGrow={1}>
-            {showSidebar && (
-              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
-                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
-                onSelect={(p) => { setPane(p); setSelectedItem(null); setView('list') }}
-                height={rows - (compactFooter ? 2 : 3)}
-              />
-            )}
-            <ErrorBoundary>
-              {/* goToQueueItem is the only place that decides what Enter opens (the evidence view, #127). */}
-              <ReviewQueue onOpen={goToQueueItem} innerWidth={columns - (showSidebar ? sidebarWidth : 0) - 2} listHeight={listHeight} />
-            </ErrorBoundary>
-          </Box>
-          <StatusBar repo={repo} pane={pane} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
-          <FooterKeys hidden={compactFooter} keys={contextFooterHints(pane, 'queue', {}, _config.toml)} />
-        </Box>
-      </AppContext.Provider>
+      <Shell {...frame} sidebar={sidebarFor(toList)}
+        status={statusFor({ count: undefined })}
+        footer={contextFooterHints(pane, 'queue', {}, _config.toml)}>
+        <ErrorBoundary>
+          {/* goToQueueItem is the only place that decides what Enter opens (the evidence view, #127). */}
+          <ReviewQueue onOpen={goToQueueItem} innerWidth={columns - (showSidebar ? sidebarWidth : 0) - 2} listHeight={listHeight} />
+        </ErrorBoundary>
+      </Shell>
     )
   }
 
   if (view === 'settings') {
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows}>
-          <Box flexDirection="row" flexGrow={1}>
-            {showSidebar && (
-              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
-                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
-                onSelect={(p) => { setPane(p); setSelectedItem(null); setView('list') }}
-                height={rows - (compactFooter ? 2 : 3)}
-              />
-            )}
-            <ErrorBoundary>
-              <SettingsPane onBack={() => setView('list')} />
-            </ErrorBoundary>
-          </Box>
-          <StatusBar repo={repo} pane="settings" scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
-          <FooterKeys hidden={compactFooter} keys={[
-            { key: 'j/k', label: 'navigate' },
-            { key: 'Enter', label: 'select' },
-            { key: '?', label: 'help' },
-            { key: 'Esc', label: 'back' }
-          ]} />
-        </Box>
-      </AppContext.Provider>
+      <Shell {...frame} sidebar={sidebarFor(toList)}
+        status={statusFor({ pane: 'settings', count: undefined })}
+        footer={[
+          { key: 'j/k', label: 'navigate' },
+          { key: 'Enter', label: 'select' },
+          { key: '?', label: 'help' },
+          { key: 'Esc', label: 'back' }
+        ]}>
+        <ErrorBoundary>
+          <SettingsPane onBack={() => setView('list')} />
+        </ErrorBoundary>
+      </Shell>
     )
   }
 
@@ -350,29 +275,24 @@ export function renderAppView(ctx) {
     const detailFooter = contextFooterHints(detailKind, 'detail', paneState.actionCtx, _config.toml)
 
     return (
-      <AppContext.Provider value={appCtx}>
-        <Box flexDirection="column" height={rows}>
-          <Box flexDirection="column" flexGrow={1}>
-            <ErrorBoundary>
-              <DetailPane
-                {...(detailKind === 'issues'
-                  ? { issueNumber: selectedItem.number }
-                  : { prNumber: selectedItem.number, baseRefName: selectedItem.baseRefName, entry: selectedItem._entry })}
-                repo={itemRepo}
-                onBack={goBack}
-                onOpenDiff={goToDiff}
-                onOpenStory={detailKind === 'prs' ? goToStory : undefined}
-                onOpenConflict={detailKind === 'prs' ? goToConflict : undefined}
-                onOpenActions={detailKind === 'prs' ? goToActions : undefined}
-                onViewComments={detailKind === 'prs' ? goToComments : undefined}
-                onPaneState={detailKind === 'prs' ? onPaneState : undefined}
-              />
-            </ErrorBoundary>
-          </Box>
-          <StatusBar repo={itemRepo} pane={pane} count={paneState.count} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
-          <FooterKeys hidden={compactFooter} keys={detailFooter} />
-        </Box>
-      </AppContext.Provider>
+      <Shell {...frame} bodyProps={{ flexDirection: 'column' }}
+        status={statusFor({ repo: itemRepo })} footer={detailFooter}>
+        <ErrorBoundary>
+          <DetailPane
+            {...(detailKind === 'issues'
+              ? { issueNumber: selectedItem.number }
+              : { prNumber: selectedItem.number, baseRefName: selectedItem.baseRefName, entry: selectedItem._entry })}
+            repo={itemRepo}
+            onBack={goBack}
+            onOpenDiff={goToDiff}
+            onOpenStory={detailKind === 'prs' ? goToStory : undefined}
+            onOpenConflict={detailKind === 'prs' ? goToConflict : undefined}
+            onOpenActions={detailKind === 'prs' ? goToActions : undefined}
+            onViewComments={detailKind === 'prs' ? goToComments : undefined}
+            onPaneState={detailKind === 'prs' ? onPaneState : undefined}
+          />
+        </ErrorBoundary>
+      </Shell>
     )
   }
 
@@ -456,52 +376,29 @@ export function renderAppView(ctx) {
     return contextFooterHints(pane, 'list', paneState.actionCtx, _config.toml)
   })()
 
-  const paneSwitch = (p) => { setPane(p); setSelectedItem(null); setView('list'); setAppMode('NORMAL') }
+  const paneSwitch = (p) => { toList(p); setAppMode('NORMAL') }
 
   return (
-    <AppContext.Provider value={appCtx}>
-      <Box flexDirection="column" height={rows} overflow="hidden">
-        {/* Compact mode: horizontal tab strip replaces sidebar */}
-        {!showSidebar && (
-          <TabStrip panes={PANES} currentPane={pane} paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} onSelect={paneSwitch} />
-        )}
-        <Box flexDirection="row" flexGrow={1} overflow="hidden">
-          {showSidebar && (
-            <ErrorBoundary section="Sidebar">
-              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
-                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
-                borderRight={false}
-                onSelect={paneSwitch}
-                height={rows - (compactFooter ? 2 : 3)}
-              />
-            </ErrorBoundary>
-          )}
-
-          <Box flexDirection="column" flexGrow={1} overflow="hidden"
-               borderStyle={borderStyle || 'round'}
-               borderColor={t.ui.borderActive}>
-            <ErrorBoundary section="Pane header">
-              <PaneHeader pane={pane} count={paneState.count} loading={paneState.loading} error={paneState.error} isStale={paneState.isStale} />
-            </ErrorBoundary>
-            <Box flexGrow={1} flexDirection="column" overflow="hidden">
-              <ErrorBoundary>
-                {renderListPane()}
-              </ErrorBoundary>
-            </Box>
-          </Box>
-
+    <Shell {...frame} overflow="hidden" bodyProps={{ overflow: 'hidden' }}
+      // Compact mode: horizontal tab strip replaces sidebar
+      header={!showSidebar && (
+        <TabStrip panes={PANES} currentPane={pane} paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} onSelect={paneSwitch} />
+      )}
+      sidebar={sidebarFor(paneSwitch, { borderRight: false })} sidebarBoundary
+      leaderHint={leaderActive && <LeaderHint text={hintLine(['app.leader-theme', 'app.leader-ai', 'app.leader-help'], _config.toml)} />}
+      status={statusFor()} footer={listFooter} toasts={toasts}>
+      <Box flexDirection="column" flexGrow={1} overflow="hidden"
+           borderStyle={borderStyle || 'round'}
+           borderColor={t.ui.borderActive}>
+        <ErrorBoundary section="Pane header">
+          <PaneHeader pane={pane} count={paneState.count} loading={paneState.loading} error={paneState.error} isStale={paneState.isStale} />
+        </ErrorBoundary>
+        <Box flexGrow={1} flexDirection="column" overflow="hidden">
+          <ErrorBoundary>
+            {renderListPane()}
+          </ErrorBoundary>
         </Box>
-
-        {leaderActive && (
-          <Box paddingX={2} paddingY={0}>
-            <Text color={t.ui.selected} bold>{'<Space> '}</Text>
-            <Text color={t.ui.dim}>{hintLine(['app.leader-theme', 'app.leader-ai', 'app.leader-help'], _config.toml)}  (1.5s)</Text>
-          </Box>
-        )}
-        <StatusBar repo={repo} pane={pane} count={paneState.count} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
-        <FooterKeys hidden={compactFooter} keys={listFooter} />
-        {toasts.length > 0 && <Toaster toasts={toasts} />}
       </Box>
-    </AppContext.Provider>
+    </Shell>
   )
 }
