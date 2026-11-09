@@ -17,7 +17,7 @@ import { BIN, ROOT, VitalsSession, sleep } from './vitals-lib.js'
 import { existsSync } from 'fs'
 
 /** Metric ids whose value fails its target on main today (measured by this harness; see the PR). */
-export const EXPECT_FAIL = new Set(['CLEAR', 'WARM-GH:reopen'])
+export const EXPECT_FAIL = new Set(['WARM-GH:reopen']) // CLEAR went to 0 with #598 and is now enforced
 
 const problem = nodePtyProblem(pty, ROOT)
 if (problem) skipOrFail(`node-pty cannot spawn: ${problem}`)
