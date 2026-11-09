@@ -63,7 +63,6 @@ export function seedPRDetail(repo, row) {
 export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDiff, onPaneState }) {
   useKeyScope('pane')
   const { t } = useTheme()
-  const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const termRows = stdout?.rows || 24
   const termCols = stdout?.columns || 80
@@ -269,11 +268,11 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Notify App when dialog opens/closes so global keys are suppressed + footer updates
+  useKeyScope('dialog', !!dialog)
   useEffect(() => {
-    notifyDialog(!!dialog)
     if (onPaneState) onPaneState({ dialogHint: dialog || null })
-    return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
-  }, [dialog, notifyDialog]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { if (onPaneState) onPaneState({ dialogHint: null }) }
+  }, [dialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 

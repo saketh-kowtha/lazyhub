@@ -38,7 +38,7 @@ CI, branch protection and release flow are documented in `docs/CI_SIMPLIFICATION
 | Dashboard section and row selection | `selectionMemory` in `features/tabs/view.jsx`, so a detail round trip restores it | the session |
 | Fetched data | `useGh` caches: an in-memory LRU (200 entries, 64 MB), then the disk cache under `~/.cache/lazyhub/data/` mirrored in memory at startup | memory for the session, disk across runs |
 | Key scope stack | `KeyScopeProvider` in `src/keyscope.js` | the session |
-| A dialog is open (suppresses global keys) | `dialogActiveRef` in `App`, set through `notifyDialog(true/false)`; every component that opens a dialog must call it | planned for removal (D13) |
+| A dialog is open (suppresses global keys) | the focus stack: the dialog, overlay or input claims its scope with `useKeyScope`; `App`'s global handler reads `liveScope()` and stands down for a modal scope (`notifyDialog` and `dialogActiveRef` are gone, R6 #484) | while the component is mounted and open |
 | gh health (failing calls) and the daemon-fallback notice | module state behind `useGhHealth` and `src/daemon/fallback.js`, shown by the status bar | the session |
 | In-flight write | `usePendingWrite` in the view that started it | until it settles |
 | Contained handler errors and absorbed errors | `src/contain.js` (toast; `logSwallowed` ring) | six seconds / the session |
@@ -99,7 +99,7 @@ The full, numbered list is "Hard invariants" in `AGENTS.md`; `docs/ARCHITECT_DEC
 2. UI code never spawns a process; it uses `src/services/`.
 3. `sanitize()` every string that came from GitHub before it is rendered or put in dialog text.
 4. Colors and spacing come from `useTheme()`; components never import the static theme constant.
-5. Input goes through `useSafeInput`; keys are registry actions; a dialog calls `notifyDialog(true/false)` until the focus manager replaces it.
+5. Input goes through `useSafeInput`; keys are registry actions; a dialog claims its scope with `useKeyScope('dialog', open)`; there is no `notifyDialog`.
 6. `ErrorBoundary` wraps every view branch in `app.jsx`.
 7. Config is TOML only (`~/.config/lazyhub/lazyhub.toml`).
 8. Fast and complete: windowed rendering, page-by-page fetching, no silent truncation (D16).
@@ -118,6 +118,8 @@ Everything above is the code as it is. This section is the destination, so every
 | Query layer (D14) | `useQuery(key, fetcher)` for all reads and `useMutation(fn, {invalidates})` for all writes; structured keys, in-flight dedupe, cancellation, synchronous cache seed, invalidation by key prefix | `useGh(fetchFn, deps)` with coarse `invalidateRepoCache`; no dedupe or cancellation | R2 #480, R3 #481 (invalidation, list-to-detail seeding, async disk cache), R8 #486 |
 | Diff open | Built: the changed-file list is the only call before first content (patches load per file, then comments, repo info and `headRefOid`), and `src/features/prs/diff/prefetch.js` fetches page 1 of the file list into the same query entry when the PR cursor rests 400 ms or the detail opens. Prefetch runs with `runGh(..., { priority: 'low' })`: queued behind every normal call and never takes the last gh slot | detail and diff load independently | R4 #482 |
 | Focus manager (D13) | one root `useInput`; an explicit stack of focus entries; only the top entry gets keys, then registry-resolved globals; claims are synchronous | scope stack in `keyscope.js` plus `dialogActiveRef` / `notifyDialog` and per-pane `if (dialog) return` | R5 #483 (core), R6 #484 (migrate App, dialogs, overlays; delete `notifyDialog`) |
+| Diff open | the diff is fetched first, the rest deferred, and the likely next view prefetched when the cursor rests | detail and diff load independently | R4 #482 |
+| Focus manager (D13) | one root `useInput`; an explicit stack of focus entries; only the top entry gets keys, then registry-resolved globals; claims are synchronous | scope stack in `keyscope.js` plus per-pane `if (dialog) return` (`notifyDialog` and `dialogActiveRef` deleted) | R5 #483 (core), R6 #484 (App on `useFocusGlobals`, dialogs and overlays claim the stack, `notifyDialog` deleted) |
 | Key ownership | tests generated from the registry; every hint derived from it | hand-written key-ownership tests | R7 #485 |
 | Shared pane primitives | `useListController`, `QueryBoundary`, `useMutation`; one pane per PR | Notifications uses them (`src/hooks/useListController.js`, `src/components/QueryBoundary.jsx`, `src/hooks/useMutation.js`, `src/ui/ListRow.jsx`); the other panes still own their list, loading and error code. `useMutation`'s `invalidates` is the seam for R3 write invalidation | R8 #486 (Notifications first), R9 #487 (the rest) |
 | Shell | one app shell and one width contract; overlays layer instead of swapping the tree | view branches swap the tree | R10 #488 |

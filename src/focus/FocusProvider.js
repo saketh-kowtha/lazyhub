@@ -45,6 +45,25 @@ export function FocusProvider({ children, router = focusRouter, globals }) {
   return React.createElement(FocusContext.Provider, { value }, children)
 }
 
+/**
+ * Register the app's global key handler: it runs for every key no entry captured, after
+ * the entries (children first), exactly like the old root-level useInput in App.
+ * @param {(input: string, key: object) => void} handler latest handler; kept in a ref
+ */
+export function useFocusGlobals(handler) {
+  const ctx = useContext(FocusContext)
+  const latest = useRef(handler)
+  latest.current = handler
+  useLayoutEffect(() => {
+    if (!ctx.provided) return undefined
+    ctx.router.setGlobals((input, key) => latest.current?.(input, key))
+    return () => ctx.router.setGlobals(null)
+  }, [ctx.router, ctx.provided])
+  // Outside a provider nothing feeds the router: listen directly.
+  // The handler re-checks the provider itself: a test double may ignore `isActive`.
+  useRootInput((input, key) => { if (!ctx.provided) latest.current?.(input, key) }, { isActive: !ctx.provided })
+}
+
 /** The scope on top of the stack, read without claiming one. */
 export function useFocusScope() {
   return useContext(FocusContext).activeScope

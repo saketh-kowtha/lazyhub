@@ -28,17 +28,14 @@ function themeNameFromConfig(theme) {
 }
 
 export function SettingsPane({ onBack }) {
-  const { notifyDialog, setMouseEnabled } = useContext(AppContext)
+  const { setMouseEnabled } = useContext(AppContext)
   const { t, themeName, setTheme } = useTheme()
   const [config, setConfig] = useState(() => loadConfig())
   const [cursor, setCursor] = useState(0)
   const cursorRef = useRef(0)
   const [dialog, setDialog] = useState(null)
 
-  React.useEffect(() => {
-    notifyDialog(!!dialog)
-    return () => notifyDialog(false)
-  }, [dialog, notifyDialog])
+  useKeyScope('dialog', !!dialog)
 
   const ai = config.ai || {}
 

@@ -7,6 +7,7 @@ import { sendInput } from '../../../test/input-bus.js'
 import { cleanup, renderWithProviders, waitForExpectation } from '../../../test/test-helpers.jsx'
 import { diffFilesPage, fakeFilePatch } from '../../../test/diff-fixtures.js'
 import { useDiffState } from './state.js'
+import { liveScope } from '../../../keyscope.js'
 import { DiffView } from './render.jsx'
 import { buildTreeRows } from './tree.js'
 
@@ -40,12 +41,10 @@ function DiffSession(props) {
 
 function mountSession() {
   const onBack = vi.fn()
-  const notifyDialog = vi.fn()
   const view = renderWithProviders(
     <DiffSession repo="owner/repo" prNumber={42} onBack={onBack} onViewComments={() => {}} />,
-    { appContext: { notifyDialog } },
   )
-  return { view, onBack, notifyDialog }
+  return { view, onBack }
 }
 
 beforeEach(() => {
@@ -87,17 +86,17 @@ describe('diff state and render contracts', () => {
   })
 
   it('maps the file tree back to diff rows and releases overlay scope on selection', async () => {
-    const { view, notifyDialog } = mountSession()
+    const { view } = mountSession()
     await waitForExpectation(() => expect(currentState?.rows).toHaveLength(7))
     await sendInput(firstActionKey('diff.tree'))
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Files'))
-    expect(notifyDialog).toHaveBeenLastCalledWith(true)
+    expect(liveScope()).toBe('dialog')
     for (let i = 0; i < 3; i++) await sendInput('j')
     await sendInput('', { return: true })
     await waitForExpectation(() => expect(currentState.cursor).toBe(4))
     expect(currentState.rows[currentState.cursor].filename).toBe('docs/guide.md')
     expect(currentState.showTree).toBe(false)
-    expect(notifyDialog).toHaveBeenLastCalledWith(false)
+    expect(liveScope()).toBe('view')
   })
 
   it('admin bypass keeps the message, waits for a confirm and needs the PR number typed', async () => {

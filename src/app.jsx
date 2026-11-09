@@ -17,10 +17,10 @@
 import { logSwallowed } from './contain.js'
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { render, useApp } from 'ink'
-import { useInput } from './hooks/useSafeInput.js'
+import { useFocusGlobals } from './focus/FocusProvider.js'
 import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
 import { terminalStdout } from './theme/terminal.js'
-import { KeyScopeProvider, useActiveScope, useKeyScope } from './keyscope.js'
+import { KeyScopeProvider, useActiveScope, useKeyScope, isModalScope, isViewScope, liveScope } from './keyscope.js'
 import { armPrefix, disarmPrefix, getArmedPrefix } from './config/keymap.js'
 import { prefixContinuations, registeredPrefixes } from './ui/actions.js'
 import { WhichKey } from './ui/WhichKey.jsx'
@@ -158,15 +158,13 @@ export function App({ repo, onSwitchRepo }) {
     return () => setConfigWriteNotifier(null)
   }, [addToast])
 
-  const dialogActiveRef    = useRef(false)
   const savedListPosition  = useRef({})
   const pendingNavigationRef = useRef(null)
   const paneStateMapRef    = useRef(new Map())
-  const notifyDialog = useCallback((active) => { dialogActiveRef.current = active }, [])
   const openHelp     = useCallback(() => setShowHelp(true), [])
   const openAI       = useCallback(() => setShowAI(true), [])
 
-  const appCtx = { notifyDialog, openHelp, openAI, setMouseEnabled, addToast, paneStateMap: paneStateMapRef.current }
+  const appCtx = { openHelp, openAI, setMouseEnabled, addToast, paneStateMap: paneStateMapRef.current }
 
   const dumpDebugState = useCallback(() => {
     try {
@@ -180,7 +178,7 @@ export function App({ repo, onSwitchRepo }) {
           cursor: paneState.cursor ?? null,
           count: paneState.count ?? null,
         },
-        dialog: paneState.dialogHint || (dialogActiveRef.current ? 'active' : null),
+        dialog: paneState.dialogHint || (isModalScope(liveScope()) ? 'active' : null),
         mode: appMode,
         recentStatus,
       })
@@ -246,7 +244,7 @@ export function App({ repo, onSwitchRepo }) {
   }, [])
 
   // ─── Global key handler ───────────────────────────────────────────────────
-  useInput((input, key) => {
+  useFocusGlobals((input, key) => {
     if (isPerfEnabled()) pendingInputPerf.current.push(startTimer())
     if (process.env.LAZYHUB_CRASH_TEST === '1' && ((key.ctrl && input === '_') || input === '\x1f')) {
       // Thrown outside the handler so key-handler containment (#490) cannot catch it:
@@ -264,26 +262,12 @@ export function App({ repo, onSwitchRepo }) {
       return
     }
 
-    // Only handle global keys when no higher-priority scope has captured input.
-    // Scope stack: global(0) < pane(1) < view(2) < overlay(3) < dialog(4) < input(5)
-    // At pane level, Tab/number/? are still valid (list pane doesn't block them).
-    // At view/overlay/dialog/input, we must defer — EXCEPT for q/Esc when no
-    // component at the active scope handles it (see below).
-    const inView = activeScope === 'view' || activeScope === 'detail'
-    const highScope = activeScope !== 'global' && activeScope !== 'pane' && activeScope !== 'list' && !inView
-    if (highScope || dialogActiveRef.current) {
-      // q/Esc from the list view (pane scope active) should always quit/back.
-      // This is the lazygit convention.  We allow it through even at 'view' scope
-      // only when the view is one of the static shell views (settings/logs) that
-      // don't have their own useInput 'q' handlers and don't claim a scope — so
-      // their activeScope falls back to whatever the last list pane pushed.
-      // Concrete case: user is in list → presses S (opens settings) → presses q.
-      // Settings mounts without claiming a scope, so activeScope is still 'pane'.
-      // highScope is false for 'pane', so this block isn't even entered.
-      // The only problematic case would be if some intermediate component
-      // incorrectly pushes 'view' scope while settings/logs are shown.
-      return
-    }
+    // Global keys run only when nothing above the pane owns the keyboard: an overlay, dialog or
+    // input on the focus stack takes every key, and full-screen views keep all but help/palette.
+    // The scope is read live from the router (the context copy trails by a microtask).
+    const scope = liveScope()
+    const inView = isViewScope(scope)
+    if (isModalScope(scope)) return
 
     // Prefix keys (g): the next key picks a continuation from the registry.
     const armed = getArmedPrefix()
@@ -335,7 +319,8 @@ export function App({ repo, onSwitchRepo }) {
       if (view === 'conflict')   { setView('detail'); return }
       if (view === 'story')      { setStoryNav(null); setView('detail'); return }
       if (view === 'diff' && storyNav?.active) { setView('story'); return }
-      if (view === 'diff')       { setView(selectedItem?._fromList ? 'list' : 'detail'); return }
+      if (view === 'diff')       { setView(selectedItem?._fromEvidence ? 'evidence' : selectedItem?._fromList ? 'list' : 'detail'); return }
+      if (view === 'evidence')   { setSelectedItem(null); setView(selectedItem?._fromQueue ? 'queue' : 'list'); return }
       if (view === 'detail')     { const back = selectedItem?._fromQueue; setSelectedItem(null); setView(back ? 'queue' : 'list'); return }
       // At the root only `q` quits; a stray Esc must never kill the app.
       if (!key.escape) exit()
@@ -424,7 +409,7 @@ export function App({ repo, onSwitchRepo }) {
   // The detail pane hands back its own fetched PR; keep the dashboard identity (_repo/_kind) of the item (#493).
   const goToDiff       = useCallback((item) => {
     setStoryNav(null)
-    setSelectedItem(prev => ({ ...item, _kind: item._kind ?? prev?._kind, _repo: item._repo ?? prev?._repo, _fromQueue: prev?._fromQueue, _fromList: view === 'list' }))
+    setSelectedItem(prev => ({ ...item, _kind: item._kind ?? prev?._kind, _repo: item._repo ?? prev?._repo, _fromQueue: prev?._fromQueue, _fromList: view === 'list', _fromEvidence: view === 'evidence' }))
     setView('diff')
   }, [view])
   // Review story (#362): position and the file the diff should open at survive the round trip.
@@ -458,27 +443,34 @@ export function App({ repo, onSwitchRepo }) {
     if (view === 'conflict') { setView('detail'); return }
     if (view === 'story')    { setStoryNav(null); setView('detail'); return }
     if (view === 'diff' && storyNav?.active) { setView('story'); return }
-    if (view === 'diff')     { setView(selectedItem?._fromList ? 'list' : 'detail'); return }
+    if (view === 'diff')     { setView(selectedItem?._fromEvidence ? 'evidence' : selectedItem?._fromList ? 'list' : 'detail'); return }
     // A PR opened from the review queue returns to the queue, which remembers its group and row (#177).
     const backToQueue = view === 'detail' && selectedItem?._fromQueue
     setSelectedItem(null); setView(backToQueue ? 'queue' : 'list')
   }, [view, selectedItem, storyNav])
-  // EVIDENCE SEAM (#127): the queue hands over the focused row's evidence record. Today it opens the
-  // existing PR detail; the read-only evidence view replaces this one callback.
+  // The queue hands over the focused row's evidence record; Enter opens the read-only evidence view
+  // (#127). Esc there returns to the queue, which restores group and row by PR identity (#177).
   const goToQueueItem = useCallback((evidence) => {
-    goToDetail({
+    setSelectedItem({
       number: evidence.identity.number, title: evidence.untrusted?.title, _kind: 'prs', _repo: evidence.identity.repo,
       baseRefName: evidence.context?.base?.value === 'unknown' ? undefined : evidence.context?.base?.value,
       _fromQueue: true, _evidence: evidence,
     })
-  }, [goToDetail])
+    setView('evidence')
+  }, [])
+  // Evidence -> full PR detail keeps the queue as the place Esc ends up (existing _fromQueue chain).
+  const goToEvidenceDetail = useCallback(() => setView('detail'), [])
+  const returnFromEvidence = useCallback((target) => {
+    setSelectedItem(null)
+    setView(target?.view === 'queue' ? 'queue' : 'list')
+  }, [])
 
   const onPaneState = useCallback((s) => setPaneState(prev => ({ ...prev, ...s })), [])
 
   const tree = renderAppView({
     actionsBranch, actionsRepo, itemIsForeign, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
     exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail, goToPRRow,
-    goToDiff, goToQueueItem, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
+    goToDiff, goToQueueItem, goToEvidenceDetail, returnFromEvidence, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
     showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,

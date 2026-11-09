@@ -21,6 +21,7 @@
 
 import React from 'react'
 import { FocusProvider, useFocusEntry, useFocusScope } from './focus/FocusProvider.js'
+import { focusRouter } from './focus/router.js'
 
 export const SCOPE_LEVEL = {
   global:  0,
@@ -31,6 +32,34 @@ export const SCOPE_LEVEL = {
   overlay: 3,
   dialog:  4,
   input:   5,
+}
+
+/**
+ * True when `scope` is an overlay, dialog or text input: something that owns every key,
+ * so the app's global keys (panes, palette, help, leader) must not run.
+ * @param {string} scope scope name
+ * @returns {boolean} whether the scope blocks the global handler
+ */
+export function isModalScope(scope) {
+  return (SCOPE_LEVEL[scope] ?? SCOPE_LEVEL.input) >= SCOPE_LEVEL.overlay
+}
+
+/**
+ * True when `scope` is a full-screen view (detail, diff, comments, ...).
+ * @param {string} scope scope name
+ * @returns {boolean} whether it is the view scope
+ */
+export function isViewScope(scope) {
+  return SCOPE_LEVEL[scope] === SCOPE_LEVEL.view
+}
+
+/**
+ * The scope on top of the stack right now (synchronous; the React copy from
+ * useActiveScope trails by a microtask). For key handlers, which must not read stale state.
+ * @returns {string} scope name
+ */
+export function liveScope() {
+  return focusRouter.activeScope()
 }
 
 /**
