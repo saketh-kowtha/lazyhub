@@ -3,7 +3,7 @@ import { runGh } from './core.js'
 import { classifyGh } from '../daemon/protocol.js'
 import { listIssueTimelinePage, mapIssueTimelineNode, editIssueComment, deleteIssueComment, getIssueHeader } from './issue-timeline.js'
 
-vi.mock('./core.js', () => ({ getRepo: (r) => r, runGh: vi.fn() }))
+vi.mock('./core.js', async (importOriginal) => ({ ...(await importOriginal()), getRepo: (r) => r, runGh: vi.fn() }))
 
 const comment = (over = {}) => ({
   __typename: 'IssueComment', id: 'IC_1', databaseId: 101, body: 'hello', url: 'https://x/c/101',

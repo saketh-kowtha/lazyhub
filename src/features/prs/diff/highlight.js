@@ -86,12 +86,12 @@ function htmlToChalk(html, bgColor, t) {
       const end = html.indexOf('<', i)
       const raw = end === -1 ? html.slice(i) : html.slice(i, end)
       const text = raw
-        .replace(/&amp;/g, '&')
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
         .replace(/&#x27;/g, "'")
+        .replace(/&amp;/g, '&') // last, so "&amp;lt;" decodes to "&lt;" and not "<"
       if (text) {
         const fg = colorStack.filter(Boolean).at(-1) || t.syntax.default
         parts.push(applyThemeStyle(text, fg, bgColor))

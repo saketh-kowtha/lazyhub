@@ -12,6 +12,7 @@ import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { loadConfig, saveConfig, BUILTIN_PANES } from '../../config.js'
 import { logger, TextInput } from '../../utils.js'
+import { endpointHint } from './endpoint-hint.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 
 const PROVIDERS = ['anthropic', 'openai', 'ollama', 'openai-compatible']
@@ -64,20 +65,8 @@ export function SettingsPane({ onBack }) {
     }
     // openai-compat — show endpoint hint
     const baseUrl = ai.openaiBaseUrl || 'https://api.openai.com/v1'
-    let endpointHint
-    if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
-      const port = baseUrl.match(/:(\d+)/)?.[1]
-      endpointHint = port ? `local :${port}` : 'local'
-    } else if (baseUrl.includes('groq.com'))    { endpointHint = 'Groq' }
-    else if (baseUrl.includes('together'))       { endpointHint = 'Together' }
-    else if (baseUrl.includes('fireworks'))      { endpointHint = 'Fireworks' }
-    else if (baseUrl.includes('openai.azure'))   { endpointHint = 'Azure OpenAI' }
-    else if (baseUrl.includes('openai.com'))     { endpointHint = 'OpenAI' }
-    else if (baseUrl.includes('mistral'))        { endpointHint = 'Mistral' }
-    else if (baseUrl.includes('deepseek'))       { endpointHint = 'DeepSeek' }
-    else if (baseUrl.includes('x.ai'))           { endpointHint = 'xAI' }
-    else { endpointHint = baseUrl.replace(/^https?:\/\//, '').split('/')[0] }
-    return `${model}  (${endpointHint})`
+    const hint = endpointHint(baseUrl)
+    return `${model}  (${hint})`
   }
 
   const OPTIONS = [

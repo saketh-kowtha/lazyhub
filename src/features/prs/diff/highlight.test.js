@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { t } from '../../../theme.js'
+import { stripAnsi } from '../../../utils-core.js'
 import { expandTabs, syntaxHighlight } from './highlight.js'
 
 describe('diff tab expansion (#426)', () => {
@@ -18,5 +19,13 @@ describe('diff tab expansion (#426)', () => {
   it('emits no raw TAB from syntaxHighlight, with or without a language', () => {
     expect(syntaxHighlight('\tconst x = 1', 'javascript', null, t)).not.toContain('\t')
     expect(syntaxHighlight('\tconst x = 1', null, null, t)).not.toContain('\t')
+  })
+})
+
+describe('entity decoding order', () => {
+  it('round-trips literal entity text instead of double-decoding it', () => {
+    const out = stripAnsi(syntaxHighlight('const s = "&lt;&amp;lt;&amp;amp;"', 'javascript', null, t))
+    expect(out).toContain('&lt;&amp;lt;&amp;amp;')
+    expect(syntaxHighlight('a < b && c', 'javascript', null, t)).toContain('&&')
   })
 })

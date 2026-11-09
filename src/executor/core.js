@@ -342,3 +342,19 @@ async function execGh(args, { timeout = GH_TIMEOUT, json, stdin, interactive, co
 export function getRepo(overrideRepo) {
   return overrideRepo || process.env.GHUI_REPO
 }
+
+/**
+ * Resolve the effective repository and return it as a URL path fragment
+ * (`owner/name`) with each segment percent-encoded. Throws unless the repo is
+ * exactly `owner/name`, so a malformed value can never add or drop path segments.
+ * @param {string} [overrideRepo]
+ * @returns {string}
+ */
+export function repoPath(overrideRepo) {
+  const repo = getRepo(/** @type {string} */ (overrideRepo))
+  const parts = typeof repo === 'string' ? repo.split('/') : []
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error(`Invalid repository "${repo}": expected "owner/name"`)
+  }
+  return `${encodeURIComponent(parts[0])}/${encodeURIComponent(parts[1])}`
+}

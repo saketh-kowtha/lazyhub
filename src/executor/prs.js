@@ -8,7 +8,7 @@ const PR_LIST_MAX_RESULTS = 1000
 const PR_SEARCH_STATES = new Set(['open', 'closed', 'merged', 'all'])
 
 function compact(value) {
-  return String(value || '').replace(/"/g, '\\"').trim()
+  return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').trim()
 }
 
 function prSearchQuery(repo, filter) {

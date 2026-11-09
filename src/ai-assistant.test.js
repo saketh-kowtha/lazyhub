@@ -247,7 +247,7 @@ describe('assistant provider boundary (B-65: every round goes through src/ai/ind
       for (const e of readdirSync(dir, { withFileTypes: true })) {
         const p = join(dir, e.name)
         if (e.isDirectory()) walk(p)
-        else if (/\.jsx?$/.test(e.name) && !/\.test\./.test(e.name) && readFileSync(p, 'utf8').includes('api.anthropic.com')) offenders.push(p)
+        else if (/\.jsx?$/.test(e.name) && !/\.test\./.test(e.name) && /api\.anthropic\.com/.test(readFileSync(p, 'utf8'))) offenders.push(p)
       }
     }
     walk(root)
