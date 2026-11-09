@@ -883,6 +883,54 @@ description = "Go to Notifications"
 scope = "global"
 group = "go"
 
+[actions."go.queue"]
+keys = ["g q"]
+hint = "g q"
+label = "queue"
+description = "Open the review queue: PRs that need your attention, each with why"
+scope = "global"
+group = "go"
+
+[actions."queue.open"]
+keys = ["Enter"]
+hint = "Enter"
+label = "open"
+description = "Open the selected pull request"
+scope = "queue-list"
+group = "action"
+
+[actions."queue.browser"]
+keys = ["o"]
+hint = "o"
+label = "browser"
+description = "Open the selected pull request in the browser"
+scope = "queue-list"
+group = "action"
+
+[actions."queue.next-group"]
+keys = ["]"]
+hint = "]/["
+label = "group"
+description = "Next status group"
+scope = "queue-list"
+group = "nav"
+
+[actions."queue.prev-group"]
+keys = ["["]
+hint = "]/["
+label = "group"
+description = "Previous status group"
+scope = "queue-list"
+group = "nav"
+
+[actions."queue.more"]
+keys = ["+"]
+hint = "+"
+label = "more"
+description = "Load the next page of review requests and your PRs"
+scope = "queue-list"
+group = "action"
+
 [actions."pr.checks"]
 keys = ["c"]
 hint = "c"

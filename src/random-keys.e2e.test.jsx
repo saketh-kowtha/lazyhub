@@ -166,7 +166,7 @@ const PRINTABLE = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345678
 export const SPAWNING_ACTIONS = [
   'branch.checkout', 'branch.new', 'branch.delete', 'branch.push',
   'pr.checkout', 'pr.conflicts', 'pr.new',
-  'pr.open-browser', 'issue.open-browser', 'tab.open-browser', 'check.open-browser',
+  'pr.open-browser', 'issue.open-browser', 'tab.open-browser', 'check.open-browser', 'queue.browser',
   'pr.copy-url', 'issue.copy-url',
   'pr.open-editor', 'app.open-config', 'dialog.editor',
   'notification.open',
