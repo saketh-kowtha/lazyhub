@@ -879,6 +879,14 @@ export const LEGACY_ACTION_VALUES = {
     scope: ["pr-detail"],
     group: ["action"],
   },
+  "pr.evidence": {
+    keys: [["e"]],
+    hint: ["e"],
+    label: ["evidence"],
+    description: ["Read-only review evidence: facts, sources, freshness and the inspected head"],
+    scope: ["pr-detail"],
+    group: ["action"],
+  },
   "pr.open-editor": {
     keys: [["E"]],
     hint: ["E"],

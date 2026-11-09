@@ -266,6 +266,7 @@ export const DEFAULT_CONFIG = {
     'pr.base':               { keys: ['B'], hint: 'B', label: 'base', description: 'Change the base branch', scope: 'pr-detail', group: 'action' },
     'pr.comments':           { keys: ['v'], hint: 'v', label: 'comments', description: 'Open the comments view', scope: 'pr-detail,diff', group: 'action' },
     'pr.claims':             { keys: ['V'], hint: 'V', label: 'claims', description: 'Check the claims in the PR description against the diff', scope: 'pr-detail', group: 'action' },
+    'pr.evidence':           { keys: ['e'], hint: 'e', label: 'evidence', description: 'Read-only review evidence: facts, sources, freshness and the inspected head', scope: 'pr-detail', group: 'action' },
     'pr.open-editor':        { keys: ['E'], hint: 'E', label: 'editor', description: 'Open the first changed file, or the cursor line in the diff, in $EDITOR', scope: 'pr-detail,diff', group: 'action' },
     'pr.story':              { keys: ['s'], hint: 's', label: 'story', description: 'Review story: a guided step-by-step walkthrough of the diff', scope: 'pr-detail', group: 'action' },
     'story.next':            { keys: ['n'], hint: 'n / p', label: 'next step', description: 'Next step of the review story', scope: 'pr-story', group: 'nav' },

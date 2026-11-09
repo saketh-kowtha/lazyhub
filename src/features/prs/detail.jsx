@@ -47,10 +47,11 @@ import { PRDetailHeader } from './detail/Header.jsx'
 import { buildContentRows } from './detail/content-rows.jsx'
 import { sortChecks } from './detail/Checks.jsx'
 import { ClaimsView } from './ClaimsView.jsx'
+import { EvidenceView } from './EvidenceView.jsx'
 
 const _editorCfg = loadConfig().editor
 
-export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, onBack, onOpenDiff, onOpenStory, onOpenConflict, onOpenActions, onViewComments, onPaneState }) {
+export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, onBack, onOpenDiff, onOpenStory, onOpenConflict, onOpenActions, onViewComments, onPaneState, returnTo, onReturn }) {
   useKeyScope('view')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
@@ -266,6 +267,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
     if (id === 'pr.story' && pr && onOpenStory) { onOpenStory(pr); return }
     if (id === 'pr.comments' && onViewComments) { onViewComments(); return }
     if (id === 'pr.claims' && pr) { setDialog('claims'); return }
+    if (id === 'pr.evidence' && pr) { setDialog('evidence'); return }
     if (id === 'pr.open-browser' && pr?.url) {
       openUrl(pr.url)
       return
@@ -564,6 +566,10 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
 
   if (dialog === 'claims') {
     return <ClaimsView pr={pr} repo={repo} onClose={() => setDialog(null)} onOpenDiff={onOpenDiff} />
+  }
+
+  if (dialog === 'evidence') {
+    return <EvidenceView pr={pr} repo={repo} onClose={() => setDialog(null)} onOpenDiff={onOpenDiff} returnTo={returnTo} onReturn={onReturn} />
   }
 
   if (dialog === 'check-logs') {
