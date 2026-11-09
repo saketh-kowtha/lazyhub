@@ -11,6 +11,7 @@ import { openUrl } from '../../services/platform.js'
 import { Box, Text, useStdout } from 'ink'
 import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
+import { usePrefetchPRDiff } from './diff/prefetch.js'
 import {
   getPR,
   getRepoInfo, getPRChecks, getBranchProtection,
@@ -60,6 +61,8 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
   const termRows = stdout?.rows    || 24
 
   const { data: pr, loading, error, refetch } = useGh(getPR, [repo, prNumber])
+  // The diff's first request, fetched at low priority while the detail is read (#482).
+  usePrefetchPRDiff(repo, prNumber, 0)
   const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000 })
   const { data: checks }   = useGh(getPRChecks, [repo, prNumber], { ttl: 30_000 })
   // The list row already knows the base branch: ask for protection now instead of after getPR (#452).
