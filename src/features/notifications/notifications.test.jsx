@@ -81,7 +81,7 @@ describe('notification mark-read write (#453)', () => {
   })
 
   it('shows a failure status and does not refetch when the write fails', async () => {
-    markNotificationRead.mockReturnValue(Promise.reject(new Error('HTTP 403')))
+    markNotificationRead.mockRejectedValueOnce(new Error('HTTP 403'))
     const refetch = vi.fn()
     const n = { id: '1', unread: true, reason: 'mention', updatedAt: '2026-06-06T10:00:00Z', repository: { name: 'repo' }, subject: { title: 'Thread 1', type: 'Issue' } }
     useGh.mockReturnValue({ data: [n], loading: false, error: null, refetch })
