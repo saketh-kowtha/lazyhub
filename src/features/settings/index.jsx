@@ -90,7 +90,6 @@ export function SettingsPane({ onBack }) {
   }
 
   useKeymapInput((input, key) => {
-    if (dialog) return
     if (key.escape || input === 'q') { onBack(); return }
     if (input === 'j' || key.downArrow) {
       cursorRef.current = (cursorRef.current + 1) % OPTIONS.length
@@ -132,7 +131,7 @@ export function SettingsPane({ onBack }) {
       }
       setDialog(id)
     }
-  })
+  }, { yieldToModal: true })
 
   // ── Sub-screen dialogs ────────────────────────────────────────────────────
   if (dialog === 'theme') {

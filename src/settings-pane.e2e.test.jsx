@@ -63,6 +63,22 @@ describe('Settings pane user flows', () => {
     expect(view.lastFrame()).toContain('[Enter] confirm')
   })
 
+  it('keys typed into the Page Size editor never reach the pane handler (#485)', async () => {
+    const onBack = vi.fn()
+    renderWithProviders(<SettingsPane onBack={onBack} />)
+    await flush(20)
+    for (const input of ['j', 'j', 'j', 'j']) await sendInput(input)
+    await sendInput('', { return: true })
+    await flush(20)
+    await sendInput('q')
+    await sendInput('j')
+    expect(onBack).not.toHaveBeenCalled()
+    await sendInput('', { escape: true })
+    await flush(20)
+    await sendInput('q')
+    expect(onBack).toHaveBeenCalledTimes(1)
+  })
+
   it('Page Size editor can be cancelled and the pane keeps responding', async () => {
     const onBack = vi.fn()
     renderWithProviders(

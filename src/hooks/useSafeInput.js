@@ -23,8 +23,8 @@ export function useRootInput(handler, options) {
 
 /**
  * @param {(input: string, key: any) => void} handler
- * @param {{ isActive?: boolean }} [options]
+ * @param {{ isActive?: boolean, yieldToModal?: boolean }} [options] yieldToModal: stay silent while an overlay, dialog or input owns the keys (#485)
  */
 export function useInput(handler, options) {
-  useFocusEntry(null, handler, { isActive: options?.isActive })
+  useFocusEntry(null, handler, { isActive: options?.isActive, yieldToModal: options?.yieldToModal })
 }

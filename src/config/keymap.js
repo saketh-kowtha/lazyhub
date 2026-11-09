@@ -289,9 +289,9 @@ export function prefixConsumes(input, key = {}) {
  * Keeps `src/features` free of direct Ink useInput calls, and keeps prefix
  * continuations (`g p`) away from view-level handlers.
  * @param {any} handler
- * @param {any} [opts]
+ * @param {{ isActive?: boolean, yieldToModal?: boolean }} [opts] yieldToModal: stay silent while an overlay, dialog or input owns the keys (#485)
  */
 export function useKeymapInput(handler, opts) {
   // skipOnPrefix: the router keeps an armed prefix's continuation (`g p`) away from views.
-  useFocusEntry(null, handler, { skipOnPrefix: true, isActive: opts?.isActive })
+  useFocusEntry(null, handler, { skipOnPrefix: true, isActive: opts?.isActive, yieldToModal: opts?.yieldToModal })
 }

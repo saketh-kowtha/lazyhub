@@ -22,27 +22,9 @@
 import React from 'react'
 import { FocusProvider, useFocusEntry, useFocusScope } from './focus/FocusProvider.js'
 import { focusRouter } from './focus/router.js'
+import { SCOPE_LEVEL, isModalScope } from './focus/scopes.js'
 
-export const SCOPE_LEVEL = {
-  global:  0,
-  pane:    1,
-  list:    1,   // alias
-  view:    2,
-  detail:  2,   // alias
-  overlay: 3,
-  dialog:  4,
-  input:   5,
-}
-
-/**
- * True when `scope` is an overlay, dialog or text input: something that owns every key,
- * so the app's global keys (panes, palette, help, leader) must not run.
- * @param {string} scope scope name
- * @returns {boolean} whether the scope blocks the global handler
- */
-export function isModalScope(scope) {
-  return (SCOPE_LEVEL[scope] ?? SCOPE_LEVEL.input) >= SCOPE_LEVEL.overlay
-}
+export { SCOPE_LEVEL, isModalScope }
 
 /**
  * True when `scope` is a full-screen view (detail, diff, comments, ...).

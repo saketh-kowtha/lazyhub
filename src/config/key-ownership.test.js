@@ -136,3 +136,32 @@ describe('log viewer footer (#463)', () => {
     expect(labels).not.toContain('re-run')
   })
 })
+
+describe('every key-bearing action has an owner (#485)', () => {
+  // Scopes whose keys the app shell, a dialog or a shared controller handles.
+  const SHELL_SCOPES = new Set(['global', 'list', 'dialog', 'leader'])
+  const PANE_SCOPES = new Set(['pr-list', 'issue-list', 'branch-list', 'workflow-list', 'notification-list', 'tab-list',
+    'pr-detail', 'pr-checks', 'pr-story', 'pr-comments', 'diff', 'issue-detail', 'queue-list'])
+
+  it('declares only scopes that a context resolves, so no key is bound where nothing listens', () => {
+    const known = new Set([...SHELL_SCOPES, ...PANE_SCOPES])
+    const stray = []
+    for (const [id, action] of Object.entries(config.actions)) {
+      if (!action.keys.length) continue
+      for (const scope of String(action.scope).split(',')) if (!known.has(scope)) stray.push(`${id}:${scope}`)
+    }
+    expect(stray).toEqual([])
+  })
+
+  it('every pane scope is reachable from a (pane, view) pair', () => {
+    const reachable = new Set()
+    const withTab = { ...config, tabs: [{ id: 'tabs' }] }
+    for (const [pane, view] of [...CONTEXTS, ['tabs', 'list'], ['prs', 'story'], ['focus', 'queue']]) {
+      for (const scope of contextScopes(pane, view, withTab)) reachable.add(scope)
+    }
+    for (const scope of PANE_SCOPES) {
+      if (scope === 'pr-checks') continue // a mode inside PR detail, not a view
+      expect(reachable.has(scope), scope).toBe(true)
+    }
+  })
+})

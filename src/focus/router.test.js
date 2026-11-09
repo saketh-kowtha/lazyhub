@@ -307,3 +307,37 @@ describe('chord timing', () => {
     expect(tracker.feed('l', {})).toBeNull()
   })
 })
+
+describe('focus router: yieldToModal (#485)', () => {
+  const press = (router) => router.dispatch('x', {})
+
+  it('a pane listener hears keys until an overlay, dialog or input is on top', () => {
+    const router = createFocusRouter()
+    const pane = vi.fn()
+    router.claim({ id: 'pane', scope: null, yieldToModal: true, handler: pane })
+    press(router)
+    expect(pane).toHaveBeenCalledTimes(1)
+    for (const scope of ['overlay', 'dialog', 'input']) {
+      const release = router.claim({ id: scope, scope, handler: null })
+      press(router)
+      release()
+    }
+    expect(pane).toHaveBeenCalledTimes(1)
+    press(router)
+    expect(pane).toHaveBeenCalledTimes(2)
+  })
+
+  it('stays audible under pane and view scopes, and without the flag', () => {
+    const router = createFocusRouter()
+    const flagged = vi.fn()
+    const plain = vi.fn()
+    router.claim({ id: 'flagged', scope: null, yieldToModal: true, handler: flagged })
+    router.claim({ id: 'plain', scope: null, handler: plain })
+    router.claim({ id: 'view', scope: 'view', handler: null })
+    press(router)
+    router.claim({ id: 'dialog', scope: 'dialog', handler: null })
+    press(router)
+    expect(flagged).toHaveBeenCalledTimes(1)
+    expect(plain).toHaveBeenCalledTimes(2)
+  })
+})

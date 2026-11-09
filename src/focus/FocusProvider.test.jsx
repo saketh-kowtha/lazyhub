@@ -2,10 +2,12 @@ import React, { useState } from 'react'
 import { Text } from 'ink'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useFocusEntry, useFocusGlobals } from './FocusProvider.js'
+import { useInput } from '../hooks/useSafeInput.js'
+import { useKeymapInput } from '../config/keymap.js'
 import { useKeyScope, isModalScope, isViewScope, liveScope } from '../keyscope.js'
 import { describeFocus, focusRouter } from './router.js'
 import { getContainedToast, resetContained } from '../contain.js'
-import { sendInput } from '../test/input-bus.js'
+import { sendInput, rootListenerCount } from '../test/input-bus.js'
 import { cleanup, flush, renderWithProviders } from '../test/test-helpers.jsx'
 
 vi.mock('ink', async () => {
@@ -96,6 +98,22 @@ describe('FocusProvider', () => {
     await sendInput('b')
     // The handler still runs (the app decides), but it sees the dialog on top of the stack.
     expect(order.filter(e => e.startsWith('global:'))).toEqual(['global:b:modal'])
+  })
+
+  it('every key goes through the one root listener: panes, globals and dialogs are router entries (#485)', async () => {
+    const seen = []
+    function Pane() {
+      useInput((input) => { seen.push('input:' + input) })
+      useKeymapInput((input) => { seen.push('keymap:' + input) })
+      useKeyScope('dialog')
+      useFocusGlobals((input) => { seen.push('global:' + input) })
+      return null
+    }
+    renderWithProviders(<Pane />)
+    await flush(5)
+    expect(rootListenerCount()).toBe(1)
+    await sendInput('z')
+    expect(seen).toEqual(['input:z', 'keymap:z', 'global:z'])
   })
 
   it('classifies scopes: overlays, dialogs and inputs are modal, views are not', () => {
