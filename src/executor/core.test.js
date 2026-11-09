@@ -11,6 +11,7 @@ import { writeAuditEntry } from '../daemon/audit.js'
 import { invalidateRepoCache } from '../cache.js'
 import { runGh, GhError, getGhCallHistory } from './core.js'
 import { classifyGhFailure } from './classify.js'
+import { onWrite } from '../data/invalidation.js'
 import { clearDaemonFallback, getDaemonFallback } from '../daemon/fallback.js'
 
 const ok = (stdout = '[]') => ({ exitCode: 0, stdout, stderr: '' })
@@ -44,6 +45,29 @@ describe('runGh fail-closed write handling', () => {
     expect(writeAuditEntry.mock.calls.map(c => c[0].phase)).toEqual(['intent', 'result'])
     expect(writeAuditEntry.mock.calls[1][0].outcome).toBe('ok')
     expect(invalidateRepoCache).toHaveBeenCalledWith('o/r')
+  })
+
+  it('announces a finished write after the daemon cache is dropped, so revalidation reads fresh data (#481)', async () => {
+    const order = []
+    requestDaemon.mockImplementation(async (_socket, msg) => { order.push(`daemon:${msg.type}`); return {} })
+    const off = onWrite(({ repo }) => order.push(`notify:${repo}`))
+    try {
+      await runGh(WRITE)
+    } finally { off() }
+    expect(order).toEqual(['daemon:invalidate', 'notify:o/r'])
+  })
+
+  it('announces a failed write too (the remote outcome is ambiguous) and never a read (#481)', async () => {
+    const seen = []
+    const off = onWrite(({ repo }) => seen.push(repo))
+    try {
+      execa.mockRejectedValueOnce(Object.assign(new Error('boom'), { exitCode: 1, stderr: 'boom' }))
+      await expect(runGh(WRITE)).rejects.toBeInstanceOf(GhError)
+      expect(seen).toEqual(['o/r'])
+      execa.mockResolvedValue(ok())
+      await runGh(TYPED_READ, { skipDaemon: true })
+      expect(seen).toEqual(['o/r'])
+    } finally { off() }
   })
 
   it('tells the daemon to drop its cache after a write, authenticated; a failure is logged, not thrown', async () => {
