@@ -19,6 +19,7 @@
     "test:memory": "node test/pty/memory.js",
     "test:portability": "node test/pty/portability.js",
     "test:perf": "node test/perf/run.js",
+    "vitals": "node test/perf/vitals.js",
     "demo": "node scripts/demo.mjs",
     "prepublishOnly": "npm run build && npm run typecheck && npm test"
   },

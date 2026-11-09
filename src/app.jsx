@@ -20,6 +20,7 @@ import { render, useApp } from 'ink'
 import { useFocusGlobals } from './focus/FocusProvider.js'
 import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
 import { terminalStdout } from './theme/terminal.js'
+import { vitals } from './perf/vitals.js'
 import { KeyScopeProvider, useActiveScope, useKeyScope, isModalScope, isViewScope, liveScope } from './keyscope.js'
 import { getArmedPrefix } from './config/keymap.js'
 import { useChords } from './shell/useChords.js'
@@ -518,7 +519,7 @@ export function renderApp() {
           </KeyScopeProvider>
         </ThemeProvider>
       </ConfigProvider>,
-      { stdout: terminalStdout() }
+      { stdout: vitals.wrapStdout(terminalStdout()) }
     )
 
     // When Ink exits (useApp().exit() called), also restore terminal
