@@ -1,4 +1,4 @@
-import { getRepo, runGh } from './core.js'
+import { getRepo, repoPath, runGh } from './core.js'
 import { logger } from '../utils-core.js'
 
 /**
@@ -55,7 +55,7 @@ export async function listBranches(/** @type {any} */ repo) {
   const all = []
   for (let page = 1; page <= BRANCH_MAX_PAGES; page++) {
     const args = [
-      'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches?per_page=${BRANCH_PAGE_SIZE}&page=${page}`,
+      'api', `repos/${repoPath(r)}/branches?per_page=${BRANCH_PAGE_SIZE}&page=${page}`,
       '--jq', '[.[] | {name: .name, protected: .protected, commit: {sha: .commit.sha}}]',
     ]
     const rows = await runGh(args)
@@ -128,7 +128,7 @@ export async function checkoutBranch(/** @type {any} */ repo, /** @type {any} */
 export async function deleteBranch(/** @type {any} */ repo, /** @type {any} */ branchName) {
   const r = getRepo(repo)
   const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/git/refs/heads/${encodeRefPath(branchName)}`,
+    'api', `repos/${repoPath(r)}/git/refs/heads/${encodeRefPath(branchName)}`,
     '--method', 'DELETE',
   ]
   return runGh(args)
@@ -217,7 +217,7 @@ export async function getRemoteBranch(/** @type {any} */ repo, /** @type {any} *
   if (!branch) return null
   try {
     const r = getRepo(repo)
-    return await runGh(['api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches/${encodeRefPath(branch)}`])
+    return await runGh(['api', `repos/${repoPath(r)}/branches/${encodeRefPath(branch)}`])
   } catch {
     return null
   }
@@ -234,7 +234,7 @@ export async function compareBranches(/** @type {any} */ repo, /** @type {any} *
   if (!base || !head) return null
   try {
     const r = getRepo(repo)
-    return await runGh(['api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/compare/${encodeRefPath(base)}...${encodeRefPath(head)}`])
+    return await runGh(['api', `repos/${repoPath(r)}/compare/${encodeRefPath(base)}...${encodeRefPath(head)}`])
   } catch {
     return null
   }

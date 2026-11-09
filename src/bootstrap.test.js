@@ -507,7 +507,7 @@ describe('GHES host resolution', () => {
             }
             if (bin === 'gh' && args[0] === 'auth' && args[1] === 'token') {
                 const host = args[3] || 'github.com'
-                return tokenHosts.includes(host) ? { exitCode: 0, stdout: 'tok\n' } : { exitCode: 1, stdout: '' }
+                return tokenHosts.some(h => h === host) ? { exitCode: 0, stdout: 'tok\n' } : { exitCode: 1, stdout: '' }
             }
             return { exitCode: 1, stdout: '' }
         })

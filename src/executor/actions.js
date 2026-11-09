@@ -1,4 +1,4 @@
-import { getRepo, runGh } from './core.js'
+import { getRepo, repoPath, runGh } from './core.js'
 import { encodeRefPath } from './branches.js'
 
 /**
@@ -85,7 +85,7 @@ export async function getPRChecks(/** @type {any} */ repo, /** @type {any} */ nu
     return []
   }
   if (!pr?.headRefOid) return []
-  const base = `repos/${encodeURIComponent(r).replace('%2F', '/')}/commits/${encodeURIComponent(pr.headRefOid)}/check-runs`
+  const base = `repos/${repoPath(r)}/commits/${encodeURIComponent(pr.headRefOid)}/check-runs`
   const jq = '[.check_runs[] | {id: .id, name: .name, status: .status, conclusion: .conclusion, appName: .app.name, url: .html_url, startedAt: .started_at, completedAt: .completed_at}]'
   const checks = []
   let truncated = false
@@ -120,7 +120,7 @@ export async function getPRChecks(/** @type {any} */ repo, /** @type {any} */ nu
 export async function rerunCheckRun(/** @type {any} */ repo, /** @type {any} */ checkRunId) {
   const r = getRepo(repo)
   return runGh([
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/check-runs/${checkRunId}/rerequest`,
+    'api', `repos/${repoPath(r)}/check-runs/${checkRunId}/rerequest`,
     '--method', 'POST',
   ])
 }
@@ -134,7 +134,7 @@ export async function getCheckRunAnnotations(/** @type {any} */ repo, /** @type 
   const r = getRepo(repo)
   try {
     return await runGh([
-      'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/check-runs/${checkRunId}/annotations`,
+      'api', `repos/${repoPath(r)}/check-runs/${checkRunId}/annotations`,
       '--jq', '[.[] | {path: .path, line: .start_line, level: .annotation_level, message: .message, title: .title}]',
     ])
   } catch {
@@ -151,7 +151,7 @@ export async function getBranchProtection(/** @type {any} */ repo, /** @type {an
   if (!branch) return null
   const r = getRepo(repo)
   const args = [
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/branches/${encodeRefPath(branch)}/protection`,
+    'api', `repos/${repoPath(r)}/branches/${encodeRefPath(branch)}/protection`,
     '--jq', '{requiredReviews: (.required_pull_request_reviews.required_approving_review_count // 0), requireCodeOwnerReviews: (.required_pull_request_reviews.require_code_owner_reviews // false), requireStatusChecks: (.required_status_checks != null), requiredChecks: ([(.required_status_checks.contexts // []), (.required_status_checks.checks // [] | map(.context))] | add // [])}',
   ]
   try {

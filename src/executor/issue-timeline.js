@@ -9,7 +9,7 @@
  */
 
 import { GhError } from './gh-error.js'
-import { getRepo, runGh } from './core.js'
+import { getRepo, repoPath, runGh } from './core.js'
 
 const REPO_PART_RE = /^[a-zA-Z0-9._-]+$/
 
@@ -207,7 +207,7 @@ function assertCommentId(id) {
   if (!Number.isInteger(Number(id)) || Number(id) <= 0) throw new Error(`Invalid comment ID: ${id}`)
 }
 
-const commentPath = (repo, id) => `repos/${encodeURIComponent(getRepo(repo)).replace('%2F', '/')}/issues/comments/${encodeURIComponent(id)}`
+const commentPath = (repo, id) => `repos/${repoPath(repo)}/issues/comments/${encodeURIComponent(id)}`
 
 /**
  * Edit an issue comment body. Allowed by GitHub only for the viewer's own comments (or a maintainer).
