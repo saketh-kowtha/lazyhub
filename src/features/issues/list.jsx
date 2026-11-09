@@ -10,8 +10,9 @@ import { openUrl, copyToClipboard } from '../../services/platform.js'
 import { useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
-import { usePendingWrite } from '../../hooks/usePendingWrite.js'
-import { listIssuesPage, getIssueRow } from '../../executor.js'
+import { useListController } from '../../hooks/useListController.js'
+import { useMutation } from '../../hooks/useMutation.js'
+import { listIssuesPage, getIssueRow, closeIssue, createIssue } from '../../executor.js'
 import { sanitize } from '../../utils.js'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -28,7 +29,7 @@ const _actions = _appConfig.toml
 // GitHub search never returns more than 1,000 results.
 const SEARCH_CAP = 1000
 
-export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, onPaneState, initialCursor = 0, initialScrollOffset = 0 }) {
+export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, onPaneState }) {
   useKeyScope('pane')
   const { t } = useTheme()
   const { notifyDialog } = useContext(AppContext)
@@ -65,12 +66,7 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
     setOverlay({ key: pageKey, rows: {}, added: [] })
     refetchFirst()
   }, [pageKey, refetchFirst])
-  const [cursor, setCursor] = useState(initialCursor)
-  const [scrollOffset, setScrollOffset] = useState(initialScrollOffset)
   const [dialog, setDialog] = useState(null)
-  const [statusMsg, setStatusMsg] = useState(null)
-  const lastKeyRef   = useRef(null)
-  const lastKeyTimer = useRef(null)
 
   const hasNextPage = extra.hasNextPage ?? firstPage?.hasNextPage ?? false
   const endCursor = extra.endCursor ?? firstPage?.endCursor ?? null
@@ -87,6 +83,8 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
       .filter(Boolean)
   }, [rawItems, patches])
   const STATE_CYCLE = ['open', 'closed']
+  const list = useListController({ items, height: visibleHeight, getId: i => i.number })
+  const { cursor } = list
 
   const loadMore = useCallback(async () => {
     if (inFlight.current || !endCursor) return
@@ -146,86 +144,51 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
     if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
   }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A refetch can shrink the list (closed issue, read notification); keep the cursor on a real row.
-  useEffect(() => {
-    if (items.length > 0 && cursor > items.length - 1) {
-      const last = items.length - 1
-      setCursor(last)
-      setScrollOffset(Math.max(0, last - visibleHeight + 1))
-    }
-  }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
-
   useEffect(() => {
     notifyDialog(!!dialog)
     if (onPaneState) onPaneState({ dialogHint: dialog || null })
     return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
   }, [dialog, notifyDialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
-
-  const statusTimer = useRef(null)
-  useEffect(() => () => { clearTimeout(statusTimer.current) }, [])
-  const showStatus = (msg, isError = false, sticky = false) => {
-    clearTimeout(statusTimer.current)
-    setStatusMsg({ msg, isError, persist: isError })
-    if (!isError && !sticky) statusTimer.current = setTimeout(() => setStatusMsg(null), 3000)
+  // Writes run through useMutation (#453): pending line, double-submit guard, sticky failure.
+  // The mutations live here, not in the dialogs, because the dialogs unmount as soon as they close.
+  const closeM = useMutation(number => closeIssue(repo, number), {
+    label: number => `Closing #${number}`,
+    success: (_r, number) => `Closed #${number}`,
+    invalidates: [(_r, [number]) => refreshIssue(number)],
+  })
+  const createM = useMutation(values => createIssue(repo, /** @type {any} */ ({ title: values.title, body: values.body })), {
+    label: 'Creating issue',
+    success: 'Issue created',
+    invalidates: [(created) => {
+      const number = Number(String(created || '').match(/\/issues\/(\d+)/)?.[1])
+      if (number) refreshIssue(number, { added: true })
+      else refetch()
+    }],
+  })
+  // Non-write notices (filter, copy, label errors): transient; errors stick until a key.
+  const [notice, setNotice] = useState(null)
+  const noticeTimer = useRef(null)
+  useEffect(() => () => { clearTimeout(noticeTimer.current) }, [])
+  const showStatus = (msg, isError = false) => {
+    clearTimeout(noticeTimer.current)
+    setNotice({ msg, isError, persist: isError })
+    if (!isError) noticeTimer.current = setTimeout(() => setNotice(null), 3000)
   }
-  // Pending/double-submit guard for close and create (#453). Lives here, not in
-  // the dialogs, because the dialogs unmount as soon as they close.
-  const { run: pendingRun } = usePendingWrite((msg) => showStatus(msg, false, true))
-  // Resolves true only when fn ran (false when ignored as a double submit).
-  const runWrite = async (label, fn) => {
-    let ran = false
-    const result = await pendingRun(label, async () => { ran = true; return fn() })
-    return { ran, result }
-  }
-
-  const moveCursor = useCallback((delta) => {
-    setCursor(prev => {
-      const next = Math.max(0, Math.min(items.length - 1, prev + delta))
-      if (next < scrollOffset) setScrollOffset(next)
-      if (next >= scrollOffset + visibleHeight) setScrollOffset(next - visibleHeight + 1)
-      return next
-    })
-  }, [items.length, scrollOffset, visibleHeight])
+  const statusMsg = closeM.status || createM.status || notice
 
   useKeymapInput((input, key) => {
-    if (statusMsg?.persist) { setStatusMsg(null) }
+    if (statusMsg?.persist) { closeM.dismiss(); createM.dismiss(); setNotice(null) }
     if (dialog) return
+    if (list.handleKey(input, key)) return
 
-    // gg → top
-    const topSequenceKey = firstActionKey('cursor.top', 'gg', _actions)[0]
-    if (input === topSequenceKey) {
-      if (lastKeyRef.current === topSequenceKey) {
-        clearTimeout(lastKeyTimer.current)
-        lastKeyRef.current = null
-        setCursor(0); setScrollOffset(0)
-        return
-      }
-      lastKeyRef.current = topSequenceKey
-      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
-      return
-    }
-    lastKeyRef.current = null
-
-    // G → bottom
-    if (matchesAction('cursor.bottom', input, key, _actions)) {
-      if (items.length > 0) {
-        const last = items.length - 1
-        setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
-      }
-      return
-    }
-
-    if (matchesAction('cursor.down', input, key, _actions)) { moveCursor(1);  return }
-    if (matchesAction('cursor.up', input, key, _actions))   { moveCursor(-1); return }
     if (matchesAction('list.refresh', input, key, _actions)) { if (extra.error) retryPage(); else refetch(); return }
     if (matchesAction('list.search', input, key, _actions)) { setDialog('fuzzy'); return }
     if (matchesAction('issue.new', input, key, _actions)) { setDialog('new'); return }
 
     // Direct filter keys from config (defaults: O=open, C=closed)
-    if (FK.filterOpen   && input === FK.filterOpen   && filterState !== 'open')   { setFilterState('open');   showStatus('▸ open');   setCursor(0); setScrollOffset(0); return }
-    if (FK.filterClosed && input === FK.filterClosed && filterState !== 'closed') { setFilterState('closed'); showStatus('▸ closed'); setCursor(0); setScrollOffset(0); return }
+    if (FK.filterOpen   && input === FK.filterOpen   && filterState !== 'open')   { setFilterState('open');   showStatus('▸ open');   list.jumpTop(); return }
+    if (FK.filterClosed && input === FK.filterClosed && filterState !== 'closed') { setFilterState('closed'); showStatus('▸ closed'); list.jumpTop(); return }
     // f still cycles as fallback
     if (matchesAction('issue.filter-cycle', input, key, _actions)) {
       setFilterState(prev => {
@@ -233,7 +196,7 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
         showStatus(`▸ ${next}`)
         return next
       })
-      setCursor(0); setScrollOffset(0)
+      list.jumpTop()
       return
     }
 
@@ -244,12 +207,12 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
         showStatus(next === 'oldest' ? 'sort: oldest first' : 'sort: default')
         return next
       })
-      setCursor(0); setScrollOffset(0)
+      list.jumpTop()
       return
     }
 
     if (loading || items.length === 0) return
-    const issue = items[cursor]
+    const issue = list.selected
 
     if (matchesAction('issue.open-selected', input, key, _actions)) {
       if (issue) onSelectIssue(issue)
@@ -283,8 +246,7 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
     }
   })
 
-  const selectedIssue = items[cursor]
-  const visibleIssues = items.slice(scrollOffset, scrollOffset + visibleHeight)
+  const selectedIssue = list.selected
 
   if (dialog === 'fuzzy' || dialog === 'new' || (selectedIssue && ['close', 'labels', 'assignees'].includes(dialog))) {
     return (
@@ -293,13 +255,12 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
         repo={repo}
         items={items}
         selectedIssue={selectedIssue}
-        setCursor={setCursor}
-        setScrollOffset={setScrollOffset}
+        onJump={list.moveTo}
         onClose={() => setDialog(null)}
         showStatus={showStatus}
-        runWrite={runWrite}
-        refetch={refetch}
-        refreshIssue={refreshIssue}
+        closeIssue={closeM.mutate}
+        createIssue={createM.mutate}
+        onChanged={refreshIssue}
       />
     )
   }
@@ -307,8 +268,7 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
   return (
     <IssueListView
       items={items}
-      loading={loading}
-      error={error}
+      query={{ data: items, loading, error }}
       filterState={filterState}
       sortMode={sortMode}
       statusMsg={statusMsg}
@@ -317,9 +277,7 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
       t={t}
       visibleHeight={visibleHeight}
       width={paneWidth(innerWidth, stdout)}
-      visibleIssues={visibleIssues}
-      scrollOffset={scrollOffset}
-      cursor={cursor}
+      list={list}
       paging={{ hasMore: hasNextPage, total: totalCount, loadingMore: extra.loading, error: extra.error, cap: SEARCH_CAP }}
     />
   )
