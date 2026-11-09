@@ -20,6 +20,7 @@ import { useKeymapInput } from '../../config/keymap.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
 import { seedGh } from '../../data/ghKeys.js'
+import { usePrefetchPRDiff } from './diff/prefetch.js'
 import { listPRsPage, getPR, getPRRow, getPRPreview, getRepoInfo, searchOwnsState } from '../../executor.js'
 import { AppContext } from '../../context.js'
 import { usePaneState } from '../../hooks/usePaneState.js'
@@ -412,6 +413,8 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   // ── Dialogs ───────────────────────────────────────────────────────────────
 
   const listPR = items[cursor]
+  // `d` on a resting row finds the changed-file list already fetched (#482).
+  usePrefetchPRDiff(repo, dialog ? null : listPR?.number)
   // Heavy fields (body, full checks) load for the focused row only, after the cursor settles,
   // and only while the preview panel is actually on screen.
   const panel = previewPanelLayout({ listWidth: innerWidth || termCols - 2, termRows, previewWidth: _appConfig.layout?.previewWidth })

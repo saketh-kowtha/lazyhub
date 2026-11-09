@@ -13,10 +13,10 @@ const FILES_PAGE = 100
  * One cursor page of a PR's changed files (paths and counts only, no patch text).
  * @param {string} repo
  * @param {number} number
- * @param {{ after?: string|null, limit?: number }} [opts]
+ * @param {{ after?: string|null, limit?: number, priority?: 'low' }} [opts]
  * @returns {Promise<{ files: {path:string, additions:number, deletions:number, changeType:string}[], hasNextPage: boolean, endCursor: string|null, totalCount: number }>}
  */
-export async function listPRFilesPage(repo, number, { after = null, limit = FILES_PAGE } = {}) {
+export async function listPRFilesPage(repo, number, { after = null, limit = FILES_PAGE, priority } = {}) {
   const [owner, name] = getRepo(repo).split('/')
   const query = `
     query($owner: String!, $name: String!, $number: Int!, $limit: Int!, $after: String) {
@@ -39,7 +39,7 @@ export async function listPRFilesPage(repo, number, { after = null, limit = FILE
     '-F', `number=${Number(number)}`,
     '-F', `limit=${Math.max(1, Math.min(Number(limit) || FILES_PAGE, FILES_PAGE))}`,
     ...(after ? ['-f', `after=${after}`] : []),
-  ])
+  ], priority ? { priority } : {})
   const pr = result?.data?.repository?.pullRequest
   if (!pr) throw new Error(`Pull request #${number} not found`)
   const conn = pr.files || {}

@@ -86,4 +86,29 @@ describe('runGh bounded concurrency', () => {
     calls.slice(4).forEach(c => c.finish())
     await Promise.all(done)
   })
+  it('serves low-priority reads after normal ones and keeps one slot free for the user', async () => {
+    process.env.LAZYHUB_GH_CONCURRENCY = '2'
+    const calls = deferredExeca()
+    const low1 = runGh(READ(1), { skipDaemon: true, priority: 'low' })
+    const low2 = runGh(READ(2), { skipDaemon: true, priority: 'low' })
+    await tick()
+    // The cap is 2: a speculative read may use only one slot.
+    expect(calls.map(c => c.args[2])).toEqual(['1'])
+    // A user read starts at once in the free slot, ahead of the waiting low read.
+    const user = runGh(READ(3), { skipDaemon: true })
+    await tick()
+    expect(calls.map(c => c.args[2])).toEqual(['1', '3'])
+    // A queued normal read is served before the queued low one when a slot frees.
+    const user2 = runGh(READ(4), { skipDaemon: true })
+    await tick()
+    calls[1].finish()
+    await tick()
+    expect(calls.map(c => c.args[2])).toEqual(['1', '3', '4'])
+    calls[0].finish()
+    calls[2].finish()
+    await tick()
+    expect(calls.map(c => c.args[2])).toEqual(['1', '3', '4', '2'])
+    calls[3].finish()
+    await Promise.all([low1, low2, user, user2])
+  })
 })
