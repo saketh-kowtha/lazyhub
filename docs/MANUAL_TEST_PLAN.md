@@ -404,7 +404,7 @@ One pass through the core flows to confirm nothing obvious broke.
 - [ ] Works.
 
 #### T-321 — All advertised keys do something
-- [ ] `d` diff, `v` comments, `m` merge, `a` approve, `x` request changes, `X` close, `D` draft toggle, `B` base change, `l` labels, `A` assignees, `R` reviewers, `V` claims check (statuses, evidence, `E` editor, `d` diff), `r` refresh, `o` browser.
+- [ ] `d` diff, `v` comments, `m` merge, `a` approve, `x` request changes, `X` close, `D` draft toggle, `B` base change, `l` labels, `A` assignees, `R` reviewers, `V` claims check (statuses, evidence, `E` editor, `d` diff), `e` review evidence (read-only; sources, freshness, head-changed banner, `r` refresh, `d` diff), `r` refresh, `o` browser.
 - [ ] None silently swallow input.
 
 #### T-322 — `c` enters CI checks mode

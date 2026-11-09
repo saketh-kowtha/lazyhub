@@ -73,8 +73,8 @@ Exposed by the `src/executor.js` barrel for the review-queue (#177) and PR detai
 (#127) views. Not a CLI or MCP surface. Read-only, one GraphQL call per read via
 `runGh()`; display evidence only, never an authorization input.
 
-Status: the primitives exist (#175), but nothing in the TUI calls them yet. The review
-queue (#177) and PR detail evidence (#127) views that will consume them are not built.
+Status: the primitives exist (#175). The PR detail evidence view (#127, key `e`) consumes
+`loadEvidenceDetail`; the review queue (#177) is not built yet.
 
 - `fetchReviewQueueEvidence({limit, scope:{org,repos}, after, cache})` returns
   `{schema_version, kind:"review_queue", host, account, fetched_at, items[], group_counts, truncation:{review_requested,authored}, rate_limit}`.
@@ -91,6 +91,16 @@ queue (#177) and PR detail evidence (#127) views that will consume them are not 
   (author prose); `actor.attribution` is always `unverified`. Never use either as a decision input.
 - Cache (`createEvidenceCache`) is in memory, partitioned by host, account and repo;
   past its TTL a hit is `stale`. `diagnostics()` returns counts only.
+- Detail (`src/executor/evidence-detail.js`, `EVIDENCE_DETAIL_VERSION` 1): `loadEvidenceDetail(repo, number, {cache, force, inspectedHead})`
+  returns `{schema_version, record, files, required_checks, head, errors[], fetched_at}`. `files` is a fact
+  `{items[{path,additions,deletions,change_type,kind}], total, returned, truncated, head}`, read by cursor to 300 files
+  (`truncated` and `total` say when more exist). `required_checks` is a fact from GitHub's per-PR `isRequired`
+  (`{required, passing, failing, pending, total, truncated, head}`) and replaces the `unknown` placeholder in
+  `record.facts.required_checks`; a required check that never reported is not visible. A failed side read is
+  `value: "unknown"` plus `errors[{part, message}]`; only a failed record read throws. `head` is
+  `compareHead(inspected, current)` = `{state: current|stale|unknown, inspected, current}`.
+  `evidenceRows(detail)` is the cleaned display model; `returnTarget({view, position, filter, key})` is the shape a
+  caller passes to the view so Esc returns to it.
 - Approval handoff: a record is a snapshot. Revalidation against the live head and exact
   binding remain the approval work's job (#235/#244/#278); nothing may be authorized from a cached record.
 
