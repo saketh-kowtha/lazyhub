@@ -21,6 +21,7 @@ import {
   getPRFilePatch,
   listPRCommentsPage,
   listPRTimelinePage,
+  getCheckRunAnnotations,
   getPR as getPRMeta,
 } from './executor.js'
 import { getAICodeReview } from './ai/index.js'
@@ -329,6 +330,35 @@ describe('PR detail and diff E2E flows', () => {
     expect(getAICodeReview).toHaveBeenCalledWith(expect.objectContaining({
       prTitle: 'Stabilize parser',
     }))
+  })
+
+  it('smart Enter on failing CI: Esc from the log lands on the detail, where d opens the diff (#314)', async () => {
+    getCheckRunAnnotations.mockResolvedValue([{ path: 'src/app.jsx', start_line: 1, annotation_level: 'failure', message: 'boom' }])
+    const onOpenDiff = vi.fn()
+    const view = renderWithProviders(
+      <PRDetail repo="owner/repo" prNumber={42} entry="checks-log" onBack={() => {}} onOpenDiff={onOpenDiff}
+        onViewComments={() => {}} onOpenConflict={() => {}} onOpenActions={() => {}} />
+    )
+    await waitForExpectation(() => expect(getCheckRunAnnotations).toHaveBeenCalledWith('owner/repo', 9001))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Log Viewer'))
+    await sendInput('', { escape: true })
+    await waitForExpectation(() => expect(view.lastFrame()).not.toContain('Log Viewer'))
+    await flush(20)
+    await sendInput('d')
+    await waitForExpectation(() => expect(onOpenDiff).toHaveBeenCalledWith(expect.objectContaining({ number: 42 })))
+  })
+
+  it('in checks mode a non-checks key leaves the mode and acts as a detail key', async () => {
+    const onOpenDiff = vi.fn()
+    renderWithProviders(
+      <PRDetail repo="owner/repo" prNumber={42} onBack={() => {}} onOpenDiff={onOpenDiff}
+        onViewComments={() => {}} onOpenConflict={() => {}} onOpenActions={() => {}} />
+    )
+    await flush(20)
+    await sendInput('c')
+    await flush(20)
+    await sendInput('d')
+    await waitForExpectation(() => expect(onOpenDiff).toHaveBeenCalledWith(expect.objectContaining({ number: 42 })))
   })
 })
 

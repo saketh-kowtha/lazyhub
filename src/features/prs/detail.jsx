@@ -198,8 +198,8 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
       entryDone.current = true
       const failing = allChecksForNav.findIndex(c => /failure|error/i.test(c.conclusion || c.status || c.state || ''))
       if (failing < 0) { showStatus('No failing check to open'); return }
-      checkCursorRef.current = failing
-      setCheckCursor(failing)
+      // Open the log without entering checks mode: Esc from the log lands on the plain
+      // detail, where d, v and the other detail keys work at once.
       openCheckLogs(allChecksForNav[failing])
     }
   }) // eslint-disable-line react-hooks/exhaustive-deps
@@ -248,7 +248,9 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
       if (id === 'check.open-browser' && check) { openCheckInBrowser(check); return }
       if (id === 'check.log' && check) { openCheckLogs(check); return }
       if (id === 'check.rerun' && check?.id) { setRerunCheck(check); setDialog('rerun-check'); return }
-      return
+      // Any other key leaves checks mode and acts as a detail key, so d still opens the diff.
+      checkCursorRef.current = null
+      setCheckCursor(null)
     }
 
     const id = resolveAction(input, key)
