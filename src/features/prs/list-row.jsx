@@ -1,11 +1,8 @@
 /** PR rows, expanded metadata and popover content; shared display summaries stay here. */
 import React, { memo } from 'react'
 import { Box, Text } from 'ink'
-<<<<<<< HEAD
 import { effectiveHintKey, getActionConfig } from '../../config/actions.js'
-=======
 import { ListRow } from '../../ui/ListRow.jsx'
->>>>>>> origin/main
 import { sanitize, shortAge, truncateToWidth, formatLogin, padEndWidth, padStartWidth } from '../../utils.js'
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
