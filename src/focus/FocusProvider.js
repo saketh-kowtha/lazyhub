@@ -81,12 +81,13 @@ let anonymous = 0
  * @param {boolean} [opts.active=true] false neither claims nor receives keys
  * @param {boolean} [opts.captures] take keys exclusively
  * @param {boolean} [opts.skipOnPrefix] ignore the continuation of an armed prefix
+ * @param {boolean} [opts.yieldToModal] scope-less listener that stays silent while an overlay, dialog or input is on top
  * @param {boolean} [opts.isActive] extra live gate for scope-less listeners
  * @returns {{ isActive: boolean, activeScope: string }} activation state
  */
 export function useFocusEntry(id, handler, opts = {}) {
   const ctx = useContext(FocusContext)
-  const { scope = null, active = true, captures = false, skipOnPrefix = false } = opts
+  const { scope = null, active = true, captures = false, skipOnPrefix = false, yieldToModal = false } = opts
   const gate = opts.isActive
   const latest = useRef({ handler, gate })
   latest.current = { handler, gate }
@@ -101,10 +102,11 @@ export function useFocusEntry(id, handler, opts = {}) {
       scope,
       captures,
       skipOnPrefix,
+      yieldToModal,
       handler: hasHandler ? (input, key) => latest.current.handler?.(input, key) : null,
       isActive: () => latest.current.gate !== false,
     })
-  }, [ctx.router, ctx.provided, active, scope, captures, skipOnPrefix, hasHandler])
+  }, [ctx.router, ctx.provided, active, scope, captures, skipOnPrefix, yieldToModal, hasHandler])
 
   // Outside a FocusProvider nothing feeds the router, so fall back to a plain listener.
   // The handler re-checks the gate itself: it must stay inert inside a provider even

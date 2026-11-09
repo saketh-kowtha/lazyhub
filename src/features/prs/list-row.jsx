@@ -1,6 +1,7 @@
 /** PR rows, expanded metadata and popover content; shared display summaries stay here. */
 import React, { memo } from 'react'
 import { Box, Text } from 'ink'
+import { effectiveHintKey, getActionConfig } from '../../config/actions.js'
 import { sanitize, shortAge, truncateToWidth, formatLogin, padEndWidth, padStartWidth } from '../../utils.js'
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
@@ -196,6 +197,24 @@ export function previewPanelLayout({ listWidth, termRows, previewWidth }) {
 }
 
 /**
+ * The preview popover's hint bar, from the effective bindings so a rebind or unbind
+ * is reflected and an unbound action is left out (#485). Esc closes the popover.
+ * @param {Record<string, any>} [config] effective config
+ * @returns {string} hint text
+ */
+export function previewHint(config = getActionConfig()) {
+  const parts = []
+  const open = effectiveHintKey('pr.open-selected', config)
+  if (open) parts.push(`${open === 'Enter' ? '↩' : open} open`)
+  for (const [id, label] of [['pr.approve', 'approve'], ['pr.merge', 'merge']]) {
+    const key = effectiveHintKey(id, config)
+    if (key) parts.push(`${key} ${label}`)
+  }
+  parts.push('Esc hide')
+  return parts.join(' · ')
+}
+
+/**
  * Popover content component: shows PR title, meta, body excerpt, CI summary,
  * unresolved thread count, and action hints.
  *
@@ -288,7 +307,7 @@ function PRDetailPopoverContent({ pr, t, width }) {
       {/* Hint bar */}
       <Box paddingX={1}>
         <Text color={t.ui.dim} wrap="truncate">
-          {truncateToWidth('↩ open · a approve · m merge · Esc hide', innerW)}
+          {truncateToWidth(previewHint(), innerW)}
         </Text>
       </Box>
     </Box>

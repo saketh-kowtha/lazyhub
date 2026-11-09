@@ -2,7 +2,8 @@ import React from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup } from 'ink-testing-library'
 import { renderWithProviders } from '../../test/test-helpers.jsx'
-import { PRRow, PRDetailPopoverContentMemo } from './list-row.jsx'
+import { PRRow, PRDetailPopoverContentMemo, previewHint } from './list-row.jsx'
+import { DEFAULT_CONFIG } from '../../config/schema.js'
 import { resolveTheme } from '../../theme.js'
 
 afterEach(cleanup)
@@ -46,5 +47,20 @@ describe('PR list CI summaries', () => {
     expect(row).toMatch(/✓ 1\s+\/ 1/)
     const popover = renderWithProviders(<PRDetailPopoverContentMemo pr={checkedPR} t={t} width={52} />).lastFrame()
     expect(popover).toContain('✓ ci-pass')
+  })
+})
+
+describe('preview popover hint bar (#485)', () => {
+  const withKeymap = (keymap) => ({ ...DEFAULT_CONFIG, keymaps: { 'pr-list': keymap } })
+
+  it('is derived from the registry, not typed next to the handler', () => {
+    expect(previewHint(DEFAULT_CONFIG)).toBe('↩ open · a approve · m merge · Esc hide')
+    const view = renderWithProviders(<PRDetailPopoverContentMemo pr={pr} t={t} width={80} />)
+    expect(view.lastFrame()).toContain('open · a approve · m merge · Esc hide')
+  })
+
+  it('follows a rebind and drops an unbound action', () => {
+    expect(previewHint(withKeymap({ unbind: { a: true }, x: 'pr.approve' }))).toBe('↩ open · x approve · m merge · Esc hide')
+    expect(previewHint(withKeymap({ unbind: { m: true } }))).toBe('↩ open · a approve · Esc hide')
   })
 })

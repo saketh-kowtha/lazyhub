@@ -171,8 +171,6 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
   }, [])
 
   useInput((input, key) => {
-    if (dialog) return
-
     // gg → top
     if (input === 'g') {
       if (lastKeyRef.current === 'g') {
@@ -212,7 +210,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
       if (action === 'open')  { openInBrowser(selectedItem.url); return }
       if (action === 'copy')  { copyUrl(selectedItem.url); return }
     }
-  })
+  }, { yieldToModal: true })
 
   // ── Dialogs ───────────────────────────────────────────────────────────────
 

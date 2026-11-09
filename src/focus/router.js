@@ -13,6 +13,8 @@
  *  - `captures: true` means the entry takes the key exclusively: no other entry, and no
  *    global handler, sees it. When several capture, the most recently claimed wins.
  *  - `skipOnPrefix: true` makes the entry ignore the continuation key of an armed prefix.
+ *  - `yieldToModal: true` makes a scope-less listener (a pane's key handler) stay silent while
+ *    the top of the stack is an overlay, dialog or input, so the pane needs no `if (dialog) return`.
  *
  * Dispatch order: entries in claim order (children claim before parents, as Ink's
  * listeners registered). Without a capture, every eligible entry at the active scope
@@ -24,6 +26,7 @@
  */
 
 import { reportContained } from '../contain.js'
+import { isModalScope } from './scopes.js'
 
 /** Prefix keys the manager owns: armed by the app, consumed by dispatch. */
 const NO_TTL = null
@@ -35,6 +38,7 @@ const NO_TTL = null
  * @property {((input: string, key: object) => any)|null} [handler] key handler
  * @property {boolean} [captures] take the key exclusively
  * @property {boolean} [skipOnPrefix] ignore the continuation of an armed prefix
+ * @property {boolean} [yieldToModal] a scope-less listener that is skipped while an overlay, dialog or input owns the keys
  * @property {() => boolean} [isActive] live gate; false skips the handler
  */
 
@@ -129,6 +133,7 @@ export function createFocusRouter({ onError = reportContained, now = Date.now } 
         if (e.isActive && !e.isActive()) return false
         if (e.scope && e.scope !== top) return false
         if (e.skipOnPrefix && prefixHit) return false
+        if (e.yieldToModal && !e.scope && isModalScope(top)) return false
         return true
       })
       const capturing = eligible.filter(e => e.captures)

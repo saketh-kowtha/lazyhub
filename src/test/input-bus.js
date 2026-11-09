@@ -27,6 +27,15 @@ export function mockUseInput(React) {
 }
 
 /**
+ * How many Ink-level listeners are registered. With the real focus manager mounted it must be
+ * exactly 1 (FocusProvider's root): every other handler is an entry in the router (#485).
+ * @returns {number} registered handler count
+ */
+export function rootListenerCount() {
+  return handlers.size
+}
+
+/**
  * Deliver one key to every registered handler, then let React settle.
  * @param {string} [input] character input
  * @param {object} [key] ink key flags

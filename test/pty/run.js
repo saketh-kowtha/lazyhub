@@ -608,6 +608,47 @@ async function runFocusReturnFlow({ cols, rows, single = false }) {
   }
 }
 
+// #485: key ownership with real stdin. `M` is the merged filter in the PR list (auto-merge moved into the
+// merge picker, #448), and while the search box owns the keyboard, pane keys (`a` approve, `m` merge, `q`
+// quit, `M`) are text: no confirm dialog opens, the app does not quit, and Esc hands the keys back.
+async function runKeyOwnershipFlow() {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-keyown-'))
+  const stubBin = installGhStub(temp)
+  const screen = new TerminalScreen(120, 40)
+  let term
+  try {
+    term = spawnTerminal(childEnv(stubBin, temp), [], { cols: 120, rows: 40 })
+    term.onData(data => screen.feed(data))
+    const showing = (re, want = true) => () => (re.test(screen.text()) === want ? true : screen.text())
+    await waitUntil(showing(/Focus/), 'key-ownership flow startup')
+    await settle()
+    await sendUntil(() => writeChord(term, 'gp'), () => screen.text(), /PTY harness fixture PR/, 'PR list for the key-ownership flow')
+
+    // M is the merged filter, never the auto-merge confirmation.
+    term.write('M')
+    await new Promise(resolve => setTimeout(resolve, 400))
+    assert.doesNotMatch(screen.text(), /auto-merge/i, 'M must not open the auto-merge confirmation')
+    term.write('O')
+    await waitUntil(showing(/PTY harness fixture PR/), 'the open filter is back')
+
+    // The search box owns the keyboard: pane keys are typed, not run.
+    term.write('/')
+    await new Promise(resolve => setTimeout(resolve, 300))
+    for (const ch of 'qamM') term.write(ch)
+    await waitUntil(showing(/qamM/), 'pane keys are typed into the search box')
+    assert.doesNotMatch(screen.text(), /Approve PR|Merge PR|auto-merge/i, 'no write dialog opened under the search box')
+    term.write('\x1b')
+    await waitUntil(showing(/qamM/, false), 'Esc closes the search box')
+    await waitUntil(showing(/Pull Requests/), 'the app is still running on the PR list')
+
+    term.write('q')
+    await waitForExit(term)
+  } finally {
+    await stopTerminal(term)
+    removeTempDir(temp)
+  }
+}
+
 // The same flow inside a real terminal emulator (tmux), which crops and reflows like a user's terminal.
 async function runTmuxResizeFlow() {
   const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-tmuxresize-'))
@@ -669,6 +710,7 @@ await runSwrCacheFlow()
 await runResizeFlow()
 await runColdStartFlow()
 await runFailedLogFlow()
+await runKeyOwnershipFlow()
 await runFocusReturnFlow({ cols: 100, rows: 40 })
 await runFocusReturnFlow({ cols: 80, rows: 24 })
 await runFocusReturnFlow({ cols: 60, rows: 16, single: true })
