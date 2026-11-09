@@ -11,13 +11,12 @@ import { format } from 'timeago.js'
 import { getLogs, logger, sanitizeRaw, TextInput } from '../../utils.js'
 import { copyToClipboard } from '../../services/platform.js'
 import { useTheme } from '../../theme.js'
-import { AppContext } from '../../context.js'
+import { useKeyScope } from '../../keyscope.js'
 
 const LEVELS = ['ALL', 'INFO', 'WARN', 'ERROR', 'DEBUG']
 
 export function LogPane({ onBack }) {
   const { t } = useTheme()
-  const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const rows = stdout?.rows || 24
 
@@ -45,10 +44,7 @@ export function LogPane({ onBack }) {
     return () => clearInterval(id)
   }, [])
 
-  useEffect(() => {
-    notifyDialog(!!(searching || selectedLog))
-    return () => notifyDialog(false)
-  }, [searching, selectedLog, notifyDialog])
+  useKeyScope('dialog', !!(searching || selectedLog))
 
   const filteredLogs = useMemo(() => {
     return allLogs.filter(log => {

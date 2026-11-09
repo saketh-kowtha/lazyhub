@@ -6,6 +6,7 @@ import { useGh } from '../../hooks/useGh.js'
 import { getIssueHeader, listIssueTimelinePage, getIssueRow, closeIssue, createIssue, listIssuesPage, listLabels, listCollaborators, editIssueMembers, addIssueComment } from '../../executor.js'
 import * as platform from '../../services/platform.js'
 import { sendInput } from '../../test/input-bus.js'
+import { liveScope } from '../../keyscope.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 
 vi.mock('ink', async () => {
@@ -103,16 +104,15 @@ describe('shared issue editor contracts', () => {
     ['list', 'assignees', 'A', 'assignee', 'assignee&amp;safe'],
     ['detail', 'assignees', 'A', 'assignee', 'assignee&amp;safe'],
   ])('diffs %s %s with raw API identifiers in ONE edit call and closes the dialog', async (pane, _kind, key, kind, current) => {
-    const notifyDialog = vi.fn()
     const view = await renderIssue(pane === 'list'
       ? <IssueList repo="owner/repo" onSelectIssue={() => {}} />
       : <IssueDetail repo="owner/repo" issueNumber={11} onBack={() => {}} />,
-    { appContext: { notifyDialog } })
+    )
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Issue title'))
     await flush(20)
     await sendInput(key)
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Filter:'))
-    expect(notifyDialog).toHaveBeenCalledWith(true)
+    expect(liveScope()).toBe('dialog')
     await sendInput(' ')
     await sendInput('', { downArrow: true })
     await sendInput(' ')
@@ -120,7 +120,7 @@ describe('shared issue editor contracts', () => {
     await waitForExpectation(() => {
       expect(editIssueMembers).toHaveBeenCalledExactlyOnceWith('owner/repo', 11, kind, { add: ['new&amp;safe'], remove: [current] })
       expect(view.lastFrame()).toContain('Issue title')
-      expect(notifyDialog).toHaveBeenLastCalledWith(false)
+      expect(liveScope()).not.toBe('dialog')
       expect(refetch).toHaveBeenCalled()
     })
   })

@@ -3,7 +3,7 @@
  */
 
 import { logSwallowed } from '../../contain.js'
-import React, { useState, useCallback, useMemo, useEffect, useContext, useRef, memo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect, useRef, memo } from 'react'
 import { currentBranch as gitCurrentBranch, createBranch, push as gitPush, checkout as gitCheckout, findLocalCheckout, noLocalCheckoutMessage } from '../../services/git.js'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
@@ -16,7 +16,6 @@ import { MutationStatus } from '../../components/MutationStatus.jsx'
 import { ListRow } from '../../ui/ListRow.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
-import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
 import { TextInput, sanitize, sanitizePath } from '../../utils.js'
@@ -46,7 +45,6 @@ const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, width }) => {
 export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
   useKeyScope('pane')
   const { t } = useTheme()
-  const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const rowWidth = paneWidth(innerWidth, stdout)
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
@@ -89,11 +87,11 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
     if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
   }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useKeyScope('dialog', !!dialog)
   useEffect(() => {
-    notifyDialog(!!dialog)
     if (onPaneState) onPaneState({ dialogHint: dialog || null })
-    return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
-  }, [dialog, notifyDialog])
+    return () => { if (onPaneState) onPaneState({ dialogHint: null }) }
+  }, [dialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Every write runs through one useMutation (#453): pending line, double-submit guard,
   // sticky failure. `op` is { label, success, run, failPrefix? }.

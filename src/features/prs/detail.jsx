@@ -54,7 +54,6 @@ const _editorCfg = loadConfig().editor
 export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, onBack, onOpenDiff, onOpenStory, onOpenConflict, onOpenActions, onViewComments, onPaneState, returnTo, onReturn }) {
   useKeyScope('view')
   const { t } = useTheme()
-  const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const cols    = stdout?.columns || 80
   const termRows = stdout?.rows    || 24
@@ -91,10 +90,7 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
   }
   const { run: runWrite } = usePendingWrite((msg) => showStatus(msg, false, true))
 
-  React.useEffect(() => {
-    notifyDialog(!!dialog)
-    return () => notifyDialog(false)
-  }, [dialog, notifyDialog])
+  useKeyScope('dialog', !!dialog)
 
   const contentRows = useMemo(
     () => pr ? buildContentRows(pr, checks, protection, cols, t, checkCursor) : [],

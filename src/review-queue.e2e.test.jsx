@@ -1,8 +1,8 @@
 /**
  * review-queue.e2e.test.jsx -- the review queue inside the real App (#177).
  *
- * `g q` opens the queue from Focus, every row says why it is there, Enter opens the existing PR
- * detail (the seam the evidence view will replace), Esc comes back to the queue with the group and
+ * `g q` opens the queue from Focus, every row says why it is there, Enter opens the evidence view
+ * evidence view (#127), Esc comes back to the queue with the group and
  * row kept, and q/Esc from the queue returns to the pane. The help overlay and footer list only
  * keys that work, and no write verb is advertised.
  */
@@ -48,13 +48,50 @@ vi.mock('./components/TabStrip.jsx', () => ({ TabStrip: () => <Text>TABS</Text> 
 vi.mock('./components/Toaster.jsx', () => ({ Toaster: () => null }))
 vi.mock('./components/StatusBar.jsx', () => ({ StatusBar: () => null }))
 
-vi.mock('./executor.js', () => {
+vi.mock('./features/prs/diff.jsx', async () => {
+  const { Text } = await import('ink')
+  const { useInput } = await import('./hooks/useSafeInput.js')
+  return { PRDiff: ({ prNumber, onBack }) => { useInput((_i, k) => { if (k.escape) onBack() }); return <Text>{`PR DIFF ${prNumber}`}</Text> } }
+})
+
+vi.mock('./executor.js', async () => {
+  const actual = await vi.importActual('./executor.js')
   const fns = [
     'listPRs', 'listIssues', 'getPR', 'getIssue', 'getIssueHeader', 'listIssueTimelinePage', 'getRepoInfo', 'getPRChecks', 'getBranchProtection',
-    'listLabels', 'listCollaborators', 'getCurrentBranch', 'listBranches', 'listRuns', 'fetchReviewQueueEvidence',
+    'listLabels', 'listCollaborators', 'getCurrentBranch', 'listBranches', 'listRuns', 'fetchReviewQueueEvidence', 'loadEvidenceDetail',
   ]
-  return { ...Object.fromEntries(fns.map(name => [name, vi.fn()])), classifyGhFailure: () => ({ cause: 'x' }) }
+  return {
+    ...Object.fromEntries(fns.map(name => [name, vi.fn()])), classifyGhFailure: () => ({ cause: 'x' }),
+    evidenceRows: actual.evidenceRows, createEvidenceCache: actual.createEvidenceCache, returnTarget: actual.returnTarget,
+  }
 })
+
+const fact = (value, source = 'github.graphql.x') => ({ value, source, fetched_at: '2026-11-09T12:00:00.000Z' })
+function evidenceDetail(repo, number, title) {
+  const required = fact({ required: 1, passing: 1, failing: 0, pending: 0, total: 1, truncated: false, head: 'head2aaaa', names: ['test'] }, 'github.graphql.isRequired')
+  return {
+    schema_version: 1,
+    record: {
+      identity: { host: 'github.com', repo, number, url: null, account: 'octocat' },
+      context: { head: fact('head2aaaa'), base: fact('main') },
+      facts: {
+        state: fact('OPEN'), is_draft: fact(false), mergeable: fact('MERGEABLE'), review_decision: fact('APPROVED'),
+        checks: fact({ state: 'SUCCESS', total: 1, passed: 1, failed: 0, pending: 0, truncated: false }),
+        reviews: fact({ approvals: 1, staleApprovals: 0, changesRequested: 0, mine: 'NONE', truncated: false }),
+        review_requests: fact({ via: 'direct', teams: [], truncated: false }),
+        unresolved_threads: fact({ unresolved: 0, total: 0, truncated: false }),
+        required_checks: required,
+      },
+      attention: [], actor: { login: 'dev', github_type: 'User', source: 's', attribution: 'unverified' },
+      untrusted: { title, title_truncated: false, body: '', body_truncated: false, threads: [] },
+      fetched_at: new Date().toISOString(),
+    },
+    files: fact({ items: [{ path: 'src/a.js', additions: 3, deletions: 1, change_type: 'MODIFIED', kind: 'source' }], total: 1, returned: 1, truncated: false, head: 'head2aaaa' }, 'github.graphql.files'),
+    required_checks: required,
+    head: { state: 'current', inspected: 'head2aaaa', current: 'head2aaaa' },
+    errors: [], fetched_at: new Date().toISOString(),
+  }
+}
 
 const detailPR = number => ({
   number, title: `PR ${number}`, state: 'OPEN', isDraft: false, updatedAt: '2026-06-06T10:00:00Z', url: `https://example.test/pull/${number}`,
@@ -85,6 +122,7 @@ describe('review queue in the app (#177)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     executor.fetchReviewQueueEvidence.mockResolvedValue(queueResult(sampleItems()))
+    executor.loadEvidenceDetail.mockImplementation(async (repo, number) => evidenceDetail(repo, number, `PR ${number}`))
     useGh.mockImplementation((fn, deps = []) => {
       if (fn === executor.listPRs || fn === executor.listIssues) return ghResult([])
       if (fn === executor.getPR) return ghResult(detailPR(deps[1]))
@@ -104,17 +142,46 @@ describe('review queue in the app (#177)', () => {
     expect(executor.fetchReviewQueueEvidence).toHaveBeenCalledTimes(1)
   })
 
-  it('Enter opens the existing PR detail of that repository, Esc returns with the row kept', async () => {
+  it('Enter opens the evidence view of that PR, Esc returns to the same group and row', async () => {
     const view = await openQueue()
     await press([key('j'), key(']'), ENTER])
-    await waitForExpectation(() => expect(useGh).toHaveBeenCalledWith(executor.getPR, ['acme/platform', 409]))
-    await waitForExpectation(() => expect(view.lastFrame()).toContain('body 409'))
+    await waitForExpectation(() => expect(executor.loadEvidenceDetail).toHaveBeenCalled())
+    expect(executor.loadEvidenceDetail.mock.calls[0].slice(0, 2)).toEqual(['acme/platform', 409])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('acme/platform#409'))
+    expect(view.lastFrame()).toContain('read-only')
+    expect(view.lastFrame()).toContain('back to queue')
+    expect(useGh).not.toHaveBeenCalledWith(executor.getPR, expect.anything())
     await press([ESC])
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Review queue'))
-    expect(view.lastFrame()).toContain('Shard the worker queue')
     expect(rowLine(view, 'Shard the worker queue')).toContain('▶')
     // coming back reuses the loaded rows instead of a second round trip
     expect(executor.fetchReviewQueueEvidence).toHaveBeenCalledTimes(1)
+  })
+
+  it('evidence -> diff -> Esc returns to the evidence view, then Esc to the queue', async () => {
+    const view = await openQueue()
+    await press([key('j'), key(']'), ENTER])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Revision'))
+    await press([key('d')])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DIFF 409'))
+    await press([ESC])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('acme/platform#409'))
+    expect(view.lastFrame()).not.toContain('PR DIFF')
+    await press([ESC])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Review queue'))
+    expect(rowLine(view, 'Shard the worker queue')).toContain('▶')
+  })
+
+  it('Enter in the evidence view reaches the full PR detail, Esc from there returns to the queue', async () => {
+    const view = await openQueue()
+    await press([key('j'), key(']'), ENTER])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Revision'))
+    expect(view.lastFrame()).toContain('PR detail')
+    await press([ENTER])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('body 409'))
+    await press([ESC])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Review queue'))
+    expect(rowLine(view, 'Shard the worker queue')).toContain('▶')
   })
 
   it('q returns to the pane the queue was opened from', async () => {

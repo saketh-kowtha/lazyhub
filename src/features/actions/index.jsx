@@ -2,7 +2,7 @@
  * src/features/actions/index.jsx — Actions / workflow runs pane
  */
 
-import React, { useState, useCallback, useEffect, useContext, memo } from 'react'
+import React, { useState, useCallback, useEffect, memo } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useKeymapInput } from '../../config/keymap.js'
@@ -15,7 +15,6 @@ import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { toLogLines, logTitle } from './log-lines.js'
 import { loadFailureExcerpt } from '../prs/ci-log.js'
-import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
 import { QueryBoundary } from '../../components/QueryBoundary.jsx'
@@ -65,7 +64,6 @@ const ActionRow = memo(({ run, isSelected, width }) => {
 export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, initialBranch = null }) {
   useKeyScope('pane')
   const { t } = useTheme()
-  const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const rowWidth = paneWidth(innerWidth, stdout)
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
@@ -86,11 +84,11 @@ export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, ini
     if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
   }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useKeyScope('dialog', !!dialog)
   useEffect(() => {
-    notifyDialog(!!dialog)
     if (onPaneState) onPaneState({ dialogHint: dialog || null })
-    return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
-  }, [dialog, notifyDialog]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { if (onPaneState) onPaneState({ dialogHint: null }) }
+  }, [dialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pending guard, status line and refetch-after-write live in useMutation (#453).
   const rerun = useMutation((run) => rerunRun(repo, run.databaseId), { label: 'Re-running', success: 'Re-run triggered', invalidates: [() => refetch()] })

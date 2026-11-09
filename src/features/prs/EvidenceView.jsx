@@ -34,10 +34,11 @@ const evidenceCache = () => (cache ||= createEvidenceCache())
  * @param {string} props.repo
  * @param {() => void} props.onClose
  * @param {(pr: object) => void} [props.onOpenDiff]
+ * @param {() => void} [props.onOpenDetail] Enter: open the full PR detail (only offered when the caller passes it)
  * @param {{ view: string, position: number, filter: string, key: string }} [props.returnTo] where Esc should go back to
  * @param {(target: object) => void} [props.onReturn]
  */
-export function EvidenceView({ pr, repo, onClose, onOpenDiff, returnTo, onReturn }) {
+export function EvidenceView({ pr, repo, onClose, onOpenDiff, onOpenDetail, returnTo, onReturn }) {
   useKeyScope('dialog')
   const { t } = useTheme()
   const { stdout } = useStdout()
@@ -87,6 +88,7 @@ export function EvidenceView({ pr, repo, onClose, onOpenDiff, returnTo, onReturn
     if (matchesAction('cursor.down', input, key)) { setCursor(c => Math.min(lines.length - 1, c + 1)); return }
     if (matchesAction('cursor.up', input, key)) { setCursor(c => Math.max(0, c - 1)); return }
     if (matchesAction('list.refresh', input, key)) { force.current = true; setState(s => ({ ...s, phase: s.detail ? 'ok' : 'loading' })); setReload(n => n + 1); return }
+    if (matchesAction('pr.open-selected', input, key) && onOpenDetail) { onOpenDetail(); return }
     if (matchesAction('pr.diff', input, key) && onOpenDiff) onOpenDiff(pr)
   })
 
@@ -137,7 +139,7 @@ export function EvidenceView({ pr, repo, onClose, onOpenDiff, returnTo, onReturn
         <Text color={t.ui.dim}>Observation only. It does not approve, merge or authorize anything. No AI was used.</Text>
       </Box>
       <Box paddingX={1}>
-        <Text color={t.ui.dim}>{hintLine([['cursor.down', 'scroll'], ['list.refresh', 'refresh'], ['pr.diff', 'diff']])}  Esc {returnTo?.view && onReturn ? `back to ${sanitize(returnTo.view)}` : 'close'}</Text>
+        <Text color={t.ui.dim}>{hintLine([['cursor.down', 'scroll'], ['list.refresh', 'refresh'], ['pr.diff', 'diff'], ...(onOpenDetail ? [['pr.open-selected', 'PR detail']] : [])])}  Esc {returnTo?.view && onReturn ? `back to ${sanitize(returnTo.view)}` : 'close'}</Text>
       </Box>
     </Box>
   )

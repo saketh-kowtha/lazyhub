@@ -5,7 +5,7 @@
  */
 
 import { logSwallowed } from '../../contain.js'
-import React, { useState, useCallback, useEffect, useContext, useRef } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { openUrl, copyToClipboard } from '../../services/platform.js'
 import { useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
@@ -14,7 +14,6 @@ import { useListController } from '../../hooks/useListController.js'
 import { useMutation } from '../../hooks/useMutation.js'
 import { listIssuesPage, getIssueRow, closeIssue, createIssue } from '../../executor.js'
 import { sanitize } from '../../utils.js'
-import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { loadConfig } from '../../config.js'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
@@ -32,7 +31,6 @@ const SEARCH_CAP = 1000
 export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, onPaneState }) {
   useKeyScope('pane')
   const { t } = useTheme()
-  const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
@@ -144,11 +142,11 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
     if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
   }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useKeyScope('dialog', !!dialog)
   useEffect(() => {
-    notifyDialog(!!dialog)
     if (onPaneState) onPaneState({ dialogHint: dialog || null })
-    return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
-  }, [dialog, notifyDialog]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { if (onPaneState) onPaneState({ dialogHint: null }) }
+  }, [dialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Writes run through useMutation (#453): pending line, double-submit guard, sticky failure.
   // The mutations live here, not in the dialogs, because the dialogs unmount as soon as they close.
