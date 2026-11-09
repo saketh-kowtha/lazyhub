@@ -38,14 +38,26 @@ export function useListController({ items, height, getId }) {
   const timerRef = useRef(/** @type {ReturnType<typeof setTimeout> | undefined} */ (undefined))
   useEffect(() => () => clearTimeout(timerRef.current), [])
 
-  const { moveCursor: virtualMove, jumpTop, jumpBottom } = v
-  // Selection memory: the previous render's selected id is looked up in the new items.
+  const { moveCursor: rawMove, jumpTop: rawTop, jumpBottom: rawBottom } = v
+  // The remembered id is set where the user moves (not re-derived after every render), so a
+  // refetch that hands back new-but-equal rows, or reorders them, cannot fight the cursor.
+  const remember = useCallback((idx) => {
+    if (!getId) return
+    const it = items[Math.max(0, Math.min(count - 1, idx))]
+    idRef.current = it === undefined ? undefined : getId(it)
+  }, [getId, items, count])
+  const virtualMove = useCallback((idx) => { remember(idx); rawMove(idx) }, [remember, rawMove])
+  const jumpTop = useCallback(() => { remember(0); rawTop() }, [remember, rawTop])
+  const jumpBottom = useCallback(() => { remember(count - 1); rawBottom() }, [remember, rawBottom, count])
+  // Selection memory: the remembered id is looked up in the new items.
   useEffect(() => {
     if (!getId || idRef.current === undefined) return
     const idx = items.findIndex(it => getId(it) === idRef.current)
-    if (idx !== -1 && idx !== cursor) virtualMove(idx)
+    if (idx !== -1 && idx !== cursor) rawMove(idx)
+    else if (idx === -1) idRef.current = undefined
   }, [items]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { idRef.current = getId && selected !== undefined ? getId(selected) : undefined })
+  // Nothing remembered yet (first rows, or the row left): remember what is selected now.
+  useEffect(() => { if (getId && idRef.current === undefined && selected !== undefined) idRef.current = getId(selected) })
 
   /** @returns {boolean} true when the key was navigation and is consumed */
   const handleKey = useCallback((input, key) => {
