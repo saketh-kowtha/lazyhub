@@ -10,6 +10,7 @@ import { execa } from 'execa'
 import { GhError } from './gh-error.js'
 import { recordDuration } from '../perf.js'
 import { invalidateRepoCache } from '../cache.js'
+import { notifyWrite } from '../data/invalidation.js'
 import { DAEMON_RETRY_AFTER_MS, clearDaemonFallback, daemonReadsSuspended, noteDaemonFallback } from '../daemon/fallback.js'
 import { requestDaemon } from '../daemon/lifecycle.js'
 import { classifyGh, toTypedRead } from '../daemon/protocol.js'
@@ -148,6 +149,8 @@ export async function runGh(args, opts = {}) {
     // The remote outcome may be ambiguous on error, so drop cached reads either way.
     try { invalidateRepoCache(repo) } catch { /* cache is best-effort */ }
     await invalidateDaemonCache(repo)
+    // After the daemon cache is dropped, so the revalidation this triggers reads fresh data (#481).
+    notifyWrite(repo)
     try { writeAuditEntry({ phase: 'result', reqId, outcome }) } catch { /* write already happened */ }
   }
 }
@@ -341,4 +344,20 @@ async function execGh(args, { timeout = GH_TIMEOUT, json, stdin, interactive, co
  */
 export function getRepo(overrideRepo) {
   return overrideRepo || process.env.GHUI_REPO
+}
+
+/**
+ * Resolve the effective repository and return it as a URL path fragment
+ * (`owner/name`) with each segment percent-encoded. Throws unless the repo is
+ * exactly `owner/name`, so a malformed value can never add or drop path segments.
+ * @param {string} [overrideRepo]
+ * @returns {string}
+ */
+export function repoPath(overrideRepo) {
+  const repo = getRepo(/** @type {string} */ (overrideRepo))
+  const parts = typeof repo === 'string' ? repo.split('/') : []
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error(`Invalid repository "${repo}": expected "owner/name"`)
+  }
+  return `${encodeURIComponent(parts[0])}/${encodeURIComponent(parts[1])}`
 }

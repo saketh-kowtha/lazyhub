@@ -13,10 +13,16 @@
  *    earlier page, refresh only page 1, and report `{loaded, total, hasMore, capped}`
  *    so a footer can say "N of M" (D16: never silently truncate).
  *
- * Out of scope here (R3, R4): invalidation from writes, list-to-detail seeding, prefetch.
+ * Writes (R3, #481): `runGh()` announces each finished write through `invalidation.js`; the
+ * client marks every cached read for that repository stale (data kept for stale-while-
+ * revalidate) and mounted queries revalidate in the background, so no pane needs a
+ * "remember to refetch" call. `setQueryData` seeds an entry (a list row seeding its detail).
+ *
+ * Out of scope here (R4): prefetch.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { onWrite } from './invalidation.js'
 import { approxBytes, createLruCache, cacheIdentity, peekCache, readCacheAsync, writeCache } from '../cache.js'
 
 export const QUERY_MAX_ENTRIES = 200
@@ -51,8 +57,22 @@ export function createQueryClient({ maxEntries = QUERY_MAX_ENTRIES, maxBytes = Q
   let cache = makeCache()
   /** @type {Map<string, { controller: AbortController, refs: number, settled: boolean, promise: Promise<any> }>} */
   const inflight = new Map()
+  /** @type {Set<{ keyStr: string, run: () => void }>} */
+  const subscribers = new Set()
 
-  return {
+  /**
+   * The structured parts of a key string (always `keyString` output), without the
+   * infinite-query marker.
+   * @param {string} keyStr
+   */
+  function partsOf(keyStr) {
+    const parts = JSON.parse(keyStr)
+    return parts[0] === 'infinite' ? parts.slice(1) : parts
+  }
+  const sameValue = (/** @type {any} */ a, /** @type {any} */ b) =>
+    typeof a === 'string' && typeof b === 'string' ? a.toLowerCase() === b.toLowerCase() : JSON.stringify(a) === JSON.stringify(b)
+
+  const client = {
     /**
      * Cached `{ data, timestamp }` for a key string, or undefined.
      * @param {string} keyStr
@@ -127,11 +147,97 @@ export function createQueryClient({ maxEntries = QUERY_MAX_ENTRIES, maxBytes = Q
         },
       }
     },
+
+    /**
+     * Subscribe a mounted query to invalidation of its key. `run` should revalidate.
+     * @param {string} keyStr
+     * @param {() => void} run
+     * @returns {() => void}
+     */
+    subscribe(keyStr, run) {
+      const sub = { keyStr, run }
+      subscribers.add(sub)
+      return () => { subscribers.delete(sub) }
+    },
+
+    /**
+     * Seed or replace the data for a structured key without fetching. `timestamp: 0`
+     * seeds an entry that renders at once but counts as stale, so the owning view
+     * revalidates it. `ifAbsent` never overwrites an existing entry (a fuller one wins).
+     * @param {unknown[]} key
+     * @param {any} data
+     * @param {{ timestamp?: number, ifAbsent?: boolean }} [options]
+     */
+    setQueryData(key, data, { timestamp = Date.now(), ifAbsent = false } = {}) {
+      const keyStr = keyString(key)
+      if (ifAbsent && cache.get(keyStr)) return false
+      cache.set(keyStr, { data, timestamp })
+      return true
+    },
+
+    /** @param {unknown[]} key */
+    getQueryData(key) { return cache.get(keyString(key))?.data },
+
+    /**
+     * Public write-invalidation API (`useMutation({ invalidates })` calls it with a structured
+     * key array). Mark every entry whose key starts with `prefix` stale (the data stays, so a view
+     * keeps showing it while it revalidates), forget fetches that started before this
+     * call so their pre-write result cannot be stored, and tell mounted queries to
+     * revalidate. String parts compare case-insensitively (GitHub names do).
+     * @param {unknown[]} [prefix] default: everything
+     * @returns {number} how many cached entries were marked stale
+     */
+    invalidate(prefix = []) {
+      const matches = (/** @type {string} */ keyStr) => {
+        const parts = partsOf(keyStr)
+        return prefix.every((p, i) => sameValue(parts[i], p))
+      }
+      let marked = 0
+      for (const keyStr of cache.keys()) {
+        if (!matches(keyStr)) continue
+        const entry = cache.get(keyStr)
+        if (entry) { cache.set(keyStr, { data: entry.data, timestamp: 0 }); marked++ }
+      }
+      for (const [keyStr, e] of [...inflight]) {
+        if (!matches(keyStr)) continue
+        e.controller.abort()
+        inflight.delete(keyStr)
+      }
+      for (const sub of [...subscribers]) if (matches(sub.keyStr)) sub.run()
+      return marked
+    },
+
+    /**
+     * Invalidate every read for a repository under the current host and account. A null
+     * repository (a write that cannot be attributed) invalidates the whole identity.
+     * Keys built by `identityKey(repo, ...)` are `[host, account, repo, ...]`.
+     * @param {string | null} repo
+     */
+    invalidateRepo(repo) {
+      const { host, account } = cacheIdentity()
+      return client.invalidate(repo ? [host, account, repo] : [host, account])
+    },
   }
+  return client
 }
 
 /** The app-wide client. */
 export const queryClient = createQueryClient()
+
+// Every finished write marks its repository's cached reads stale and revalidates what is mounted.
+onWrite(({ repo }) => { queryClient.invalidateRepo(repo) })
+
+/**
+ * What a query shows while it (re)fetches: cached data as stale; an invalidation
+ * revalidating a view that already has data keeps it (stale, no loading frame); else loading.
+ * @param {{ force: boolean, background: boolean, hasData: boolean, cached?: { data: any }, diskCached?: { payload: any } | null }} state
+ * @returns {{ data?: any, loading?: boolean, stale: boolean }}
+ */
+function startView({ force, background, hasData, cached, diskCached }) {
+  if (!force && (cached || diskCached)) return { data: cached ? cached.data : diskCached?.payload, loading: false, stale: true }
+  if (background && hasData) return { stale: true }
+  return { loading: true, stale: false }
+}
 
 /**
  * useQuery(key, fetcher, options)
@@ -191,7 +297,14 @@ export function useQuery(key, fetcher, options = {}) {
   const latest = useRef({})
   latest.current = { fetcher, persist, onSuccess, onError, onCleanup }
 
-  const fetchData = useCallback(async (force = false) => {
+  const hasDataRef = useRef(false)
+  hasDataRef.current = data != null
+  const enabledRef = useRef(enabled)
+  enabledRef.current = enabled
+
+  // `background`: an invalidation revalidates what is on screen, so a view that already
+  // has data keeps it (marked stale) instead of dropping back to a loading frame.
+  const fetchData = useCallback(async (force = false, background = false) => {
     if (!mountedRef.current) return
     const token = ++tokenRef.current
     const isCurrent = () => mountedRef.current && tokenRef.current === token
@@ -210,14 +323,10 @@ export function useQuery(key, fetcher, options = {}) {
       setIsStale(false)
       return
     }
-    if (!force && (cached || diskCached)) {
-      setData(cached ? cached.data : diskCached.payload)
-      setLoading(false)
-      setIsStale(true)
-    } else {
-      setLoading(true)
-      setIsStale(false)
-    }
+    const view = startView({ force, background, hasData: hasDataRef.current, cached, diskCached })
+    if (view.data !== undefined) setData(view.data)
+    if (view.loading !== undefined) setLoading(view.loading)
+    setIsStale(view.stale)
     setError(null)
 
     // Cold start (no memory/mirror hit): read the file asynchronously, concurrently with
@@ -248,8 +357,9 @@ export function useQuery(key, fetcher, options = {}) {
       settled = true
       if (!isCurrent()) return
       setError(err)
-      if (!diskCached && !cached && !lateDisk) setData(null)
-      setIsStale(Boolean(diskCached || cached || lateDisk))
+      const keep = Boolean(diskCached || cached || lateDisk) || (background && hasDataRef.current)
+      if (!keep) setData(null)
+      setIsStale(keep)
       latest.current.onError?.(err)
     } finally {
       if (isCurrent()) setLoading(false)
@@ -257,6 +367,12 @@ export function useQuery(key, fetcher, options = {}) {
   }, [keyStr, ttl, client])
 
   const refetch = useCallback(() => { fetchData(true) }, [fetchData])
+
+  // A write invalidated this key: revalidate in the background (shares the one in-flight
+  // fetch with any other view on the same key).
+  useEffect(() => client.subscribe(keyStr, () => {
+    if (mountedRef.current && enabledRef.current) fetchData(false, true)
+  }), [client, keyStr, fetchData])
 
   /**
    * Optimistically update cached data without refetching. `updater` receives the current
@@ -369,7 +485,7 @@ export function useInfiniteQuery(key, fetchPage, options) {
   }, [client, keyStr])
 
   const request = useCallback((cursor, force) => {
-    const call = client.fetch(`${keyStr}#${JSON.stringify(cursor ?? null)}`,
+    const call = client.fetch(keyString([...JSON.parse(keyStr), { cursor: cursor ?? null }]),
       ctx => latest.current.fetchPage({ cursor, signal: ctx.signal }), { force, store: false })
     releases.current.add(call.release)
     return call
@@ -432,6 +548,13 @@ export function useInfiniteQuery(key, fetchPage, options) {
   }, [request, commit])
 
   const refetch = useCallback(() => { loadFirst(true) }, [loadFirst])
+
+  // A write invalidated this list: refresh page 1 in the background, keep later pages.
+  const enabledRef = useRef(enabled)
+  enabledRef.current = enabled
+  useEffect(() => client.subscribe(keyStr, () => {
+    if (mountedRef.current && enabledRef.current) loadFirst(false)
+  }), [client, keyStr, loadFirst])
 
   useEffect(() => {
     mountedRef.current = true

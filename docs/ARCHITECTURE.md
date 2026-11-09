@@ -36,7 +36,7 @@ CI, branch protection and release flow are documented in `docs/CI_SIMPLIFICATION
 | Per-pane report for the shell (`count`, `loading`, `error`, `dialogHint`, `actionCtx`) | each pane calls `onPaneState`; `App` keeps `paneState` | while the pane is mounted |
 | Cursor, scroll offset, filters, search text, open dialog | the pane's controller (`list.jsx`, `detail.jsx`, ...) | while mounted; `usePaneState` keeps list state across a detail round trip and `App` clears it on an explicit pane switch |
 | Dashboard section and row selection | `selectionMemory` in `features/tabs/view.jsx`, so a detail round trip restores it | the session |
-| Fetched data | `useGh` caches: an in-memory LRU (200 entries, 48 MB), then the disk cache under `~/.cache/lazyhub/data/` mirrored in memory at startup | memory for the session, disk across runs |
+| Fetched data | `useGh` caches: an in-memory LRU (200 entries, 64 MB), then the disk cache under `~/.cache/lazyhub/data/` mirrored in memory at startup | memory for the session, disk across runs |
 | Key scope stack | `KeyScopeProvider` in `src/keyscope.js` | the session |
 | A dialog is open (suppresses global keys) | the focus stack: the dialog, overlay or input claims its scope with `useKeyScope`; `App`'s global handler reads `liveScope()` and stands down for a modal scope (`notifyDialog` and `dialogActiveRef` are gone, R6 #484) | while the component is mounted and open |
 | gh health (failing calls) and the daemon-fallback notice | module state behind `useGhHealth` and `src/daemon/fallback.js`, shown by the status bar | the session |
@@ -69,9 +69,11 @@ Reads: a pane calls `useGh(fetchFn, deps)`. The hook seeds synchronously from me
 3. Otherwise `gh` runs with an array argv, a timeout (30 s by default) and a bounded number of concurrent children (4). Output is parsed; a failure is a typed `GhError` with redacted stderr.
 4. `useGh` stores the result in both caches and reports success or failure to `useGhHealth`; a failure is also turned into a plain-language `Failure` by `executor/classify.js`.
 
+Detail views are seeded from the list: opening a PR puts the list row under the detail's key (marked `partial` and stale), so the detail renders at once while `getPR`, checks and branch protection load in parallel.
+
 Lists are fetched page by page with cursors and appended; every fixed-size call is listed with its reason in `src/paging-audit.test.js`.
 
-Writes: the UI asks for confirmation (default No for destructive ones), then runs the mutation through `usePendingWrite` (one in flight, a pending status). `runGh` writes an `intent` audit entry first (and blocks the write if it cannot), runs `gh`, drops the repository's cached reads, invalidates the daemon cache and writes a `result` entry. Local git follows the same path through `runGit()` in `executor/git.js`. There is no fallback to a direct `gh` call for a write.
+Writes: the UI asks for confirmation (default No for destructive ones), then runs the mutation through `usePendingWrite` (one in flight, a pending status). `runGh` writes an `intent` audit entry first (and blocks the write if it cannot), runs `gh`, drops the repository's cached reads, invalidates the daemon cache, announces the finished write (`src/data/invalidation.js`) and writes a `result` entry. The query client marks every cached read for that repository stale (data kept) and every mounted view revalidates in the background, so no pane needs a "remember to refetch" call (R3, #481). Local git follows the same path through `runGit()` in `executor/git.js`. There is no fallback to a direct `gh` call for a write.
 
 Rendering: every string that came from GitHub passes through `sanitize()` before it is drawn; colors come from `useTheme()` tokens; widths come from `useLayout()` (minimum 40 x 10, below which one "terminal too small" message replaces the screen).
 
@@ -117,7 +119,7 @@ Everything above is the code as it is. This section is the destination, so every
 | Diff open | the diff is fetched first, the rest deferred, and the likely next view prefetched when the cursor rests | detail and diff load independently | R4 #482 |
 | Focus manager (D13) | one root `useInput`; an explicit stack of focus entries; only the top entry gets keys, then registry-resolved globals; claims are synchronous | scope stack in `keyscope.js` plus per-pane `if (dialog) return` (`notifyDialog` and `dialogActiveRef` deleted) | R5 #483 (core), R6 #484 (App on `useFocusGlobals`, dialogs and overlays claim the stack, `notifyDialog` deleted) |
 | Key ownership | tests generated from the registry; every hint derived from it | hand-written key-ownership tests | R7 #485 |
-| Shared pane primitives | `useListController`, `QueryBoundary`, `useMutation`; one pane per PR | each pane owns its list, loading and error code | R8 #486 (Notifications first), R9 #487 (the rest) |
+| Shared pane primitives | `useListController`, `QueryBoundary`, `useMutation`; one pane per PR | Notifications uses them (`src/hooks/useListController.js`, `src/components/QueryBoundary.jsx`, `src/hooks/useMutation.js`, `src/ui/ListRow.jsx`); the other panes still own their list, loading and error code. `useMutation`'s `invalidates` is the seam for R3 write invalidation | R8 #486 (Notifications first), R9 #487 (the rest) |
 | Shell | one app shell and one width contract; overlays layer instead of swapping the tree | view branches swap the tree | R10 #488 |
 | Tooling | the invariants machine-checked | partly convention | R11 #489 |
 | Errors | handler exceptions never kill the app; `ErrorBoundary` can reset | largely done (`containHandler`) | R12 #490 |

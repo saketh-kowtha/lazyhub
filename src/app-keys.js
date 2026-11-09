@@ -37,6 +37,7 @@ export const GLOBAL_KEYS = actionHints([
   'go.branches',
   'go.actions',
   'go.notifications',
+  'go.queue',
   'debug.dump-state',
   'app.back',
 ], _config.toml)

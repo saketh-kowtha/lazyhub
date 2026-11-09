@@ -1,6 +1,6 @@
 // @ts-nocheck
 // TODO(#197): typed gh issue payload shapes should replace broad JS destructuring.
-import { getRepo, runGh } from './core.js'
+import { getRepo, repoPath, runGh } from './core.js'
 /**
  * List issues with optional filters.
  * @param repo
@@ -26,7 +26,7 @@ const ISSUE_PAGE_MAX = 100
 const ISSUE_STATES = new Set(['open', 'closed', 'all'])
 
 function q(value) {
-  return String(value || '').replace(/"/g, '\\"').trim()
+  return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').trim()
 }
 
 // An unquoted search qualifier value: a login, a bot login or @me. Anything else
@@ -248,7 +248,7 @@ export async function listCollaborators(repo) {
   const all = []
   for (let page = 1; page <= COLLAB_MAX_PAGES; page++) {
     const args = [
-      'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/collaborators?per_page=${COLLAB_PAGE_SIZE}&page=${page}`,
+      'api', `repos/${repoPath(r)}/collaborators?per_page=${COLLAB_PAGE_SIZE}&page=${page}`,
       '--jq', '[.[] | {login: .login, name: .name}]',
     ]
     const rows = await runGh(args)

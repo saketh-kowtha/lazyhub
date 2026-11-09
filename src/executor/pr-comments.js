@@ -1,7 +1,7 @@
 // @ts-nocheck
 // TODO(#197): typed gh PR review payload shapes should replace broad JS destructuring.
 import { GhError } from './gh-error.js'
-import { getRepo, runGh } from './core.js'
+import { getRepo, repoPath, runGh } from './core.js'
 
 const REPO_PART_RE = /^[a-zA-Z0-9._-]+$/
 
@@ -59,7 +59,7 @@ export async function addPRLineComment(repo, number, { body, path, line, side = 
   const r = getRepo(repo)
   const payload = JSON.stringify({ body, path, line, side, commit_id: commitId })
   return runGh([
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/${encodeURIComponent(number)}/comments`,
+    'api', `repos/${repoPath(r)}/pulls/${encodeURIComponent(number)}/comments`,
     '--method', 'POST',
     '--input', '-',
   ], { stdin: payload })
@@ -276,7 +276,7 @@ export async function replyToComment(repo, prNumber, commentId, body) {
   const r = getRepo(repo)
   assertPositiveId(commentId)
   return runGh([
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/${encodeURIComponent(prNumber)}/comments/${encodeURIComponent(commentId)}/replies`,
+    'api', `repos/${repoPath(r)}/pulls/${encodeURIComponent(prNumber)}/comments/${encodeURIComponent(commentId)}/replies`,
     '--method', 'POST',
     '--raw-field', `body=${body}`,
   ])
@@ -292,7 +292,7 @@ export async function editPRComment(repo, commentId, body) {
   const r = getRepo(repo)
   assertPositiveId(commentId)
   return runGh([
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/comments/${encodeURIComponent(commentId)}`,
+    'api', `repos/${repoPath(r)}/pulls/comments/${encodeURIComponent(commentId)}`,
     '--method', 'PATCH',
     '--raw-field', `body=${body}`,
   ])
@@ -307,7 +307,7 @@ export async function deletePRComment(repo, commentId) {
   const r = getRepo(repo)
   assertPositiveId(commentId)
   return runGh([
-    'api', `repos/${encodeURIComponent(r).replace('%2F', '/')}/pulls/comments/${encodeURIComponent(commentId)}`,
+    'api', `repos/${repoPath(r)}/pulls/comments/${encodeURIComponent(commentId)}`,
     '--method', 'DELETE',
   ])
 }

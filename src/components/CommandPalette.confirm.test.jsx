@@ -49,7 +49,7 @@ async function openAndSelect(label) {
     <CommandPalette context={context} onClose={onClose} onNavigate={() => {}} onTheme={() => {}} themes={[]} />,
   )
   await type(label.toLowerCase())
-  const row = new RegExp(`▶ ${label.replace(/[()]/g, '\\$&')}\\s{2,}`)
+  const row = new RegExp(`▶ ${label.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}\\s{2,}`)
   for (let i = 0; i < 9 && !row.test(ui.lastFrame()); i++) await sendInput('', { downArrow: true })
   expect(ui.lastFrame()).toMatch(row)
   await sendInput('', { return: true })

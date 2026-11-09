@@ -238,6 +238,11 @@ export function App({ repo, onSwitchRepo }) {
     setActionsTarget({ repo: null, branch: null })
   }, [pane]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // g q: the review queue (#177) is a view over the current pane; q/Esc returns to the pane.
+  const openQueue = useCallback(() => {
+    setSelectedItem(null); setView('queue'); setActionsTarget({ repo: null, branch: null })
+  }, [])
+
   // ─── Global key handler ───────────────────────────────────────────────────
   useFocusGlobals((input, key) => {
     if (isPerfEnabled()) pendingInputPerf.current.push(startTimer())
@@ -272,7 +277,8 @@ export function App({ repo, onSwitchRepo }) {
       setPrefixPopup(null)
       if (key.escape) return
       const hit = prefixContinuations(armed.prefix, pane, view).find(c => c.global && c.key === input)
-      if (hit) goToPane(PANE_FOR_GO_ACTION[hit.actionId])
+      if (hit?.actionId === 'go.queue') openQueue()
+      else if (hit) goToPane(PANE_FOR_GO_ACTION[hit.actionId])
       return
     }
     if (input && !key.ctrl && !key.meta && !showHelp && registeredPrefixes(_config.toml).has(input)) {
@@ -308,12 +314,13 @@ export function App({ repo, onSwitchRepo }) {
       if (showHelp)              { setShowHelp(false); return }
       if (view === 'settings')   { setView('list'); return }
       if (view === 'logs')       { setView('list'); return }
+      if (view === 'queue')      { setView('list'); return }
       if (view === 'comments')   { setView('diff'); return }
       if (view === 'conflict')   { setView('detail'); return }
       if (view === 'story')      { setStoryNav(null); setView('detail'); return }
       if (view === 'diff' && storyNav?.active) { setView('story'); return }
       if (view === 'diff')       { setView(selectedItem?._fromList ? 'list' : 'detail'); return }
-      if (view === 'detail')     { setSelectedItem(null); setView('list'); return }
+      if (view === 'detail')     { const back = selectedItem?._fromQueue; setSelectedItem(null); setView(back ? 'queue' : 'list'); return }
       // At the root only `q` quits; a stray Esc must never kill the app.
       if (!key.escape) exit()
       return
@@ -401,7 +408,7 @@ export function App({ repo, onSwitchRepo }) {
   // The detail pane hands back its own fetched PR; keep the dashboard identity (_repo/_kind) of the item (#493).
   const goToDiff       = useCallback((item) => {
     setStoryNav(null)
-    setSelectedItem(prev => ({ ...item, _kind: item._kind ?? prev?._kind, _repo: item._repo ?? prev?._repo, _fromList: view === 'list' }))
+    setSelectedItem(prev => ({ ...item, _kind: item._kind ?? prev?._kind, _repo: item._repo ?? prev?._repo, _fromQueue: prev?._fromQueue, _fromList: view === 'list' }))
     setView('diff')
   }, [view])
   // Review story (#362): position and the file the diff should open at survive the round trip.
@@ -436,15 +443,26 @@ export function App({ repo, onSwitchRepo }) {
     if (view === 'story')    { setStoryNav(null); setView('detail'); return }
     if (view === 'diff' && storyNav?.active) { setView('story'); return }
     if (view === 'diff')     { setView(selectedItem?._fromList ? 'list' : 'detail'); return }
-    setSelectedItem(null); setView('list')
+    // A PR opened from the review queue returns to the queue, which remembers its group and row (#177).
+    const backToQueue = view === 'detail' && selectedItem?._fromQueue
+    setSelectedItem(null); setView(backToQueue ? 'queue' : 'list')
   }, [view, selectedItem, storyNav])
+  // EVIDENCE SEAM (#127): the queue hands over the focused row's evidence record. Today it opens the
+  // existing PR detail; the read-only evidence view replaces this one callback.
+  const goToQueueItem = useCallback((evidence) => {
+    goToDetail({
+      number: evidence.identity.number, title: evidence.untrusted?.title, _kind: 'prs', _repo: evidence.identity.repo,
+      baseRefName: evidence.context?.base?.value === 'unknown' ? undefined : evidence.context?.base?.value,
+      _fromQueue: true, _evidence: evidence,
+    })
+  }, [goToDetail])
 
   const onPaneState = useCallback((s) => setPaneState(prev => ({ ...prev, ...s })), [])
 
   const tree = renderAppView({
     actionsBranch, actionsRepo, itemIsForeign, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
     exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail, goToPRRow,
-    goToDiff, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
+    goToDiff, goToQueueItem, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
     showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,

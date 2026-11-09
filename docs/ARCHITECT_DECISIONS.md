@@ -201,9 +201,12 @@ a synchronous cache seed, invalidation by key prefix.
 **Shipped (under the name `useGh`).** `src/hooks/useGh.js` is the read hook: a key
 built from host, account, function name and arguments; a request generation so only
 the latest request writes state; a synchronous seed from a bounded in-memory LRU
-(200 entries, 48 MB) or the startup mirror of the disk cache; stale-while-revalidate;
+(200 entries, 64 MB) or the startup mirror of the disk cache; stale-while-revalidate;
 health reporting (`useGhHealth`). `usePendingWrite` guards a write against a double
-submit. Writes invalidate a repository's cached reads coarsely (`invalidateRepoCache`).
+submit. A finished write marks every cached read for its repository stale and mounted
+views revalidate in the background (`src/data/invalidation.js`, `queryClient.invalidate`);
+the PR list seeds the PR detail (`setQueryData`). Per-mutation `invalidates` declarations
+are still planned: invalidation is by repository.
 
 **Planned (#480 to #482, #486).** `useQuery` / `useMutation` with structured keys and
 prefix invalidation, in-flight dedupe and cancellation, list-to-detail seeding, and

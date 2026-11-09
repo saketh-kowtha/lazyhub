@@ -12,14 +12,13 @@
  * All text returned is untrusted GitHub data; the view cleans it before drawing.
  */
 
-import { getRepo, runGh } from './core.js'
+import { repoPath, runGh } from './core.js'
 
 const FILE_PAGE = 100
 export const FILE_MAX_PAGES = 10
 export const BASE_RUNS_DEFAULT = 3
 export const BASE_RUNS_MAX = 10
 
-const repoPath = (/** @type {string} */ repo) => encodeURIComponent(getRepo(repo)).replace('%2F', '/')
 
 /**
  * @typedef {{path: string, previousPath: string|null, status: string}} ChangedFile

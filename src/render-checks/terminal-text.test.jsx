@@ -14,7 +14,7 @@ import { useEffect } from 'react'
 import { useGh } from '../hooks/useGh.js'
 import {
   getPR, getRepoInfo, getPRChecks, getBranchProtection, getPRDiffStats, listPRFilesPage, getPRFilePatch, listPRCommentsPage,
-  getIssueHeader, listIssueTimelinePage, listIssuesPage, listLabels, listCollaborators, listBranches, listOpenPRBranches, listRuns, listNotifications,
+  getIssueHeader, loadEvidenceDetail, listIssueTimelinePage, listIssuesPage, listLabels, listCollaborators, listBranches, listOpenPRBranches, listRuns, listNotifications,
 } from '../executor.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../test/test-helpers.jsx'
 import { sendInput } from '../test/input-bus.js'
@@ -28,6 +28,7 @@ import { ActionList } from '../features/actions/index.jsx'
 import { NotificationList } from '../features/notifications/index.jsx'
 import { LogViewer } from '../components/dialogs/LogViewer.jsx'
 import { CollisionRadar } from '../features/prs/collisions/view.jsx'
+import { EvidenceView } from '../features/prs/EvidenceView.jsx'
 import { parsePatchChanges } from '../features/prs/collisions/engine.js'
 import { PRComments } from '../features/prs/comments.jsx'
 import { ConflictView } from '../features/prs/ConflictView.jsx'
@@ -288,6 +289,7 @@ describe('diff view', () => {
 vi.mock('../executor.js', async () => ({
   ...await vi.importActual('../executor.js'),
   getPRFilePatch: vi.fn(),
+  loadEvidenceDetail: vi.fn(),
 }))
 
 describe('issue views', () => {
@@ -428,6 +430,38 @@ describe('collision radar', () => {
       expectClean(frameOf(view))
     })
   }
+})
+
+describe('review evidence view', () => {
+  const fact = (value) => ({ value, source: 'github.graphql', fetched_at: '2026-11-09T12:00:00.000Z' })
+  const detail = () => poison({
+    record: {
+      identity: { repo: 'o/r', number: 1, account: 'me' }, context: { head: fact('abc1234'), base: fact('main') },
+      facts: {
+        state: fact('OPEN'), is_draft: fact(false), mergeable: fact('MERGEABLE'), review_decision: fact('APPROVED'),
+        checks: fact({ state: 'SUCCESS', total: 1, passed: 1, failed: 0, pending: 0, truncated: false }),
+        reviews: fact({ approvals: 1, staleApprovals: 0, changesRequested: 0, mine: 'NONE', truncated: false }),
+        review_requests: fact({ via: 'team_unverified', teams: ['core'], truncated: false }),
+        unresolved_threads: fact({ unresolved: 0, total: 0, truncated: false }),
+      },
+      attention: [], actor: { login: 'dev', github_type: 'Bot', attribution: 'unverified' },
+      untrusted: { title: 'Title', title_truncated: false, body: 'Body', body_truncated: false, threads: [{ path: 'src/a.js', author: 'jin', excerpt: 'Why', truncated: false }] },
+      fetched_at: new Date().toISOString(),
+    },
+    files: fact({ items: [{ path: 'src/a.js', additions: 1, deletions: 0, change_type: 'MODIFIED', kind: 'source' }], total: 1, returned: 1, truncated: false, head: 'abc1234' }),
+    required_checks: fact({ required: 1, passing: 1, failing: 0, pending: 0, total: 1, truncated: false, head: 'abc1234', names: ['lint'] }),
+    head: { state: 'current', inspected: 'abc1234', current: 'abc1234' },
+    errors: [{ part: 'files', message: 'bad' }],
+  })
+  it('rows, files and thread excerpts', async () => {
+    loadEvidenceDetail.mockResolvedValue(detail())
+    const view = renderWithProviders(<EvidenceView pr={{ number: 1 }} repo="o/r" onClose={() => {}} />)
+    await flush(20)
+    for (let i = 0; i < 30; i++) await sendInput('j')
+    await flush(20)
+    expect(frameOf(view)).toContain('CANARY')
+    expectClean(frameOf(view))
+  })
 })
 
 describe('AI review pane', () => {

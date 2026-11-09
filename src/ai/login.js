@@ -74,7 +74,7 @@ export async function checkManifest(cmd, manifest) {
   try {
     for (const { args, flags } of manifest.helpChecks) {
       const help = await run(args)
-      const missing = flags.find(f => !new RegExp(`(^|[\\s,\\[<|])${f.replace(/[-]/g, '\\-')}($|[\\s,=\\]>|])`, 'm').test(help))
+      const missing = flags.find(f => !new RegExp(`(^|[\\s,\\[<|])${f.replace(/[\\^$.*+?()[\]{}|-]/g, '\\$&')}($|[\\s,=\\]>|])`, 'm').test(help))
       if (missing) { result = { ok: false, reason: `lacks ${missing}` }; break }
     }
     if (result.ok) {

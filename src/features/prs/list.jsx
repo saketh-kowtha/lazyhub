@@ -19,7 +19,8 @@ import { useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
-import { listPRsPage, getPRRow, getPRPreview, getRepoInfo, searchOwnsState } from '../../executor.js'
+import { seedGh } from '../../data/ghKeys.js'
+import { listPRsPage, getPR, getPRRow, getPRPreview, getRepoInfo, searchOwnsState } from '../../executor.js'
 import { AppContext } from '../../context.js'
 import { usePaneState } from '../../hooks/usePaneState.js'
 import { loadConfig, loadState, saveState } from '../../config.js'
@@ -48,6 +49,15 @@ const PREVIEW_DELAY_MS = 150
 const emptyMore = (key) => ({ key, items: [], endCursor: null, hasNextPage: null, totalCount: null, loading: false, error: null })
 
 export { canToggleAutoMergeFromList } from './list-row.jsx'
+
+/**
+ * The detail view renders from the row the list already has while getPR, checks and
+ * branch protection load in parallel (#481, #452). The seed is marked `partial` (no
+ * body, reviews or files yet) and stale, so the detail shows the gap and revalidates.
+ */
+export function seedPRDetail(repo, row) {
+  if (repo && row?.number != null) seedGh(getPR, [repo, row.number], { ...row, partial: true })
+}
 
 export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDiff, onPaneState }) {
   useKeyScope('pane')
@@ -373,7 +383,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     const pr = items[cursor]
     if (!pr) return
 
-    if (matchesAction('pr.open-selected', input, key, _actions)) { onSelectPR(pr, smartEnterTarget(pr, { scope, enabled: loadState().smartEnter !== false })); return }
+    if (matchesAction('pr.open-selected', input, key, _actions)) { seedPRDetail(repo, pr); onSelectPR(pr, smartEnterTarget(pr, { scope, enabled: loadState().smartEnter !== false })); return }
     if (matchesAction('pr.diff', input, key, _actions)) { onOpenDiff(pr); return }
     if (matchesAction('pr.merge', input, key, _actions)) { openDialog('merge'); return }
     if (matchesAction('pr.labels', input, key, _actions)) { openDialog('labels'); return }
