@@ -79,4 +79,36 @@ describe('notification mark-read write (#453)', () => {
     release()
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Marked as read'))
   })
+
+  it('shows a failure status and does not refetch when the write fails', async () => {
+    markNotificationRead.mockReturnValue(Promise.reject(new Error('HTTP 403')))
+    const refetch = vi.fn()
+    const n = { id: '1', unread: true, reason: 'mention', updatedAt: '2026-06-06T10:00:00Z', repository: { name: 'repo' }, subject: { title: 'Thread 1', type: 'Issue' } }
+    useGh.mockReturnValue({ data: [n], loading: false, error: null, refetch })
+    const view = renderWithProviders(<NotificationList repo="owner/repo" onNavigateTo={() => {}} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Thread 1'))
+    await flush(20)
+    await sendInput('u')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Failed: HTTP 403'))
+    expect(refetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('notification list selection memory (R8)', () => {
+  it('keeps the cursor on the same thread when a refetch reorders the list', async () => {
+    const mk = (id) => ({ id, unread: true, reason: 'mention', updatedAt: '2026-06-06T10:00:00Z', repository: { name: 'repo' }, subject: { title: `Thread ${id}`, type: 'Issue' } })
+    useGh.mockImplementation(() => {
+      const [data, setData] = React.useState([mk('1'), mk('2'), mk('3')])
+      return { data, loading: false, error: null, refetch: () => setData([mk('3'), mk('2'), mk('1')]) }
+    })
+    const onNavigateTo = vi.fn()
+    const view = renderWithProviders(<NotificationList repo="owner/repo" onNavigateTo={onNavigateTo} />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Thread 3'))
+    await flush(20)
+    await sendInput('j')
+    await sendInput('r')
+    await flush(40)
+    await sendInput('', { return: true })
+    expect(onNavigateTo).toHaveBeenCalledWith(expect.objectContaining({ id: '2' }))
+  })
 })

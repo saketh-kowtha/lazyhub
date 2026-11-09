@@ -117,7 +117,7 @@ Everything above is the code as it is. This section is the destination, so every
 | Diff open | the diff is fetched first, the rest deferred, and the likely next view prefetched when the cursor rests | detail and diff load independently | R4 #482 |
 | Focus manager (D13) | one root `useInput`; an explicit stack of focus entries; only the top entry gets keys, then registry-resolved globals; claims are synchronous | scope stack in `keyscope.js` plus `dialogActiveRef` / `notifyDialog` and per-pane `if (dialog) return` | R5 #483 (core), R6 #484 (migrate App, dialogs, overlays; delete `notifyDialog`) |
 | Key ownership | tests generated from the registry; every hint derived from it | hand-written key-ownership tests | R7 #485 |
-| Shared pane primitives | `useListController`, `QueryBoundary`, `useMutation`; one pane per PR | each pane owns its list, loading and error code | R8 #486 (Notifications first), R9 #487 (the rest) |
+| Shared pane primitives | `useListController`, `QueryBoundary`, `useMutation`; one pane per PR | Notifications uses them (`src/hooks/useListController.js`, `src/components/QueryBoundary.jsx`, `src/hooks/useMutation.js`, `src/ui/ListRow.jsx`); the other panes still own their list, loading and error code. `useMutation`'s `invalidates` is the seam for R3 write invalidation | R8 #486 (Notifications first), R9 #487 (the rest) |
 | Shell | one app shell and one width contract; overlays layer instead of swapping the tree | view branches swap the tree | R10 #488 |
 | Tooling | the invariants machine-checked | partly convention | R11 #489 |
 | Errors | handler exceptions never kill the app; `ErrorBoundary` can reset | largely done (`containHandler`) | R12 #490 |
