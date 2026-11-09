@@ -89,7 +89,8 @@ export function getGhCallHistory() {
 	 *                                   timeout: 0 for flows that wait on the user.
 	 * @param {boolean}  [opts.combine]  return stdout and stderr interleaved as raw text
 	 *                                   (`gh auth status` reports on stderr)
-	 * @param {number}   [opts.maxBuffer] cap on captured stdout/stderr bytes (execa default 100 MB);
+	 * @param {'low'}    [opts.priority] a speculative read (prefetch): queues behind normal calls and keeps a slot free
+ * @param {number}   [opts.maxBuffer] cap on captured stdout/stderr bytes (execa default 100 MB);
 	 *                                   exceeding it throws a GhError mentioning maxBuffer
 	 * @param {boolean}  [opts.skipDaemon] bypass the local daemon even when available
 	 * @param {number}   [opts.ttl]      daemon cache TTL override in ms
@@ -178,6 +179,9 @@ async function invalidateDaemonCache(repo) {
 const GH_CONCURRENCY_DEFAULT = 4
 /** @type {any[]} */
 const ghWaiters = []
+/** Speculative reads (prefetch, #482): served only after every normal waiter, and never take the last slot. */
+/** @type {any[]} */
+const ghLowWaiters = []
 let ghInFlight = 0
 
 function ghConcurrencyLimit() {
@@ -186,19 +190,25 @@ function ghConcurrencyLimit() {
   return Number.isSafeInteger(n) && n > 0 ? n : GH_CONCURRENCY_DEFAULT
 }
 
-async function acquireGhSlot() {
-  if (ghInFlight < ghConcurrencyLimit()) {
+/** @param {boolean} [low] a speculative read that must never delay a user-initiated one */
+async function acquireGhSlot(low = false) {
+  const limit = ghConcurrencyLimit()
+  // A low-priority call leaves one slot free (when there is more than one) so a user action
+  // arriving next starts at once, and it never starts while a normal call is waiting.
+  if (low ? (ghInFlight < Math.max(1, limit - 1) && ghWaiters.length === 0) : ghInFlight < limit) {
     ghInFlight += 1
     return
   }
-  // The releasing call hands its slot straight to the next waiter (FIFO).
-  await new Promise(resolve => ghWaiters.push(resolve))
+  // The releasing call hands its slot straight to the next waiter (FIFO, normal before low).
+  await new Promise(resolve => (low ? ghLowWaiters : ghWaiters).push(resolve))
 }
 
 function releaseGhSlot() {
   const next = ghWaiters.shift()
-  if (next) next()
-  else ghInFlight -= 1
+  if (next) { next(); return }
+  // Hand the slot to a low waiter only while the low-priority cap (one slot kept free) holds.
+  if (ghLowWaiters.length > 0 && ghInFlight <= Math.max(1, ghConcurrencyLimit() - 1)) { ghLowWaiters.shift()(); return }
+  ghInFlight -= 1
 }
 
 /**
@@ -208,11 +218,11 @@ function releaseGhSlot() {
  * login) bypass the queue so they can never starve behind background reads.
  *
  * @param {string[]} args
- * @param {{timeout?: number, json?: boolean, stdin?: string, interactive?: boolean, combine?: boolean, maxBuffer?: number}} [opts]
+ * @param {{timeout?: number, json?: boolean, stdin?: string, interactive?: boolean, combine?: boolean, maxBuffer?: number, priority?: 'low'}} [opts]
  */
 async function spawnGh(args, opts = {}) {
   if (opts.interactive) return execGh(args, opts)
-  await acquireGhSlot()
+  await acquireGhSlot(opts.priority === 'low')
   try {
     return await execGh(args, opts)
   } finally {

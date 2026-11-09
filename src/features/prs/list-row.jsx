@@ -1,7 +1,11 @@
 /** PR rows, expanded metadata and popover content; shared display summaries stay here. */
 import React, { memo } from 'react'
 import { Box, Text } from 'ink'
+<<<<<<< HEAD
 import { effectiveHintKey, getActionConfig } from '../../config/actions.js'
+=======
+import { ListRow } from '../../ui/ListRow.jsx'
+>>>>>>> origin/main
 import { sanitize, shortAge, truncateToWidth, formatLogin, padEndWidth, padStartWidth } from '../../utils.js'
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
@@ -133,8 +137,7 @@ export const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded, maskTitle 
 
   return (
     <Box flexDirection="column">
-      <Box paddingX={1} height={1}>
-        <Text color={isSelected ? t.ui.selected : t.ui.muted}>{isSelected ? '▎' : ' '}</Text>
+      <ListRow selected={isSelected}>
         <PRStateBadge pr={pr} t={t} isSelected={isSelected} />
         <Text color={isSelected ? t.ui.selected : t.ui.muted}> {'#' + String(pr.number).padEnd(5)}</Text>
         <Box width={tw} overflow="hidden">
@@ -151,7 +154,7 @@ export const PRRow = memo(({ pr, isSelected, t, titleWidth, expanded, maskTitle 
         <ReviewBadge pr={pr} t={t} isSelected={isSelected} />
         <Text color={isSelected ? t.ui.selected : t.ui.muted}> @{authorLogin}</Text>
         <Text color={isSelected ? t.ui.selected : t.ui.muted}> {ageStr}</Text>
-      </Box>
+      </ListRow>
       {expanded && <PRExpandedDetail pr={pr} t={t} />}
     </Box>
   )

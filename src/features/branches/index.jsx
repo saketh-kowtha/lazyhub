@@ -3,41 +3,42 @@
  */
 
 import { logSwallowed } from '../../contain.js'
-import React, { useState, useCallback, useMemo, useEffect, useContext, useRef, memo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect, useRef, memo } from 'react'
 import { currentBranch as gitCurrentBranch, createBranch, push as gitPush, checkout as gitCheckout, findLocalCheckout, noLocalCheckoutMessage } from '../../services/git.js'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
-import { usePendingWrite } from '../../hooks/usePendingWrite.js'
-import { classifyGhFailure, listBranches, deleteBranch, listOpenPRBranches } from '../../executor.js'
-import { FailureNotice } from '../../components/FailureNotice.jsx'
+import { useListController } from '../../hooks/useListController.js'
+import { useMutation } from '../../hooks/useMutation.js'
+import { listBranches, deleteBranch, listOpenPRBranches } from '../../executor.js'
+import { QueryBoundary } from '../../components/QueryBoundary.jsx'
+import { MutationStatus } from '../../components/MutationStatus.jsx'
+import { ListRow } from '../../ui/ListRow.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
-import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
-import { TextInput, sanitize, sanitizePath, sanitizeRaw } from '../../utils.js'
+import { TextInput, sanitize, sanitizePath } from '../../utils.js'
 import { fitCell, paneWidth } from '../../ui/row-layout.js'
 import { logger } from '../../utils-core.js'
 import { BranchListSkeleton } from '../../components/Skeleton.jsx'
-import { firstActionKey, matchesAction } from '../../config/actions.js'
+import { matchesAction } from '../../config/actions.js'
 
 // One line per branch, never wider than the pane (#495): the markers and badges keep their
 // columns and only the name is cut.
-const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, t, width }) => {
+const BranchRow = memo(({ branch, isSelected, isCurrent, hasPR, width }) => {
+  const { t } = useTheme()
   const lock = branch.protected ? 3 : 0
   const pr = hasPR ? 3 : 0
   const nameWidth = Math.max(4, width - 2 - 2 - (isCurrent ? 2 : 0) - lock - pr)
   return (
-    <Box key={branch.name} paddingX={1} height={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-      <Text color={isSelected ? t.ui.selected : t.ui.muted}>
-        {isSelected ? '▶ ' : '  '}
-      </Text>
+    <ListRow selected={isSelected}>
+      <Text> </Text>
       {isCurrent && <Text color={isSelected ? t.ui.selected : undefined} bold>► </Text>}
       <Text color={isSelected ? t.ui.selected : undefined} bold={isSelected || isCurrent}>{fitCell(sanitizePath(branch.name), nameWidth)}</Text>
       {branch.protected && <Text color={isSelected ? t.ui.selected : t.ui.muted}> 🔒</Text>}
       {hasPR && <Text color={isSelected ? t.ui.selected : t.ui.muted} bold> PR</Text>}
-    </Box>
+    </ListRow>
   )
 })
 
@@ -48,7 +49,8 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
   const rowWidth = paneWidth(innerWidth, stdout)
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
-  const { data: branches, loading, error, refetch, isStale } = useGh(listBranches, [repo])
+  const query = useGh(listBranches, [repo])
+  const { data: branches, loading, error, refetch, isStale } = query
   // Slim head-branch list for the PR marker only (#456), not the full PR list.
   const { data: prHeads } = useGh(listOpenPRBranches, [repo], { ttl: 120_000 })
   const openPRHeads = useMemo(() => new Set(Array.isArray(prHeads?.heads) ? prHeads.heads : []), [prHeads])
@@ -75,28 +77,15 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
   }, [localDir])
 
   useEffect(() => { refreshCurrentBranch() }, [refreshCurrentBranch])
-  const [cursor, setCursor] = useState(0)
-  const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog] = useState(null)
-  const [statusMsg, setStatusMsg] = useState(null)
   const [newBranchName, setNewBranchName] = useState('')
-  const lastKeyRef   = useRef(null)
-  const lastKeyTimer = useRef(null)
 
   const items = branches || []
+  const list = useListController({ items, height: visibleHeight, getId: b => b.name })
 
   useEffect(() => {
     if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
   }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // A refetch can shrink the list (deleted branch); keep the cursor on a real row.
-  useEffect(() => {
-    if (items.length > 0 && cursor > items.length - 1) {
-      const last = items.length - 1
-      setCursor(last)
-      setScrollOffset(Math.max(0, last - visibleHeight + 1))
-    }
-  }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useKeyScope('dialog', !!dialog)
   useEffect(() => {
@@ -104,39 +93,31 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
     return () => { if (onPaneState) onPaneState({ dialogHint: null }) }
   }, [dialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
-
-  const statusTimer = useRef(null)
-  useEffect(() => () => { clearTimeout(statusTimer.current) }, [])
-  const showStatus = (msg, isError = false, sticky = false) => {
-    clearTimeout(statusTimer.current)
-    setStatusMsg({ msg, isError, persist: isError })
-    if (!isError && !sticky) statusTimer.current = setTimeout(() => setStatusMsg(null), 3000)
+  // Every write runs through one useMutation (#453): pending line, double-submit guard,
+  // sticky failure. `op` is { label, success, run, failPrefix? }.
+  const act = useMutation(op => op.run(), {
+    label: op => op.label,
+    success: (_r, op) => op.success,
+    invalidates: [(_r, [op]) => op.after?.()],
+  })
+  // Non-write notices ("no local checkout", "already on"): transient, errors stick until a key.
+  const [notice, setNotice] = useState(/** @type {{ msg: string, isError: boolean, persist: boolean } | null} */ (null))
+  const noticeTimer = useRef(/** @type {ReturnType<typeof setTimeout> | undefined} */ (undefined))
+  useEffect(() => () => clearTimeout(noticeTimer.current), [])
+  const showNotice = (msg, isError = false) => {
+    clearTimeout(noticeTimer.current)
+    setNotice({ msg, isError, persist: isError })
+    if (!isError) noticeTimer.current = setTimeout(() => setNotice(null), 3000)
   }
-  // Pending/double-submit guard for every write on this pane (#453).
-  const { run: pendingRun } = usePendingWrite((msg) => showStatus(msg, false, true))
-  // Resolves true only when fn ran (false when ignored as a double submit).
-  const runWrite = async (label, fn) => {
-    let ran = false
-    await pendingRun(label, async () => { ran = true; return fn() })
-    return ran
-  }
+  const status = act.status || notice
+  const dismissStatus = () => { act.dismiss(); setNotice(null) }
 
-  const moveCursor = useCallback((delta) => {
-    setCursor(prev => {
-      const next = Math.max(0, Math.min(items.length - 1, prev + delta))
-      if (next < scrollOffset) setScrollOffset(next)
-      if (next >= scrollOffset + visibleHeight) setScrollOffset(next - visibleHeight + 1)
-      return next
-    })
-  }, [items.length, scrollOffset, visibleHeight])
-
-  const selectedBranch = items[cursor]
+  const selectedBranch = list.selected
 
   // Local actions need a checkout of `repo`; otherwise say why they are off.
   const requireLocal = () => {
     if (localDir) return true
-    showStatus(localDir === undefined
+    showNotice(localDir === undefined
       ? 'Checking for a local checkout…'
       : noLocalCheckoutMessage(sanitize(repo)), localDir === null)
     return false
@@ -145,48 +126,23 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
   const hasOpenPR = !!selectedBranch && openPRHeads.has(selectedBranch.name)
 
   useKeymapInput((input, key) => {
-    if (statusMsg?.persist) { setStatusMsg(null); return }
+    if (status?.persist) { dismissStatus(); return }
     if (dialog === 'new-branch') {
       if (key.escape) { setDialog(null); setNewBranchName(''); return }
       return
     }
     if (dialog) return
-    if (matchesAction('cursor.down', input, key)) { moveCursor(1); return }
-    if (matchesAction('cursor.up', input, key))  { moveCursor(-1); return }
+    if (list.handleKey(input, key)) return
     if (matchesAction('list.refresh', input, key)) { refetch(); return }
     if (matchesAction('list.search', input, key)) { setDialog('fuzzy'); return }
     if (matchesAction('branch.new', input, key)) { if (requireLocal()) { setNewBranchName(''); setDialog('new-branch') } return }
-
-    // gg → top
-    const topSequenceKey = firstActionKey('cursor.top', 'gg')[0]
-    if (input === topSequenceKey) {
-      if (lastKeyRef.current === topSequenceKey) {
-        clearTimeout(lastKeyTimer.current)
-        lastKeyRef.current = null
-        setCursor(0); setScrollOffset(0)
-        return
-      }
-      lastKeyRef.current = topSequenceKey
-      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
-      return
-    }
-    lastKeyRef.current = null
-
-    // G → bottom
-    if (matchesAction('cursor.bottom', input, key)) {
-      if (items.length > 0) {
-        const last = items.length - 1
-        setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
-      }
-      return
-    }
 
     if (loading || items.length === 0) return
 
     if (matchesAction('branch.checkout', input, key)) {
       if (selectedBranch && requireLocal()) {
         if (selectedBranch.name === currentBranch) {
-          showStatus(`Already on "${sanitizePath(selectedBranch.name)}"`)
+          showNotice(`Already on "${sanitizePath(selectedBranch.name)}"`)
           return
         }
         setDialog('checkout')
@@ -202,15 +158,10 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
     if (matchesAction('branch.push', input, key)) {
       // Push current branch
       if (!requireLocal()) return
-      runWrite('Pushing', async () => {
-        await gitPush(localDir, local.remote, 'HEAD')
-      }).then(ran => { if (ran) showStatus('Pushed') })
-        .catch(err => showStatus(`Push failed: ${err.message}`, true))
+      act.mutate({ label: 'Pushing', success: 'Pushed', run: () => gitPush(localDir, local.remote, 'HEAD') })
       return
     }
   })
-
-  const visibleBranches = items.slice(scrollOffset, scrollOffset + visibleHeight)
 
   if (dialog === 'fuzzy') {
     return (
@@ -220,7 +171,7 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
           searchFields={['name', 'title']}
           onSubmit={(item) => {
             const idx = items.findIndex(b => b.name === item.name)
-            if (idx !== -1) { setCursor(idx); setScrollOffset(Math.max(0, idx - 2)) }
+            if (idx !== -1) list.moveTo(idx)
             setDialog(null)
           }}
           onCancel={() => setDialog(null)}
@@ -235,15 +186,10 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
         <ConfirmDialog
           message={`Checkout branch "${sanitizePath(selectedBranch.name)}"?`}
           destructive={false}
-          onConfirm={async () => {
+          onConfirm={() => {
             setDialog(null)
-            try {
-              if (!await runWrite(`Checking out ${sanitizePath(selectedBranch.name)}`, () => gitCheckout(local, selectedBranch.name))) return
-              showStatus(`✓ Checked out ${sanitizePath(selectedBranch.name)}`)
-              refreshCurrentBranch()
-            } catch (err) {
-              showStatus(`Failed: ${err.message}`, true)
-            }
+            const name = sanitizePath(selectedBranch.name)
+            act.mutate({ label: `Checking out ${name}`, success: `✓ Checked out ${name}`, run: () => gitCheckout(local, selectedBranch.name), after: refreshCurrentBranch })
           }}
           onCancel={() => setDialog(null)}
         />
@@ -261,15 +207,10 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
           message={msg}
           destructive={true}
           requireText={sanitizePath(selectedBranch.name)}
-          onConfirm={async () => {
+          onConfirm={() => {
             setDialog(null)
-            try {
-              if (!await runWrite(`Deleting ${sanitizePath(selectedBranch.name)}`, () => deleteBranch(repo, selectedBranch.name))) return
-              showStatus(`Deleted ${sanitizePath(selectedBranch.name)}`)
-              refetch()
-            } catch (err) {
-              showStatus(`Failed: ${err.message}`, true)
-            }
+            const name = sanitizePath(selectedBranch.name)
+            act.mutate({ label: `Deleting ${name}`, success: `Deleted ${name}`, run: () => deleteBranch(repo, selectedBranch.name), after: refetch })
           }}
           onCancel={() => setDialog(null)}
         />
@@ -292,19 +233,17 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
               const name = newBranchName.trim()
               if (!name) { setDialog(null); return }
               if (/[\s~^:?*\[\\]|\.\.|\.$|^-|\.lock$/.test(name)) {
-                showStatus(`Invalid branch name: "${name}"`, true)
+                showNotice(`Invalid branch name: "${name}"`, true)
                 setDialog(null)
                 return
               }
               setDialog(null)
-              try {
-                if (!await runWrite(`Creating ${name}`, async () => {
-                  await createBranch(localDir, name)
-                })) return
-                showStatus(`✓ Created and checked out ${name}`)
-                refreshCurrentBranch()
-                refetch()
-              } catch (err) { showStatus(`Failed: ${err.message}`, true) }
+              act.mutate({
+                label: `Creating ${name}`,
+                success: `✓ Created and checked out ${name}`,
+                run: () => createBranch(localDir, name),
+                after: () => { refreshCurrentBranch(); refetch() },
+              })
             }}
           />
         </Box>
@@ -320,43 +259,24 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
       {prMarkersTruncated && (
         <Box paddingX={1}><Text color={t.ui.dim}>PR markers may be incomplete: only the first 5,000 open PRs were checked</Text></Box>
       )}
-      {statusMsg && (
-        <Box paddingX={1}>
-          <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{sanitizeRaw(statusMsg.msg)}{statusMsg.persist ? ' [any key]' : ''}</Text>
-        </Box>
-      )}
+      <MutationStatus status={status} />
       <Box flexDirection="column" flexGrow={1}>
-        {loading && items.length === 0 && (
-          <BranchListSkeleton count={visibleHeight} />
-        )}
-        {visibleBranches.map((branch, i) => {
-          const idx = scrollOffset + i
-          const isSelected = idx === cursor
-          const hasPR = openPRHeads.has(branch.name)
-          const isCurrent = currentBranch && branch.name === currentBranch
-          return (
+        <QueryBoundary
+          query={query}
+          skeleton={<BranchListSkeleton count={visibleHeight} />}
+          empty="No branches found."
+        >
+          {() => list.visibleItems.map((branch, i) => (
             <BranchRow
               key={branch.name}
               branch={branch}
-              isSelected={isSelected}
-              isCurrent={isCurrent}
-              hasPR={hasPR}
-              t={t}
+              isSelected={list.scrollOffset + i === list.cursor}
+              isCurrent={!!currentBranch && branch.name === currentBranch}
+              hasPR={openPRHeads.has(branch.name)}
               width={rowWidth}
             />
-          )
-        })}
-        {error && (
-          <Box paddingX={2} paddingY={1} flexDirection="column">
-            <FailureNotice failure={classifyGhFailure(error)} />
-            <Text color={t.ui.dim}>[{firstActionKey('list.refresh', 'r')}] retry</Text>
-          </Box>
-        )}
-        {!loading && !error && items.length === 0 && (
-          <Box paddingX={2} paddingY={1}>
-            <Text color={t.ui.muted}>No branches found. [{firstActionKey('list.refresh', 'r')}] refresh</Text>
-          </Box>
-        )}
+          ))}
+        </QueryBoundary>
       </Box>
     </Box>
   )
