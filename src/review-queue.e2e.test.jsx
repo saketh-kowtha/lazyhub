@@ -121,7 +121,9 @@ async function openQueue() {
 describe('review queue in the app (#177)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    executor.fetchReviewQueueEvidence.mockResolvedValue(queueResult(sampleItems()))
+    // Stamp the read "now": the queue reuses rows younger than QUEUE_TTL_MS, so a fixed
+    // fixture time made the reuse assertion fail once the wall clock passed it.
+    executor.fetchReviewQueueEvidence.mockResolvedValue({ ...queueResult(sampleItems()), fetched_at: new Date().toISOString() })
     executor.loadEvidenceDetail.mockImplementation(async (repo, number) => evidenceDetail(repo, number, `PR ${number}`))
     useGh.mockImplementation((fn, deps = []) => {
       if (fn === executor.listPRs || fn === executor.listIssues) return ghResult([])
