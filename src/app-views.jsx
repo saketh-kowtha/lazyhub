@@ -41,7 +41,7 @@ export function renderAppView(ctx) {
     goToDiff, goToQueueItem, goToEvidenceDetail, returnFromEvidence, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
-    showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
+    showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows, termRows,
     showRepoPicker, setShowRepoPicker, onSwitchRepo,
   } = ctx
   // Items opened from a dashboard section keep that section's repository (#493).
@@ -56,7 +56,7 @@ export function renderAppView(ctx) {
   const toList = (p) => { setPane(p); setSelectedItem(null); setView('list') }
   const frame = { appCtx, rows, compactFooter }
   // ─── Below the minimum size: one clear message instead of a broken frame ──
-  if (tooSmall) return <TooSmall cols={columns} rows={rows} minCols={minCols} minRows={minRows} />
+  if (tooSmall) return <TooSmall cols={columns} rows={rows} termRows={termRows} minCols={minCols} minRows={minRows} />
   // ─── AI assistant overlay ─────────────────────────────────────────────────
   if (showAI) {
     return (
