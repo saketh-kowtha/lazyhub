@@ -37,7 +37,7 @@ import { Box, Text, useStdout } from 'ink'
 import { useInput } from '../hooks/useSafeInput.js'
 import { format } from 'timeago.js'
 import { FuzzySearch } from './dialogs/FuzzySearch.jsx'
-import { AppContext } from '../context.js'
+import { useKeyScope } from '../keyscope.js'
 import { useTheme } from '../theme.js'
 import { sanitize, sanitizeRaw, resolvePath, formatLogin, padEndWidth } from '../utils.js'
 
@@ -80,7 +80,6 @@ const CustomPaneRow = memo(({ item, isSelected, t, stateColor }) => {
 
 export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
   const { t } = useTheme()
-  const { notifyDialog } = useContext(AppContext)
 
   const stateColor = useCallback((state) => {
     if (!state) return t.ui.muted
@@ -148,10 +147,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
     if (onPaneState) onPaneState({ loading, error, count: items.length })
   }, [loading, error, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    notifyDialog(!!dialog)
-    return () => notifyDialog(false)
-  }, [dialog, notifyDialog])
+  useKeyScope('dialog', !!dialog)
 
   const moveCursor = useCallback((delta) => {
     setCursor(prev => {

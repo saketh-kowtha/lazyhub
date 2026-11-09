@@ -6,7 +6,6 @@ import { KeyScopeProvider } from '../keyscope.js'
 import { ThemeProvider } from '../theme.js'
 
 const defaultAppContext = {
-  notifyDialog: () => {},
   openHelp: () => {},
   openAI: () => {},
   setMouseEnabled: () => {},

@@ -60,7 +60,7 @@ beforeEach(() => {
   currentState = null
 })
 afterEach(() => { cleanup(); rmSync(process.env.LAZYHUB_CACHE_DIR, { recursive: true, force: true }) })
-const mount = (n) => renderWithProviders(<Session n={n} />, { appContext: { notifyDialog: () => {} } })
+const mount = (n) => renderWithProviders(<Session n={n} />)
 
 describe('diff open order (#451, #509)', () => {
   it('requests only the file list first, shows the files at once, then loads patches and secondary data', async () => {

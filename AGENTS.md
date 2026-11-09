@@ -188,8 +188,9 @@ log: `docs/bugs/` and, up to B-91, `docs/ARCHITECTURE.md` §21). Check each one 
 7. **`useTheme()` hook, never `import { t }`** static constant, in components.
 8. **FuzzySearch always gets objects, never strings.**
 9. **GraphQL integer variables use `-F`; string variables use `-f`.**
-10. **`notifyDialog(true/false)`** called by any component that opens/closes a
-    dialog.
+10. **A component that opens a dialog or overlay claims its scope** with
+    `useKeyScope('dialog'|'overlay'|'input', open)` (focus stack, `src/focus`); there is no
+    `notifyDialog`.
 11. **`ErrorBoundary` wraps every view branch** in `app.jsx`.
 12. **Shared text cleanup** (`sanitize`, `sanitizeBlock`, `sanitizeRaw`, `sanitizeLog`,
     `sanitizeCode`, `sanitizePath`): every string sourced from GitHub goes through the
