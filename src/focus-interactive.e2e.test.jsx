@@ -59,7 +59,7 @@ vi.mock('./components/StatusBar.jsx', () => ({ StatusBar: () => null }))
 vi.mock('./executor.js', () => {
   const fns = [
     'listPRs', 'listIssues', 'getPR', 'getIssue', 'getIssueHeader', 'listIssueTimelinePage', 'getRepoInfo', 'getPRChecks', 'getBranchProtection',
-    'listLabels', 'listCollaborators', 'getCurrentBranch', 'listBranches', 'listRuns',
+    'listLabels', 'listCollaborators', 'getCurrentBranch', 'listBranches', 'listRuns', 'listPRFilesPage',
   ]
   return { ...Object.fromEntries(fns.map(name => [name, vi.fn()])), classifyGhFailure: () => ({ message: 'x' }) }
 })

@@ -58,7 +58,7 @@ vi.mock('./executor.js', async () => {
   const actual = await vi.importActual('./executor.js')
   const fns = [
     'listPRs', 'listIssues', 'getPR', 'getIssue', 'getIssueHeader', 'listIssueTimelinePage', 'getRepoInfo', 'getPRChecks', 'getBranchProtection',
-    'listLabels', 'listCollaborators', 'getCurrentBranch', 'listBranches', 'listRuns', 'fetchReviewQueueEvidence', 'loadEvidenceDetail',
+    'listLabels', 'listCollaborators', 'getCurrentBranch', 'listBranches', 'listRuns', 'fetchReviewQueueEvidence', 'loadEvidenceDetail', 'listPRFilesPage',
   ]
   return {
     ...Object.fromEntries(fns.map(name => [name, vi.fn()])), classifyGhFailure: () => ({ cause: 'x' }),
