@@ -15,13 +15,14 @@
  */
 
 import { logSwallowed } from './contain.js'
-import React, { useState, useRef, useCallback, useEffect } from 'react'
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { render, useApp } from 'ink'
 import { useFocusGlobals } from './focus/FocusProvider.js'
 import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
 import { terminalStdout } from './theme/terminal.js'
 import { KeyScopeProvider, useActiveScope, useKeyScope, isModalScope, isViewScope, liveScope } from './keyscope.js'
-import { armPrefix, disarmPrefix, getArmedPrefix } from './config/keymap.js'
+import { getArmedPrefix } from './config/keymap.js'
+import { useChords } from './shell/useChords.js'
 import { prefixContinuations, registeredPrefixes } from './ui/actions.js'
 import { WhichKey } from './ui/WhichKey.jsx'
 import { loadConfig, CONFIG_PATH } from './config.js'
@@ -117,11 +118,8 @@ export function App({ repo, onSwitchRepo }) {
   const [recentStatus, setRecentStatus] = useState([])
   const [showPalette, setShowPalette]   = useState(false)
   const [showRepoPicker, setShowRepoPicker] = useState(false) // palette: Switch repository (#466)
-  const [leaderActive, setLeaderActive] = useState(false)
-  const leaderTimerRef = useRef(null)
-  // Which-key popup for an armed prefix key such as `g` (#312)
-  const [prefixPopup, setPrefixPopup] = useState(null)
-  const prefixTimerRef = useRef(null)
+  // <Space> leader and the which-key prefix (`g`, #312): state and timers live in the shell.
+  const { leaderActive, armLeader, clearLeader, prefixPopup, armPrefixChord, clearPrefix } = useChords()
   const toastTimersRef = useRef(new Set())
 
   const addToast = useCallback(({ message, variant = 'info', durationMs }) => {
@@ -139,9 +137,6 @@ export function App({ repo, onSwitchRepo }) {
   useEffect(() => () => {
     for (const timer of toastTimersRef.current) clearTimeout(timer)
     toastTimersRef.current.clear()
-    clearTimeout(leaderTimerRef.current)
-    clearTimeout(prefixTimerRef.current)
-    disarmPrefix()
   }, [])
 
   // Unknown action ids in the user's keymaps used to land only in debug.log (#475).
@@ -164,7 +159,11 @@ export function App({ repo, onSwitchRepo }) {
   const openHelp     = useCallback(() => setShowHelp(true), [])
   const openAI       = useCallback(() => setShowAI(true), [])
 
-  const appCtx = { openHelp, openAI, setMouseEnabled, addToast, paneStateMap: paneStateMapRef.current }
+  // Memoised: every consumer of AppContext re-rendered on each App render (#488).
+  const appCtx = useMemo(
+    () => ({ openHelp, openAI, setMouseEnabled, addToast, paneStateMap: paneStateMapRef.current }),
+    [openHelp, openAI, addToast],
+  )
 
   const dumpDebugState = useCallback(() => {
     try {
@@ -272,9 +271,7 @@ export function App({ repo, onSwitchRepo }) {
     // Prefix keys (g): the next key picks a continuation from the registry.
     const armed = getArmedPrefix()
     if (armed) {
-      clearTimeout(prefixTimerRef.current)
-      disarmPrefix()
-      setPrefixPopup(null)
+      clearPrefix()
       if (key.escape) return
       const hit = prefixContinuations(armed.prefix, pane, view).find(c => c.global && c.key === input)
       if (hit?.actionId === 'go.queue') openQueue()
@@ -283,10 +280,7 @@ export function App({ repo, onSwitchRepo }) {
     }
     if (input && !key.ctrl && !key.meta && !showHelp && registeredPrefixes(_config.toml).has(input)) {
       const items = prefixContinuations(input, pane, view)
-      armPrefix(input, items.filter(c => c.global).map(c => c.key))
-      setPrefixPopup({ prefix: input, items })
-      clearTimeout(prefixTimerRef.current)
-      prefixTimerRef.current = setTimeout(() => { disarmPrefix(); setPrefixPopup(null) }, 1500)
+      armPrefixChord(input, items)
       return
     }
 
@@ -359,24 +353,18 @@ export function App({ repo, onSwitchRepo }) {
     if (matchesAction('app.leader', input, key, _config.toml)) {
       if (leaderActive) {
         // Double-space: open command palette
-        clearTimeout(leaderTimerRef.current)
-        setLeaderActive(false)
+        clearLeader()
         setShowPalette(true)
         setAppMode('COMMAND')
         return
       }
-      setLeaderActive(true)
-      clearTimeout(leaderTimerRef.current)
-      leaderTimerRef.current = setTimeout(() => {
-        setLeaderActive(false)
-      }, 1500)
+      armLeader()
       return
     }
 
     // Leader chords (only when leaderActive)
     if (leaderActive) {
-      clearTimeout(leaderTimerRef.current)
-      setLeaderActive(false)
+      clearLeader()
       if (matchesAction('app.leader-theme', input, key, _config.toml)) { setShowPalette(true); setAppMode('COMMAND'); return }
       if (matchesAction('app.leader-ai', input, key, _config.toml)) { setShowAI(true); return }
       if (matchesAction('app.leader-help', input, key, _config.toml)) { setShowHelp(true); return }
@@ -484,7 +472,7 @@ export function App({ repo, onSwitchRepo }) {
         <WhichKey
           prefix={prefixPopup.prefix}
           items={prefixPopup.items}
-          onClose={() => { clearTimeout(prefixTimerRef.current); disarmPrefix(); setPrefixPopup(null) }}
+          onClose={clearPrefix}
         />
       )}
     </>
