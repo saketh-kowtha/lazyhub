@@ -131,7 +131,7 @@ describe('responsive shell: breakpoints', () => {
     const lines = frame(view).split('\n')
     expect(lines.at(-1)).toMatch(/\? help/)
     expect(lines.at(-2)).toMatch(/^─+$/)
-    expect(lines).toHaveLength(24)
+    expect(lines).toHaveLength(23) // one row short of the terminal so Ink never clears it (#597)
   })
 })
 
