@@ -65,7 +65,7 @@ export function App({ repo, onSwitchRepo }) {
   const pendingInputPerf = useRef([])
   const activeScope = useActiveScope()
   const layout = useLayout()
-  const { cols: columns, rows, sidebarWidth, previewWidth, borderStyle, compactFooter, showSidebar, showPreview, listHeight, tooSmall, minCols, minRows } = layout
+  const { cols: columns, rows, sidebarWidth, previewWidth, borderStyle, compactFooter, showSidebar, showPreview, listHeight, tooSmall, minCols, minRows, termRows } = layout
 
   // ─── Mouse support ────────────────────────────────────────────────────────
   const [mouseEnabled, setMouseEnabled] = useState(
@@ -462,7 +462,7 @@ export function App({ repo, onSwitchRepo }) {
     goToDiff, goToQueueItem, goToEvidenceDetail, returnFromEvidence, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
-    showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
+    showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows, termRows,
     showRepoPicker, setShowRepoPicker, onSwitchRepo,
   })
 

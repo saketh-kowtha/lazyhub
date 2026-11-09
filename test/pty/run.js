@@ -502,7 +502,8 @@ async function runFailedLogFlow() {
     // Smart Enter (#314): a PR with failing CI opens the failed check's log directly and says why.
     // Resend Enter if the first one lands before the list has focus (slow CI runners).
     await sendUntil(() => term.write('\r'), () => screen.text(), /Failure excerpt/, 'smart Enter opens the failure excerpt of the failed check', { tries: 3, eachMs: 4000 })
-    assert.match(screen.text(), /AssertionError/)
+    // The excerpt frame can paint before the log text loads; wait for it (slow CI runners).
+    await waitUntil(showing(/AssertionError/), 'the failed-step log text is shown')
     term.write('\x1b')
     await waitUntil(showing(/Failure excerpt/, false), 'Esc closes the smart-Enter log')
     await waitUntil(showing(/Fixture body/), 'Esc from the smart-Enter log lands on PR detail')
@@ -510,7 +511,7 @@ async function runFailedLogFlow() {
     term.write('c')
     await waitUntil(showing(/\[Ctrl\+R\] re-run/), 'checks mode')
     await sendUntil(() => term.write('\r'), () => screen.text(), /Failure excerpt/, 'the failure excerpt opens first', { tries: 3, eachMs: 4000 })
-    assert.match(screen.text(), /AssertionError/)
+    await waitUntil(showing(/AssertionError/), 'the failed-step log text is shown first')
     assert.doesNotMatch(screen.text(), /RUN {2}v3\.2\.4/, 'the full log is not shown yet')
     term.write('f')
     await waitUntil(showing(/RUN {2}v3\.2\.4/), 'f shows the full log')
@@ -714,6 +715,7 @@ await runKeyOwnershipFlow()
 await runFocusReturnFlow({ cols: 100, rows: 40 })
 await runFocusReturnFlow({ cols: 80, rows: 24 })
 await runFocusReturnFlow({ cols: 60, rows: 16, single: true })
+await import('./clear.js') // CLEAR gate (#597): runs its 50-key session on import
 
 if (spawnSync('tmux', ['-V']).status === 0) {
   await runLazyhubFlow({ useTmux: true })

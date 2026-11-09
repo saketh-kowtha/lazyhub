@@ -58,3 +58,11 @@ describe('computeLayout breakpoints', () => {
     expect(at(180, 50).showAIPanel).toBe(true)
   })
 })
+
+describe('computeLayout root height (#597)', () => {
+  it.each([[80, 24], [120, 40], [200, 50], [40, 10], [20, 5]])('%ix%i: the full-height root is one row shorter than the terminal', (cols, termRows) => {
+    const l = at(cols, termRows)
+    expect(l.rows).toBe(termRows - 1)
+    expect(l.termRows).toBe(termRows)
+  })
+})
