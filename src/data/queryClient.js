@@ -18,16 +18,33 @@
  * revalidate) and mounted queries revalidate in the background, so no pane needs a
  * "remember to refetch" call. `setQueryData` seeds an entry (a list row seeding its detail).
  *
+ * Lazy updates (V1, #597): see docs/bugs/597-v1-query-semantics.md.
+ *  - a refetch is merged into the cached value by stable id (`replaceEqualDeep`): unchanged rows
+ *    keep their identity and an identical revalidate changes no state, so it draws no frame;
+ *  - hook state is one object updated by one `setState` per event. Ink 4 renders through a
+ *    legacy React root (no auto-batching outside event handlers), so separate setStates in an
+ *    async callback would each commit and paint an intermediate frame;
+ *  - cache notifications (data watchers, invalidation revalidations) are coalesced on a microtask;
+ *  - a body mode is derived (`renderMode.js`): `loading` is kept for unmigrated views and means
+ *    `isLoading` (no data yet and a request in flight); `isFetching` is any request in flight;
+ *  - freshness classes (`freshness.js`) and a lazy, timer-free GC of entries nobody watches.
+ *
  * Out of scope here (R4): prefetch.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { onWrite } from './invalidation.js'
+import { replaceEqualDeep } from './structuralShare.js'
+import { deriveRenderMode, SKELETON_DELAY_MS } from './renderMode.js'
+import { GC_MIN_UNUSED_MS } from './freshness.js'
+import { createNotifier } from './notifier.js'
 import { approxBytes, createLruCache, cacheIdentity, peekCache, readCacheAsync, writeCache } from '../cache.js'
 
 export const QUERY_MAX_ENTRIES = 200
 export const QUERY_MAX_BYTES = 64 * 1024 * 1024
 export const DEFAULT_TTL = 30_000
+export { FRESHNESS } from './freshness.js'
+export { replaceEqualDeep }
 
 /**
  * Serialise a structured key. Arrays and plain values only; the same parts always give
@@ -49,51 +66,112 @@ export function identityKey(...parts) {
 }
 
 /**
- * Create an isolated client (tests build their own; the app uses `queryClient`).
- * @param {{ maxEntries?: number, maxBytes?: number }} [options]
+ * The structured parts of a key string (always `keyString` output), without the
+ * infinite-query marker.
+ * @param {string} keyStr
  */
-export function createQueryClient({ maxEntries = QUERY_MAX_ENTRIES, maxBytes = QUERY_MAX_BYTES } = {}) {
+function partsOf(keyStr) {
+  const parts = JSON.parse(keyStr)
+  return parts[0] === 'infinite' ? parts.slice(1) : parts
+}
+const sameValue = (/** @type {any} */ a, /** @type {any} */ b) =>
+  typeof a === 'string' && typeof b === 'string' ? a.toLowerCase() === b.toLowerCase() : JSON.stringify(a) === JSON.stringify(b)
+
+/**
+ * Create an isolated client (tests build their own; the app uses `queryClient`).
+ * @param {{ maxEntries?: number, maxBytes?: number, gcMs?: number }} [options] `gcMs`: how long an entry
+ *   nobody watches is kept before the lazy sweep may drop it (the LRU caps may evict earlier)
+ */
+export function createQueryClient({ maxEntries = QUERY_MAX_ENTRIES, maxBytes = QUERY_MAX_BYTES, gcMs = GC_MIN_UNUSED_MS } = {}) {
   const makeCache = () => createLruCache(maxEntries, { maxBytes, sizeOf: entry => approxBytes(entry.data) })
   let cache = makeCache()
   /** @type {Map<string, { controller: AbortController, refs: number, settled: boolean, promise: Promise<any> }>} */
   const inflight = new Map()
   /** @type {Set<{ keyStr: string, run: () => void }>} */
   const subscribers = new Set()
+  /** @type {Map<string, Set<() => void>>} data watchers (mounted hooks) by key string */
+  const watchers = new Map()
+  /** @type {Map<string, number>} key string -> last time it was read, written or released by a watcher */
+  const lastUsed = new Map()
+  const notifier = createNotifier(watchers, subscribers)
+  let lastSweep = Date.now()
 
-  /**
-   * The structured parts of a key string (always `keyString` output), without the
-   * infinite-query marker.
-   * @param {string} keyStr
-   */
-  function partsOf(keyStr) {
-    const parts = JSON.parse(keyStr)
-    return parts[0] === 'infinite' ? parts.slice(1) : parts
+  /** @param {string} keyStr */
+  function notifyData(keyStr) {
+    lastUsed.set(keyStr, Date.now())
+    notifier.data(keyStr)
   }
-  const sameValue = (/** @type {any} */ a, /** @type {any} */ b) =>
-    typeof a === 'string' && typeof b === 'string' ? a.toLowerCase() === b.toLowerCase() : JSON.stringify(a) === JSON.stringify(b)
+  /**
+   * Drop entries nobody watches that have been unused for `gcMs`. Run lazily from writes (no
+   * timer, nothing keeps the process alive); the LRU caps bound memory in between.
+   * @param {number} [now]
+   */
+  function sweep(now = Date.now()) {
+    lastSweep = now
+    let dropped = 0
+    for (const keyStr of cache.keys()) {
+      if (watchers.get(keyStr)?.size || inflight.has(keyStr)) continue
+      if (now - (lastUsed.get(keyStr) ?? 0) < gcMs) continue
+      cache.delete(keyStr)
+      lastUsed.delete(keyStr)
+      dropped++
+    }
+    for (const keyStr of lastUsed.keys()) if (!cache.has(keyStr)) lastUsed.delete(keyStr)
+    return dropped
+  }
+  const maybeSweep = () => { if (Date.now() - lastSweep >= Math.min(gcMs, 60_000)) sweep() }
 
   const client = {
     /**
      * Cached `{ data, timestamp }` for a key string, or undefined.
      * @param {string} keyStr
      */
-    get(keyStr) { return cache.get(keyStr) },
+    get(keyStr) { const entry = cache.get(keyStr); if (entry) lastUsed.set(keyStr, Date.now()); return entry },
     /**
-     * Store data for a key string (timestamp defaults to now).
+     * Store data for a key string (timestamp defaults to now) and tell its watchers (coalesced).
      * @param {string} keyStr
      * @param {any} data
      * @param {number} [timestamp]
      */
-    set(keyStr, data, timestamp = Date.now()) { cache.set(keyStr, { data, timestamp }) },
+    set(keyStr, data, timestamp = Date.now()) {
+      cache.set(keyStr, { data, timestamp })
+      notifyData(keyStr)
+      maybeSweep()
+    },
     /** @param {string} keyStr */
-    delete(keyStr) { return cache.delete(keyStr) },
+    delete(keyStr) { lastUsed.delete(keyStr); return cache.delete(keyStr) },
     /** Drop every cached entry and forget every in-flight fetch (tests). */
     reset() {
       for (const e of inflight.values()) e.controller.abort()
       inflight.clear()
+      notifier.clear()
+      lastUsed.clear()
       cache = makeCache()
     },
     stats: () => ({ size: cache.size, bytes: cache.bytes, inflight: inflight.size }),
+    /**
+     * Run the unused-entry sweep now (tests); returns how many entries it dropped.
+     * @param {number} [now]
+     */
+    gc: now => sweep(now),
+    /**
+     * Watch the data of a key: `fn` runs (once per microtask, however many writes) after the cache
+     * entry changed. A watched entry is never swept. Returns the unwatch function.
+     * @param {string} keyStr
+     * @param {() => void} fn
+     * @returns {() => void}
+     */
+    watch(keyStr, fn) {
+      let set = watchers.get(keyStr)
+      if (!set) watchers.set(keyStr, (set = new Set()))
+      set.add(fn)
+      return () => {
+        const cur = watchers.get(keyStr)
+        cur?.delete(fn)
+        if (cur && cur.size === 0) watchers.delete(keyStr)
+        lastUsed.set(keyStr, Date.now())
+      }
+    },
     /** @param {string} keyStr */
     isInflight(keyStr) { return inflight.has(keyStr) },
 
@@ -119,8 +197,12 @@ export function createQueryClient({ maxEntries = QUERY_MAX_ENTRIES, maxBytes = Q
           try {
             const result = await fetcher({ signal: controller.signal })
             if (inflight.get(keyStr) === e && !controller.signal.aborted) {
-              if (store) cache.set(keyStr, { data: result, timestamp: Date.now() })
-              if (persist) writeCache(persist.key, result, persist.meta || {})
+              // Merge into the cached value: unchanged rows keep their identity (V1, #597).
+              const prev = store ? cache.get(keyStr) : undefined
+              const shared = prev ? replaceEqualDeep(prev.data, result) : result
+              if (store) { cache.set(keyStr, { data: shared, timestamp: Date.now() }); notifyData(keyStr); maybeSweep() }
+              if (persist) writeCache(persist.key, shared, persist.meta || {})
+              return shared
             }
             return result
           } finally {
@@ -171,7 +253,28 @@ export function createQueryClient({ maxEntries = QUERY_MAX_ENTRIES, maxBytes = Q
     setQueryData(key, data, { timestamp = Date.now(), ifAbsent = false } = {}) {
       const keyStr = keyString(key)
       if (ifAbsent && cache.get(keyStr)) return false
-      cache.set(keyStr, { data, timestamp })
+      const prev = cache.get(keyStr)
+      cache.set(keyStr, { data: prev ? replaceEqualDeep(prev.data, data) : data, timestamp })
+      notifyData(keyStr)
+      maybeSweep()
+      return true
+    },
+
+    /**
+     * Patch cached data in place (an optimistic update): `updater(prev)` returns the new value,
+     * merged by identity with the old one. The entry keeps its timestamp, mounted queries on the key
+     * follow on the next microtask, and nothing is fetched. No-op (false) when nothing is cached.
+     * @param {unknown[]} key
+     * @param {(prev: any) => any} updater
+     */
+    updateQueryData(key, updater) {
+      const keyStr = keyString(key)
+      const prev = cache.get(keyStr)
+      if (!prev) return false
+      const next = replaceEqualDeep(prev.data, updater(prev.data))
+      if (next === prev.data) return true
+      cache.set(keyStr, { data: next, timestamp: prev.timestamp })
+      notifyData(keyStr)
       return true
     },
 
@@ -203,7 +306,9 @@ export function createQueryClient({ maxEntries = QUERY_MAX_ENTRIES, maxBytes = Q
         e.controller.abort()
         inflight.delete(keyStr)
       }
-      for (const sub of [...subscribers]) if (matches(sub.keyStr)) sub.run()
+      // Revalidations are coalesced on a microtask: one run per mounted query however many
+      // invalidations arrive in the same tick (V1, #597).
+      for (const sub of subscribers) if (matches(sub.keyStr)) notifier.run(sub)
       return marked
     },
 
@@ -227,37 +332,90 @@ export const queryClient = createQueryClient()
 // Every finished write marks its repository's cached reads stale and revalidates what is mounted.
 onWrite(({ repo }) => { queryClient.invalidateRepo(repo) })
 
+
+/**
+ * One state object, one `setState` per event. Ink 4 renders through a legacy React root, so
+ * `setState` calls made from an async callback are not batched: separate setters for data,
+ * loading, error and stale would commit (and paint) an intermediate frame each. `patch` merges
+ * fields in a single update and returns the same state object when nothing changed, so an
+ * identical result re-renders nothing.
+ * @template {Record<string, any>} S
+ * @param {() => S} init
+ * @returns {[S, (p: Partial<S> | ((prev: S) => Partial<S>)) => void, (next: S) => void]}
+ */
+function useBag(init) {
+  const [state, set] = useState(init)
+  const patch = useCallback(p => set(prev => {
+    const next = typeof p === 'function' ? p(prev) : p
+    for (const k in next) if (!Object.is(prev[k], next[k])) return { ...prev, ...next }
+    return prev
+  }), [])
+  return [state, patch, set]
+}
+
+/**
+ * True once `pending` has held for SKELETON_DELAY_MS under this key. Under the delay a view keeps
+ * its previous frame; the timer is cleared the moment the request settles.
+ * @param {boolean} pending
+ * @param {string} keyStr
+ */
+function useSkeletonDue(pending, keyStr) {
+  const [dueKey, setDueKey] = useState(/** @type {string | null} */ (null))
+  const dueRef = useRef(/** @type {string | null} */ (null)) // a setter call, even a no-op one, can cost a render
+  useEffect(() => {
+    if (!pending) {
+      if (dueRef.current !== null) { dueRef.current = null; setDueKey(null) }
+      return undefined
+    }
+    const timer = setTimeout(() => { dueRef.current = keyStr; setDueKey(keyStr) }, SKELETON_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [pending, keyStr])
+  return pending && dueKey === keyStr
+}
+
 /**
  * What a query shows while it (re)fetches: cached data as stale; an invalidation
- * revalidating a view that already has data keeps it (stale, no loading frame); else loading.
+ * revalidating a view that already has data keeps it (stale); else nothing new.
  * @param {{ force: boolean, background: boolean, hasData: boolean, cached?: { data: any }, diskCached?: { payload: any } | null }} state
- * @returns {{ data?: any, loading?: boolean, stale: boolean }}
+ * @returns {{ data?: any, stale: boolean }}
  */
 function startView({ force, background, hasData, cached, diskCached }) {
-  if (!force && (cached || diskCached)) return { data: cached ? cached.data : diskCached?.payload, loading: false, stale: true }
+  if (!force && (cached || diskCached)) return { data: cached ? cached.data : diskCached?.payload, stale: true }
   if (background && hasData) return { stale: true }
-  return { loading: true, stale: false }
+  return { stale: false }
 }
 
 /**
  * useQuery(key, fetcher, options)
  *
+ * Returned fields:
+ *  - `data`, `error`, `refetch`, `mutate`, `isStale` as before;
+ *  - `isLoading`: no data yet and a request in flight. `loading` is the same value, kept for
+ *    views that have not moved to `QueryBoundary` (it no longer goes true for a refetch of data
+ *    already on screen, so a manual refresh or revalidate cannot blank a list);
+ *  - `isFetching`: any request in flight, a background revalidate included (feed the header cell);
+ *  - `mode`: the derived body mode (`skeleton | pending | data | empty | error`, see renderMode.js);
+ *    `skeletonDue` is the 150 ms delay having elapsed, for `QueryBoundary`;
+ *  - `isPlaceholderData`: the rows belong to the previous key (`keepPreviousData` only).
+ *
  * @template T
  * @param {unknown[]} key structured key
  * @param {(ctx: { signal: AbortSignal }) => Promise<T>} fetcher
  * @param {object} [options]
- * @param {number}  [options.ttl=30000] ms a cached value counts as fresh
+ * @param {number}  [options.ttl=30000] ms a cached value counts as fresh (`staleTime` is an alias; Infinity: fresh while the key is unchanged)
+ * @param {number}  [options.staleTime] alias of `ttl`
  * @param {boolean} [options.enabled=true] false defers the fetch until it flips true
+ * @param {boolean} [options.keepPreviousData=false] on a key change with nothing cached, keep the previous key's rows
+ *   (flagged `isPlaceholderData`) until the new data lands, instead of dropping to no data
  * @param {{ key: string, meta?: object }} [options.persist] disk-cache entry for this query
  * @param {(result: T) => void} [options.onSuccess] called when the current request succeeds
  * @param {(error: unknown) => void} [options.onError] called when the current request fails
  * @param {() => void} [options.onCleanup] called when the owner unmounts or its key changes
  * @param {ReturnType<typeof createQueryClient>} [options.client]
- * @returns {{ data: T | null, loading: boolean, error: any, refetch: () => void,
- *   mutate: (updater: (prev: T | null) => T, opts?: { revalidate?: boolean }) => void, isStale: boolean }}
  */
 export function useQuery(key, fetcher, options = {}) {
-  const { ttl = DEFAULT_TTL, enabled = true, persist = null, onSuccess, onError, onCleanup, client = queryClient } = options
+  const { persist = null, onSuccess, onError, onCleanup, enabled = true, keepPreviousData = false, client = queryClient } = options
+  const ttl = options.staleTime ?? options.ttl ?? DEFAULT_TTL
   const keyStr = keyString(key)
 
   // Stale-while-revalidate (#454): seed from the memory cache, then the disk-cache mirror
@@ -268,37 +426,40 @@ export function useQuery(key, fetcher, options = {}) {
     const disk = persist ? peekCache(persist.key) : null
     return disk ? { data: disk.payload, stale: true } : null
   }
-  const [seed] = useState(readSeed)
-  const [dataState, setData] = useState(seed ? seed.data : null)
-  const [loadingState, setLoading] = useState(!seed)
-  const [errorState, setError] = useState(null)
-  const [isStaleState, setIsStale] = useState(Boolean(seed?.stale))
-  const [seededKey, setSeededKey] = useState(keyStr)
+  /** @param {any} prev */
+  const build = prev => {
+    const seed = readSeed()
+    const keep = keepPreviousData && !seed && prev?.data != null
+    return {
+      keyStr,
+      data: seed ? seed.data : keep ? prev.data : null,
+      error: /** @type {any} */ (null),
+      isStale: seed ? seed.stale : keep,
+      fetching: Boolean(enabled) && (!seed || seed.stale),
+      isPlaceholder: keep,
+    }
+  }
+  const [state, patch, replace] = useBag(() => build(null))
   // Derived from the key during render (#548): React discards this pass and re-renders at
   // once, but the values returned below already belong to the new key, so no render ever
   // pairs the new key with the previous key's data.
-  let data = dataState, loading = loadingState, error = errorState, isStale = isStaleState
-  if (seededKey !== keyStr) {
-    const next = readSeed()
-    setSeededKey(keyStr)
-    setData(next ? next.data : null)
-    setLoading(!next)
-    setIsStale(Boolean(next?.stale))
-    setError(null)
-    data = next ? next.data : null
-    loading = !next
-    isStale = Boolean(next?.stale)
-    error = null
-  }
+  let cur = state
+  if (state.keyStr !== keyStr) { cur = build(state); replace(cur) }
+  const { data, error, isStale, fetching, isPlaceholder } = cur
+  const isLoading = data == null && fetching
+  const skeletonDue = useSkeletonDue(isLoading, keyStr)
 
   const mountedRef = useRef(true)
   const tokenRef = useRef(0) // request token: only the latest request may touch state (#434)
   const releaseRef = useRef(null)
+  const ownFetchRef = useRef(false) // this hook's own fetch is applying the result: ignore watcher echoes
   const latest = useRef({})
   latest.current = { fetcher, persist, onSuccess, onError, onCleanup }
 
-  const hasDataRef = useRef(false)
-  hasDataRef.current = data != null
+  const dataRef = useRef(data)
+  dataRef.current = data
+  const placeholderRef = useRef(isPlaceholder)
+  placeholderRef.current = isPlaceholder
   const enabledRef = useRef(enabled)
   enabledRef.current = enabled
 
@@ -317,54 +478,45 @@ export function useQuery(key, fetcher, options = {}) {
     const diskCached = fresh || !pDisk ? null : peekCache(pDisk.key)
 
     if (fresh) {
-      setData(cached.data)
-      setLoading(false)
-      setError(null)
-      setIsStale(false)
+      ownFetchRef.current = false
+      patch({ data: cached.data, error: null, isStale: false, fetching: false, isPlaceholder: false })
       return
     }
-    const view = startView({ force, background, hasData: hasDataRef.current, cached, diskCached })
-    if (view.data !== undefined) setData(view.data)
-    if (view.loading !== undefined) setLoading(view.loading)
-    setIsStale(view.stale)
-    setError(null)
+    const view = startView({ force, background, hasData: dataRef.current != null && !placeholderRef.current, cached, diskCached })
+    patch({ ...(view.data !== undefined ? { data: view.data, isPlaceholder: false } : {}), isStale: view.stale, error: null, fetching: true })
 
     // Cold start (no memory/mirror hit): read the file asynchronously, concurrently with
     // the network call, and show it as stale data if it lands first.
     let settled = false
-    let lateDisk = false
     if (!force && !cached && !diskCached && pDisk) {
       readCacheAsync(pDisk.key).then(disk => {
         if (!disk || settled || !isCurrent()) return
-        lateDisk = true
-        setData(disk.payload)
-        setLoading(false)
-        setIsStale(true)
+        patch({ data: disk.payload, isStale: true, isPlaceholder: false })
       })
     }
 
     const call = client.fetch(keyStr, ctx => latest.current.fetcher(ctx), { force, persist: pDisk })
     releaseRef.current = call.release
+    ownFetchRef.current = true
     try {
       const result = await call.promise
       settled = true
       if (!isCurrent()) return
-      setData(result)
-      setError(null)
-      setIsStale(false)
-      latest.current.onSuccess?.(result)
+      ownFetchRef.current = false
+      // Merge by identity: an identical result is the very same object, so nothing re-renders.
+      const shared = placeholderRef.current ? result : replaceEqualDeep(dataRef.current, result)
+      patch({ data: shared, error: null, isStale: false, fetching: false, isPlaceholder: false })
+      latest.current.onSuccess?.(shared)
     } catch (err) {
       settled = true
       if (!isCurrent()) return
-      setError(err)
-      const keep = Boolean(diskCached || cached || lateDisk) || (background && hasDataRef.current)
-      if (!keep) setData(null)
-      setIsStale(keep)
+      ownFetchRef.current = false
+      // Data already on screen stays under the failure (a placeholder belongs to another key: dropped).
+      const keep = dataRef.current != null && !placeholderRef.current
+      patch({ error: err, data: keep ? dataRef.current : null, isStale: keep, fetching: false, isPlaceholder: false })
       latest.current.onError?.(err)
-    } finally {
-      if (isCurrent()) setLoading(false)
     }
-  }, [keyStr, ttl, client])
+  }, [keyStr, ttl, client, patch])
 
   const refetch = useCallback(() => { fetchData(true) }, [fetchData])
 
@@ -374,37 +526,51 @@ export function useQuery(key, fetcher, options = {}) {
     if (mountedRef.current && enabledRef.current) fetchData(false, true)
   }), [client, keyStr, fetchData])
 
+  // The cache entry changed under us (an optimistic patch, a seed, another view's fetch):
+  // follow it, once per microtask however many writes there were.
+  useEffect(() => client.watch(keyStr, () => {
+    if (!mountedRef.current || ownFetchRef.current) return
+    const entry = client.get(keyStr)
+    if (!entry || (entry.data === dataRef.current && !placeholderRef.current)) return
+    patch({ data: entry.data, isStale: Date.now() - entry.timestamp >= ttl, isPlaceholder: false })
+  }), [client, keyStr, ttl, patch])
+
   /**
    * Optimistically update cached data without refetching. `updater` receives the current
-   * data and returns the new data; `{ revalidate: true }` refetches afterwards.
+   * data and returns the new data (merged by identity with it); `{ revalidate: true }`
+   * refetches afterwards.
    */
   const mutate = useCallback((updater, opts = {}) => {
-    setData(prev => {
-      const next = updater(prev)
-      const cached = client.get(keyStr)
-      if (cached) client.set(keyStr, next, cached.timestamp) // keep cache in sync so refetch doesn't undo it
-      const p = latest.current.persist
-      if (p) writeCache(p.key, next, p.meta || {})
-      return next
-    })
+    const next = replaceEqualDeep(dataRef.current, updater(dataRef.current))
+    dataRef.current = next
+    patch({ data: next, isPlaceholder: false })
+    const cached = client.get(keyStr)
+    if (cached) client.set(keyStr, next, cached.timestamp) // keep cache in sync so refetch doesn't undo it
+    const p = latest.current.persist
+    if (p) writeCache(p.key, next, p.meta || {})
     if (opts.revalidate) setTimeout(() => fetchData(true), 0)
-  }, [keyStr, client, fetchData])
+  }, [keyStr, client, fetchData, patch])
 
   useEffect(() => {
     mountedRef.current = true
     const cleanupFor = latest.current.onCleanup // the owner of THIS key, not of the next render's
     if (enabled) fetchData(false)
-    else setLoading(false) // a disabled hook is not loading; also un-sticks a true->false flip
+    else patch({ fetching: false }) // a disabled hook is not loading; also un-sticks a true->false flip
     return () => {
       tokenRef.current++ // eslint-disable-line react-hooks/exhaustive-deps
       mountedRef.current = false
+      ownFetchRef.current = false // eslint-disable-line react-hooks/exhaustive-deps
       releaseRef.current?.()
       releaseRef.current = null
       cleanupFor?.()
     }
   }, [keyStr, enabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { data, loading, error, refetch, mutate, isStale }
+  const mode = deriveRenderMode({ data, error, isLoading, skeletonDue })
+  return {
+    data, loading: isLoading, isLoading, isFetching: fetching, error, refetch, mutate, isStale,
+    mode, skeletonDue, isPlaceholderData: isPlaceholder,
+  }
 }
 
 const defaultItems = page => (Array.isArray(page) ? page : Array.isArray(page?.items) ? page.items : [])
@@ -416,6 +582,9 @@ const defaultItems = page => (Array.isArray(page) ? page : Array.isArray(page?.i
  * cursor for the page after it, or null/undefined at the end. Pages are kept by cursor:
  * `fetchNextPage()` appends the next page and never refetches an earlier one, and
  * `refetch()` (the `r` key) refreshes page 1 only, leaving the later pages in place.
+ * A refreshed page 1 is merged into the old one by identity (an identical page changes
+ * nothing). Also returns `isLoading`/`isFetching`/`mode`/`skeletonDue` as `useQuery` does;
+ * `loading` is `isLoading`.
  *
  * @template P
  * @param {unknown[]} key
@@ -426,17 +595,15 @@ const defaultItems = page => (Array.isArray(page) ? page : Array.isArray(page?.i
  * @param {(page: P) => number | null | undefined} [options.getTotal] total across all pages, when known
  * @param {(page: P) => boolean} [options.getCapped] true when the source stopped at a cap
  * @param {number} [options.ttl]
+ * @param {number} [options.staleTime] alias of `ttl`
  * @param {boolean} [options.enabled]
  * @param {ReturnType<typeof createQueryClient>} [options.client]
- * @returns {{ pages: P[], items: unknown[], loaded: number, total: number | null, hasMore: boolean,
- *   capped: boolean, loading: boolean, loadingMore: boolean, error: any, isStale: boolean,
- *   fetchNextPage: () => void, refetch: () => void }}
  */
 export function useInfiniteQuery(key, fetchPage, options) {
   const {
-    getNextCursor, getItems = defaultItems, getTotal, getCapped,
-    ttl = DEFAULT_TTL, enabled = true, client = queryClient,
+    getNextCursor, getItems = defaultItems, getTotal, getCapped, enabled = true, client = queryClient,
   } = options
+  const ttl = options.staleTime ?? options.ttl ?? DEFAULT_TTL
   const keyStr = keyString(['infinite', ...key])
 
   // Cache entry: { pages: [{ cursor, data }] }. Each page is fetched under its own
@@ -445,28 +612,23 @@ export function useInfiniteQuery(key, fetchPage, options) {
     const mem = client.get(keyStr)
     return mem ? { pages: mem.data, stale: Date.now() - mem.timestamp >= ttl } : null
   }
-  const [seed] = useState(readSeed)
-  const [pagesState, setPages] = useState(seed ? seed.pages : [])
-  const [loadingState, setLoading] = useState(!seed)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [errorState, setError] = useState(null)
-  const [staleState, setStale] = useState(Boolean(seed?.stale))
-  const [seededKey, setSeededKey] = useState(keyStr)
-  let pages = pagesState, loading = loadingState, error = errorState, isStale = staleState, more = loadingMore
-  if (seededKey !== keyStr) {
-    const next = readSeed()
-    setSeededKey(keyStr)
-    setPages(next ? next.pages : [])
-    setLoading(!next)
-    setLoadingMore(false)
-    setStale(Boolean(next?.stale))
-    setError(null)
-    pages = next ? next.pages : []
-    loading = !next
-    more = false
-    isStale = Boolean(next?.stale)
-    error = null
+  const build = () => {
+    const seed = readSeed()
+    return {
+      keyStr,
+      pages: /** @type {Array<{ cursor: any, data: any }>} */ (seed ? seed.pages : []),
+      error: /** @type {any} */ (null),
+      isStale: Boolean(seed?.stale),
+      fetching: Boolean(enabled) && (!seed || seed.stale),
+      loadingMore: false,
+    }
   }
+  const [state, patch, replace] = useBag(build)
+  let cur = state
+  if (state.keyStr !== keyStr) { cur = build(); replace(cur) }
+  const { pages, error, isStale, fetching, loadingMore: more } = cur
+  const isLoading = pages.length === 0 && fetching
+  const skeletonDue = useSkeletonDue(isLoading, keyStr)
 
   const mountedRef = useRef(true)
   const tokenRef = useRef(0) // bumped on key change/unmount: drops every in-flight result of the old key
@@ -478,11 +640,11 @@ export function useInfiniteQuery(key, fetchPage, options) {
   const latest = useRef({})
   latest.current = { fetchPage, getNextCursor }
 
-  const commit = useCallback(next => {
+  const commit = useCallback((next, extra = {}) => {
     pagesRef.current = next
-    setPages(next)
+    patch({ pages: next, ...extra })
     client.set(keyStr, next)
-  }, [client, keyStr])
+  }, [client, keyStr, patch])
 
   const request = useCallback((cursor, force) => {
     const call = client.fetch(keyString([...JSON.parse(keyStr), { cursor: cursor ?? null }]),
@@ -499,28 +661,31 @@ export function useInfiniteQuery(key, fetchPage, options) {
     const isCurrent = () => mountedRef.current && tokenRef.current === epoch && firstRef.current === token
     const cached = client.get(keyStr)
     if (!force && cached && Date.now() - cached.timestamp < ttl) {
-      setPages(cached.data); setLoading(false); setError(null); setStale(false)
+      patch({ pages: cached.data, fetching: false, error: null, isStale: false })
       return
     }
-    if (pagesRef.current.length > 0) setStale(true)
-    else setLoading(true)
-    setError(null)
+    patch({ isStale: pagesRef.current.length > 0, fetching: true, error: null })
     const call = request(null, force)
     try {
       const data = await call.promise
       if (!isCurrent()) return
-      const rest = pagesRef.current.slice(1)
-      commit([{ cursor: null, data }, ...rest])
-      setStale(false)
+      const old = pagesRef.current[0]
+      const shared = old ? replaceEqualDeep(old.data, data) : data
+      if (old && shared === old.data) {
+        // Nothing changed: keep the very same pages array (no re-render of the list), refresh the clock.
+        client.set(keyStr, pagesRef.current)
+        patch({ isStale: false, fetching: false })
+      } else {
+        commit([{ cursor: null, data: shared }, ...pagesRef.current.slice(1)], { isStale: false, fetching: false })
+      }
     } catch (err) {
       if (!isCurrent()) return
-      setError(err)
+      patch({ error: err, fetching: false })
     } finally {
       call.release()
       releases.current.delete(call.release)
-      if (isCurrent()) setLoading(false)
     }
-  }, [client, keyStr, ttl, request, commit])
+  }, [client, keyStr, ttl, request, commit, patch])
 
   const fetchNextPage = useCallback(async () => {
     const current = pagesRef.current
@@ -530,8 +695,7 @@ export function useInfiniteQuery(key, fetchPage, options) {
     const epoch = tokenRef.current
     const count = current.length
     moreRef.current = true
-    setLoadingMore(true)
-    setError(null)
+    patch({ loadingMore: true, error: null })
     const call = request(cursor, false)
     try {
       const data = await call.promise
@@ -539,13 +703,13 @@ export function useInfiniteQuery(key, fetchPage, options) {
       if (!mountedRef.current || tokenRef.current !== epoch || pagesRef.current.length !== count) return
       commit([...pagesRef.current, { cursor, data }])
     } catch (err) {
-      if (mountedRef.current && tokenRef.current === epoch) setError(err)
+      if (mountedRef.current && tokenRef.current === epoch) patch({ error: err })
     } finally {
       call.release()
       releases.current.delete(call.release)
-      if (tokenRef.current === epoch) { moreRef.current = false; if (mountedRef.current) setLoadingMore(false) }
+      if (tokenRef.current === epoch) { moreRef.current = false; if (mountedRef.current) patch({ loadingMore: false }) }
     }
-  }, [request, commit])
+  }, [request, commit, patch])
 
   const refetch = useCallback(() => { loadFirst(true) }, [loadFirst])
 
@@ -555,12 +719,14 @@ export function useInfiniteQuery(key, fetchPage, options) {
   useEffect(() => client.subscribe(keyStr, () => {
     if (mountedRef.current && enabledRef.current) loadFirst(false)
   }), [client, keyStr, loadFirst])
+  // Mounted lists are watched, so the sweep never drops an entry that is on screen.
+  useEffect(() => client.watch(keyStr, () => {}), [client, keyStr])
 
   useEffect(() => {
     mountedRef.current = true
     moreRef.current = false
     if (enabled) loadFirst(false)
-    else setLoading(false)
+    else patch({ fetching: false })
     return () => {
       tokenRef.current++ // eslint-disable-line react-hooks/exhaustive-deps
       mountedRef.current = false
@@ -569,14 +735,18 @@ export function useInfiniteQuery(key, fetchPage, options) {
     }
   }, [keyStr, enabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Memoised on the pages array so an unchanged list hands back the very same `items`.
+  const items = useMemo(() => pages.flatMap(p => getItems(p.data)), [pages]) // eslint-disable-line react-hooks/exhaustive-deps
+  const pageData = useMemo(() => pages.map(p => p.data), [pages])
   const lastPage = pages.length > 0 ? pages[pages.length - 1].data : null
-  const items = pages.flatMap(p => getItems(p.data))
   const total = lastPage && getTotal ? (getTotal(lastPage) ?? null) : null
   const hasMore = lastPage != null && getNextCursor(lastPage) != null
   const capped = Boolean(getCapped && pages.some(p => getCapped(p.data)))
+  const mode = deriveRenderMode({ data: pages.length > 0 ? items : null, error, isLoading, skeletonDue })
 
   return {
-    pages: pages.map(p => p.data), items, loaded: items.length, total, hasMore, capped,
-    loading, loadingMore: more, error, isStale, fetchNextPage, refetch,
+    pages: pageData, items, loaded: items.length, total, hasMore, capped,
+    loading: isLoading, isLoading, isFetching: fetching, loadingMore: more, error, isStale, mode, skeletonDue,
+    fetchNextPage, refetch,
   }
 }
