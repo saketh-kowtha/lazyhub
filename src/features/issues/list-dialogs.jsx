@@ -4,16 +4,14 @@
 
 import React from 'react'
 import { Box } from 'ink'
-import { closeIssue, createIssue } from '../../executor.js'
 import { sanitize } from '../../utils.js'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { IssueLabelDialog, IssueAssigneeDialog } from './dialogs.jsx'
 
-export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor, setScrollOffset, onClose, showStatus, runWrite, refetch, refreshIssue = undefined }) {
-  // Patch the one changed row when the list supports it; otherwise refetch (D16).
-  const changed = (number, opts) => (refreshIssue ? refreshIssue(number, opts) : refetch())
+export function IssueListDialogs({ dialog, repo, items, selectedIssue, onJump, onClose, showStatus, closeIssue, createIssue, onChanged }) {
+  // The list owns the writes (useMutation); a dialog only confirms and hands over (D16: one row is patched).
   if (dialog === 'fuzzy') {
     const fuzzyItems = items.map(issue => ({ ...issue, authorLogin: issue.author?.login || '' }))
     return (
@@ -23,7 +21,7 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
           searchFields={['title', 'number', 'authorLogin']}
           onSubmit={(item) => {
             const idx = items.findIndex(i => i.number === item.number)
-            if (idx !== -1) { setCursor(idx); setScrollOffset(Math.max(0, idx - 2)) }
+            if (idx !== -1) onJump(idx)
             onClose()
           }}
           onCancel={onClose}
@@ -38,16 +36,9 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
         <ConfirmDialog
           message={`Close issue #${selectedIssue.number}: ${sanitize(selectedIssue.title)}?`}
           destructive={true}
-          onConfirm={async () => {
+          onConfirm={() => {
             onClose()
-            try {
-              const { ran } = await runWrite(`Closing #${selectedIssue.number}`, () => closeIssue(repo, selectedIssue.number))
-              if (!ran) return
-              showStatus(`Closed #${selectedIssue.number}`)
-              changed(selectedIssue.number)
-            } catch (err) {
-              showStatus(`Failed: ${err.message}`, true)
-            }
+            closeIssue(selectedIssue.number)
           }}
           onCancel={onClose}
         />
@@ -65,18 +56,9 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
             { name: 'body', label: 'Body', type: 'multiline' },
           ]}
           validate={(values) => ((values.title || '').trim() ? null : 'a title is required')}
-          onSubmit={async (values) => {
+          onSubmit={(values) => {
             onClose()
-            try {
-              const { ran, result: created } = await runWrite('Creating issue', () => createIssue(repo, /** @type {any} */ ({ title: values.title, body: values.body })))
-              if (!ran) return
-              showStatus('Issue created')
-              const number = Number(String(created || '').match(/\/issues\/(\d+)/)?.[1])
-              if (number) changed(number, { added: true })
-              else refetch()
-            } catch (err) {
-              showStatus(`Failed: ${err.message}`, true)
-            }
+            createIssue(values)
           }}
           onCancel={onClose}
         />
@@ -89,7 +71,7 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
       <IssueLabelDialog
         repo={repo} issue={selectedIssue}
         onError={(err) => showStatus(`✗ Updating labels failed: ${sanitize(err.message)}`, true)}
-        onClose={() => { onClose(); changed(selectedIssue.number) }}
+        onClose={() => { onClose(); onChanged(selectedIssue.number) }}
       />
     )
   }
@@ -99,7 +81,7 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, setCursor
       <IssueAssigneeDialog
         repo={repo} issue={selectedIssue}
         onError={(err) => showStatus(`✗ Updating assignees failed: ${sanitize(err.message)}`, true)}
-        onClose={() => { onClose(); changed(selectedIssue.number) }}
+        onClose={() => { onClose(); onChanged(selectedIssue.number) }}
       />
     )
   }

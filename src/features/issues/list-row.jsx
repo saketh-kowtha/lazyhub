@@ -3,9 +3,10 @@
  */
 
 import React, { memo } from 'react'
-import { Box, Text } from 'ink'
+import { Text } from 'ink'
 import { format } from 'timeago.js'
 import { sanitize, safeHex, formatLogin } from '../../utils.js'
+import { ListRow } from '../../ui/ListRow.jsx'
 import { fitCell, cellWidth, planRow } from '../../ui/row-layout.js'
 
 // Colour budget (#566): the state is the glyph (● open, ○ closed) and the focused row takes the one
@@ -38,8 +39,7 @@ export const IssueRow = memo(({ issue, isSelected, t, width = 78 }) => {
   })
 
   return (
-    <Box paddingX={1} height={1} backgroundColor={isSelected ? t.ui.headerBg : undefined}>
-      <Text color={isSelected ? t.ui.selected : undefined}>{isSelected ? '▎' : ' '}</Text>
+    <ListRow selected={isSelected}>
       <IssueStateBadge issue={issue} t={t} isSelected={isSelected} />
       <Text> </Text>
       <Text color={quiet} bold>{fitCell(`#${issue.number}`, NUM_COLS)}</Text>
@@ -50,6 +50,6 @@ export const IssueRow = memo(({ issue, isSelected, t, width = 78 }) => {
       {show.labels && extraLabels > 0 && <Text color={quiet}> +{extraLabels}</Text>}
       {show.author && <Text color={quiet}> {authorLogin}</Text>}
       {show.age && <Text color={quiet}> {fitCell(format(issue.updatedAt), AGE_COLS)}</Text>}
-    </Box>
+    </ListRow>
   )
 })
