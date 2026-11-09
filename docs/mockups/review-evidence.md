@@ -19,9 +19,9 @@ existing dialog views; rationale in the PR body.
    required        ✗  2 required: 1 passing, 1 failing, 0 pending. A required check that has not reported is not visible here
  Review
    decision           APPROVED
-   approvals       ◔  1 approval, 1 given on an earlier head (stale), 0 requesting changes
+   approvals       ◐  1 approval, 1 given on an earlier head (stale), 0 requesting changes
    requested of you   via a team (core); GitHub does not say which of your teams matched
-   threads         ◔  1 unresolved of 1
+   threads         ◐  1 unresolved of 1
  Merge
    mergeable       ✓  MERGEABLE
  Files

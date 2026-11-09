@@ -30,7 +30,7 @@ const requiredPage = (nodes, { total = nodes.length, head = 'head2aaaa' } = {}) 
   data: { repository: { pullRequest: { headRefOid: head, commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { totalCount: total, pageInfo: { hasNextPage: total > nodes.length }, nodes } } } }] } } } },
 })
 
-/** Route a runGh call by the query it carries. */
+// Route a runGh call by the query it carries.
 function route({ record = { data: { viewer: { login: 'octocat' }, repository: { pullRequest: prNode() } } }, files = filesPage(['src/a.js']), required = requiredPage([]) } = {}) {
   runGh.mockImplementation(async args => {
     const q = args.find(a => String(a).startsWith('query='))

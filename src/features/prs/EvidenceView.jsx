@@ -25,7 +25,8 @@ import { Spinner } from '../../components/Spinner.jsx'
 import { sanitize, sanitizeRaw } from '../../utils.js'
 
 // One cache per process so reopening the view within the TTL is instant and still flagged stale after it.
-const cache = createEvidenceCache()
+let cache = null
+const evidenceCache = () => (cache ||= createEvidenceCache())
 
 /**
  * @param {object} props
@@ -49,7 +50,7 @@ export function EvidenceView({ pr, repo, onClose, onOpenDiff, returnTo, onReturn
 
   useEffect(() => {
     let live = true
-    loadEvidenceDetail(repo, pr.number, { cache, force: force.current, inspectedHead: inspected.current })
+    loadEvidenceDetail(repo, pr.number, { cache: evidenceCache(), force: force.current, inspectedHead: inspected.current })
       .then(detail => {
         if (!live) return
         // The first head read is the revision the user inspects; later refreshes are compared with it.
@@ -74,7 +75,7 @@ export function EvidenceView({ pr, repo, onClose, onOpenDiff, returnTo, onReturn
   const at = Math.min(cursor, Math.max(0, lines.length - 1))
   const selected = lines[at]
   const toneColor = { ok: t.ci.pass, bad: t.ci.fail, warn: t.ci.pending, muted: t.ui.muted, plain: undefined }
-  const glyph = { ok: '✓', bad: '✗', warn: '◔', muted: ' ', plain: ' ' }
+  const glyph = { ok: '✓', bad: '✗', warn: '◐', muted: ' ', plain: ' ' }
 
   const goBack = () => {
     if (returnTo && onReturn) onReturn(returnTo)

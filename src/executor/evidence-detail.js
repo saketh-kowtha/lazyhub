@@ -155,7 +155,10 @@ export function returnTarget({ view = 'detail', position = 0, filter = '', key =
   return Object.freeze({ view: String(view), position: Math.max(0, Math.trunc(Number(position)) || 0), filter: String(filter), key: String(key) })
 }
 
-/** @param {string} repo @param {number} number */
+/**
+ * @param {string} repo
+ * @param {number} number
+ */
 function validate(repo, number) {
   const [owner, name] = String(repo || '').split('/')
   const n = Number(number)
@@ -267,8 +270,9 @@ export async function loadEvidenceDetail(repo, number, { cache, force = false, i
   }
   const files = settle(filesR, 'files')
   const required = settle(requiredR, 'required_checks')
-  const currentHead = recordR.value.context.head.value
-  const record = { ...recordR.value, facts: { ...recordR.value.facts, required_checks: required } }
+  const base = /** @type {any} */ (recordR.value)
+  const currentHead = base.context.head.value
+  const record = { ...base, facts: { ...base.facts, required_checks: required } }
   return {
     schema_version: EVIDENCE_DETAIL_VERSION,
     record,
@@ -280,99 +284,139 @@ export async function loadEvidenceDetail(repo, number, { cache, force = false, i
   }
 }
 
-/** @param {any} f a fact */
-const isUnknown = f => f?.value === UNKNOWN
+// Row builders. Pure: `detail` in, rows out. All GitHub text is cleaned here (prose with
+// sanitize(), paths with sanitizePath()); the view draws row.value as-is.
 
-/** @param {number} n @param {string} one @param {string} many */
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
+/** @typedef {{section: string, label: string, value: string, tone: 'ok'|'bad'|'warn'|'muted'|'plain', source?: string, fetched_at?: string, untrusted?: boolean}} Row */
 
+const isUnknown = (/** @type {any} */ f) => f?.value === UNKNOWN
+const plural = (/** @type {number} */ n, /** @type {string} */ one, /** @type {string} */ many) => `${n} ${n === 1 ? one : many}`
 const short = (/** @type {any} */ sha) => (sha && sha !== UNKNOWN ? sanitize(String(sha)).slice(0, 7) : UNKNOWN)
-/** Enum-like values come from GitHub too; they are cleaned before they reach a row. */
+// Enum-like values come from GitHub too; they are cleaned before they reach a row.
 const word = (/** @type {any} */ v) => sanitize(String(v))
+const errorFor = (/** @type {any} */ detail, /** @type {string} */ part) => detail.errors.find((/** @type {any} */ e) => e.part === part)?.message || 'not read'
+
+/** Collects rows; `unknown()` writes the explicit unknown row. */
+function rowBuilder() {
+  /** @type {Row[]} */
+  const rows = []
+  const row = (/** @type {string} */ section, /** @type {string} */ label, /** @type {string} */ value, /** @type {Row['tone']} */ tone = 'plain', /** @type {any} */ f = null, /** @type {boolean} */ untrusted = false) =>
+    rows.push({ section, label, value, tone, ...(f ? { source: f.source, fetched_at: f.fetched_at } : {}), ...(untrusted ? { untrusted: true } : {}) })
+  const unknown = (/** @type {string} */ section, /** @type {string} */ label, /** @type {any} */ f, /** @type {string} */ why = '') =>
+    row(section, label, `unknown${why ? ` (${sanitizeRaw(why)})` : ''}`, 'warn', f)
+  return { rows, row, unknown }
+}
+
+/** @typedef {ReturnType<typeof rowBuilder>} Builder */
+
+// Revision and freshness first: everything below is true of this head at this time.
+function revisionRows(/** @type {Builder} */ b, /** @type {any} */ detail, /** @type {number} */ now) {
+  const rec = detail.record
+  const head = detail.head
+  const fr = freshness(rec.fetched_at, now)
+  b.row('Revision', 'head', head.current ? `${short(head.current)} on ${word(rec.context.base.value)}` : 'unknown', head.current ? 'plain' : 'warn', rec.context.head)
+  if (head.state === 'stale') b.row('Revision', 'changed', `head moved since you opened this: ${short(head.inspected)} -> ${short(head.current)}. Read the evidence again; earlier reading no longer applies`, 'bad')
+  else if (head.state === 'unknown') b.row('Revision', 'inspected', 'cannot compare: a head is unknown', 'warn')
+  else b.row('Revision', 'inspected', 'same head as when you opened this', 'ok')
+  const age = fr.age_ms == null ? 'time unknown' : `${Math.round(fr.age_ms / 1000)}s ago`
+  b.row('Revision', 'read', `${age}${fr.stale ? ', STALE: refresh before relying on it' : ''}`, fr.stale ? 'warn' : 'plain', { source: rec.identity.account === UNKNOWN ? 'github.graphql' : `github.graphql as ${sanitize(rec.identity.account)}`, fetched_at: rec.fetched_at })
+}
+
+const BAD_REASONS = new Set(['ci_failing', 'merge_conflict', 'changes_requested', 'stale_approval'])
+
+function attentionRows(/** @type {Builder} */ b, /** @type {any} */ rec) {
+  for (const a of rec.attention) b.row('Attention', word(a.code), `from ${word(a.fact)}${a.detail ? `: ${sanitize(a.detail)}` : ''}`, BAD_REASONS.has(a.code) ? 'bad' : 'warn', { source: a.source, fetched_at: rec.fetched_at })
+  if (rec.attention.length === 0) b.row('Attention', 'none', 'no attention reason from the facts below', 'muted')
+}
+
+function checkRows(/** @type {Builder} */ b, /** @type {any} */ detail) {
+  const facts = detail.record.facts
+  const checks = facts.checks.value
+  if (isUnknown(facts.checks) || checks.state === UNKNOWN) b.unknown('Checks', 'checks', facts.checks)
+  else {
+    const lower = checks.truncated ? ' (lower bound: more checks exist than were read)' : ''
+    b.row('Checks', 'rollup', `${word(checks.state)}: ${checks.passed} passed, ${checks.failed} failed, ${checks.pending} pending of ${checks.total}${lower}`, checks.failed > 0 ? 'bad' : checks.pending > 0 ? 'warn' : 'ok', facts.checks)
+  }
+  const req = detail.required_checks
+  if (isUnknown(req)) { b.unknown('Checks', 'required', req, errorFor(detail, 'required_checks')); return }
+  const v = req.value
+  const earlier = v.head !== UNKNOWN && detail.head.current && v.head !== detail.head.current
+  const note = `${v.truncated ? '; only the first checks were read' : ''}${earlier ? '; read at an earlier head' : ''}`
+  b.row('Checks', 'required', `${v.required} required: ${v.passing} passing, ${v.failing} failing, ${v.pending} pending. A required check that has not reported is not visible here${note}`, v.failing > 0 ? 'bad' : v.pending > 0 || earlier ? 'warn' : 'ok', req)
+}
+
+function reviewRows(/** @type {Builder} */ b, /** @type {any} */ facts) {
+  const reviews = facts.reviews.value
+  const decision = facts.review_decision.value
+  b.row('Review', 'decision', word(decision), decision === 'APPROVED' ? 'ok' : decision === UNKNOWN ? 'warn' : 'plain', facts.review_decision)
+  if (isUnknown(facts.reviews) || reviews.approvals === UNKNOWN) b.unknown('Review', 'reviews', facts.reviews)
+  else {
+    const stale = reviews.staleApprovals > 0 ? `, ${reviews.staleApprovals} given on an earlier head (stale)` : ''
+    b.row('Review', 'approvals', `${plural(reviews.approvals, 'approval', 'approvals')}${stale}, ${reviews.changesRequested} requesting changes${reviews.truncated ? ' (lower bound: more reviews exist)' : ''}`, reviews.staleApprovals > 0 || reviews.changesRequested > 0 ? 'warn' : 'ok', facts.reviews)
+    if (reviews.mine !== undefined) b.row('Review', 'you', reviews.mine === UNKNOWN ? 'unknown' : word(reviews.mine).toLowerCase().replace('_', ' '), 'plain', facts.reviews)
+  }
+  const requests = facts.review_requests.value
+  if (isUnknown(facts.review_requests) || requests.via === UNKNOWN) b.unknown('Review', 'requested of you', facts.review_requests)
+  else b.row('Review', 'requested of you', requests.via === 'team_unverified' ? `via a team (${requests.teams.map((/** @type {string} */ s) => sanitize(s)).join(', ')}); GitHub does not say which of your teams matched` : word(requests.via), 'plain', facts.review_requests)
+  const threads = facts.unresolved_threads.value
+  if (isUnknown(facts.unresolved_threads) || threads.unresolved === UNKNOWN) b.unknown('Review', 'threads', facts.unresolved_threads)
+  else b.row('Review', 'threads', `${threads.unresolved} unresolved${threads.truncated ? ' (lower bound)' : ''} of ${threads.total}`, threads.unresolved > 0 ? 'warn' : 'ok', facts.unresolved_threads)
+}
+
+function mergeRows(/** @type {Builder} */ b, /** @type {any} */ facts) {
+  const m = facts.mergeable.value
+  b.row('Merge', 'mergeable', word(m), m === 'MERGEABLE' ? 'ok' : m === 'CONFLICTING' ? 'bad' : 'warn', facts.mergeable)
+  b.row('Merge', 'draft', facts.is_draft.value === UNKNOWN ? 'unknown' : word(facts.is_draft.value), facts.is_draft.value === true ? 'warn' : 'plain', facts.is_draft)
+}
+
+function observationValue(/** @type {{code: string, paths: string[]}} */ o, /** @type {any} */ v) {
+  if (o.paths.length === 0) return `none of the ${v.returned} files read${v.truncated ? ' (more files exist)' : ''}`
+  const shown = o.paths.slice(0, 3).map(sanitizePath).join(', ')
+  return `${shown}${o.paths.length > 3 ? ` and ${o.paths.length - 3} more` : ''}${v.truncated ? ' (among the files read)' : ''}`
+}
+
+function fileRows(/** @type {Builder} */ b, /** @type {any} */ detail) {
+  const files = detail.files
+  if (isUnknown(files)) { b.unknown('Files', 'files', files, errorFor(detail, 'files')); return }
+  const v = files.value
+  const byKind = /** @type {Record<string, number>} */ ({})
+  for (const f of v.items) byKind[f.kind] = (byKind[f.kind] || 0) + 1
+  const adds = v.items.reduce((/** @type {number} */ s, /** @type {any} */ f) => s + f.additions, 0)
+  const dels = v.items.reduce((/** @type {number} */ s, /** @type {any} */ f) => s + f.deletions, 0)
+  b.row('Files', 'changed', `${plural(v.total, 'file', 'files')}${v.truncated ? `; the first ${v.returned} are listed, the rest are in the diff (d)` : ''}  +${adds} -${dels}`, v.truncated ? 'warn' : 'plain', files)
+  b.row('Files', 'by path', Object.entries(byKind).map(([k, c]) => `${word(k)} ${c}`).join(', ') || 'none', 'plain', files)
+  if (v.head !== UNKNOWN && detail.head.current && v.head !== detail.head.current) b.row('Files', 'note', 'files were read at an earlier head than the record above; refresh', 'warn', files)
+  for (const o of fileObservations(v.items)) b.row('Files', word(o.code), observationValue(o, v), o.code === 'no_test_files_changed' ? 'muted' : 'warn', files)
+  for (const f of v.items) b.row('File', word(f.change_type).toLowerCase(), `+${f.additions} -${f.deletions}  ${sanitizePath(f.path)}`, 'plain')
+}
+
+// Author-written prose last and labelled: never an input to anything above.
+function untrustedRows(/** @type {Builder} */ b, /** @type {any} */ rec) {
+  const section = 'Written by the author (unverified)'
+  const u = rec.untrusted
+  b.row(section, 'actor', `${sanitize(rec.actor.login)} (${sanitize(rec.actor.github_type)}); attribution unverified`, 'muted', null, true)
+  b.row(section, 'title', `${sanitize(u.title)}${u.title_truncated ? ' ...(cut)' : ''}`, 'plain', null, true)
+  b.row(section, 'description', u.body === UNKNOWN ? 'unknown' : `${sanitize(String(u.body).split('\n')[0] || '(empty)')}${u.body_truncated ? ' ...(cut)' : ''}`, 'plain', null, true)
+  for (const t of u.threads) b.row(section, `${sanitizePath(t.path)} ${sanitize(t.author)}`, `${sanitize(t.excerpt)}${t.truncated ? ' ...(cut)' : ''}`, 'plain', null, true)
+}
 
 /**
- * Flat, ordered, display-ready rows. Pure: `detail` in, rows out. All GitHub text is cleaned here
- * (prose with sanitize(), paths with sanitizePath()); the view draws row.value as-is.
+ * Flat, ordered, display-ready rows (see the header for the Row shape).
  *
  * @param {any} detail from loadEvidenceDetail()
  * @param {{now?: number}} [opts]
- * @returns {{section: string, label: string, value: string, tone: 'ok'|'bad'|'warn'|'muted'|'plain', source?: string, fetched_at?: string, untrusted?: boolean}[]}
+ * @returns {Row[]}
  */
 export function evidenceRows(detail, { now = Date.now() } = {}) {
   const rec = detail.record
-  const facts = rec.facts
-  /** @type {any[]} */
-  const rows = []
-  const row = (/** @type {string} */ section, /** @type {string} */ label, /** @type {string} */ value, /** @type {string} */ tone = 'plain', /** @type {any} */ f = null, /** @type {boolean} */ untrusted = false) =>
-    rows.push({ section, label, value, tone, ...(f ? { source: f.source, fetched_at: f.fetched_at } : {}), ...(untrusted ? { untrusted: true } : {}) })
-  const unknownRow = (/** @type {string} */ section, /** @type {string} */ label, /** @type {any} */ f, /** @type {string} */ why = '') => row(section, label, `unknown${why ? ` (${sanitizeRaw(why)})` : ''}`, 'warn', f)
-
-  // Revision and freshness first: everything below is true of this head at this time.
-  const fr = freshness(rec.fetched_at, now)
-  const head = detail.head
-  row('Revision', 'head', head.current ? `${short(head.current)} on ${word(rec.context.base.value)}` : 'unknown', head.current ? 'plain' : 'warn', rec.context.head)
-  if (head.state === 'stale') row('Revision', 'changed', `head moved since you opened this: ${short(head.inspected)} -> ${short(head.current)}. Read the evidence again; earlier reading no longer applies`, 'bad')
-  else if (head.state === 'unknown') row('Revision', 'inspected', 'cannot compare: a head is unknown', 'warn')
-  else row('Revision', 'inspected', 'same head as when you opened this', 'ok')
-  row('Revision', 'read', `${fr.age_ms == null ? 'time unknown' : `${Math.round(fr.age_ms / 1000)}s ago`}${fr.stale ? ', STALE: refresh before relying on it' : ''}`, fr.stale ? 'warn' : 'plain', { source: rec.identity.account === UNKNOWN ? 'github.graphql' : `github.graphql as ${sanitize(rec.identity.account)}`, fetched_at: rec.fetched_at })
-
-  for (const a of rec.attention) row('Attention', a.code, `from ${a.fact}${a.detail ? `: ${a.detail}` : ''}`, ['ci_failing', 'merge_conflict', 'changes_requested', 'stale_approval'].includes(a.code) ? 'bad' : 'warn', { source: a.source, fetched_at: rec.fetched_at })
-  if (rec.attention.length === 0) row('Attention', 'none', 'no attention reason from the facts below', 'muted')
-
-  const checks = facts.checks.value
-  if (isUnknown(facts.checks) || checks.state === UNKNOWN) unknownRow('Checks', 'checks', facts.checks)
-  else {
-    const lower = checks.truncated ? ' (lower bound: more checks exist than were read)' : ''
-    row('Checks', 'rollup', `${word(checks.state)}: ${checks.passed} passed, ${checks.failed} failed, ${checks.pending} pending of ${checks.total}${lower}`, checks.failed > 0 ? 'bad' : checks.pending > 0 ? 'warn' : 'ok', facts.checks)
-  }
-  const req = detail.required_checks
-  if (isUnknown(req)) unknownRow('Checks', 'required', req, detail.errors.find((/** @type {any} */ e) => e.part === 'required_checks')?.message || 'not read')
-  else {
-    const v = req.value
-    const stale = v.head !== UNKNOWN && head.current && v.head !== head.current
-    row('Checks', 'required', `${v.required} required: ${v.passing} passing, ${v.failing} failing, ${v.pending} pending. A required check that has not reported is not visible here${v.truncated ? '; only the first checks were read' : ''}${stale ? '; read at an earlier head' : ''}`, v.failing > 0 ? 'bad' : v.pending > 0 || stale ? 'warn' : 'ok', req)
-  }
-
-  const reviews = facts.reviews.value
-  row('Review', 'decision', word(facts.review_decision.value), facts.review_decision.value === 'APPROVED' ? 'ok' : facts.review_decision.value === UNKNOWN ? 'warn' : 'plain', facts.review_decision)
-  if (isUnknown(facts.reviews) || reviews.approvals === UNKNOWN) unknownRow('Review', 'reviews', facts.reviews)
-  else {
-    row('Review', 'approvals', `${plural(reviews.approvals, 'approval', 'approvals')}${reviews.staleApprovals > 0 ? `, ${reviews.staleApprovals} given on an earlier head (stale)` : ''}, ${reviews.changesRequested} requesting changes${reviews.truncated ? ' (lower bound: more reviews exist)' : ''}`, reviews.staleApprovals > 0 || reviews.changesRequested > 0 ? 'warn' : 'ok', facts.reviews)
-    if (reviews.mine !== undefined) row('Review', 'you', reviews.mine === UNKNOWN ? 'unknown' : word(reviews.mine).toLowerCase().replace('_', ' '), 'plain', facts.reviews)
-  }
-  const requests = facts.review_requests.value
-  if (isUnknown(facts.review_requests) || requests.via === UNKNOWN) unknownRow('Review', 'requested of you', facts.review_requests)
-  else row('Review', 'requested of you', requests.via === 'team_unverified' ? `via a team (${requests.teams.map((/** @type {string} */ s) => sanitize(s)).join(', ')}); GitHub does not say which of your teams matched` : requests.via, 'plain', facts.review_requests)
-  const threads = facts.unresolved_threads.value
-  if (isUnknown(facts.unresolved_threads) || threads.unresolved === UNKNOWN) unknownRow('Review', 'threads', facts.unresolved_threads)
-  else row('Review', 'threads', `${threads.unresolved} unresolved${threads.truncated ? ' (lower bound)' : ''} of ${threads.total}`, threads.unresolved > 0 ? 'warn' : 'ok', facts.unresolved_threads)
-
-  row('Merge', 'mergeable', word(facts.mergeable.value), facts.mergeable.value === 'MERGEABLE' ? 'ok' : facts.mergeable.value === 'CONFLICTING' ? 'bad' : 'warn', facts.mergeable)
-  row('Merge', 'draft', facts.is_draft.value === UNKNOWN ? 'unknown' : word(facts.is_draft.value), facts.is_draft.value === true ? 'warn' : 'plain', facts.is_draft)
-
-  const files = detail.files
-  if (isUnknown(files)) unknownRow('Files', 'files', files, detail.errors.find((/** @type {any} */ e) => e.part === 'files')?.message || 'not read')
-  else {
-    const v = files.value
-    const byKind = /** @type {Record<string, number>} */ ({})
-    for (const f of v.items) byKind[f.kind] = (byKind[f.kind] || 0) + 1
-    const adds = v.items.reduce((/** @type {number} */ s, /** @type {any} */ f) => s + f.additions, 0)
-    const dels = v.items.reduce((/** @type {number} */ s, /** @type {any} */ f) => s + f.deletions, 0)
-    row('Files', 'changed', `${plural(v.total, 'file', 'files')}${v.truncated ? `; the first ${v.returned} are listed, the rest are in the diff (d)` : ''}  +${adds} -${dels}`, v.truncated ? 'warn' : 'plain', files)
-    row('Files', 'by path', Object.entries(byKind).map(([k, c]) => `${word(k)} ${c}`).join(', ') || 'none', 'plain', files)
-    if (v.head !== UNKNOWN && head.current && v.head !== head.current) row('Files', 'note', 'files were read at an earlier head than the record above; refresh', 'warn', files)
-    for (const o of fileObservations(v.items)) {
-      row('Files', o.code, o.paths.length ? `${o.paths.slice(0, 3).map(sanitizePath).join(', ')}${o.paths.length > 3 ? ` and ${o.paths.length - 3} more` : ''}${v.truncated ? ' (among the files read)' : ''}` : `none of the ${v.returned} files read${v.truncated ? ' (more files exist)' : ''}`, o.code === 'no_test_files_changed' ? 'muted' : 'warn', files)
-    }
-    for (const f of v.items) row('File', word(f.change_type).toLowerCase(), `+${f.additions} -${f.deletions}  ${sanitizePath(f.path)}`, 'plain')
-  }
-
-  // Author-written prose last and labelled: never an input to anything above.
-  row('Written by the author (unverified)', 'actor', `${sanitize(rec.actor.login)} (${sanitize(rec.actor.github_type)}); attribution unverified`, 'muted', null, true)
-  row('Written by the author (unverified)', 'title', `${sanitize(rec.untrusted.title)}${rec.untrusted.title_truncated ? ' ...(cut)' : ''}`, 'plain', null, true)
-  const body = rec.untrusted.body
-  row('Written by the author (unverified)', 'description', body === UNKNOWN ? 'unknown' : `${sanitize(String(body).split('\n')[0] || '(empty)')}${rec.untrusted.body_truncated ? ' ...(cut)' : ''}`, 'plain', null, true)
-  for (const t of rec.untrusted.threads) row('Written by the author (unverified)', `${sanitizePath(t.path)} ${sanitize(t.author)}`, `${sanitize(t.excerpt)}${t.truncated ? ' ...(cut)' : ''}`, 'plain', null, true)
-  for (const e of detail.errors) row('Not read', word(e.part), sanitizeRaw(e.message), 'warn')
-  return rows
+  const b = rowBuilder()
+  revisionRows(b, detail, now)
+  attentionRows(b, rec)
+  checkRows(b, detail)
+  reviewRows(b, rec.facts)
+  mergeRows(b, rec.facts)
+  fileRows(b, detail)
+  untrustedRows(b, rec)
+  for (const e of detail.errors) b.row('Not read', word(e.part), sanitizeRaw(e.message), 'warn')
+  return b.rows
 }
