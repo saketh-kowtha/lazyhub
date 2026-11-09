@@ -31,7 +31,7 @@
  *   Supports action value: "open" (same as o), "copy" (same as y)
  */
 
-import React, { useState, useCallback, useEffect, useContext, useRef, memo } from 'react'
+import React, { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react'
 import { openUrl, copyToClipboard, runConfiguredCommand } from '../services/platform.js'
 import { Box, Text, useStdout } from 'ink'
 import { useInput } from '../hooks/useSafeInput.js'
@@ -39,6 +39,8 @@ import { format } from 'timeago.js'
 import { FuzzySearch } from './dialogs/FuzzySearch.jsx'
 import { useKeyScope } from '../keyscope.js'
 import { useTheme } from '../theme.js'
+import { useQuery } from '../data/queryClient.js'
+import { FRESHNESS } from '../data/freshness.js'
 import { sanitize, sanitizeRaw, resolvePath, formatLogin, padEndWidth } from '../utils.js'
 
 // Resolve {repo}, {owner}, {name} placeholders in a command string and return as array for execa
@@ -93,9 +95,6 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
   const { stdout } = useStdout()
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
 
-  const [items, setItems]         = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState(null)
   const [cursor, setCursor]       = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog]       = useState(null)
@@ -108,44 +107,51 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
     setTimeout(() => setStatusMsg(null), 3000)
   }
 
+  // The command result is a query (V4c, #597): rows stay on screen while `r` re-runs the command
+  // or the command fails, the body follows the derived render mode, and a re-open inside the
+  // freshness window runs nothing. Memory cache only: command output is never written to disk.
   const fetchItems = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const args = resolveCommandArgs(paneDef.command, repo)
-      const result = await runConfiguredCommand(args)
-      if (result.exitCode !== 0) {
-        throw new Error(result.stderr?.split('\n')[0] || 'Command failed')
-      }
-      
-      let data = JSON.parse(result.stdout)
-      
-      if (paneDef.preProcessor) {
-        try {
-          const scriptPath = resolvePath(paneDef.preProcessor)
-          const { default: processor } = await import(`file://${scriptPath}`)
-          if (typeof processor === 'function') {
-            data = await processor(data, { repo, paneDef })
-          }
-        } catch (procErr) {
-          setError(`Pre-processor error: ${procErr.message}`)
-        }
-      }
-
-      setItems(Array.isArray(data) ? data : [])
-    } catch (err) {
-      setError(err.message || String(err))
-      setItems([])
-    } finally {
-      setLoading(false)
+    const args = resolveCommandArgs(paneDef.command, repo)
+    const result = await runConfiguredCommand(args)
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr?.split('\n')[0] || 'Command failed')
     }
+    let data = JSON.parse(result.stdout)
+    if (paneDef.preProcessor) {
+      try {
+        const scriptPath = resolvePath(paneDef.preProcessor)
+        const { default: processor } = await import(/* @vite-ignore */ `file://${scriptPath}`)
+        if (typeof processor === 'function') {
+          data = await processor(data, { repo, paneDef })
+        }
+      } catch (procErr) {
+        throw new Error(`Pre-processor error: ${procErr.message}`)
+      }
+    }
+    return Array.isArray(data) ? data : []
   }, [paneDef, repo])
 
-  useEffect(() => { fetchItems() }, [fetchItems])
+  const query = useQuery(
+    ['customPane', repo || '', paneDef.label || '', paneDef.command || '', paneDef.preProcessor || ''],
+    fetchItems,
+    { ttl: FRESHNESS.list },
+  )
+  const { mode, isFetching, isLoading, refetch } = query
+  const items = useMemo(() => query.data ?? [], [query.data])
+  const error = query.error ? (query.error.message || String(query.error)) : null
 
   useEffect(() => {
-    if (onPaneState) onPaneState({ loading, error, count: items.length })
-  }, [loading, error, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (onPaneState) onPaneState({ loading: isLoading, error, count: items.length })
+  }, [isLoading, error, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A re-run can return fewer rows: keep the cursor and window inside them.
+  useEffect(() => {
+    if (cursor >= items.length && items.length > 0) {
+      const last = items.length - 1
+      setCursor(last)
+      setScrollOffset(o => Math.min(o, Math.max(0, last)))
+    }
+  }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useKeyScope('dialog', !!dialog)
 
@@ -194,7 +200,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
     }
     if (input === 'j' || key.downArrow) { moveCursor(1);  return }
     if (input === 'k' || key.upArrow)   { moveCursor(-1); return }
-    if (input === 'r') { fetchItems(); return }
+    if (input === 'r') { refetch(); return }
     if (input === '/') { setDialog('fuzzy'); return }
 
     if (!selectedItem) return
@@ -242,36 +248,39 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
         <Text color={t.ui.selected} bold>{paneDef.label}</Text>
         {items.length > 0 && <Text color={t.ui.dim}>({items.length})</Text>}
         <Text color={t.ui.dim}>[r] refresh  [/] search  [y] copy url  [o] browser</Text>
+        {/* Reserved cell: background activity never shifts the layout. */}
+        <Text color={t.ui.dim}>{isFetching ? '↻' : ' '}</Text>
+        {mode === 'data' && error && <Text color={t.ci.fail}>{`⚠ refresh failed: ${sanitizeRaw(error)}`}</Text>}
         {statusMsg && (
           <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {sanitizeRaw(statusMsg.msg)}</Text>
         )}
       </Box>
 
-      {/* Loading */}
-      {loading && (
+      {/* Loading: only with nothing to keep, and only after the 150 ms delay */}
+      {mode === 'skeleton' && (
         <Box paddingX={2} paddingY={1}>
           <Text color={t.ui.muted}>Loading {paneDef.label}…</Text>
         </Box>
       )}
 
       {/* Error */}
-      {!loading && error && (
+      {mode === 'error' && (
         <Box paddingX={2} paddingY={1} flexDirection="column">
           <Text color={t.ci.fail}>⚠ Command failed — [r] retry</Text>
-          <Text color={t.ui.dim}>{error}</Text>
+          <Text color={t.ui.dim}>{sanitizeRaw(error)}</Text>
           <Text color={t.ui.dim}>$ {resolveCommandArgs(paneDef.command, repo).join(' ')}</Text>
         </Box>
       )}
 
       {/* Empty state */}
-      {!loading && !error && items.length === 0 && (
+      {mode === 'empty' && (
         <Box paddingX={2} paddingY={1}>
           <Text color={t.ui.muted}>No items returned. [r] re-run</Text>
         </Box>
       )}
 
       {/* List rows */}
-      {!loading && !error && visibleItems.map((item, i) => {
+      {mode === 'data' && visibleItems.map((item, i) => {
         const idx = scrollOffset + i
         return (
           <CustomPaneRow

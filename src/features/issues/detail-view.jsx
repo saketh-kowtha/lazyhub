@@ -9,7 +9,7 @@ import { sanitize, sanitizeRaw, TextInput } from '../../utils.js'
 
 export function IssueDetailView({
   issue, t, visibleRows, cursorEntry, maxScroll, scrollY, visibleHeight, rowCount,
-  loadedCount, totalCount, conversationLoading, conversationError, loadingMore, moreFailed, incomplete,
+  loadedCount, totalCount, conversationLoading, conversationError, fetching = false, refreshFailed = false, refreshKey = 'r', loadingMore, moreFailed, incomplete,
   newCount, showNewKey, compose, replyText, setReplyText, submitCompose, confirmDelete, statusMsg, statusIsError = false,
 }) {
   const stateColor = issue.state === 'OPEN' ? t.issue.open : t.issue.closed
@@ -22,6 +22,8 @@ export function IssueDetailView({
         <Box gap={1}>
           <Text color={stateColor}>{issue.state === 'OPEN' ? '●' : '✗'}</Text>
           <Text bold color={t.ui.selected} wrap="truncate">#{issue.number} {sanitize(issue.title)}</Text>
+          {/* Reserved cell: background activity never shifts the layout. */}
+          <Text color={t.ui.dim}>{fetching ? '↻' : ' '}</Text>
         </Box>
         <Box gap={2}>
           <Text color={t.ui.muted}>by {sanitize(issue.author?.login)}</Text>
@@ -96,6 +98,7 @@ export function IssueDetailView({
         </Box>
       )}
 
+      {refreshFailed && !statusMsg && <Text color={t.ci.fail}>{`⚠ Could not refresh, showing the last loaded data  [${refreshKey}] retry`}</Text>}
       {statusMsg && <Text color={statusIsError ? t.ci.fail : t.ci.pass}>{sanitizeRaw(statusMsg)}</Text>}
     </Box>
   )
