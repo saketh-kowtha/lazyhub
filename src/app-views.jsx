@@ -26,6 +26,7 @@ import { LogPane } from './features/logs/index.jsx'
 import { NotificationList } from './features/notifications/index.jsx'
 import { CustomPane } from './components/CustomPane.jsx'
 import { TabView } from './features/tabs/view.jsx'
+import { ReviewQueue } from './features/queue/view.jsx'
 import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 import { AIAssistant } from './components/AIAssistant.jsx'
 import { CommandPalette } from './components/CommandPalette.jsx'
@@ -38,7 +39,7 @@ export function renderAppView(ctx) {
   const {
     actionsBranch, actionsRepo, itemIsForeign, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
     exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail, goToPRRow,
-    goToDiff, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
+    goToDiff, goToQueueItem, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
     showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
@@ -262,6 +263,30 @@ export function renderAppView(ctx) {
             { key: '/', label: 'search' },
             { key: 'Esc', label: 'back' }
           ]} />
+        </Box>
+      </AppContext.Provider>
+    )
+  }
+
+  if (view === 'queue') {
+    return (
+      <AppContext.Provider value={appCtx}>
+        <Box flexDirection="column" height={rows}>
+          <Box flexDirection="row" flexGrow={1}>
+            {showSidebar && (
+              <Sidebar currentPane={pane} visiblePanes={PANES} width={sidebarWidth} borderStyle={borderStyle}
+                paneLabels={PANE_LABELS} paneIcons={PANE_ICONS} repo={repo}
+                onSelect={(p) => { setPane(p); setSelectedItem(null); setView('list') }}
+                height={rows - (compactFooter ? 2 : 3)}
+              />
+            )}
+            <ErrorBoundary>
+              {/* EVIDENCE SEAM (#127): goToQueueItem is the only place that decides what Enter opens. */}
+              <ReviewQueue onOpen={goToQueueItem} innerWidth={columns - (showSidebar ? sidebarWidth : 0) - 2} listHeight={listHeight} />
+            </ErrorBoundary>
+          </Box>
+          <StatusBar repo={repo} pane={pane} scopeIndicator={['global','pane','list'].includes(activeScope) ? null : activeScope.toUpperCase()} mode={appMode} ghHealth={ghHealth} />
+          <FooterKeys hidden={compactFooter} keys={contextFooterHints(pane, 'queue', {}, _config.toml)} />
         </Box>
       </AppContext.Provider>
     )

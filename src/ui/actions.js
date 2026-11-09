@@ -79,6 +79,7 @@ export function contextScopes(pane, view = 'list', config = undefined) {
   if (view === 'diff') return ['global', 'diff']
   if (view === 'story') return ['global', 'pr-story']
   if (view === 'comments') return ['global', 'pr-comments']
+  if (view === 'queue') return ['global', 'queue-list']
   if (view === 'detail') return ['global', pane === 'issues' ? 'issue-detail' : 'pr-detail']
   const listScope = {
     prs: 'pr-list', issues: 'issue-list', branches: 'branch-list',
@@ -115,6 +116,7 @@ const FOOTER_IDS = {
   'workflow-list': ['cursor.down', 'workflow.logs', 'workflow.rerun', 'workflow.cancel', 'list.search'],
   'notification-list': ['cursor.down', 'notification.open', 'notification.mark-read', 'notification.mark-all'],
   'tab-list': ['cursor.down', 'tab.open-selected', 'tab.open-browser', 'tab.next-section'],
+  'queue-list': ['cursor.down', 'queue.open', 'queue.browser', 'queue.next-group', 'queue.more', 'list.refresh', 'app.back'],
   'pr-detail': ['cursor.down', 'pr.diff', 'pr.checks', 'pr.approve', 'pr.merge', 'pr.comments', 'pr.open-browser', 'app.back', 'pr.why-red'],
   'issue-detail': ['cursor.down', 'issue.reply', 'issue.quote', 'issue.labels', 'issue.assignees', 'issue.open-browser', 'app.back'],
   'diff': ['cursor.down', 'diff.next-file', 'diff.next-thread', 'diff.comment', 'diff.file-jump', 'diff.split', 'list.search', 'app.back'],
@@ -127,6 +129,7 @@ const FOOTER_GROUP = { nav: 1, meta: 3 }
 // Shared 'list' verbs a full-screen view does not implement (kept out of its help).
 const UNSUPPORTED = {
   'tab-list': new Set(['list.search']),
+  'queue-list': new Set(['list.search']),
   'pr-comments': new Set(['list.search']),
   'issue-detail': new Set(['list.search']),
 }
