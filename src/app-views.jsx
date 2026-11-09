@@ -13,6 +13,8 @@ import { StatusBar } from './components/StatusBar.jsx'
 import { FooterKeys } from './components/FooterKeys.jsx'
 import { PRList } from './features/prs/list.jsx'
 import { PRDetail } from './features/prs/detail.jsx'
+import { EvidenceView } from './features/prs/EvidenceView.jsx'
+import { returnTarget } from './executor/evidence-detail.js'
 import { PRDiff } from './features/prs/diff.jsx'
 import { StoryView } from './features/prs/story/StoryView.jsx'
 import { PRComments } from './features/prs/comments.jsx'
@@ -39,7 +41,7 @@ export function renderAppView(ctx) {
   const {
     actionsBranch, actionsRepo, itemIsForeign, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
     exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail, goToPRRow,
-    goToDiff, goToQueueItem, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
+    goToDiff, goToQueueItem, goToEvidenceDetail, returnFromEvidence, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
     showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
@@ -154,6 +156,27 @@ export function renderAppView(ctx) {
   }
 
   // ─── Full-screen views ────────────────────────────────────────────────────
+  if (view === 'evidence' && selectedItem) {
+    const evRepo = itemRepo
+    return (
+      <AppContext.Provider value={appCtx}>
+        <Box flexDirection="column" height={rows}>
+          <ErrorBoundary>
+            <EvidenceView
+              pr={{ number: selectedItem.number, title: selectedItem.title }}
+              repo={evRepo}
+              onClose={() => returnFromEvidence(selectedItem._fromQueue ? { view: 'queue' } : undefined)}
+              onOpenDiff={goToDiff}
+              onOpenDetail={goToEvidenceDetail}
+              returnTo={selectedItem._fromQueue ? returnTarget({ view: 'queue', key: `${evRepo}#${selectedItem.number}` }) : undefined}
+              onReturn={returnFromEvidence}
+            />
+          </ErrorBoundary>
+        </Box>
+      </AppContext.Provider>
+    )
+  }
+
   if (view === 'conflict' && selectedItem) {
     return (
       <AppContext.Provider value={appCtx}>
@@ -281,7 +304,7 @@ export function renderAppView(ctx) {
               />
             )}
             <ErrorBoundary>
-              {/* EVIDENCE SEAM (#127): goToQueueItem is the only place that decides what Enter opens. */}
+              {/* goToQueueItem is the only place that decides what Enter opens (the evidence view, #127). */}
               <ReviewQueue onOpen={goToQueueItem} innerWidth={columns - (showSidebar ? sidebarWidth : 0) - 2} listHeight={listHeight} />
             </ErrorBoundary>
           </Box>

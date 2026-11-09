@@ -319,7 +319,8 @@ export function App({ repo, onSwitchRepo }) {
       if (view === 'conflict')   { setView('detail'); return }
       if (view === 'story')      { setStoryNav(null); setView('detail'); return }
       if (view === 'diff' && storyNav?.active) { setView('story'); return }
-      if (view === 'diff')       { setView(selectedItem?._fromList ? 'list' : 'detail'); return }
+      if (view === 'diff')       { setView(selectedItem?._fromEvidence ? 'evidence' : selectedItem?._fromList ? 'list' : 'detail'); return }
+      if (view === 'evidence')   { setSelectedItem(null); setView(selectedItem?._fromQueue ? 'queue' : 'list'); return }
       if (view === 'detail')     { const back = selectedItem?._fromQueue; setSelectedItem(null); setView(back ? 'queue' : 'list'); return }
       // At the root only `q` quits; a stray Esc must never kill the app.
       if (!key.escape) exit()
@@ -408,7 +409,7 @@ export function App({ repo, onSwitchRepo }) {
   // The detail pane hands back its own fetched PR; keep the dashboard identity (_repo/_kind) of the item (#493).
   const goToDiff       = useCallback((item) => {
     setStoryNav(null)
-    setSelectedItem(prev => ({ ...item, _kind: item._kind ?? prev?._kind, _repo: item._repo ?? prev?._repo, _fromQueue: prev?._fromQueue, _fromList: view === 'list' }))
+    setSelectedItem(prev => ({ ...item, _kind: item._kind ?? prev?._kind, _repo: item._repo ?? prev?._repo, _fromQueue: prev?._fromQueue, _fromList: view === 'list', _fromEvidence: view === 'evidence' }))
     setView('diff')
   }, [view])
   // Review story (#362): position and the file the diff should open at survive the round trip.
@@ -442,27 +443,34 @@ export function App({ repo, onSwitchRepo }) {
     if (view === 'conflict') { setView('detail'); return }
     if (view === 'story')    { setStoryNav(null); setView('detail'); return }
     if (view === 'diff' && storyNav?.active) { setView('story'); return }
-    if (view === 'diff')     { setView(selectedItem?._fromList ? 'list' : 'detail'); return }
+    if (view === 'diff')     { setView(selectedItem?._fromEvidence ? 'evidence' : selectedItem?._fromList ? 'list' : 'detail'); return }
     // A PR opened from the review queue returns to the queue, which remembers its group and row (#177).
     const backToQueue = view === 'detail' && selectedItem?._fromQueue
     setSelectedItem(null); setView(backToQueue ? 'queue' : 'list')
   }, [view, selectedItem, storyNav])
-  // EVIDENCE SEAM (#127): the queue hands over the focused row's evidence record. Today it opens the
-  // existing PR detail; the read-only evidence view replaces this one callback.
+  // The queue hands over the focused row's evidence record; Enter opens the read-only evidence view
+  // (#127). Esc there returns to the queue, which restores group and row by PR identity (#177).
   const goToQueueItem = useCallback((evidence) => {
-    goToDetail({
+    setSelectedItem({
       number: evidence.identity.number, title: evidence.untrusted?.title, _kind: 'prs', _repo: evidence.identity.repo,
       baseRefName: evidence.context?.base?.value === 'unknown' ? undefined : evidence.context?.base?.value,
       _fromQueue: true, _evidence: evidence,
     })
-  }, [goToDetail])
+    setView('evidence')
+  }, [])
+  // Evidence -> full PR detail keeps the queue as the place Esc ends up (existing _fromQueue chain).
+  const goToEvidenceDetail = useCallback(() => setView('detail'), [])
+  const returnFromEvidence = useCallback((target) => {
+    setSelectedItem(null)
+    setView(target?.view === 'queue' ? 'queue' : 'list')
+  }, [])
 
   const onPaneState = useCallback((s) => setPaneState(prev => ({ ...prev, ...s })), [])
 
   const tree = renderAppView({
     actionsBranch, actionsRepo, itemIsForeign, activeScope, appCtx, appMode, borderStyle, columns, compactFooter,
     exit, ghHealth, goBack, goToActions, goToComments, goToConflict, goToDetail, goToPRRow,
-    goToDiff, goToQueueItem, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
+    goToDiff, goToQueueItem, goToEvidenceDetail, returnFromEvidence, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
     showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
