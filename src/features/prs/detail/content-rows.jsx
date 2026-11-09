@@ -10,7 +10,7 @@ import { ReviewersHeading, ReviewerRow } from './Reviewers.jsx'
 import { sortChecks, ChecksHeading, CheckRow } from './Checks.jsx'
 import { MergeStatusRow, RequiredReviewsRow, RequiredChecksRow } from './MergeStatus.jsx'
 
-/** @typedef {{number?: number, title?: string, state?: string, isDraft?: boolean, mergeable?: string, mergeStateStatus?: string, autoMergeRequest?: {mergeMethod?: string}, assignees?: Array<{login: string}>, labels?: Array<{name: string, color: string}>, reviews?: Array<{author?: {login?: string}, state: string}>, reviewRequests?: Array<{login?: string, name?: string}>, statusCheckRollup?: Array<{name?: string, context?: string, conclusion?: string, status?: string, state?: string, appName?: string}>, body?: string}} PRDetailContent */
+/** @typedef {{number?: number, title?: string, state?: string, isDraft?: boolean, mergeable?: string, mergeStateStatus?: string, autoMergeRequest?: {mergeMethod?: string}, assignees?: Array<{login: string}>, labels?: Array<{name: string, color: string}>, reviews?: Array<{author?: {login?: string}, state: string}>, reviewRequests?: Array<{login?: string, name?: string}>, statusCheckRollup?: Array<{name?: string, context?: string, conclusion?: string, status?: string, state?: string, appName?: string}>, body?: string, partial?: boolean}} PRDetailContent */
 /** @typedef {{requiredReviews: number, requireCodeOwnerReviews?: boolean, requireStatusChecks?: boolean, requiredChecks?: string[]}} PRProtection */
 
 /** @param {PRDetailContent} pr @param {Array<{name?: string, context?: string, conclusion?: string, status?: string, state?: string, appName?: string}> | null} checks @param {PRProtection | null} protection @param {number} cols @param {object} t @param {number | null} [checkCursor] */
@@ -66,6 +66,14 @@ export function buildContentRows(pr, checks, protection, cols, t, checkCursor = 
   }
   sep('sep-merge')
 
+  if (pr.partial) {
+    // Seeded from the list row: the description and reviews arrive with the full PR.
+    push('body-loading', (
+      <Box key="body-loading" paddingX={1}>
+        <Text color={t.ui.dim}>Loading description and reviews...</Text>
+      </Box>
+    ))
+  }
   if (pr.body) {
     push('body-hdr', (
       <Box key="body-hdr" paddingX={1}>

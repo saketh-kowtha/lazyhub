@@ -8,7 +8,10 @@
 import { logger } from '../utils.js'
 import { scopedCacheKey as makeDiskCacheKey, cacheIdentity, warmCache } from '../cache.js'
 import { recordGhFailure, recordGhSuccess, clearGhFailure } from './useGhHealth.js'
-import { useQuery, queryClient, identityKey, DEFAULT_TTL, QUERY_MAX_BYTES } from '../data/queryClient.js'
+import { useQuery, queryClient, DEFAULT_TTL, QUERY_MAX_BYTES } from '../data/queryClient.js'
+import { repoOf, ghQueryKey, seedGh } from '../data/ghKeys.js'
+
+export { ghQueryKey, seedGh }
 
 export const GH_MEMORY_MAX_BYTES = QUERY_MAX_BYTES
 
@@ -38,10 +41,10 @@ export function ghMemoryCacheStats() {
 export function useGh(fetchFn, deps = [], { ttl = DEFAULT_TTL, enabled = true } = {}) {
   const { host } = cacheIdentity()
   const op = fetchFn.name || 'unnamed'
-  const repo = typeof deps[0] === 'string' ? deps[0] : process.env.GHUI_REPO
+  const repo = repoOf(deps)
   const diskCacheKey = makeDiskCacheKey([repo, fetchFn.name, deps])
   const callSite = `${op}:${diskCacheKey}`
-  return useQuery(identityKey(fetchFn.name, ...deps), () => fetchFn(...deps), {
+  return useQuery(ghQueryKey(fetchFn, deps), () => fetchFn(...deps), {
     ttl,
     enabled,
     persist: { key: diskCacheKey, meta: { repo, host, op } },

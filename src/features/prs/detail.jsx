@@ -255,6 +255,12 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
     const open = pr && pr.state === 'OPEN'
 
     if (id === 'list.refresh') { refetch(); return }
+    // Seeded from the list row (#481): body, reviews and files are still loading, so anything
+    // that needs them waits for the real PR rather than acting on a partial one.
+    if (pr?.partial && String(id).startsWith('pr.') && id !== 'pr.open-browser') {
+      showStatus('Loading PR details...')
+      return
+    }
     if (id === 'pr.diff' && pr) { onOpenDiff(pr); return }
     if (id === 'pr.collisions' && pr) { setDialog('collisions'); return }
     if (id === 'pr.story' && pr && onOpenStory) { onOpenStory(pr); return }
