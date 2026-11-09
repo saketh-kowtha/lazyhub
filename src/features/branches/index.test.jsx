@@ -14,14 +14,18 @@ vi.mock('../../hooks/useGh.js', () => ({ useGh: vi.fn() }))
 
 afterEach(cleanup)
 
+// Stable references, like the real useGh: a new array every render would look like a refetch.
+const BRANCHES = [{ name: 'main' }, { name: 'dev' }]
+const NO_PRS = []
+const refetch = vi.fn()
 let head
 beforeEach(() => {
   vi.clearAllMocks()
   clearLocalCheckoutCache()
   head = 'main'
   useGh.mockImplementation(fn => ({
-    data: fn === listBranches ? [{ name: 'main' }, { name: 'dev' }] : [],
-    loading: false, refetch: vi.fn(),
+    data: fn === listBranches ? BRANCHES : NO_PRS,
+    loading: false, refetch,
   }))
   execa.mockImplementation(async (_cmd, args) => {
     if (args[0] === 'remote') return { exitCode: 0, stdout: 'origin\thttps://github.com/o/r.git (fetch)' }
@@ -35,7 +39,7 @@ it('moves the current-branch marker after a checkout', async () => {
   await waitForInputReady(view)
   await waitForExpectation(() => expect(view.lastFrame()).toMatch(/► main/))
   view.stdin.write('j')
-  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/▶ dev/))
+  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/▎ dev/))
   await waitForInputReady(view)
   view.stdin.write('\r')
   await waitForExpectation(() => expect(view.lastFrame()).toContain('Checkout branch "dev"'))
@@ -62,11 +66,11 @@ it('keeps a valid selection when a refetch returns fewer branches', async () => 
   const view = renderWithProviders(<BranchList repo="o/r" listHeight={10} />)
   await waitForInputReady(view)
   view.stdin.write('G')
-  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/▶ dev/))
+  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/▎ dev/))
   await waitForInputReady(view)
   view.stdin.write('r')
   await waitForExpectation(() => expect(view.lastFrame()).not.toContain('dev'))
-  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/▶ (► )?main/))
+  await waitForExpectation(() => expect(view.lastFrame()).toMatch(/▎ (► )?main/))
 })
 
 it('does not run local git when the launch directory is not a clone of the viewed repo (#471)', async () => {
