@@ -56,7 +56,6 @@ function MessageRow({ msg }) {
 export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiConfig, rows }) {
   useKeyScope('overlay')
   const { t } = useTheme()
-  const { notifyDialog } = useContext(AppContext)
 
   const [messages,        setMessages]        = useState([])
   const [inputText,       setInputText]       = useState('')
@@ -73,10 +72,6 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
   useEffect(() => () => abortRef.current?.abort(), [])
 
   // Block all background key handlers while AI overlay is open
-  useEffect(() => {
-    notifyDialog(true)
-    return () => notifyDialog(false)
-  }, [notifyDialog])
 
   // Rows available for the message area (header=1, input=3, margins)
   const msgAreaRows = Math.max(2, rows - 5)

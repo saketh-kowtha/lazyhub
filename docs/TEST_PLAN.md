@@ -185,8 +185,8 @@ These are the rules. If any test run violates one, it's a bug.
 - `scrollOffset` is always `>= 0` and `<= Math.max(0, items.length - visibleHeight)`.
 
 **State machine invariants:**
-- `dialog` being set always causes `notifyDialog(true)` to be called.
-- `dialog` being cleared always causes `notifyDialog(false)` to be called.
+- `dialog` being set always puts a `dialog` claim on top of the focus stack (`liveScope()`).
+- `dialog` being cleared always releases that claim.
 - No two dialogs can be open simultaneously.
 - `loading=true` and `error!=null` never coexist.
 

@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import { Text } from 'ink'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { useFocusEntry } from './FocusProvider.js'
+import { useFocusEntry, useFocusGlobals } from './FocusProvider.js'
+import { useKeyScope, isModalScope, isViewScope, liveScope } from '../keyscope.js'
 import { describeFocus, focusRouter } from './router.js'
 import { getContainedToast, resetContained } from '../contain.js'
 import { sendInput } from '../test/input-bus.js'
@@ -74,5 +75,32 @@ describe('FocusProvider', () => {
     await sendInput('y')
     expect(seen).toEqual(['x', 'y'])
     expect(getContainedToast()).toMatch(/pane\.bug.*bug/)
+  })
+
+  it('the app global handler runs once per key, after entries, and not under a dialog claim (#484)', async () => {
+    const order = []
+    function Root() {
+      const [open, setOpen] = useState(false)
+      useFocusEntry('pane', (input) => { order.push('pane:' + input); if (input === 'o') setOpen(true) }, { scope: 'pane' })
+      useFocusGlobals((input) => { order.push('global:' + input + ':' + (isModalScope(liveScope()) ? 'modal' : 'free')) })
+      return open ? <Dialog /> : null
+    }
+    function Dialog() { useKeyScope('dialog'); return null }
+    renderWithProviders(<Root />)
+    await flush(5)
+    await sendInput('a')
+    expect(order).toEqual(['pane:a', 'global:a:free'])
+    await sendInput('o')
+    await flush(5)
+    order.length = 0
+    await sendInput('b')
+    // The handler still runs (the app decides), but it sees the dialog on top of the stack.
+    expect(order.filter(e => e.startsWith('global:'))).toEqual(['global:b:modal'])
+  })
+
+  it('classifies scopes: overlays, dialogs and inputs are modal, views are not', () => {
+    for (const s of ['overlay', 'dialog', 'input']) expect(isModalScope(s)).toBe(true)
+    for (const s of ['global', 'pane', 'list', 'view', 'detail']) expect(isModalScope(s)).toBe(false)
+    expect(isViewScope('view') && isViewScope('detail') && !isViewScope('pane')).toBe(true)
   })
 })

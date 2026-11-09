@@ -17,10 +17,10 @@
 import { logSwallowed } from './contain.js'
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { render, useApp } from 'ink'
-import { useInput } from './hooks/useSafeInput.js'
+import { useFocusGlobals } from './focus/FocusProvider.js'
 import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
 import { terminalStdout } from './theme/terminal.js'
-import { KeyScopeProvider, useActiveScope, useKeyScope } from './keyscope.js'
+import { KeyScopeProvider, useActiveScope, useKeyScope, isModalScope, isViewScope, liveScope } from './keyscope.js'
 import { armPrefix, disarmPrefix, getArmedPrefix } from './config/keymap.js'
 import { prefixContinuations, registeredPrefixes } from './ui/actions.js'
 import { WhichKey } from './ui/WhichKey.jsx'
@@ -158,15 +158,13 @@ export function App({ repo, onSwitchRepo }) {
     return () => setConfigWriteNotifier(null)
   }, [addToast])
 
-  const dialogActiveRef    = useRef(false)
   const savedListPosition  = useRef({})
   const pendingNavigationRef = useRef(null)
   const paneStateMapRef    = useRef(new Map())
-  const notifyDialog = useCallback((active) => { dialogActiveRef.current = active }, [])
   const openHelp     = useCallback(() => setShowHelp(true), [])
   const openAI       = useCallback(() => setShowAI(true), [])
 
-  const appCtx = { notifyDialog, openHelp, openAI, setMouseEnabled, addToast, paneStateMap: paneStateMapRef.current }
+  const appCtx = { openHelp, openAI, setMouseEnabled, addToast, paneStateMap: paneStateMapRef.current }
 
   const dumpDebugState = useCallback(() => {
     try {
@@ -180,7 +178,7 @@ export function App({ repo, onSwitchRepo }) {
           cursor: paneState.cursor ?? null,
           count: paneState.count ?? null,
         },
-        dialog: paneState.dialogHint || (dialogActiveRef.current ? 'active' : null),
+        dialog: paneState.dialogHint || (isModalScope(liveScope()) ? 'active' : null),
         mode: appMode,
         recentStatus,
       })
@@ -246,7 +244,7 @@ export function App({ repo, onSwitchRepo }) {
   }, [])
 
   // ─── Global key handler ───────────────────────────────────────────────────
-  useInput((input, key) => {
+  useFocusGlobals((input, key) => {
     if (isPerfEnabled()) pendingInputPerf.current.push(startTimer())
     if (process.env.LAZYHUB_CRASH_TEST === '1' && ((key.ctrl && input === '_') || input === '\x1f')) {
       // Thrown outside the handler so key-handler containment (#490) cannot catch it:
@@ -264,26 +262,12 @@ export function App({ repo, onSwitchRepo }) {
       return
     }
 
-    // Only handle global keys when no higher-priority scope has captured input.
-    // Scope stack: global(0) < pane(1) < view(2) < overlay(3) < dialog(4) < input(5)
-    // At pane level, Tab/number/? are still valid (list pane doesn't block them).
-    // At view/overlay/dialog/input, we must defer — EXCEPT for q/Esc when no
-    // component at the active scope handles it (see below).
-    const inView = activeScope === 'view' || activeScope === 'detail'
-    const highScope = activeScope !== 'global' && activeScope !== 'pane' && activeScope !== 'list' && !inView
-    if (highScope || dialogActiveRef.current) {
-      // q/Esc from the list view (pane scope active) should always quit/back.
-      // This is the lazygit convention.  We allow it through even at 'view' scope
-      // only when the view is one of the static shell views (settings/logs) that
-      // don't have their own useInput 'q' handlers and don't claim a scope — so
-      // their activeScope falls back to whatever the last list pane pushed.
-      // Concrete case: user is in list → presses S (opens settings) → presses q.
-      // Settings mounts without claiming a scope, so activeScope is still 'pane'.
-      // highScope is false for 'pane', so this block isn't even entered.
-      // The only problematic case would be if some intermediate component
-      // incorrectly pushes 'view' scope while settings/logs are shown.
-      return
-    }
+    // Global keys run only when nothing above the pane owns the keyboard: an overlay, dialog or
+    // input on the focus stack takes every key, and full-screen views keep all but help/palette.
+    // The scope is read live from the router (the context copy trails by a microtask).
+    const scope = liveScope()
+    const inView = isViewScope(scope)
+    if (isModalScope(scope)) return
 
     // Prefix keys (g): the next key picks a continuation from the registry.
     const armed = getArmedPrefix()

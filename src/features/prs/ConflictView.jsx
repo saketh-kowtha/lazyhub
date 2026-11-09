@@ -62,7 +62,6 @@ function fileStatusIcon(file, t) {
 export function ConflictView({ pr, repo, onBack, onResolved }) {
   useKeyScope('view')
   const { t } = useTheme()
-  const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const termRows = stdout?.rows || 24
 
@@ -94,10 +93,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
   // "label…" while it runs and ignores a repeat submit instead of racing it.
   const { run: guard } = usePendingWrite((msg) => showStatus(msg, false, true))
 
-  useEffect(() => {
-    notifyDialog(!!dialog)
-    return () => notifyDialog(false)
-  }, [dialog, notifyDialog])
+  useKeyScope('dialog', !!dialog)
 
   // ── Probe local git state ─────────────────────────────────────────────────
   const loadFiles = useCallback(async () => {

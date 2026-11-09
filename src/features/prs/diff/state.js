@@ -4,7 +4,7 @@
  */
 
 import { logSwallowed } from '../../../contain.js'
-import { useState, useMemo, useContext, useEffect, useRef, useCallback } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { openUrl } from '../../../services/platform.js'
 import { useStdout } from 'ink'
 import { useActionResolver, useKeymapInput } from '../../../config/keymap.js'
@@ -14,7 +14,6 @@ import { contextFooterHints } from '../../../ui/actions.js'
 import { usePendingWrite } from '../../../hooks/usePendingWrite.js'
 import { getAICodeReview, AIError } from '../../../ai/index.js'
 import { loadConfig } from '../../../config.js'
-import { AppContext } from '../../../context.js'
 import { useKeyScope } from '../../../keyscope.js'
 import { sanitize } from '../../../utils.js'
 import { flattenFiles } from '../diff-parser.js'
@@ -120,11 +119,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   const [aiPostStatus, setAiPostStatus]       = useState(null)
 
   // Suppress global 1-9 tab key handler when any overlay is active
-  const { notifyDialog } = useContext(AppContext)
-  useEffect(() => {
-    notifyDialog(!!(gotoActive || findActive || compose || showTree || dialog || fileJumpActive || aiReview || aiReviewLoading))
-    return () => notifyDialog(false)
-  }, [gotoActive, findActive, compose, showTree, dialog, fileJumpActive, aiReview, aiReviewLoading, notifyDialog])
+  useKeyScope('dialog', !!(gotoActive || findActive || compose || showTree || dialog || fileJumpActive || aiReview || aiReviewLoading))
 
   // Cleanup transient input states on unmount so they don't bleed into re-mounts
   useEffect(() => () => {

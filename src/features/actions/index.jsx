@@ -62,7 +62,6 @@ const ActionRow = memo(({ run, isSelected, t, width }) => {
 export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, initialBranch = null }) {
   useKeyScope('pane')
   const { t } = useTheme()
-  const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const rowWidth = paneWidth(innerWidth, stdout)
   const visibleHeight = listHeight || Math.max(5, (stdout?.rows || 24) - 8)
@@ -95,11 +94,11 @@ export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, ini
     }
   }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useKeyScope('dialog', !!dialog)
   useEffect(() => {
-    notifyDialog(!!dialog)
     if (onPaneState) onPaneState({ dialogHint: dialog || null })
-    return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
-  }, [dialog, notifyDialog]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { if (onPaneState) onPaneState({ dialogHint: null }) }
+  }, [dialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { clearTimeout(lastKeyTimer.current) }, [])
 

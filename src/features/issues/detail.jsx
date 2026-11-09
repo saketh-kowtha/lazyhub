@@ -42,7 +42,6 @@ const QUOTE_MAX_LINES = 6
 export function IssueDetail({ issueNumber, repo, onBack }) {
   useKeyScope('view')
   const { t } = useTheme()
-  const { notifyDialog } = useContext(AppContext)
   const { stdout } = useStdout()
   const termRows = stdout?.rows || 24
   const termCols = stdout?.columns || 80
@@ -99,10 +98,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
   const resolveConfirm = useActionResolver(['dialog'])
 
   // Notify App when dialog opens/closes
-  React.useEffect(() => {
-    notifyDialog(!!dialog)
-    return () => notifyDialog(false)
-  }, [dialog, notifyDialog])
+  useKeyScope('dialog', !!dialog)
 
   const items = data?.items
   const built = useMemo(

@@ -1,11 +1,11 @@
-import React, { useContext } from 'react'
+import React, { useState } from 'react'
 import { Text, useInput } from 'ink'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { sendInput } from './test/input-bus.js'
 import { InputDriver } from './test/input-driver.jsx'
 import { disarmPrefix, getArmedPrefix } from './config/keymap.js'
 import { App, AppRoot } from './app.jsx'
-import { AppContext } from './context.js'
+import { useKeyScope } from './keyscope.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation } from './test/test-helpers.jsx'
 
 const exitSpy = vi.hoisted(() => vi.fn())
@@ -80,9 +80,10 @@ vi.mock('./features/prs/comments.jsx', () => ({ PRComments: ({ prNumber }) => <T
 vi.mock('./features/prs/ConflictView.jsx', () => ({ ConflictView: ({ pr }) => <Text>{`CONFLICT ${pr.number}`}</Text> }))
 vi.mock('./features/prs/list.jsx', () => ({
   PRList: ({ repo, onSelectPR, onOpenDiff }) => {
-    const { notifyDialog } = useContext(AppContext)
+    const [dialog, setDialog] = useState(false)
+    useKeyScope('dialog', dialog)
     useInput((input) => {
-      if (input === 'x') notifyDialog(true)
+      if (input === 'x') setDialog(true)
       if (input === 'o') onSelectPR({ number: 7, title: 'Open detail' })
       if (input === 'd') onOpenDiff({ number: 9, title: 'Open diff' })
     })

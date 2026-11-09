@@ -175,7 +175,7 @@ were the current code. The sections of `docs/ARCHITECTURE.md` describe the code 
 
 **Decision.** One root `useInput`; an explicit stack of focus entries; only the top
 entry receives keys, then registry-resolved globals. `notifyDialog`,
-`dialogActiveRef` and per-pane `if (dialog) return` are retired.
+`dialogActiveRef` and per-pane `if (dialog) return` are retired (the first two are gone as of R6 #484).
 
 **Shipped.** `src/keyscope.js` keeps a scope stack (`global < pane < view < overlay
 < dialog < input`); components claim a scope with `useKeyScope` and the root handler
@@ -184,10 +184,11 @@ in `app.jsx` defers to anything above `pane`. Every handler is wrapped by
 through the action registry (`[actions.*]` in `defaultConfig.toml`,
 `src/config/actions.js`, `useKeymapInput`).
 
-**Planned (#483 R5, #484 R6).** The focus manager proper: synchronous claims, a
-single owner per key, and removal of `notifyDialog` / `dialogActiveRef`, which still
-exist in `app.jsx` and in every pane that opens a dialog. Until R6 lands,
-a component that opens a dialog still calls `notifyDialog(true/false)`.
+**Shipped since (#483 R5, #484 R6).** The focus manager core (synchronous claims) and the
+App/dialog migration: `app.jsx` registers its global handler with `useFocusGlobals`, every
+dialog or overlay claims its scope with `useKeyScope`, and `notifyDialog` /
+`dialogActiveRef` are deleted. Still planned: a single owner per key for non-capturing
+peers and the per-pane `if (dialog) return` guards (R7, R9).
 
 ### D14 - Query layer
 

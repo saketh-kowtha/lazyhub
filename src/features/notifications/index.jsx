@@ -15,7 +15,6 @@ import { sanitize } from '../../utils.js'
 import { fitCell, paneWidth, planRow } from '../../ui/row-layout.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
-import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
 import { NotificationListSkeleton } from '../../components/Skeleton.jsx'
@@ -31,7 +30,6 @@ const AGE_COLS = 13
 export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigateTo, onPaneState }) {
   useKeyScope('pane')
   const { t } = useTheme()
-  const { notifyDialog } = useContext(AppContext)
 
   function notifTypeIcon(type) {
     switch (type) {
@@ -58,11 +56,11 @@ export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigate
     if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
   }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useKeyScope('dialog', !!dialog)
   useEffect(() => {
-    notifyDialog(!!dialog)
     if (onPaneState) onPaneState({ dialogHint: dialog || null })
-    return () => { notifyDialog(false); if (onPaneState) onPaneState({ dialogHint: null }) }
-  }, [dialog, notifyDialog]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { if (onPaneState) onPaneState({ dialogHint: null }) }
+  }, [dialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pending guard, status line and refetch-after-write live in useMutation (#453).
   const markRead = useMutation(id => markNotificationRead(id), { label: 'Marking as read', success: 'Marked as read', invalidates: [() => refetch()] })
