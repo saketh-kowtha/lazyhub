@@ -45,7 +45,7 @@ export async function probeGh() {
 /**
  * Plain-language lines for a classified failure: cause, command, notes.
  *
- * @param {{cause: string, fix?: string|null, fixHint?: string|null, notes?: string[]}} f
+ * @param {Record<string, any>} f classified failure (cause, fix, fixHint, notes)
  * @returns {string}
  */
 export function formatFailureLines(f) {
@@ -577,8 +577,7 @@ export async function bootstrap(renderApp, { repo: chosenRepo, repoOverride, ope
     }
     repo = await pickRepoInteractive(repos)
     if (!repo) {
-      console.error('\n  ✗ No repository selected. Exiting.')
-      console.error('    Run lazyhub inside a clone, or use: lazyhub --repo owner/name\n')
+      console.error('\n  ✗ No repository selected. Exiting.\n')
       process.exit(1)
     }
   }

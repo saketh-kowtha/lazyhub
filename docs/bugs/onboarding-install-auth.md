@@ -35,14 +35,14 @@ Counts (19 flows, A1 to A7 and B1 to B12): before this PR 10 PASS, 8 FAIL (A4, A
 ## Root causes and fixes
 
 - **A4:** nothing checked `engines`; the bundle failed to parse on Node < 20. `bin/lazyhub.js` now loads `src/cli/node-guard.js` first (its own chunk, no dependencies).
-- **B3, B9, B10, B11:** `listRepos()` caught every error and returned `[]`. `listReposDetailed()` now returns the `classifyGhFailure` result and `bootstrap()` prints cause plus the literal command (`formatFailureLines` prefers the command over hints that hold key placeholders). An empty list now says `lazyhub --repo owner/name`.
+- **B3, B9, B10, B11:** `listRepos()` caught every error and returned `[]`. `listReposDetailed()` now returns the `classifyGhFailure` result and `bootstrap()` prints cause plus the literal command (`formatFailureLines` prefers the command over hints that hold key placeholders).  An empty (successful) list keeps its existing wording; the launch-path work (#630) owns that message.
 - **B5:** `checkAuth()` collapsed every failure to `false`. `checkAuthDetailed()` keeps the classification; `gh_too_old` stops before the login flow.
 - **B12:** the startup probes used the 30 s default and mapped any failure to "not installed". They now use a 10 s timeout and a timeout is reported as its own cause.
 - **A6:** a missing config is now `ok` ("defaults are in use (created on first launch)"); `doctor` adds `gh installed (<version>)` and `Logged in to <host>` or the classified cause and command (`src/cli/doctor/gh.js`); `restoreTerminal()` returns early when stdout is not a TTY.
 
 ## Regression tests (all seen failing before the fix)
 
-- `src/bootstrap.onboarding.test.js`: B3, B9, B10, B11 (cause shown, not "No repositories found"), empty account hint, B5, B12 (both probes, timeout <= 10 s), `formatFailureLines`.
+- `src/bootstrap.onboarding.test.js`: B3, B9, B10, B11 (cause shown, not "No repositories found"), B5, B12 (both probes, timeout <= 10 s), `formatFailureLines`.
 - `src/cli/node-guard.test.js`: unit tests for Node 16, 18, 19 rejected and 20, 22, 26 accepted, plus an end to end run of the built entry on an installed Node 16 or 18 (skipped when none is installed).
 - `src/cli/doctor/gh.test.js`: missing config is OK, gh installed, missing, hung, not logged in.
 - `src/crash.restore.test.js`: no escapes on a piped stdout, still restores a TTY.

@@ -86,18 +86,6 @@ describe('repo list failure outside a repository', () => {
     expect(err).not.toMatch(/No repositories found/)
     expect(err).not.toContain('{refresh-key}')
   })
-
-  it('an account with no repositories says how to pick one', async () => {
-    stubExeca((bin, args) => {
-      if (bin === 'git') return { exitCode: 1 }
-      if (args[0] === '--version') return { exitCode: 0, stdout: 'gh version 2.40.0' }
-      if (args[1] === 'token') return { exitCode: 0, stdout: 'tok' }
-      if (args[0] === 'repo' && args[1] === 'list') return { exitCode: 0, stdout: '[]' }
-      return { exitCode: 1 }
-    })
-    const { err } = await run()
-    expect(err).toContain('lazyhub --repo owner/name')
-  })
 })
 
 describe('B5 gh too old for `auth token`', () => {
