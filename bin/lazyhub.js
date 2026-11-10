@@ -1,3 +1,12 @@
+{
+  const { nodeVersionProblem } = await import('../src/cli/node-guard.js')
+  const problem = nodeVersionProblem()
+  if (problem) {
+    process.stderr.write(problem)
+    process.exit(1)
+  }
+}
+
 if (process.argv.includes('--version') || process.argv.includes('-v')) {
   const { readFileSync } = await import('fs')
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
