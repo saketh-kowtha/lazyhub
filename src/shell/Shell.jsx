@@ -16,6 +16,7 @@ import { FooterKeys } from '../components/FooterKeys.jsx'
 import { Toaster } from '../components/Toaster.jsx'
 import { ErrorBoundary } from '../components/ErrorBoundary.jsx'
 import { useTheme } from '../theme.js'
+import { useCovered } from './covered.js'
 
 /**
  * @param {object} props
@@ -38,7 +39,9 @@ export function Shell({
   appCtx, rows, overflow, sidebar = null, sidebarBoundary = false, compactFooter, bodyProps = {},
   header = null, status = null, footer = null, leaderHint = null, toasts, children,
 }) {
-  const sidebarEl = sidebar && (
+  // A covered layer is mounted but not drawn: skip the chrome (and the status bar's clock) entirely.
+  const covered = useCovered()
+  const sidebarEl = sidebar && !covered && (
     <Sidebar {...sidebar} height={rows - (compactFooter ? 2 : 3)} />
   )
   return (
@@ -51,10 +54,10 @@ export function Shell({
             {children}
           </Box>
         )}
-        {leaderHint}
-        {status && <StatusBar {...status} />}
-        {footer && <FooterKeys hidden={compactFooter} keys={footer} />}
-        {toasts && toasts.length > 0 && <Toaster toasts={toasts} />}
+        {!covered && leaderHint}
+        {!covered && status && <StatusBar {...status} />}
+        {!covered && footer && <FooterKeys hidden={compactFooter} keys={footer} />}
+        {!covered && toasts && toasts.length > 0 && <Toaster toasts={toasts} />}
       </Box>
     </AppContext.Provider>
   )

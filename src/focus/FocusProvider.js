@@ -8,6 +8,7 @@
 
 import React, { createContext, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useRootInput } from '../hooks/useSafeInput.js'
+import { useCovered } from '../shell/covered.js'
 import { focusRouter } from './router.js'
 
 const FocusContext = createContext({ router: focusRouter, activeScope: 'global', provided: false })
@@ -87,7 +88,10 @@ let anonymous = 0
  */
 export function useFocusEntry(id, handler, opts = {}) {
   const ctx = useContext(FocusContext)
-  const { scope = null, active = true, captures = false, skipOnPrefix = false, yieldToModal = false } = opts
+  const { scope = null, captures = false, skipOnPrefix = false, yieldToModal = false } = opts
+  // A covered view (an overlay or a deeper view is on screen instead) neither claims nor receives keys (#597).
+  const covered = useCovered()
+  const active = (opts.active ?? true) && !covered
   const gate = opts.isActive
   const latest = useRef({ handler, gate })
   latest.current = { handler, gate }
