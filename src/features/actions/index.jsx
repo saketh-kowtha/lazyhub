@@ -20,6 +20,7 @@ import { useTheme } from '../../theme.js'
 import { QueryBoundary } from '../../components/QueryBoundary.jsx'
 import { MutationStatus } from '../../components/MutationStatus.jsx'
 import { ListRow } from '../../ui/ListRow.jsx'
+import { useMinuteClock } from '../../ui/clock.js'
 import { Spinner } from '../../components/Spinner.jsx'
 import { ActionListSkeleton } from '../../components/Skeleton.jsx'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
@@ -45,6 +46,7 @@ const AGE_COLS = 13
 
 // One line, never wider than the pane (#430): the age, then the branch, are dropped when it is tight.
 const ActionRow = memo(({ run, isSelected, width }) => {
+  useMinuteClock()
   const { t } = useTheme()
   const { titleWidth, show } = planRow(width, {
     fixed: 2 + 1 + 2,

@@ -13,7 +13,7 @@
  *   useKeymapInput((input, key) => { if (list.handleKey(input, key)) return; ... })
  */
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useVirtualList } from './useVirtualList.js'
 import { firstActionKey, matchesAction } from '../config/actions.js'
 
@@ -25,13 +25,17 @@ const GG_WINDOW_MS = 400
  * @param {T[]} opts.items
  * @param {number} opts.height rows visible at once
  * @param {(item: T) => string | number} [opts.getId] enables selection memory across refetches
+ * @param {{ cursor?: number, scroll?: number }} [opts.initial] position to start at (back-nav restore); read on mount only
  */
-export function useListController({ items, height, getId }) {
-  const v = useVirtualList({ items, height })
+export function useListController({ items, height, getId, initial }) {
+  const v = useVirtualList({ items, height, initialCursor: initial?.cursor, initialScrollOffset: initial?.scroll })
   const count = items.length
   // The first render after a shrink still holds the old cursor; never expose it.
   const cursor = count === 0 ? 0 : Math.min(v.cursor, count - 1)
   const selected = count === 0 ? undefined : items[cursor]
+  // The window array keeps its identity while the cursor moves inside it.
+  const { scrollOffset } = v
+  const visibleItems = useMemo(() => items.slice(scrollOffset, scrollOffset + height), [items, scrollOffset, height])
 
   const idRef = useRef(/** @type {string | number | undefined} */ (undefined))
   const lastKeyRef = useRef(/** @type {string | null} */ (null))
@@ -39,16 +43,21 @@ export function useListController({ items, height, getId }) {
   useEffect(() => () => clearTimeout(timerRef.current), [])
 
   const { moveCursor: rawMove, jumpTop: rawTop, jumpBottom: rawBottom } = v
+  // Callbacks handed to panes and rows must keep one identity while the cursor moves (#597), so
+  // they read the latest values from this ref instead of closing over them. Assigned in render.
+  const live = useRef(/** @type {any} */ (null))
+  live.current = { items, count, getId, cursor, rawMove, rawTop, rawBottom }
   // The remembered id is set where the user moves (not re-derived after every render), so a
   // refetch that hands back new-but-equal rows, or reorders them, cannot fight the cursor.
   const remember = useCallback((idx) => {
-    if (!getId) return
-    const it = items[Math.max(0, Math.min(count - 1, idx))]
-    idRef.current = it === undefined ? undefined : getId(it)
-  }, [getId, items, count])
-  const virtualMove = useCallback((idx) => { remember(idx); rawMove(idx) }, [remember, rawMove])
-  const jumpTop = useCallback(() => { remember(0); rawTop() }, [remember, rawTop])
-  const jumpBottom = useCallback(() => { remember(count - 1); rawBottom() }, [remember, rawBottom, count])
+    const { getId: gid, items: its, count: n } = live.current
+    if (!gid) return
+    const it = its[Math.max(0, Math.min(n - 1, idx))]
+    idRef.current = it === undefined ? undefined : gid(it)
+  }, [])
+  const virtualMove = useCallback((idx) => { remember(idx); live.current.rawMove(idx) }, [remember])
+  const jumpTop = useCallback(() => { remember(0); live.current.rawTop() }, [remember])
+  const jumpBottom = useCallback(() => { remember(live.current.count - 1); live.current.rawBottom() }, [remember])
   // Selection memory: the remembered id is looked up in the new items.
   useEffect(() => {
     if (!getId || idRef.current === undefined) return
@@ -61,8 +70,8 @@ export function useListController({ items, height, getId }) {
 
   /** @returns {boolean} true when the key was navigation and is consumed */
   const handleKey = useCallback((input, key) => {
-    if (matchesAction('cursor.down', input, key)) { virtualMove(cursor + 1); return true }
-    if (matchesAction('cursor.up', input, key)) { virtualMove(cursor - 1); return true }
+    if (matchesAction('cursor.down', input, key)) { virtualMove(live.current.cursor + 1); return true }
+    if (matchesAction('cursor.up', input, key)) { virtualMove(live.current.cursor - 1); return true }
     const top = firstActionKey('cursor.top', 'gg')[0]
     if (input === top) {
       if (lastKeyRef.current === top) {
@@ -78,12 +87,12 @@ export function useListController({ items, height, getId }) {
     lastKeyRef.current = null
     if (matchesAction('cursor.bottom', input, key)) { jumpBottom(); return true }
     return false
-  }, [virtualMove, jumpTop, jumpBottom, cursor])
+  }, [virtualMove, jumpTop, jumpBottom])
 
   return {
     cursor,
     scrollOffset: v.scrollOffset,
-    visibleItems: v.visibleItems,
+    visibleItems,
     selected,
     handleKey,
     moveTo: virtualMove,
