@@ -97,9 +97,17 @@ if (noTerminal) {
   process.exit(1)
 }
 
+// Ink reads CI once, when it is first imported, and under CI it draws only the final frame, which
+// leaves a real terminal blank. Both streams are terminals here, so this run is interactive:
+// say so while the TUI stack loads, then give the child processes (gh, git) their environment back.
+const ciBefore = process.env.CI
+if (ciBefore !== undefined && ciBefore !== 'false') process.env.CI = 'false'
+
 const { bootstrap } = await import('../src/bootstrap.js')
 const { installCrashHandlers } = await import('../src/crash.js')
 const { renderApp } = await import('../src/app.jsx')
+if (ciBefore === undefined) delete process.env.CI
+else process.env.CI = ciBefore
 const { loadConfig } = await import('../src/config.js')
 const { startIPC } = await import('../src/ipc.js')
 const { scheduleDaemon } = await import('../src/daemon/lifecycle.js')

@@ -263,6 +263,23 @@ async function runFirstRunTerminalFlow() {
   }
 }
 
+// E3: CI=true in a real terminal (dev containers, `act` shells) must not blank the UI: Ink only renders the final frame under CI.
+async function runCiEnvFlow() {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-ci-'))
+  let term
+  let output = ''
+  try {
+    term = spawnTerminal({ ...childEnv(installGhStub(temp), temp), CI: 'true' })
+    term.onData(data => { output += data })
+    await waitForScreen(() => output, /Focus|Pull Requests|PTY harness fixture PR/, 'UI under CI=true in a terminal')
+    term.write('q')
+    await waitForExit(term)
+  } finally {
+    await stopTerminal(term)
+    removeTempDir(temp)
+  }
+}
+
 async function runCrashFlow() {
   const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-crash-'))
   const stubBin = installGhStub(temp)
@@ -762,6 +779,7 @@ async function runQuitFlow() {
 
 await runLazyhubFlow()
 await runQuitFlow()
+await runCiEnvFlow()
 await runNonTtyFlow()
 await runReferenceFlow()
 await runFirstRunFlow()
