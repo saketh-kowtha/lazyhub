@@ -11,7 +11,7 @@ import { execa } from 'execa'
 import { loadSavedRepo, saveDefaultRepo, writeDefaultConfig } from './config.js'
 import { accountFingerprint, setCacheIdentity } from './cache.js'
 import { runGh } from './executor/core.js'
-import { classifyHostMismatch } from './executor/classify.js'
+import { classifyHostMismatch, classifyGhFailure } from './executor/classify.js'
 import readline from 'readline'
 
 // ─── Step 1: detect gh ────────────────────────────────────────────────────────
@@ -20,13 +20,45 @@ import readline from 'readline'
  *
  */
 export async function detectGh() {
+  return (await probeGh()).ok
+}
+
+/** Startup probes must not block a launch for the 30 s default: a hung gh (keychain prompt, slow credential helper) is reported instead (B12). */
+export const BOOT_PROBE_TIMEOUT_MS = 10_000
+
+const isTimeout = err => /timed out after/i.test(String(err?.message || ''))
+
+/**
+ * Like detectGh(), but says why it failed: `timedOut` means gh exists but did not answer.
+ *
+ * @returns {Promise<{ok: boolean, timedOut?: boolean, version?: string}>}
+ */
+export async function probeGh() {
   try {
-    await runGh(['--version'], { json: false })
-    return true
-  } catch {
-    return false
+    const out = await runGh(['--version'], { json: false, timeout: BOOT_PROBE_TIMEOUT_MS })
+    return { ok: true, version: String(out || '').match(/gh version (\S+)/)?.[1] }
+  } catch (err) {
+    return { ok: false, timedOut: isTimeout(err) }
   }
 }
+
+/**
+ * Plain-language lines for a classified failure: cause, command, notes.
+ *
+ * @param {{cause: string, fix?: string|null, fixHint?: string|null, notes?: string[]}} f
+ * @returns {string}
+ */
+export function formatFailureLines(f) {
+  const lines = [`  ✗ ${f.cause}`]
+  if (f.fix) lines.push(`    Run: ${f.fix}`)
+  else if (f.fixHint) lines.push(`    ${f.fixHint}`)
+  for (const n of f.notes || []) lines.push(`    ${n}`)
+  return lines.join('\n')
+}
+
+/** A gh that never answered is not "not installed", and not offline. */
+const HUNG_GH = `  ✗ gh did not respond within ${BOOT_PROBE_TIMEOUT_MS / 1000}s.
+    A keychain prompt or a slow credential helper may be waiting. Run \`gh auth status\` in this terminal, answer any prompt, then restart lazyhub.`
 
 /**
  *
@@ -139,18 +171,29 @@ export async function detectHostFromRemote() {
  * unauthenticated when they're perfectly logged in.
  */
 export async function checkAuth() {
+  return (await checkAuthDetailed()).ok
+}
+
+/**
+ * checkAuth() plus the reason it failed, so callers can tell "not logged in"
+ * from "gh is too old for `auth token`" or "gh did not answer".
+ *
+ * @returns {Promise<{ok: boolean, timedOut?: boolean, failure?: ReturnType<typeof classifyGhFailure>}>}
+ */
+export async function checkAuthDetailed() {
   const args = process.env.GH_HOST
     ? ['auth', 'token', '--hostname', process.env.GH_HOST]
     : ['auth', 'token']
   try {
     // runGh throws on non-zero exit and returns null on empty output.
-    const token = await runGh(args, { json: false })
+    const token = await runGh(args, { json: false, timeout: BOOT_PROBE_TIMEOUT_MS })
     // Scope shared caches to this account (#520) without another lookup: only a
     // one-way fingerprint is kept, never the credential itself.
     setCacheIdentity({ account: accountFingerprint(typeof token === 'string' ? token.trim() : '') })
-    return !!token
-  } catch {
-    return false
+    return { ok: !!token }
+  } catch (err) {
+    if (isTimeout(err)) return { ok: false, timedOut: true }
+    return { ok: false, failure: classifyGhFailure(err) }
   }
 }
 
@@ -344,15 +387,25 @@ export async function detectRepo() {
  *
  */
 export async function listRepos() {
+  return (await listReposDetailed()).repos
+}
+
+/**
+ * listRepos() plus the classified failure, so "gh said no" is never shown as
+ * "you have no repositories" (B3, B9, B10, B11).
+ *
+ * @returns {Promise<{repos: any[], failure?: ReturnType<typeof classifyGhFailure>}>}
+ */
+export async function listReposDetailed() {
   try {
     const repos = await runGh([
       'repo', 'list',
       '--limit', '20',
       '--json', 'name,nameWithOwner',
     ])
-    return Array.isArray(repos) ? repos : []
-  } catch {
-    return []
+    return { repos: Array.isArray(repos) ? repos : [] }
+  } catch (err) {
+    return { repos: [], failure: classifyGhFailure(err) }
   }
 }
 
@@ -448,9 +501,10 @@ export async function bootstrap(renderApp, { repo: chosenRepo, repoOverride, ope
   if (chosenRepo) saveDefaultRepo(chosenRepo)
 
   // Step 1 — detect gh
-  const ghInstalled = await detectGh()
-  if (!ghInstalled) {
-    printInstallInstructions(process.platform)
+  const probe = await probeGh()
+  if (!probe.ok) {
+    if (probe.timedOut) console.error(`\n${HUNG_GH}\n`)
+    else printInstallInstructions(process.platform)
     process.exit(1)
   }
 
@@ -473,7 +527,11 @@ export async function bootstrap(renderApp, { repo: chosenRepo, repoOverride, ope
   }
 
   // Step 2 — detect auth
-  let isLoggedIn = await checkAuth()
+  let auth = await checkAuthDetailed()
+  if (auth.timedOut) { console.error(`\n${HUNG_GH}\n`); process.exit(1) }
+  // An old gh without `auth token` is not "logged out": tell the user to update it (B5).
+  if (auth.failure?.kind === 'gh_too_old') { console.error(`\n${formatFailureLines(auth.failure)}\n`); process.exit(1) }
+  let isLoggedIn = auth.ok
   if (!isLoggedIn && !process.env.GH_HOST) {
     // Covers the GHE-only-login-outside-a-git-repo case where checkAuth
     // defaulted to github.com and missed the user's actual login.
@@ -512,10 +570,15 @@ export async function bootstrap(renderApp, { repo: chosenRepo, repoOverride, ope
     process.exit(2)
   }
   if (!repo) {
-    const repos = await listRepos()
+    const { repos, failure } = await listReposDetailed()
+    if (failure) {
+      console.error(`\n${formatFailureLines(failure)}\n`)
+      process.exit(1)
+    }
     repo = await pickRepoInteractive(repos)
     if (!repo) {
-      console.error('\n  ✗ No repository selected. Exiting.\n')
+      console.error('\n  ✗ No repository selected. Exiting.')
+      console.error('    Run lazyhub inside a clone, or use: lazyhub --repo owner/name\n')
       process.exit(1)
     }
   }
@@ -544,7 +607,9 @@ export async function bootstrap(renderApp, { repo: chosenRepo, repoOverride, ope
  * @returns {Promise<{ok: boolean, message?: string}>}
  */
 export async function headlessPreflight() {
-  if (!(await detectGh())) {
+  const probe = await probeGh()
+  if (probe.timedOut) return { ok: false, message: `lazyhub --mcp: gh did not respond within ${BOOT_PROBE_TIMEOUT_MS / 1000}s (keychain prompt or slow credential helper?); run \`gh auth status\`, then restart` }
+  if (!probe.ok) {
     return { ok: false, message: 'lazyhub --mcp: gh (GitHub CLI) is not installed; install it from https://cli.github.com, run `gh auth login`, then restart' }
   }
   if (!process.env.GH_HOST) {

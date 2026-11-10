@@ -3,6 +3,7 @@
  */
 
 import { checkConfig, formatConfigReport } from './config.js'
+import { checkGh } from './gh.js'
 import { checkCoverage, formatCoverageReport } from './coverage.js'
 import { resolveCurrentRepo } from '../../executor/activity.js'
 import { sanitize } from '../../utils-core.js'
@@ -12,7 +13,7 @@ export const DOCTOR_USAGE = `Usage: lazyhub doctor [options]
 Check setup and review-coverage evidence. Read-only; nothing is changed.
 
 Options:
-  --config         check the config file (default when no report is chosen)
+  --config         check the config file, the gh CLI and your gh login (default when no report is chosen)
   --coverage       report enforcement coverage and alternate paths (queries GitHub via gh)
   --repo owner/name  repository for --coverage (default: current directory's)
   --json           machine-readable output; accepts exactly one report
@@ -42,6 +43,9 @@ export async function runDoctor(argv = process.argv.slice(2), out = process.stdo
   let ok = true
   if (configOnly) {
     const report = checkConfig()
+    const gh = await checkGh()
+    report.checks.push(...gh.checks)
+    report.ok = report.ok && gh.ok
     ok = ok && report.ok
     out.write(formatConfigReport(report, { json }))
     if (!json && !coverage) out.write('\nTip: run `lazyhub doctor --coverage` to check enforcement coverage and alternate paths.\n')
