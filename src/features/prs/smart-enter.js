@@ -2,6 +2,9 @@
 /**
  * src/features/prs/smart-enter.js -- where Enter on a PR row goes (#314).
  *
+ * Opt-in: `[state] smartEnter = true`. By default Enter always opens the plain PR detail and
+ * the other views (log, diff, conflict) stay on their own keys.
+ *
  * One pure, deterministic rule, first match wins, for an OPEN PR only:
  *   1. CI is failing                      -> the failed check's log
  *   2. a review is requested of you       -> Files changed (the diff)
