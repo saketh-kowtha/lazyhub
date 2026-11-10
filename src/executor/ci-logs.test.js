@@ -33,6 +33,11 @@ describe('getFailedLog', () => {
     expect(execa.mock.calls[0][1]).toEqual(['run', 'view', '12', '--repo', 'o/r', '--log-failed'])
   })
 
+  it('names the attempt of a run after the first (V4b, #597)', async () => {
+    await getFailedLog('o/r', { runId: '12', attempt: 2 })
+    expect(execa.mock.calls[0][1]).toEqual(['run', 'view', '12', '--repo', 'o/r', '--log-failed', '--attempt', '2'])
+  })
+
   it('refuses non-numeric ids (no flag or path injection) without spawning gh', async () => {
     for (const ref of [{ jobId: '1; rm -rf' }, { runId: '--web' }, { jobId: '../x' }, {}, { jobId: 1, runId: 2 }]) {
       expect((await getFailedLog('o/r', ref)).state).toBe('unavailable')

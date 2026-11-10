@@ -14,7 +14,7 @@ const FILES_PAGE = 100
  * @param {string} repo
  * @param {number} number
  * @param {{ after?: string|null, limit?: number, priority?: 'low' }} [opts]
- * @returns {Promise<{ files: {path:string, additions:number, deletions:number, changeType:string}[], hasNextPage: boolean, endCursor: string|null, totalCount: number }>}
+ * @returns {Promise<{ files: {path:string, additions:number, deletions:number, changeType:string}[], hasNextPage: boolean, endCursor: string|null, totalCount: number, headRefOid: string|null }>}
  */
 export async function listPRFilesPage(repo, number, { after = null, limit = FILES_PAGE, priority } = {}) {
   const [owner, name] = getRepo(repo).split('/')
@@ -22,6 +22,7 @@ export async function listPRFilesPage(repo, number, { after = null, limit = FILE
     query($owner: String!, $name: String!, $number: Int!, $limit: Int!, $after: String) {
       repository(owner: $owner, name: $name) {
         pullRequest(number: $number) {
+          headRefOid
           files(first: $limit, after: $after) {
             totalCount
             pageInfo { hasNextPage endCursor }
@@ -51,6 +52,8 @@ export async function listPRFilesPage(repo, number, { after = null, limit = FILE
     hasNextPage: Boolean(conn.pageInfo?.hasNextPage && conn.pageInfo.endCursor),
     endCursor: conn.pageInfo?.endCursor || null,
     totalCount: Number(conn.totalCount ?? files.length),
+    // The head commit this page describes: the diff views key their immutable caches by it (#597).
+    headRefOid: typeof pr.headRefOid === 'string' && pr.headRefOid ? pr.headRefOid : null,
   }
 }
 
@@ -76,7 +79,7 @@ function parseFileObject(text) {
  * @param {number} number
  * @param {string} path
  * @param {{ indexHint?: number }} [opts]
- * @returns {Promise<{ status: 'ok'|'omitted'|'empty'|'missing', patch: string|null, oldPath: string|null, additions: number, deletions: number }>}
+ * @returns {Promise<{ status: 'ok'|'omitted'|'empty'|'missing', patch: string|null, oldPath: string|null, additions: number, deletions: number, headSha?: string|null }>}
  */
 export async function getPRFilePatch(repo, number, path, { indexHint = null } = {}) {
   const r = getRepo(repo)
@@ -91,7 +94,9 @@ export async function getPRFilePatch(repo, number, path, { indexHint = null } = 
   if (!file) return { status: 'missing', patch: null, oldPath: null, additions: 0, deletions: 0 }
   const additions = Number(file.additions) || 0
   const deletions = Number(file.deletions) || 0
+  // The commit this listing was read at: blob_url is `https://github.com/o/r/blob/<head sha>/<path>`.
+  const headSha = /\/blob\/([0-9a-f]{40})\//.exec(String(file.blob_url || ''))?.[1] ?? null
   const oldPath = typeof file.previous_filename === 'string' && file.previous_filename ? file.previous_filename : null
-  if (typeof file.patch === 'string' && file.patch) return { status: 'ok', patch: file.patch, oldPath, additions, deletions }
-  return { status: additions + deletions > 0 ? 'omitted' : 'empty', patch: null, oldPath, additions, deletions }
+  if (typeof file.patch === 'string' && file.patch) return { status: 'ok', patch: file.patch, oldPath, additions, deletions, headSha }
+  return { status: additions + deletions > 0 ? 'omitted' : 'empty', patch: null, oldPath, additions, deletions, headSha }
 }

@@ -28,7 +28,7 @@ describe('listPRFilesPage (#509)', () => {
         { path: 'a.js', additions: 3, deletions: 1, changeType: 'MODIFIED' },
         { path: 'b.js', additions: 0, deletions: 9, changeType: 'DELETED' },
       ],
-      hasNextPage: true, endCursor: 'c1', totalCount: 250,
+      hasNextPage: true, endCursor: 'c1', totalCount: 250, headRefOid: null,
     })
   })
 
@@ -37,6 +37,23 @@ describe('listPRFilesPage (#509)', () => {
     expect((await listPRFilesPage('o/r', 7)).files.map(f => f.path)).toEqual(['ok.js'])
     runGh.mockResolvedValue({ data: { repository: { pullRequest: null } } })
     await expect(listPRFilesPage('o/r', 7)).rejects.toThrow(/not found/)
+  })
+})
+
+describe('head SHA for the SHA-keyed diff caches (V4b, #597)', () => {
+  const sha = 'c'.repeat(40)
+
+  it('returns the head the file page describes', async () => {
+    runGh.mockResolvedValue({ data: { repository: { pullRequest: { headRefOid: sha, files: { totalCount: 0, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } } } })
+    expect((await listPRFilesPage('o/r', 7)).headRefOid).toBe(sha)
+    expect(runGh.mock.calls[0][0].find(a => a.startsWith('query='))).toContain('headRefOid')
+  })
+
+  it('reads the commit a file listing was taken at from its blob_url', async () => {
+    runGh.mockResolvedValue(JSON.stringify({ filename: 'a.js', status: 'modified', additions: 1, deletions: 0, patch: '@@ -1 +1 @@\n+a', blob_url: `https://github.com/o/r/blob/${sha}/a.js` }))
+    expect((await getPRFilePatch('o/r', 7, 'a.js')).headSha).toBe(sha)
+    runGh.mockResolvedValue(JSON.stringify({ filename: 'a.js', status: 'modified', additions: 1, deletions: 0, patch: '@@ -1 +1 @@\n+a' }))
+    expect((await getPRFilePatch('o/r', 7, 'a.js')).headSha).toBeNull()
   })
 })
 

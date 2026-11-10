@@ -23,12 +23,15 @@ export async function listRuns(/** @type {any} */ repo, /** @type {Record<string
  * Get logs for a workflow run.
  * @param repo
  * @param runId
+ * @param attempt  re-run attempt (1-based); only attempts after the first are named, so the first
+ *                 attempt keeps the plain command and a log read is pinned to the attempt it was keyed by
  */
-export async function getRunLogs(/** @type {any} */ repo, /** @type {any} */ runId) {
+export async function getRunLogs(/** @type {any} */ repo, /** @type {any} */ runId, /** @type {any} */ attempt = null) {
   const args = [
     'run', 'view', String(runId),
     '--repo', getRepo(repo),
     '--log',
+    ...(Number.isInteger(attempt) && attempt > 1 ? ['--attempt', String(attempt)] : []),
   ]
   return runGh(args)
 }

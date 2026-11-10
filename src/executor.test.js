@@ -622,6 +622,17 @@ describe('getRunLogs()', () => {
     expect(args).toContain('view')
     expect(args).toContain('12345')
     expect(args).toContain('--log')
+    expect(args).not.toContain('--attempt')
+  })
+
+  it('names the attempt only after the first (V4b, #597)', async () => {
+    execa.mockResolvedValue({ exitCode: 0, stdout: 'step logs here', stderr: '' })
+    await getRunLogs('owner/repo', 12345, 3)
+    const [, args] = execa.mock.calls[0]
+    expect(args.slice(-2)).toEqual(['--attempt', '3'])
+    execa.mockClear()
+    await getRunLogs('owner/repo', 12345, 1)
+    expect(execa.mock.calls[0][1]).not.toContain('--attempt')
   })
 })
 

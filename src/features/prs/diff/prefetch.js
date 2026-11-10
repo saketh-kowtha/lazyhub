@@ -5,15 +5,15 @@
  * `d` needs one round trip: the changed-file list. When the cursor rests on a PR row, or its
  * detail opens, that page is fetched ahead of time into the same query entry `useGh` reads,
  * at low priority so it never delays a call the user asked for. A fresh entry or an
- * in-flight request is left alone; a failure is logged and the real open path fetches for itself.
+ * in-flight request is left alone (a list read under a known head SHA never goes stale, #597); a failure is logged and the real open path fetches for itself.
  */
 
 import { useEffect } from 'react'
 import { queryClient, keyString, DEFAULT_TTL } from '../../../data/queryClient.js'
 import { ghQueryKey } from '../../../data/ghKeys.js'
 import { scopedCacheKey, cacheIdentity } from '../../../cache.js'
-import { listPRFilesPage } from '../../../executor.js'
 import { logSwallowed } from '../../../contain.js'
+import { listPRDiffFiles, fetchDiffFiles, knownHead } from './keys.js'
 
 /** How long the cursor must rest on a PR row before its diff is prefetched. */
 export const PREFETCH_REST_MS = 400
@@ -26,15 +26,17 @@ export const PREFETCH_REST_MS = 400
  */
 export function prefetchPRDiff(repo, number) {
   if (!repo || number == null) return false
-  const keyStr = keyString(ghQueryKey(listPRFilesPage, [repo, number]))
+  // The same key the diff view reads: by head SHA when one is known, else the plain ('') read.
+  const sha = knownHead(repo, number)
+  const keyStr = keyString(ghQueryKey(listPRDiffFiles, [repo, number, sha]))
   const cached = queryClient.get(keyStr)
-  if (cached && Date.now() - cached.timestamp < DEFAULT_TTL) return false
+  if (cached && (sha || Date.now() - cached.timestamp < DEFAULT_TTL)) return false
   if (queryClient.isInflight(keyStr)) return false
   const { host } = cacheIdentity()
   const { promise, release } = queryClient.fetch(
     keyStr,
-    () => listPRFilesPage(repo, number, { priority: 'low' }),
-    { persist: { key: scopedCacheKey([repo, listPRFilesPage.name, [repo, number]]), meta: { repo, host, op: listPRFilesPage.name } } },
+    () => fetchDiffFiles(repo, number, sha, { priority: 'low' }),
+    { persist: { key: scopedCacheKey([repo, listPRDiffFiles.name, [repo, number, sha]]), meta: { repo, host, op: listPRDiffFiles.name } } },
   )
   promise.then(release, err => { release(); logSwallowed('prs.diff.prefetch', err) })
   return true
