@@ -236,7 +236,7 @@ describe('keystroke budgets', () => {
       if (fn === executor.getPRChecks) return ghResult(pr.statusCheckRollup)
       if (fn === executor.getBranchProtection) return ghResult({ requiredReviews: 1 })
       if (fn === executor.getPRDiffStats) return ghResult({ additions: 2, deletions: 0, changedFiles: 1 })
-      if (fn === executor.listPRFilesPage) return ghResult(diffFilesPage(DIFF))
+      if (fn.name === 'listPRDiffFiles') return ghResult(diffFilesPage(DIFF))
       if (fn === executor.listPRCommentsPage) return ghResult({ comments: COMMENTS, truncated: false })
       if (fn === executor.listPRTimelinePage) return ghResult(timelinePage(COMMENTS))
       if (fn === executor.listRuns) return ghResult([RUN])

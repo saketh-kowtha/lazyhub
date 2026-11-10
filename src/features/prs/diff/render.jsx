@@ -197,7 +197,7 @@ export function DiffView({ prNumber, state }) {
   const { t } = useTheme()
   const {
     stdout, visibleHeight, diffStats, focusFile, totalFiles, listComplete, listError, diffRefreshError, commentsTruncated,
-    prMeta, repoInfo, loading, error, cursor, scrollOffset, dialog, setDialog,
+    prMeta, repoInfo, mode, error, cursor, scrollOffset, dialog, setDialog,
     mergeChoice, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
     footerKeys, showTree, treeCursor, findQuery, setFindQuery, findActive,
     findMatches, gotoActive, gotoInput, setGotoInput, fileJumpActive, setFileJumpActive,
@@ -248,13 +248,15 @@ export function DiffView({ prNumber, state }) {
     )
   }
 
-  if (loading) return (
+  // The body is chosen by the derived render mode (V1, #597), never by a loading flag: the skeleton
+  // only after the 150 ms delay, nothing new before it, and rows stay on screen while a newer head loads.
+  if (mode === 'skeleton' || mode === 'pending') return (
     <Box flexDirection="column" flexGrow={1}>
-      <DiffSkeleton prNumber={prNumber} />
+      {mode === 'skeleton' ? <DiffSkeleton prNumber={prNumber} /> : <Box flexGrow={1} />}
       <FooterKeys keys={footerKeys} />
     </Box>
   )
-  if (error) return (
+  if (mode === 'error') return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       <FailureNotice failure={classifyGhFailure(error)} />
       <Text color={t.ui.dim}>[{firstActionKey('list.refresh', 'r')}] retry</Text>

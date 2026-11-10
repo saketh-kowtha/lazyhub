@@ -12,7 +12,6 @@ import {
   listOpenPRBranches,
   deleteBranch,
   listRuns,
-  getRunLogs,
   cancelRun,
   listNotifications,
   markNotificationRead,
@@ -24,6 +23,7 @@ import {
 import { IssueList } from './features/issues/list.jsx'
 import { BranchList } from './features/branches/index.jsx'
 import { ActionList } from './features/actions/index.jsx'
+import { getRunLogsAt, loadRunFailureExcerpt } from './features/actions/run-log.js'
 import { NotificationList } from './features/notifications/index.jsx'
 import { PRComments } from './features/prs/comments.jsx'
 import { timelinePage } from './test/timeline.js'
@@ -82,6 +82,7 @@ vi.mock('./executor.js', () => ({
   deletePRComment: vi.fn(),
 }))
 
+let runLogText = ''
 function ghResult(data, extra = {}) {
   return { data, loading: false, error: null, refetch: vi.fn(), ...extra }
 }
@@ -126,6 +127,10 @@ describe('Pane E2E user flows', () => {
           { number: 91, state: 'OPEN', headRefName: 'feature-1' },
         ])
       }
+
+      // The run log reads are keyed by run id + attempt (V4b, #597); the text is what getRunLogs returns.
+      if (fn === getRunLogsAt) return ghResult(runLogText)
+      if (fn === loadRunFailureExcerpt) return ghResult({ state: 'expired', detail: 'Log not found or expired', excerpt: null })
 
       if (fn === listRuns) {
         return ghResult([
@@ -253,12 +258,12 @@ describe('Pane E2E user flows', () => {
   })
 
   it('opens workflow logs and allows cancelling a run', async () => {
-    getRunLogs.mockResolvedValue([
+    runLogText = [
       '2026-06-06T10:00:00.000Z boot',
       '##[group]Build',
       'compile',
       '##[endgroup]',
-    ].join('\n'))
+    ].join('\n')
     cancelRun.mockResolvedValue(undefined)
 
     const logView = renderWithProviders(
@@ -269,7 +274,7 @@ describe('Pane E2E user flows', () => {
     )
 
     await flush(20)
-    expect(getRunLogs).toHaveBeenCalledWith('owner/repo', 301)
+    expect(useGh.mock.calls.some(([fn, deps]) => fn === getRunLogsAt && deps[0] === 'owner/repo' && deps[1] === 301)).toBe(true)
     // The run failed, so the viewer opens on its failure excerpt; `f` shows the full log (#463).
     expect(logView.lastFrame()).toContain('Failure excerpt')
     await sendInput('f')

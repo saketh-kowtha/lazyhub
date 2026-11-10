@@ -272,7 +272,7 @@ describe('diff view', () => {
     const executor = await import('../executor.js')
     executor.getPRFilePatch.mockImplementation(fakeFilePatch(DIFF))
     useGh.mockImplementation(fn => ({
-      data: fn === listPRFilesPage ? diffFilesPage(DIFF)
+      data: fn.name === 'listPRDiffFiles' ? diffFilesPage(DIFF)
         : fn === getPR ? { title: `Title${CANARY}`, state: 'OPEN', headRefOid: 'a'.repeat(40) }
         : fn === getRepoInfo ? { viewerPermission: 'ADMIN' }
         : fn === getPRDiffStats ? { additions: 2, deletions: 1, changedFiles: 1 }

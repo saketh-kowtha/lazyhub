@@ -134,9 +134,11 @@ describe('diff open: errors and retry (#451)', () => {
 describe('diff loading frame (#454)', () => {
   it('shows a skeleton with header on the first frame, not a bare spinner', async () => {
     const view = mount(454)
+    // Under the 150 ms delay nothing new is drawn (the footer chrome only); then the skeleton.
+    expect(view.lastFrame()).not.toContain('░')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('░'))
     const frame = view.lastFrame()
     expect(frame).toContain('PR #454 Diff')
-    expect(frame).toContain('░')
     expect(frame).not.toContain('Loading diff')
   })
 
@@ -154,7 +156,7 @@ describe('diff loading frame (#454)', () => {
 })
 
 describe('diff with a cached file list on disk (#451/#454)', () => {
-  const seedDiskList = (n) => writeCache(mkDiskKey(['load/order', 'listPRFilesPage', ['load/order', n]]), LIST, { repo: 'load/order', op: 'listPRFilesPage' })
+  const seedDiskList = (n) => writeCache(mkDiskKey(['load/order', 'listPRDiffFiles', ['load/order', n, '']]), LIST, { repo: 'load/order', op: 'listPRDiffFiles' })
 
   it('does not start secondary calls until the revalidation of a cached list lands', async () => {
     seedDiskList(470)

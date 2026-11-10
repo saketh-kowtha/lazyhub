@@ -12,6 +12,8 @@ const h = vi.hoisted(() => {
 })
 
 vi.mock('../../../executor.js', () => ({
+  getPR: async function getPR() { return null },
+  getPRFilePatch: async function getPRFilePatch() { return null },
   // Named function: useGh keys its cache by fn.name.
   listPRFilesPage: async function listPRFilesPage(repo, n, opts) {
     h.calls.push({ repo, n, opts })
@@ -19,14 +21,16 @@ vi.mock('../../../executor.js', () => ({
   },
 }))
 
+const { resetHeadHints } = await import('./keys.js')
 const { prefetchPRDiff, usePrefetchPRDiff, PREFETCH_REST_MS } = await import('./prefetch.js')
 const { useGh, resetGhMemoryCache } = await import('../../../hooks/useGh.js')
-const { listPRFilesPage } = await import('../../../executor.js')
+const { listPRDiffFiles } = await import('./keys.js')
 
 const LIST = { files: [{ path: 'a.js', additions: 1, deletions: 0, changeType: 'MODIFIED' }], hasNextPage: false, endCursor: null, totalCount: 1 }
 
 beforeEach(() => {
   resetGhMemoryCache()
+  resetHeadHints()
   rmSync(process.env.LAZYHUB_CACHE_DIR, { recursive: true, force: true })
   h.calls.length = 0
   h.pending.length = 0
@@ -34,7 +38,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); rmSync(process.env.LAZYHUB_CACHE_DIR, { recursive: true, force: true }) })
 
 function Opened({ n }) {
-  const { data, loading } = useGh(listPRFilesPage, ['o/r', n])
+  const { data, loading } = useGh(listPRDiffFiles, ['o/r', n, ''])
   return <Text>{loading ? 'loading' : `files:${data?.files.length}`}</Text>
 }
 

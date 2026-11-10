@@ -3,11 +3,12 @@ import { Text } from 'ink'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { usePRDiffFiles } from './files.js'
 import { resetGhMemoryCache } from '../../../hooks/useGh.js'
-import { listPRFilesPage, getPRFilePatch } from '../../../executor.js'
+import { listPRFilesPage, getPRFilePatch, getPR } from '../../../executor.js'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../../test/test-helpers.jsx'
 import { flattenFiles } from '../diff-parser.js'
+import { resetHeadHints } from './keys.js'
 
-vi.mock('../../../executor.js', () => ({ listPRFilesPage: vi.fn(), getPRFilePatch: vi.fn() }))
+vi.mock('../../../executor.js', () => ({ listPRFilesPage: vi.fn(), getPRFilePatch: vi.fn(), getPR: vi.fn() }))
 
 const meta = n => Array.from({ length: n }, (_, i) => ({ path: `src/f${i}.js`, additions: 2, deletions: 1, changeType: 'MODIFIED' }))
 const patchFor = path => ({ status: 'ok', patch: `@@ -1,2 +1,3 @@\n a\n-b\n+c ${path}\n+d`, oldPath: null, additions: 2, deletions: 1 })
@@ -21,6 +22,8 @@ function Probe({ focus = 0, budgetBytes, number = 7 }) {
 beforeEach(() => {
   vi.clearAllMocks()
   resetGhMemoryCache()
+  resetHeadHints()
+  getPR.mockResolvedValue(null)
   getPRFilePatch.mockImplementation(async (_r, _n, path) => patchFor(path))
 })
 afterEach(() => cleanup())

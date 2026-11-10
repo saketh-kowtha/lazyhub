@@ -53,7 +53,7 @@ beforeEach(() => {
   mergePR.mockResolvedValue(undefined)
   getPRFilePatch.mockImplementation(fakeFilePatch(DIFF))
   useGh.mockImplementation(fn => ({
-    data: fn === listPRFilesPage ? diffFilesPage(DIFF)
+    data: fn.name === 'listPRDiffFiles' ? diffFilesPage(DIFF)
       : fn === getPR ? { title: 'Diff contracts', state: 'OPEN', headRefOid: 'a'.repeat(40) }
       : fn === getRepoInfo ? { viewerPermission: 'ADMIN' }
       : fn === getPRDiffStats ? { additions: 2, deletions: 1, changedFiles: 2 }
