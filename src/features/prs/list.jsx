@@ -19,6 +19,7 @@ import { useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useGh } from '../../hooks/useGh.js'
+import { useListController } from '../../hooks/useListController.js'
 import { seedGh } from '../../data/ghKeys.js'
 import { usePrefetchPRDiff } from './diff/prefetch.js'
 import { listPRsPage, getPR, getPRRow, getPRPreview, getRepoInfo, searchOwnsState } from '../../executor.js'
@@ -111,7 +112,10 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const statesList = [...filterStates].sort()
   const pageFilter = { states: statesList, scope, author: authorFilter || undefined, search: searchText || undefined, sort: sortMode, limit: PAGE_SIZE }
   const pageKey = JSON.stringify([repo, pageFilter])
-  const { data: firstPage, loading, error, refetch: refetchFirst, isStale } = useGh(listPRsPage, [repo, pageFilter])
+  // A filter, scope, author, search or sort change keeps the previous rows on screen (flagged
+  // `isPlaceholderData`) until the new first page lands; the fetch shows in the header cell only.
+  const { data: firstPage, loading, isLoading, isFetching, skeletonDue, isPlaceholderData, error, refetch: refetchFirst, isStale } = useGh(listPRsPage, [repo, pageFilter], { keepPreviousData: true })
+  const placeholder = Boolean(isPlaceholderData)
   const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000 })
   const [more, setMore] = useState(() => emptyMore(pageKey))
   const extra = more.key === pageKey ? more : emptyMore(pageKey)
@@ -147,9 +151,6 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     resetPaging(pageKey, { keepOverlay: true })
   }, [firstAnchor, pageKey, resetPaging])
 
-  const [cursor, setCursorRaw] = useState(savedState.cursor)
-  const [scrollOffset, setScrollOffsetRaw] = useState(savedState.scrollOffset)
-
   // Wrap setters to also persist to pane state map
   const setFilterStates = (updater) => {
     const next = typeof updater === 'function' ? updater(filterStates) : updater
@@ -162,8 +163,6 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const setSortMode = (v) => { setSortModeRaw(v); setSavedState({ sortMode: v }) }
   const setAuthorFilter = (v) => { setAuthorFilterRaw(v); setSavedState({ authorFilter: v }) }
   const setSearchText = (v) => { setSearchTextRaw(v); setSavedState({ searchText: v }) }
-  const setCursor = (v) => { setCursorRaw(v); setSavedState({ cursor: typeof v === 'function' ? v(cursor) : v }) }
-  const setScrollOffset = (v) => { setScrollOffsetRaw(v); setSavedState({ scrollOffset: typeof v === 'function' ? v(scrollOffset) : v }) }
   const [dialog, setDialog] = useState(null)
   const [mergeOptions, setMergeOptions] = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
@@ -188,10 +187,33 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       .filter(pr => pr && pr.number && !seen.has(pr.number) && seen.add(pr.number))
       .map(pr => patches.rows[pr.number] || pr)
       // A search that names its own state decides what is listed; otherwise the state filter applies.
-      .filter(pr => searchOwnsState(searchText) || filterStates.has((pr.state || '').toLowerCase()))
-  }, [firstPage, extra.items, patches, filterStatesArr, searchText]) // eslint-disable-line react-hooks/exhaustive-deps
+      // The previous key's rows are shown as they are until the new page lands: filtering them by the new states would blank them.
+      .filter(pr => placeholder || searchOwnsState(searchText) || filterStates.has((pr.state || '').toLowerCase()))
+  }, [firstPage, extra.items, patches, filterStatesArr, searchText, placeholder]) // eslint-disable-line react-hooks/exhaustive-deps
   const itemsRef = useRef(items)
   itemsRef.current = items
+
+  // Cursor, scroll window, gg/G and selection memory (the cursor follows its PR by number across a refetch).
+  const list = useListController({ items, height: effectiveHeight, getId: pr => pr.number })
+  const { cursor, scrollOffset } = list
+  // Back-navigation from detail/diff restores the saved cursor once rows exist, then keeps it saved.
+  const restoredCursor = useRef(false)
+  useEffect(() => {
+    if (restoredCursor.current || items.length === 0) return
+    restoredCursor.current = true
+    if (savedState.cursor > 0) list.moveTo(Math.min(savedState.cursor, items.length - 1))
+  }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (restoredCursor.current) setSavedState({ cursor, scrollOffset })
+  }, [cursor, scrollOffset]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A new filter/scope/author/search/sort starts at the top, once its rows (not the placeholder) are in.
+  const topPending = useRef(false)
+  const goTop = () => { topPending.current = true; list.jumpTop() }
+  useEffect(() => {
+    if (!topPending.current || placeholder || !firstPage) return
+    topPending.current = false
+    list.jumpTop()
+  }, [firstPage, placeholder]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = useCallback(async () => {
     if (inFlight.current || !endCursor) return
@@ -247,25 +269,16 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
   // Fetch the next cursor page when the cursor nears the end of what is loaded.
   useEffect(() => {
-    if (hasNextPage && !loading && !error && !extra.loading && !extra.error && cursor >= items.length - 10) loadMore()
-  }, [cursor, items.length, hasNextPage, loading, error, extra.loading, extra.error, loadMore])
+    if (hasNextPage && !placeholder && !error && !extra.loading && !extra.error && cursor >= items.length - 10) loadMore()
+  }, [cursor, items.length, hasNextPage, placeholder, error, extra.loading, extra.error, loadMore])
 
   // Filter keys from config (defaults: O=open, C=closed, M=merged)
   const FK = _cfg.keys
 
   // Notify parent of loading/error/count — cursor/scrollOffset stay local
   useEffect(() => {
-    if (onPaneState) onPaneState({ loading, error, count: items.length, isStale })
-  }, [loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // A refetch can shrink the list (merged/closed PR); keep the cursor on a real row.
-  useEffect(() => {
-    if (items.length > 0 && cursor > items.length - 1) {
-      const last = items.length - 1
-      setCursor(last)
-      setScrollOffset(Math.max(0, last - effectiveHeight + 1))
-    }
-  }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (onPaneState) onPaneState({ loading: isLoading ?? loading, error, count: items.length, isStale })
+  }, [isLoading, loading, error, items.length, isStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Notify App when dialog opens/closes so global keys are suppressed + footer updates
   useKeyScope('dialog', !!dialog)
@@ -283,13 +296,6 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   statusRef.current = showStatus
   const { run: runWrite } = usePendingWrite((msg) => showStatus(msg, false, true))
 
-  const moveCursor = useCallback((delta) => {
-    const next = Math.max(0, Math.min(items.length - 1, cursor + delta))
-    setCursor(next)
-    if (next < scrollOffset) setScrollOffset(next)
-    if (next >= scrollOffset + effectiveHeight) setScrollOffset(next - effectiveHeight + 1)
-  }, [cursor, items.length, scrollOffset, effectiveHeight])
-
   const openDialog = useCallback((name) => { setDialog(name) }, [])
   const closeDialog = useCallback(() => setDialog(null), [])
 
@@ -297,37 +303,12 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     if (statusMsg?.persist) { setStatusMsg(null) }
     if (dialog) return
 
-    // gg → top
-    const topSequenceKey = firstActionKey('cursor.top', 'gg', _actions)[0]
-    if (input === topSequenceKey) {
-      if (lastKeyRef.current === topSequenceKey) {
-        clearTimeout(lastKeyTimer.current)
-        lastKeyRef.current = null
-        setCursor(0); setScrollOffset(0)
-        return
-      }
-      lastKeyRef.current = topSequenceKey
-      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
-      return
-    }
-    lastKeyRef.current = null
-
-    // G → bottom
-    if (matchesAction('cursor.bottom', input, key, _actions)) {
-      if (items.length > 0) {
-        const last = items.length - 1
-        setCursor(last); setScrollOffset(Math.max(0, last - effectiveHeight + 1))
-      }
-      return
-    }
-
-    if (matchesAction('cursor.down', input, key, _actions)) { moveCursor(1);  return }
-    if (matchesAction('cursor.up', input, key, _actions))   { moveCursor(-1); return }
+    if (list.handleKey(input, key)) return
     if (matchesAction('list.refresh', input, key, _actions)) { if (extra.error) retryPage(); else refetch(); return }
     if (matchesAction('list.search', input, key, _actions)) { openDialog('search'); return }
     if (matchesAction('pr.preview', input, key, _actions)) { setPopoverDismissed(d => !d); return }
 
-    const focusedPR = !loading && items.length > 0 ? items[cursor] : null
+    const focusedPR = !placeholder && items.length > 0 ? items[cursor] : null
     if (matchesAction('pr.auto-merge', input, key, _actions) && canToggleAutoMergeFromList(focusedPR)) { openDialog('auto-merge'); return }
 
     // Filter state toggles (defaults: O/C/M) — press to toggle state in/out of active set
@@ -342,7 +323,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
         }
         return next
       })
-      setCursor(0); setScrollOffset(0); return
+      goTop(); return
     }
     // f cycles single-state sets: open → closed → merged → open
     if (matchesAction('pr.filter-cycle', input, key, _actions)) {
@@ -352,7 +333,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
         showStatus(`▸ ${next}`)
         return new Set([next])
       })
-      setCursor(0); setScrollOffset(0)
+      goTop()
       return
     }
 
@@ -370,7 +351,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
         setScope(next)
         showStatus(`scope: ${next}`)
       }
-      setCursor(0); setScrollOffset(0)
+      goTop()
       return
     }
 
@@ -380,7 +361,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     // N — new PR
     if (matchesAction('pr.new', input, key, _actions)) { openDialog('new-pr'); return }
 
-    if (loading || items.length === 0) return
+    if (placeholder || items.length === 0) return
     const pr = items[cursor]
     if (!pr) return
 
@@ -433,20 +414,26 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
 
   const dialogView = renderPRListDialog({
     dialog, selectedPR, items, repo, repoInfo, authorFilter, effectiveHeight,
-    mergeOptions, setMergeOptions, setDialog, setCursor, setScrollOffset,
+    mergeOptions, setMergeOptions, setDialog, jumpTop: goTop,
     setAuthorFilter, searchText, setSearchText, showStatus, closeDialog, refetch, refreshPR, runWrite,
   })
   if (dialogView) return dialogView
 
   // ── List view ─────────────────────────────────────────────────────────────
 
-  const visiblePRs = items.slice(scrollOffset, scrollOffset + effectiveHeight)
+  // `data` is withheld while the rows are another key's and there are none: that is a load, not an empty result.
+  const query = {
+    data: firstPage && !(placeholder && items.length === 0) ? items : undefined,
+    isLoading: isLoading ?? loading,
+    skeletonDue,
+    error,
+  }
 
   return (
     <PRListView
       items={items}
-      loading={loading}
-      error={error}
+      query={query}
+      fetching={Boolean(isFetching)}
       filterStates={filterStates}
       scope={scope}
       sortMode={sortMode}
@@ -458,7 +445,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
       t={t}
       height={height}
       effectiveHeight={effectiveHeight}
-      visiblePRs={visiblePRs}
+      visiblePRs={list.visibleItems}
       scrollOffset={scrollOffset}
       cursor={cursor}
       innerWidth={innerWidth}
