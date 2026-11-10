@@ -63,7 +63,7 @@ describe('PR conversation keeps its rows (V4c)', () => {
     await flush(30)
     expect(view.lastFrame()).toContain('Conv 1')
     expect(view.lastFrame()).not.toContain('Loading comments')
-    expect(view.lastFrame()).toContain('↻')
+    expect(view.lastFrame()).toContain('⟳')
     slow.reject(new Error('boom'))
     await waitForExpectation(() => expect(view.lastFrame()).toContain('refresh failed, showing loaded comments'))
     expect(view.lastFrame()).toContain('Conv 1')

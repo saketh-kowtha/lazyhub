@@ -471,7 +471,7 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
           {statusMsg && <Text color={t.ci.pass}>{sanitizeRaw(statusMsg)}</Text>}
           {error && <Text color={t.ci.fail}>{`⚠ refresh failed, showing loaded comments  [${firstActionKey('list.refresh', 'r')}] retry`}</Text>}
           {/* Reserved cell: background activity never shifts the layout. */}
-          <Text color={t.ui.dim}>{isFetching ? '↻' : ' '}</Text>
+          <Text color={t.ui.dim}>{isFetching ? '⟳' : ' '}</Text>
           <Text color={t.ui.dim}>filter: {filterMode}  {countLabel}{incomplete ? '  (incomplete: GitHub repeated a page cursor)' : ''}{hasMore ? (moreFailed ? '  (load failed, r to retry)' : '  (loading more…)') : ''}</Text>
         </Box>
       </Box>

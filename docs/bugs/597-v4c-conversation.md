@@ -8,7 +8,7 @@
   - `IssueDetail` used `loading`/`pageLoading` for the "refreshing" handshake and the live-update pause. Since V1, `loading === isLoading` is false while data is on screen, so the refresh handshake (`if (pageLoading) return`) would have reset the timeline from the stale cached page.
 - **Fix:**
   - All three bodies follow the derived `mode` (`skeleton | pending | data | empty | error`) from `useGh`/`useQuery`. A full-body failure or skeleton shows only when there is no data; otherwise rows stay and one line in the header/status slot says the refresh failed.
-  - A fixed-width `↻` cell in each header (a space when idle) shows background activity, so it cannot shift layout. No "refreshing" rows.
+  - A fixed-width `⟳` cell in each header (a space when idle) shows background activity, so it cannot shift layout. No "refreshing" rows.
   - `IssueDetail` uses `isFetching` for the refresh handshake and the live-update pause, and starts the refetches before it resets the loaded pages.
   - `CustomPane` runs its command through `useQuery` (memory cache only, list freshness 30 s, never written to disk), so `r` keeps rows, a failing re-run keeps them with a notice, and a re-open inside the window runs nothing. The cursor is clamped when a re-run returns fewer rows. The command error line is now `sanitizeRaw`ed.
   - The conversation freshness class (15 s) already applies by fetch function name (V1).

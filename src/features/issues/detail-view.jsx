@@ -23,7 +23,7 @@ export function IssueDetailView({
           <Text color={stateColor}>{issue.state === 'OPEN' ? '●' : '✗'}</Text>
           <Text bold color={t.ui.selected} wrap="truncate">#{issue.number} {sanitize(issue.title)}</Text>
           {/* Reserved cell: background activity never shifts the layout. */}
-          <Text color={t.ui.dim}>{fetching ? '↻' : ' '}</Text>
+          <Text color={t.ui.dim}>{fetching ? '⟳' : ' '}</Text>
         </Box>
         <Box gap={2}>
           <Text color={t.ui.muted}>by {sanitize(issue.author?.login)}</Text>

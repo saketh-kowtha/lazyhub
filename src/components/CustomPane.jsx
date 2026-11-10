@@ -249,7 +249,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
         {items.length > 0 && <Text color={t.ui.dim}>({items.length})</Text>}
         <Text color={t.ui.dim}>[r] refresh  [/] search  [y] copy url  [o] browser</Text>
         {/* Reserved cell: background activity never shifts the layout. */}
-        <Text color={t.ui.dim}>{isFetching ? '↻' : ' '}</Text>
+        <Text color={t.ui.dim}>{isFetching ? '⟳' : ' '}</Text>
         {mode === 'data' && error && <Text color={t.ci.fail}>{`⚠ refresh failed: ${sanitizeRaw(error)}`}</Text>}
         {statusMsg && (
           <Text color={statusMsg.isError ? t.ci.fail : t.ci.pass}> {sanitizeRaw(statusMsg.msg)}</Text>
