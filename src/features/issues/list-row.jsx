@@ -7,6 +7,7 @@ import { Text } from 'ink'
 import { format } from 'timeago.js'
 import { sanitize, safeHex, formatLogin } from '../../utils.js'
 import { ListRow } from '../../ui/ListRow.jsx'
+import { useMinuteClock } from '../../ui/clock.js'
 import { fitCell, cellWidth, planRow } from '../../ui/row-layout.js'
 
 // Colour budget (#566): the state is the glyph (● open, ○ closed) and the focused row takes the one
@@ -25,6 +26,7 @@ const AUTHOR_COLS = 12
 const AGE_COLS = 13
 
 export const IssueRow = memo(({ issue, isSelected, t, width = 78 }) => {
+  useMinuteClock()
   const authorLogin   = fitCell(formatLogin(sanitize(issue.author?.login), AUTHOR_COLS), AUTHOR_COLS)
   const visibleLabels = (issue.labels || []).slice(0, 2).map(l => ({ color: safeHex(l.color), text: `[${sanitize(l.name).slice(0, 14)}]` }))
   const extraLabels   = (issue.labels || []).length - 2
