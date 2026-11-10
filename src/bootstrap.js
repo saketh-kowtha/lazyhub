@@ -82,6 +82,48 @@ export function parseRemoteUrl(url) {
 // (no leading '-', no shell/terminal metacharacters) reach ssh, env or output.
 const isValidHost = (h) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/.test(h)
 
+// Forges that are not GitHub: a remote there says nothing about the GitHub host to
+// query and must never become an owner/name (a GitLab clone is not a lazyhub repo).
+const FOREIGN_FORGE = /(^|\.)(gitlab\.com|bitbucket\.org|codeberg\.org|sr\.ht|dev\.azure\.com|visualstudio\.com|sourceforge\.net)$|^(gitlab|bitbucket)\./i
+
+/**
+ * @param {string} host
+ */
+export const isForeignForge = (host) => FOREIGN_FORGE.test(host)
+
+/**
+ * The remote that names this checkout's GitHub repository: `origin`, else the
+ * first other remote, skipping remotes on other forges (a GitLab origin with a
+ * GitHub mirror remote, or a clone whose only remote is `upstream`).
+ *
+ * @returns {Promise<{name: string, parsed: {host: string, path: string, ssh: boolean}}|null>}
+ */
+async function pickRemote() {
+  const usable = (url) => {
+    const parsed = parseRemoteUrl(url.trim())
+    return parsed && !isForeignForge(parsed.host) ? parsed : null
+  }
+  const origin = await execa('git', ['remote', 'get-url', 'origin'], { reject: false })
+  if (origin.exitCode === 0) {
+    const parsed = usable(origin.stdout)
+    if (parsed) return { name: 'origin', parsed }
+  }
+  // 128 is "not a git repository": nothing to scan. Anything else (no origin, or an
+  // origin on another forge) falls through to the other remotes.
+  if (origin.exitCode === 128) return null
+  const all = await execa('git', ['remote', '-v'], { reject: false })
+  if (all.exitCode !== 0) return null
+  const seen = new Set()
+  for (const line of (all.stdout || '').split('\n')) {
+    const m = line.match(/^(\S+)\t(.+) \(fetch\)$/)
+    if (!m || m[1] === 'origin' || seen.has(m[1])) continue
+    seen.add(m[1])
+    const parsed = usable(m[2])
+    if (parsed) return { name: m[1], parsed }
+  }
+  return null
+}
+
 /**
  * Resolve an SSH host (possibly a ~/.ssh/config alias) to the real hostname
  * with `ssh -G`. Returns null when ssh is missing or yields no hostname.
@@ -107,10 +149,10 @@ async function resolveSshHostname(alias) {
  */
 async function resolveRemoteHost() {
   try {
-    const result = await execa('git', ['remote', 'get-url', 'origin'], { reject: false })
-    if (result.exitCode !== 0) return null
-    const parsed = parseRemoteUrl(result.stdout.trim())
-    if (!parsed || !isValidHost(parsed.host)) return null
+    const picked = await pickRemote()
+    if (!picked) return null
+    const { parsed } = picked
+    if (!isValidHost(parsed.host)) return null
     if (!parsed.ssh) return { host: parsed.host, resolved: true }
     const real = await resolveSshHostname(parsed.host)
     // GitHub's SSH-over-443 endpoint is not an API host.
@@ -322,12 +364,9 @@ export async function detectRepo() {
   // 1. Parse git remote origin URL — fast, no network needed. Host-agnostic:
   // an SSH alias or separate SSH hostname never matches GH_HOST literally.
   try {
-    const result = await execa('git', ['remote', 'get-url', 'origin'], { reject: false })
-    if (result.exitCode === 0) {
-      const parsed = parseRemoteUrl(result.stdout.trim())
-      const match = parsed?.path.match(/^([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/)
-      if (match) return match[1]
-    }
+    const parsed = (await pickRemote())?.parsed
+    const match = parsed?.path.match(/^([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/)
+    if (match) return match[1]
   } catch { /* not in a git repo */ }
 
   // 2. Let gh resolve it from the git context
@@ -363,7 +402,8 @@ export async function listRepos() {
 async function pickRepoInteractive(repos) {
   return new Promise((resolve) => {
     if (repos.length === 0) {
-      console.error('  No repositories found.')
+      console.error('  No repositories found for this account.')
+      console.error('  Run lazyhub inside a clone, or name one: lazyhub --repo owner/name')
       resolve(null)
       return
     }
@@ -462,11 +502,13 @@ export async function bootstrap(renderApp, { repo: chosenRepo, repoOverride, ope
   // GH_HOST always wins.
   if (!process.env.GH_HOST) {
     const sel = await selectGhHost()
-    if (sel.error) {
+    if (sel.error && (repoOverride || open?.repo)) {
+      // An explicit repository outranks the clone's remote: stay on the default host.
+      console.error(`  note: the git remote's host is not a gh login; opening ${repoOverride || open.repo} on github.com instead. For an enterprise host: GH_HOST=<host> lazyhub --repo ${repoOverride || open.repo}`)
+    } else if (sel.error) {
       console.error(`\n${sel.error}\n`)
       process.exit(1)
-    }
-    if (sel.host) {
+    } else if (sel.host) {
       process.env.GH_HOST = sel.host
       if (sel.note) process.stdout.write(`  ${sel.note}\n`)
     }
