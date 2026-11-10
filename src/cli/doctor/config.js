@@ -41,7 +41,8 @@ export function checkConfig(opts = {}) {
   const warnings = []
   let raw = {}
 
-  checks.push({ ok: existsSync(configPath), label: `File ${existsSync(configPath) ? 'exists' : 'missing'}` })
+  // A missing file is the normal state before the first launch, which creates it: not a failure.
+  checks.push({ ok: true, label: existsSync(configPath) ? 'File exists' : 'No config file yet; defaults are in use (created on first launch)' })
   if (existsSync(configPath)) {
     try {
       raw = parse(readFileSync(configPath, 'utf8'))

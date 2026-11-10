@@ -14,6 +14,8 @@ export function restoreTerminal() {
   if (restored) return
   restored = true
   try { if (process.stdin.isTTY && process.stdin.setRawMode) process.stdin.setRawMode(false) } catch { /* the terminal may already be gone while crashing */ }
+  // Nothing to restore when stdout is a pipe or file; escapes there would corrupt machine output.
+  if (!process.stdout.isTTY) return
   try { process.stdout.write('\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?25h\x1b[?1049l') } catch { /* closed stdout: nothing left to restore */ }
 }
 

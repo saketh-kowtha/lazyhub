@@ -34,6 +34,8 @@ Or install with Homebrew:
 brew install saketh-kowtha/tap/lazyhub
 ```
 
+If your shell says `lazyhub: command not found` right after installing, open a new terminal or run `hash -r`, and make sure the npm global bin directory (`npm prefix -g`, then its `bin` folder) is on your `PATH`. `lazyhub doctor` checks the config file, that `gh` is installed and that you are logged in.
+
 Run `lazyhub` inside a GitHub repository to use that repository, pass a PR or issue reference such as `lazyhub owner/repo#123` or `lazyhub '#123'`, use `lazyhub --repo owner/name` to open a specific repository for that launch (it is not saved; on GitHub Enterprise Server set the host: `GH_HOST=github.example.com lazyhub --repo owner/name`), or press `:` and run "Switch repository" to pick another one without restarting. On first run (or with `lazyhub --onboarding`), lazyhub guides you through choosing a repository and creates `~/.config/lazyhub/lazyhub.toml` when setup completes; cancelling leaves no first-run selection behind. See [the TOML configuration reference](docs/CONFIG_REFERENCE.md).
 
 ## A read-only report
