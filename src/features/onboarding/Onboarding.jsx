@@ -16,10 +16,12 @@ import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { Spinner } from '../../components/Spinner.jsx'
 import { sanitize } from '../../utils.js'
 import { selectGhHost } from '../../bootstrap.js'
-import { classifyFailure, isOwnerName, listWindowSize, lookupRepo, loadSession, repoKey, windowStart } from './flow.js'
+import { classifyFailure, isOwnerName, lookupRepo, onboardingLayout, loadSession, repoKey, windowStart } from './flow.js'
 import { classifyGhFailure } from '../../executor.js'
 import { useKeyScope } from '../../keyscope.js'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
+import { TooSmall } from '../../components/TooSmall.jsx'
+import { terminalStdout } from '../../theme/terminal.js'
 
 const LOOKUP_KEY = 'lookup:'
 const MAX_QUERY = 140
@@ -152,9 +154,13 @@ export function Onboarding({ onDone, embedded = false, loadSessionFn = loadSessi
   }[phase]
 
   const extraLines = (session?.listError ? 1 : 0) + (lookup ? 1 : 0)
-  const size = listWindowSize(stdout?.rows || 24, extraLines)
+  const termRows = stdout?.rows || 24
+  const termCols = stdout?.columns || 80
+  const { tooSmall, compact, size } = onboardingLayout(termRows, termCols, extraLines)
   const start = windowStart(rows.length, index, size)
   const windowed = rows.slice(start, start + size).map((row, n) => ({ row, i: start + n }))
+
+  if (tooSmall && !embedded) return <TooSmall cols={termCols} rows={termRows - 1} termRows={termRows} minCols={40} minRows={10} />
 
   return (
     <Box flexDirection="column" width={Math.min(stdout?.columns || 80, 100)}>
@@ -172,8 +178,8 @@ export function Onboarding({ onDone, embedded = false, loadSessionFn = loadSessi
         )}
         {phase === 'repos' && (
           <Box flexDirection="column">
-            <Line>lazyhub will only READ through your existing gh login. It installs nothing,</Line>
-            <Line>creates no checks, changes no rulesets and writes nothing to GitHub.</Line>
+            {!compact && <Line>lazyhub will only READ through your existing gh login. It installs nothing,</Line>}
+            {!compact && <Line>creates no checks, changes no rulesets and writes nothing to GitHub.</Line>}
             {session.listError && <Line color={t.ci.pending}>{`Repository list unavailable (${session.listError}); showing the current directory's repository only.`}</Line>}
             <Line bold>Pick a repository to open:</Line>
             {windowed.map(({ row, i }) => (
@@ -187,7 +193,7 @@ export function Onboarding({ onDone, embedded = false, loadSessionFn = loadSessi
             ))}
             {!text && repos.length === 0 && <Line color={t.ui.dim}>No repositories found for this account.</Line>}
             {text && rows.length === 0 && <Line color={t.ui.dim}>{`No loaded repository matches "${sanitize(query.trim())}". Try owner/name to look one up.`}</Line>}
-            {!embedded && <Line color={t.ui.dim}>Tip: run `lazyhub watch-only` any time for the review-coverage report.</Line>}
+            {!embedded && !compact && <Line color={t.ui.dim}>Tip: run `lazyhub watch-only` any time for the review-coverage report.</Line>}
             {searching
               ? <Line>{`Search: ${sanitize(query)}_`}</Line>
               : <Line color={t.ui.dim}>/ search · type owner/name to look up any repository</Line>}
@@ -234,6 +240,9 @@ export async function runOnboarding() {
       <ThemeProvider initialTheme={/** @type {any} */ (readRawThemeCfg())}>
         <Onboarding onDone={r => { result = r }} />
       </ThemeProvider>,
+      // Same downgrades as the main app: NO_COLOR, [ui] no_color, and the ASCII glyph map for
+      // terminals that cannot show Unicode (TERM=dumb/linux, a non-UTF-8 locale).
+      { stdout: terminalStdout() },
     )
     await app.waitUntilExit()
   } finally {

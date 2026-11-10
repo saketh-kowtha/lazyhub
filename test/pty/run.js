@@ -221,6 +221,8 @@ async function runFirstRunFlow() {
     term = spawnTerminal(env)
     term.onData(data => { output += data })
     await waitForScreen(() => output, /Pick a repository to open/, 'first-run repository list')
+    // NO_COLOR is honoured by the first-run screen too (E2).
+    assert.doesNotMatch(output, /\x1b\[(?:3[0-7]|9[0-7]|4[0-7]|38|48)[;0-9]*m/, 'NO_COLOR: no colour codes on the first-run screen')
     await settle()
     output = ''
     term.write('\r') // key 1: open the highlighted repository
@@ -231,6 +233,33 @@ async function runFirstRunFlow() {
   } finally {
     await stopTerminal(term)
     removeTempDir(temp)
+  }
+}
+
+// E1/E5: the first-run screen follows the terminal: ASCII glyphs under a non-UTF-8 locale, and no
+// full-screen clear (Ink does that when a frame is as tall as the screen) on a short terminal.
+async function runFirstRunTerminalFlow() {
+  for (const { env: extra, cols, rows, check } of [
+    { env: { LANG: 'C', LC_ALL: 'C' }, cols: 80, rows: 24, check: text => assert.doesNotMatch(text, /[^\x00-\x7f]/, 'LANG=C: first-run screen must be ASCII') },
+    { env: {}, cols: 50, rows: 12, check: (text, raw) => assert.equal((raw.match(/\x1b\[[23]J/g) || []).length, 0, 'a 12-row terminal must not be cleared on every frame') },
+    { env: {}, cols: 30, rows: 8, check: text => assert.match(text, /Terminal too small/) },
+  ]) {
+    const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-firstterm-'))
+    let term
+    let output = ''
+    try {
+      const { GHUI_REPO: _preselected, ...env } = childEnv(installGhStub(temp), temp)
+      term = spawnTerminal({ ...env, ...extra }, [], { cols, rows })
+      term.onData(data => { output += data })
+      await waitForScreen(() => output, /Pick a repository to open|Terminal too small/, `first run at ${cols}x${rows}`)
+      await settle()
+      check(stripAnsi(output), output)
+      term.write('q')
+      await waitForExit(term)
+    } finally {
+      await stopTerminal(term)
+      removeTempDir(temp)
+    }
   }
 }
 
@@ -736,6 +765,7 @@ await runQuitFlow()
 await runNonTtyFlow()
 await runReferenceFlow()
 await runFirstRunFlow()
+await runFirstRunTerminalFlow()
 await runCrashFlow()
 await runDegradedFlow()
 await runDayOneErrorFlow({

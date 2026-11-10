@@ -105,14 +105,20 @@ export async function lookupRepo(slug) {
 export const repoKey = name => name.toLowerCase()
 
 /**
- * How many list rows fit (one spare row so Ink never fills the screen): see docs/mockups/onboarding-first-run-a-search.md.
+ * How the first-run screen fits the terminal (E1). Ink clears and redraws the whole terminal
+ * whenever a frame is as tall as the screen, so the frame must stay at least one row shorter:
+ * below 16 rows the explanatory lines and the tip are dropped (compact), and below 10 rows or
+ * 40 columns only a "too small" message is shown. See docs/mockups/onboarding-first-run-a-search.md.
  *
  * @param {number} termRows
+ * @param {number} termCols
  * @param {number} [extraLines]  optional notices shown above the list
- * @returns {number}
+ * @returns {{tooSmall: boolean, compact: boolean, size: number}}  size = list rows that fit
  */
-export function listWindowSize(termRows, extraLines = 0) {
-  return Math.max(3, termRows - 12 - extraLines)
+export function onboardingLayout(termRows, termCols, extraLines = 0) {
+  if (termCols < 40 || termRows < 10) return { tooSmall: true, compact: false, size: 0 }
+  const compact = termRows < 16
+  return { tooSmall: false, compact, size: Math.max(1, termRows - (compact ? 9 : 12) - extraLines) }
 }
 
 /**

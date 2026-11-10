@@ -19,7 +19,7 @@ import { execa } from 'execa'
 import { classifyGh } from '../../daemon/protocol.js'
 import { renderWithProviders, flush, cleanup, waitForExpectation, waitForInputReady } from '../../test/test-helpers.jsx'
 import { Onboarding } from './Onboarding.jsx'
-import { classifyFailure, isOwnerName, listWindowSize, shouldOnboard, windowStart } from './flow.js'
+import { classifyFailure, isOwnerName, onboardingLayout, shouldOnboard, windowStart } from './flow.js'
 
 const ok = body => ({ exitCode: 0, stdout: JSON.stringify(body), stderr: '' })
 const fail = stderr => ({ exitCode: 1, stdout: '', stderr })
@@ -293,9 +293,24 @@ describe('repository selection (#280)', () => {
     expect(readdirSync(home)).toEqual([])
   })
 
+  it('onboardingLayout never draws a frame as tall as the terminal (Ink would clear the screen) and flags tiny terminals (E1)', () => {
+    expect(onboardingLayout(9, 80)).toMatchObject({ tooSmall: true })
+    expect(onboardingLayout(24, 39)).toMatchObject({ tooSmall: true })
+    for (let rows = 10; rows <= 40; rows += 1) {
+      for (const extra of [0, 1, 2]) {
+        if (rows < 10 + extra) continue
+        const { tooSmall, compact, size } = onboardingLayout(rows, 80, extra)
+        expect(tooSmall).toBe(false)
+        expect(size).toBeGreaterThanOrEqual(1)
+        expect((compact ? 8 : 11) + extra + size).toBeLessThan(rows)
+      }
+    }
+    expect(onboardingLayout(24, 80).compact).toBe(false)
+    expect(onboardingLayout(12, 80).compact).toBe(true)
+  })
+
   it('windowing keeps the selected index inside the visible slice', () => {
-    expect(listWindowSize(24)).toBe(12)
-    expect(listWindowSize(10)).toBe(3)
+    expect(onboardingLayout(24, 80).size).toBe(12)
     for (const size of [3, 12]) {
       for (const total of [1, 5, 14, 31, 100]) {
         for (let sel = 0; sel < total; sel += 1) {

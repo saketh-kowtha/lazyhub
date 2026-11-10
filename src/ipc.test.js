@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'fs'
 import { connect } from 'net'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -43,6 +43,37 @@ afterEach(() => {
     else process.env[k] = saved[k]
   }
   rmSync(root, { recursive: true, force: true })
+})
+
+describe.skipIf(!posix)('stale endpoints from crashed runs (D5)', () => {
+  const runDir = () => join(root, 'home', '.config', 'lazyhub', 'run')
+
+  it('removes socket and token files whose pid is gone, keeps live and foreign ones', async () => {
+    const dir = runDir()
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    const dead = 2147483000 // no such pid
+    const { createServer } = await import('net')
+    const stale = createServer()
+    await new Promise(resolve => stale.listen(join(dir, `ipc-${dead}.sock`), resolve))
+    writeFileSync(join(dir, `ipc-${dead}.sock.token`), 'x', { mode: 0o600 })
+    writeFileSync(join(dir, `ipc-${process.ppid}.sock.token`), 'live', { mode: 0o600 })
+    writeFileSync(join(dir, 'notes.txt'), 'mine', { mode: 0o600 })
+    ipc.startIPC()
+    await waitFor(() => existsSync(join(root, 'home', '.lazyhub-socket')))
+    stale.close()
+    expect(existsSync(join(dir, `ipc-${dead}.sock`))).toBe(false)
+    expect(existsSync(join(dir, `ipc-${dead}.sock.token`))).toBe(false)
+    expect(existsSync(join(dir, `ipc-${process.ppid}.sock.token`))).toBe(true)
+    expect(existsSync(join(dir, 'notes.txt'))).toBe(true)
+  })
+
+  it('a clean stop leaves no endpoint files and no pointer', async () => {
+    ipc.startIPC()
+    await waitFor(() => existsSync(join(root, 'home', '.lazyhub-socket')))
+    ipc.stopIPC()
+    expect(existsSync(join(root, 'home', '.lazyhub-socket'))).toBe(false)
+    expect(readdirSync(runDir())).toEqual([])
+  })
 })
 
 describe.skipIf(!posix)('startIPC endpoint hardening', () => {

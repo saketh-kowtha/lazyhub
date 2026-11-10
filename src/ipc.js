@@ -62,7 +62,7 @@ import { createServer } from 'net'
 import { join } from 'path'
 import { homedir } from 'os'
 import { randomBytes } from 'crypto'
-import { chmodSync, mkdirSync, readFileSync, unlinkSync } from 'fs'
+import { chmodSync, lstatSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from 'fs'
 import { assertPrivateDir, prepareSocketPath, writePrivateFile } from './secure-fs.js'
 import { logger } from './utils-core.js'
 import { ERR, issueSession } from './daemon/protocol.js'
@@ -117,6 +117,35 @@ function socketPath() {
   return _defaultPath
 }
 
+/** True unless the pid is definitely gone (EPERM means it exists under another user). */
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true } catch (err) { return err.code !== 'ESRCH' }
+}
+
+/**
+ * Remove `ipc-<pid>.sock` and `ipc-<pid>.sock.token` left in the private run dir by runs
+ * that crashed or were killed (the paths are per-pid, so nothing else would ever reuse
+ * them). Only our own files whose pid no longer exists are touched; a failure is logged,
+ * never fatal.
+ * @param {string} dir
+ */
+function pruneStaleEndpoints(dir) {
+  let names
+  try { names = readdirSync(dir) } catch { return }
+  for (const name of names) {
+    const m = /^ipc-(\d+)\.sock(\.token)?$/.exec(name)
+    if (!m || pidAlive(Number(m[1]))) continue
+    const file = join(dir, name)
+    try {
+      const st = lstatSync(file)
+      const ours = typeof process.getuid !== 'function' || st.uid === process.getuid()
+      if (ours && !st.isDirectory() && !st.isSymbolicLink()) unlinkSync(file)
+    } catch (err) {
+      if (err.code !== 'ENOENT') logger.warn(`ipc: could not remove stale ${file}: ${err.message}`)
+    }
+  }
+}
+
 /**
  * Validate the bind location before listen(). Throws on any ownership,
  * symlink, type or permission problem; nothing here is best-effort.
@@ -128,6 +157,7 @@ function prepareEndpoint(path) {
     // Verify before any chmod so a planted symlink is never followed.
     mkdirSync(socketDir(), { recursive: true, mode: 0o700 })
     assertPrivateDir(socketDir())
+    pruneStaleEndpoints(socketDir())
   }
   prepareSocketPath(path)
 }
