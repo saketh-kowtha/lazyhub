@@ -1,6 +1,6 @@
 import assert from 'assert/strict'
 import { spawnSync } from 'child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync } from 'fs'
 import { createServer } from 'net'
 import { tmpdir } from 'os'
 import { dirname, join, delimiter } from 'path'
@@ -688,7 +688,52 @@ async function runTmuxResizeFlow() {
 const ptyProblem = nodePtyProblem(pty, ROOT)
 if (ptyProblem) skipOrFail(`node-pty cannot spawn in this shell: ${ptyProblem}`)
 
+// E3: without a terminal on stdin or stdout the TUI must not start: a one-line cause on stderr, nothing on stdout, exit 1.
+async function runNonTtyFlow() {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-nontty-'))
+  try {
+    const env = childEnv(installGhStub(temp), temp)
+    for (const stdio of [['ignore', 'pipe', 'pipe'], ['pipe', 'pipe', 'pipe']]) {
+      const r = spawnSync(process.execPath, [BIN], { env, cwd: ROOT, stdio, input: stdio[0] === 'pipe' ? '' : undefined, timeout: 10000 })
+      assert.equal(r.status, 1, `non-TTY launch must exit 1 (got ${r.status}, signal ${r.signal})`)
+      assert.equal(r.stdout.length, 0, `non-TTY launch must print nothing on stdout: ${JSON.stringify(String(r.stdout).slice(0, 80))}`)
+      assert.match(String(r.stderr), /needs a terminal/)
+    }
+  } finally {
+    removeTempDir(temp)
+  }
+}
+
+// E6: q (and Ctrl+C) must end the process and give the terminal back, with the editor socket enabled (the default).
+async function runQuitFlow() {
+  for (const key of ['q', '\x03']) {
+    // A short HOME: a unix socket path over ~104 bytes cannot bind, which would silently turn the editor socket off.
+    const temp = mkdtempSync(join(existsSync('/tmp') ? '/tmp' : tmpdir(), 'lhq-'))
+    let term
+    let output = ''
+    try {
+      term = spawnTerminal(childEnv(installGhStub(temp), temp))
+      term.onData(data => { output += data })
+      await waitForScreen(() => output, /Focus|Pull Requests|PTY harness fixture PR/, 'startup')
+      await settle()
+      const exited = new Promise(resolve => term.onExit(resolve))
+      term.write(key)
+      const event = await Promise.race([exited, new Promise(resolve => setTimeout(() => resolve(null), 4000))])
+      assert.ok(event, `${JSON.stringify(key)} must end the process within 4s (it hung with the editor socket open)`)
+      assert.equal(event.exitCode, 0)
+      assert.ok(output.includes('\x1b[?1049l'), 'the alternate screen must be left')
+      assert.equal(existsSync(join(temp, '.lazyhub-socket')), false, 'the socket pointer must be removed on quit')
+      assert.deepEqual(existsSync(join(temp, '.config', 'lazyhub', 'run')) ? readdirSync(join(temp, '.config', 'lazyhub', 'run')) : [], [], 'no socket or token files may be left behind')
+    } finally {
+      await stopTerminal(term)
+      removeTempDir(temp)
+    }
+  }
+}
+
 await runLazyhubFlow()
+await runQuitFlow()
+await runNonTtyFlow()
 await runReferenceFlow()
 await runFirstRunFlow()
 await runCrashFlow()

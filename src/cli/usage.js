@@ -79,3 +79,21 @@ export function parseCliArgs(args, opts = {}) {
   }
   return parsed.ok ? withRepo({ ref: parsed.ref }) : { error: `${parsed.error}: ${JSON.stringify(positional[0]).slice(0, 80)}` }
 }
+
+/**
+ * Why the TUI cannot start here, or null when it can. The TUI needs a terminal on both
+ * ends: raw-mode keys in, a screen out. Piped, redirected or CI runs get this message on
+ * stderr and exit 1 instead of a screen of escape codes on stdout (E3).
+ *
+ * @param {{stdin?: {isTTY?: boolean}, stdout?: {isTTY?: boolean}}} [streams]
+ * @returns {string|null}
+ */
+export function nonInteractiveMessage({ stdin = process.stdin, stdout = process.stdout } = {}) {
+  const inOk = !!stdin?.isTTY
+  const outOk = !!stdout?.isTTY
+  if (inOk && outOk) return null
+  const what = !inOk && !outOk ? 'standard input and standard output are not terminals'
+    : !inOk ? 'standard input is not a terminal' : 'standard output is not a terminal'
+  return `lazyhub: the interactive UI needs a terminal, but ${what}.\n`
+    + 'Run lazyhub directly in a terminal. For scripts use `lazyhub status`, `lazyhub doctor --json` or `lazyhub --mcp`; see `lazyhub --help`.\n'
+}
