@@ -20,7 +20,11 @@ import readline from 'readline'
 import { PassThrough } from 'stream'
 import { bootstrap, confirmLogin } from './bootstrap.js'
 
-/** Make the next sign-in prompt answer `answer` ('' = Enter, null = EOF/Ctrl+C). Returns the question text seen. */
+/**
+ * Make the next sign-in prompt answer ('' = Enter, null = EOF/Ctrl+C).
+ * @param {string|null} answer
+ * @returns {{question: string|null}} the question text seen
+ */
 function answerPrompt(answer) {
   const seen = { question: null }
   readline.createInterface.mockReturnValue({

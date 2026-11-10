@@ -117,7 +117,11 @@ function socketPath() {
   return _defaultPath
 }
 
-/** True unless the pid is definitely gone (EPERM means it exists under another user). */
+/**
+ * True unless the pid is definitely gone (EPERM means it exists under another user).
+ * @param {number} pid
+ * @returns {boolean}
+ */
 function pidAlive(pid) {
   try { process.kill(pid, 0); return true } catch (err) { return err.code !== 'ESRCH' }
 }
