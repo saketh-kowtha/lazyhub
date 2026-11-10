@@ -716,6 +716,7 @@ await runFocusReturnFlow({ cols: 100, rows: 40 })
 await runFocusReturnFlow({ cols: 80, rows: 24 })
 await runFocusReturnFlow({ cols: 60, rows: 16, single: true })
 await import('./clear.js') // CLEAR gate (#597): runs its 50-key session on import
+await import('./layers.js') // WARM-GH gate (#597 V3): overlays and back-navigation spawn no gh
 
 if (spawnSync('tmux', ['-V']).status === 0) {
   await runLazyhubFlow({ useTmux: true })
