@@ -46,8 +46,10 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
   const termRows = stdout?.rows || 24
   const termCols = stdout?.columns || 80
 
-  const { data: issue, loading, error, refetch: refetchHeader } = useGh(getIssueHeader, [repo, issueNumber])
-  const { data: firstPage, loading: pageLoading, error: pageError, refetch: refetchFirst } = useGh(listIssueTimelinePage, [repo, issueNumber])
+  // Bodies branch on the derived render mode (V4c, #597), never on `loading`: cached rows stay
+  // under a revalidate or a failure, and a skeleton only shows when there is nothing to keep.
+  const { data: issue, mode: headerMode, isFetching: headerFetching, error, refetch: refetchHeader } = useGh(getIssueHeader, [repo, issueNumber])
+  const { data: firstPage, mode: pageMode, isFetching: pageFetching, error: pageError, refetch: refetchFirst } = useGh(listIssueTimelinePage, [repo, issueNumber])
 
   // Every loaded page lives in `loaded`; a write patches it in place and only an explicit refresh starts over.
   const [loaded, setLoaded] = useState(() => (firstPage ? seedOf(firstPage) : null))
@@ -64,7 +66,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
     if (!firstPage) return
     if (refreshing.current) {
       // An explicit refresh starts over from the fresh first page, not from the cached one.
-      if (pageLoading) return
+      if (pageFetching) return
       refreshing.current = false
       seenFirst.current = JSON.stringify(firstPage)
       setLoaded(seedOf(firstPage))
@@ -76,7 +78,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
     if (seenFirst.current === sig) return
     seenFirst.current = sig
     setLoaded(cur => (cur ? reconcileFirst(cur, firstPage) : cur))
-  }, [firstPage, pageLoading])
+  }, [firstPage, pageFetching])
 
   const [busy, setBusy] = useState(0)
   const [moreFailed, setMoreFailed] = useState(false)
@@ -178,11 +180,13 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
     generation.current += 1
     refreshing.current = true
     setMoreFailed(false)
+    // Start the fetches first: the cached page stays on screen while they run, and the
+    // reset below must not see `pageFetching` still false.
+    refetchHeader()
+    refetchFirst()
     setLoaded(null)
     setCursor(0)
     setScrollY(0)
-    refetchHeader()
-    refetchFirst()
   }, [refetchHeader, refetchFirst])
 
   // ── Live updates ──────────────────────────────────────────────────────────
@@ -190,7 +194,7 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
   // Revalidate page 1 (and the header) on a bounded interval while this view is the one on screen.
   // Paused while a dialog, a compose box, a delete confirm or a write is open, and while a load runs.
   const pausedRef = useRef(false)
-  pausedRef.current = !!dialog || !!compose || !!confirmDelete || busy > 0 || pageLoading
+  pausedRef.current = !!dialog || !!compose || !!confirmDelete || busy > 0 || pageFetching
   const everyMs = refreshSeconds() * 1000
   useEffect(() => {
     const id = setInterval(() => {
@@ -351,9 +355,11 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
     if (id === 'cursor.up') { moveUp(); return }
   })
 
-  if (loading && !issue) return <IssueDetailSkeleton />
-  if (error && !issue) return <Box paddingX={1}><Text color={t.ci.fail}>⚠ Failed — {firstActionKey('list.refresh', 'r')} to retry</Text></Box>
-  if (!issue) return null
+  if (!issue) {
+    if (headerMode === 'skeleton') return <IssueDetailSkeleton />
+    if (headerMode === 'error') return <Box paddingX={1}><Text color={t.ci.fail}>⚠ Failed — {firstActionKey('list.refresh', 'r')} to retry</Text></Box>
+    return null
+  }
 
   // ── Dialogs ────────────────────────────────────────────────────────────────
 
@@ -380,7 +386,10 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
       rowCount={rows.length}
       loadedCount={items?.length ?? 0}
       totalCount={total}
-      conversationLoading={!data && pageLoading}
+      conversationLoading={!data && pageMode === 'skeleton'}
+      fetching={headerFetching || pageFetching}
+      refreshFailed={!!(error || (pageError && data))}
+      refreshKey={firstActionKey('list.refresh', 'r')}
       conversationError={!data && pageError ? sanitize(String(pageError.message || 'failed')) : null}
       loadingMore={hasNext && !moreFailed}
       moreFailed={moreFailed}
