@@ -60,16 +60,27 @@ describe('remembered PR list filter (#314)', () => {
 })
 
 describe('Enter hands the opener its smart target (#314)', () => {
-  it('failing CI row -> checks-log with a reason', async () => {
+  it('by default Enter opens the plain detail, even on a failing CI row', async () => {
+    const onSelectPR = vi.fn()
+    renderWithProviders(<PRList repo="o/a" listHeight={10} innerWidth={80} onSelectPR={onSelectPR} onOpenDiff={() => {}} />)
+    await flush(20)
+    await sendInput('', { return: true })
+    await flush(20)
+    expect(onSelectPR).toHaveBeenCalledWith(expect.objectContaining({ number: 5 }), expect.objectContaining({ target: 'conversation' }))
+  })
+
+  it('smartEnter = true: failing CI row -> checks-log with a reason', async () => {
+    saveState({ smartEnter: true })
     const onSelectPR = vi.fn()
     renderWithProviders(<PRList repo="o/a" listHeight={10} innerWidth={80} onSelectPR={onSelectPR} onOpenDiff={() => {}} />)
     await flush(20)
     await sendInput('', { return: true })
     await flush(20)
     expect(onSelectPR).toHaveBeenCalledWith(expect.objectContaining({ number: 5 }), expect.objectContaining({ target: 'checks-log', reason: expect.stringMatching(/CI failing/) }))
+    saveState({ smartEnter: false })
   })
 
-  it('smartEnter = false in [state] restores the plain open', async () => {
+  it('smartEnter = false in [state] keeps the plain open', async () => {
     saveState({ smartEnter: false })
     const onSelectPR = vi.fn()
     renderWithProviders(<PRList repo="o/a" listHeight={10} innerWidth={80} onSelectPR={onSelectPR} onOpenDiff={() => {}} />)
@@ -77,6 +88,5 @@ describe('Enter hands the opener its smart target (#314)', () => {
     await sendInput('', { return: true })
     await flush(20)
     expect(onSelectPR).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ target: 'conversation' }))
-    saveState({ smartEnter: true })
   })
 })
