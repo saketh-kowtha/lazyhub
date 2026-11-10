@@ -1,0 +1,26 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`T22 real-world body > leaves no raw tags and uses only theme tokens 1`] = `
+" Summary
+
+ [image: build] ‹img.shields.io› ‹github.com/o/r/actions›
+
+ Fixes the flaky retry and adds backoff.
+ See the logs below.
+
+ ▾ Test logs (click to expand)
+│
+│  $ npm test
+│  ok
+│
+│  Only 3 tests were slow.
+│
+
+ Case       │ Before │ After
+ ───────────┼────────┼──────
+ cold start │ 1.9s   │ 0.6s
+
+ [image: flamegraph] ‹user-images.githubusercontent.com›
+
+ Thanks @alice ‹github.com/alice›!"
+`;
