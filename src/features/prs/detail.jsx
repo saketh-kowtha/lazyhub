@@ -35,6 +35,8 @@ import { extractExcerpt, annotationLines } from './ci-log.js'
 import { toLogLines } from '../actions/log-lines.js'
 import { WhyRed } from './WhyRed.jsx'
 import { PRDetailSkeleton } from '../../components/Skeleton.jsx'
+import { deriveRenderMode } from '../../data/renderMode.js'
+import { FetchCell } from './FetchCell.jsx'
 import { openInEditor, editorLabel } from '../../editor.js'
 import { loadConfig } from '../../config.js'
 import { firstActionKey, hintLine } from '../../config/actions.js'
@@ -59,7 +61,10 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
   const cols    = stdout?.columns || 80
   const termRows = stdout?.rows    || 24
 
-  const { data: pr, loading, error, refetch } = useGh(getPR, [repo, prNumber])
+  const { data: pr, loading, isLoading, isFetching, skeletonDue, error, refetch } = useGh(getPR, [repo, prNumber])
+  // The body is chosen by the derived mode, never by `loading`: data (or the list seed) stays on screen
+  // through a revalidate and under an error; background activity shows in the fixed-width state-line cell.
+  const mode = deriveRenderMode({ data: pr, error, isLoading: Boolean(isLoading ?? loading), skeletonDue })
   // The diff's first request, fetched at low priority while the detail is read (#482).
   usePrefetchPRDiff(repo, prNumber, 0)
   const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000 })
@@ -341,11 +346,10 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
 
   // ── Loading / Error ────────────────────────────────────────────────────────
 
-  if (loading) {
-    return <PRDetailSkeleton />
-  }
+  if (mode === 'skeleton') return <PRDetailSkeleton />
+  if (mode === 'pending') return null
 
-  if (error) {
+  if (mode === 'error') {
     return (
       <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
         <FailureNotice failure={classifyGhFailure(error)} />
@@ -595,8 +599,6 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
   return (
     <Box flexDirection="column" flexGrow={1}>
 
-      {loading && <Box paddingX={1}><Text color={t.ui.muted}>refreshing…</Text></Box>}
-
       {/* ── Fixed title header ── */}
       <PRDetailHeader pr={pr} />
 
@@ -621,12 +623,16 @@ export function PRDetail({ prNumber, repo, baseRefName: rowBaseRefName, entry, o
       <Box paddingX={1} justifyContent="space-between" height={1} overflow="hidden">
         {statusMsg
           ? <Text wrap="truncate" color={statusMsg.isError ? t.ci.fail : t.ci.pass}>{sanitizeRaw(statusMsg.msg)}{statusMsg.persist ? '  [any key to dismiss]' : ''}</Text>
-          : maxScroll > 0
+          : error
+            // A failed revalidate keeps the PR on screen; the reserved state line carries the notice.
+            ? <Box><FailureNotice failure={classifyGhFailure(error)} compact /><Text color={t.ui.dim}>  [{firstActionKey('list.refresh', 'r')}] retry</Text></Box>
+            : maxScroll > 0
             ? <Text wrap="truncate" color={t.ui.dim}>{scrollY + 1}–{Math.min(scrollY + visibleHeight, filteredRows.length)} / {filteredRows.length}</Text>
             : pr?.mergeable === 'CONFLICTING'
               ? <Text wrap="truncate" color={t.pr.conflict || t.ci.pending}>{hintLine([['pr.conflicts', 'resolve conflicts']])}</Text>
               : null
         }
+        <FetchCell active={Boolean(isFetching)} />
       </Box>
     </Box>
   )

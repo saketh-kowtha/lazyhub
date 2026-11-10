@@ -9,7 +9,9 @@ import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { useListController } from '../../hooks/useListController.js'
 import { useMutation } from '../../hooks/useMutation.js'
-import { listRuns, rerunRun, cancelRun } from '../../executor.js'
+import { listRuns } from '../../executor.js'
+import { ghQueryKey } from '../../data/ghKeys.js'
+import { rerunRunMutation, cancelRunMutation } from '../../data/mutations/actions.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
 import { RunLogDialog } from './RunLogDialog.jsx'
@@ -18,6 +20,7 @@ import { useTheme } from '../../theme.js'
 import { QueryBoundary } from '../../components/QueryBoundary.jsx'
 import { MutationStatus } from '../../components/MutationStatus.jsx'
 import { ListRow } from '../../ui/ListRow.jsx'
+import { useMinuteClock } from '../../ui/clock.js'
 import { ActionListSkeleton } from '../../components/Skeleton.jsx'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
 import { sanitize } from '../../utils.js'
@@ -32,7 +35,7 @@ function StatusBadge({ run, isSelected }) {
   if (conclusion === 'success') return <Text color={quiet}>✓</Text>
   if (conclusion === 'failure' || conclusion === 'timed_out') return <Text color={t.ci.fail} bold>✗</Text>
   if (status === 'in_progress' || status === 'queued') return <Text color={t.ci.running}>●</Text>
-  if (conclusion === 'cancelled') return <Text color={quiet}>⊘</Text>
+  if (status === 'cancelling' || conclusion === 'cancelled') return <Text color={quiet}>⊘</Text>
   if (conclusion === 'skipped') return <Text color={quiet}>—</Text>
   return <Text color={quiet}>?</Text>
 }
@@ -42,6 +45,7 @@ const AGE_COLS = 13
 
 // One line, never wider than the pane (#430): the age, then the branch, are dropped when it is tight.
 const ActionRow = memo(({ run, isSelected, width }) => {
+  useMinuteClock()
   const { t } = useTheme()
   const { titleWidth, show } = planRow(width, {
     fixed: 2 + 1 + 2,
@@ -85,8 +89,11 @@ export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, ini
   }, [dialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pending guard, status line and refetch-after-write live in useMutation (#453).
-  const rerun = useMutation((run) => rerunRun(repo, run.databaseId), { label: 'Re-running', success: 'Re-run triggered', invalidates: [() => refetch()] })
-  const cancel = useMutation((run) => cancelRun(repo, run.databaseId), { label: 'Cancelling', success: 'Run cancelled', invalidates: [() => refetch()] })
+  // Declared writes (src/data/mutations/actions.js): the row is patched at once, rolled back on failure,
+  // and only this repo's run list is refetched.
+  const listKey = ghQueryKey(listRuns, [repo, branchFilter ? { branch: branchFilter } : {}])
+  const rerun = useMutation(rerunRunMutation(repo, listKey))
+  const cancel = useMutation(cancelRunMutation(repo, listKey))
   // One status line: whichever write spoke last.
   const status = cancel.status || rerun.status
 

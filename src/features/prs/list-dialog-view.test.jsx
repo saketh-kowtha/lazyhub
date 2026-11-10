@@ -8,7 +8,7 @@ beforeEach(() => vi.clearAllMocks())
 const props = (dialog, extra = {}) => ({
   dialog, repo: 'o/r', selectedPR: { number: 7, title: 'PR' }, items: [], repoInfo: {},
   authorFilter: '', effectiveHeight: 5, mergeOptions: null,
-  setMergeOptions: vi.fn(), setDialog: vi.fn(), setCursor: vi.fn(), setScrollOffset: vi.fn(),
+  setMergeOptions: vi.fn(), setDialog: vi.fn(), jumpTop: vi.fn(),
   setAuthorFilter: vi.fn(), showStatus: vi.fn(), closeDialog: vi.fn(), refetch: vi.fn(), refreshPR: vi.fn(),
   ...extra,
 })
@@ -78,7 +78,7 @@ describe('PR list dialog contract', () => {
     expect(dialog.props.current).toBe('old')
     dialog.props.onSubmit('author:bob')
     expect(state.setSearchText).toHaveBeenCalledWith('author:bob')
-    expect(state.setCursor).toHaveBeenCalledWith(0)
+    expect(state.jumpTop).toHaveBeenCalled()
     expect(state.closeDialog).toHaveBeenCalledOnce()
   })
 })

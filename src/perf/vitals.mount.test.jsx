@@ -1,10 +1,8 @@
 // REMOUNT vital (#597, V0): mounts of the base PR list across an overlay open/close and across
 // list -> detail -> back, counted in-process with the recorder's mount/unmount events.
 //
-// On main today both flows REMOUNT the list (app-views.jsx returns a different tree per overlay and
-// per view), so the first two tests assert the harness SEES that (acceptance 3). The `it.fails` pair
-// states the target (0 extra mounts): it passes while the bug exists and goes red the day lane V3
-// fixes it, which is the cue to delete the baseline tests and drop `.fails`.
+// Before lane V3 both flows REMOUNTed the list (app-views.jsx returned a different tree per overlay and
+// per view); the harness saw that (V0 acceptance 3). With V3 the target holds: 0 extra mounts.
 import React, { useEffect } from 'react'
 import { Text, useInput } from 'ink'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -89,23 +87,13 @@ describe('REMOUNT vital', () => {
     expect(createRecorder({ enabled: false }).enabled).toBe(false)
   })
 
-  it('baseline on main: closing the help overlay remounts the base list (harness detects it)', async () => {
-    const view = await mountApp()
-    expect(await overlayRoundTrip(view)).toBeGreaterThan(0)
-  })
-
-  it('baseline on main: list -> detail -> back remounts the base list (harness detects it)', async () => {
-    const view = await mountApp()
-    expect(await detailRoundTrip(view)).toBeGreaterThan(0)
-  })
-
-  // Target state owned by lane V3; flips green->red when the fix lands, then becomes a plain `it`.
-  it.fails('target: overlay open+close causes 0 extra mounts of the base list', async () => {
+  // Lane V3 landed: overlays are layers and the navigation stack keeps the list alive.
+  it('target: overlay open+close causes 0 extra mounts of the base list', async () => {
     const view = await mountApp()
     expect(await overlayRoundTrip(view)).toBe(0)
   })
 
-  it.fails('target: list -> detail -> back causes 0 extra mounts of the base list', async () => {
+  it('target: list -> detail -> back causes 0 extra mounts of the base list', async () => {
     const view = await mountApp()
     expect(await detailRoundTrip(view)).toBe(0)
   })

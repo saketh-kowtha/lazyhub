@@ -3,14 +3,15 @@
  */
 
 import { logSwallowed } from '../../contain.js'
-import React, { useState, useEffect, useContext } from 'react'
+import React, { useState, useEffect, useContext, memo } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { format } from 'timeago.js'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { useListController } from '../../hooks/useListController.js'
 import { useMutation } from '../../hooks/useMutation.js'
-import { listNotifications, markNotificationRead, markAllNotificationsRead } from '../../executor.js'
+import { listNotifications } from '../../executor.js'
+import { markNotificationReadMutation, markAllNotificationsReadMutation, markNotificationReadQuietly } from '../../data/mutations/notifications.js'
 import { sanitize } from '../../utils.js'
 import { fitCell, paneWidth, planRow } from '../../ui/row-layout.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
@@ -21,25 +22,50 @@ import { NotificationListSkeleton } from '../../components/Skeleton.jsx'
 import { QueryBoundary } from '../../components/QueryBoundary.jsx'
 import { MutationStatus } from '../../components/MutationStatus.jsx'
 import { ListRow } from '../../ui/ListRow.jsx'
+import { useMinuteClock } from '../../ui/clock.js'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
 
 const REPO_COLS = 12
 const REASON_COLS = 16
 const AGE_COLS = 13
 
+function notifTypeIcon(type) {
+  switch (type) {
+    case 'PullRequest': return { icon: '⎇' }
+    case 'Issue': return { icon: '○' }
+    case 'Release': return { icon: '▸' }
+    case 'Discussion': return { icon: '💬' }
+    default: return { icon: '●' }
+  }
+}
+
+// Memo boundary for one row (#597): primitive props plus the row's own item, so a cursor move
+// re-renders only the old and new selected rows. One line, never wider than the pane (#428):
+// fixed cells keep their width, the title takes the rest, and the reason (then the age) is
+// dropped when it is tight.
+const NotificationRow = memo(({ notif, isSelected, titleWidth, showReason, showAge }) => {
+  const { t } = useTheme()
+  useMinuteClock()
+  const typeInfo = notifTypeIcon(notif.subject?.type)
+  return (
+    <ListRow selected={isSelected}>
+      <Box width={3} flexShrink={0}><Text color={isSelected ? t.ui.selected : t.ui.muted}>{typeInfo.icon}</Text></Box>
+      <Text color={isSelected ? t.ui.selected : t.ui.muted}>{fitCell(sanitize(notif.repository?.name || ''), REPO_COLS)} </Text>
+      <Text
+        color={isSelected ? t.ui.selected : (notif.unread ? undefined : t.ui.muted)}
+        bold={notif.unread || isSelected}
+      >
+        {fitCell(sanitize(notif.subject?.title || ''), titleWidth)}
+      </Text>
+      {showReason && <Text color={isSelected ? t.ui.selected : t.ui.muted}> {fitCell(sanitize(notif.reason || ''), REASON_COLS)}</Text>}
+      {showAge && <Text color={isSelected ? t.ui.selected : t.ui.muted}> {fitCell(format(notif.updatedAt), AGE_COLS)}</Text>}
+    </ListRow>
+  )
+})
+
 export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigateTo, onPaneState }) {
   useKeyScope('pane')
   const { t } = useTheme()
-
-  function notifTypeIcon(type) {
-    switch (type) {
-      case 'PullRequest': return { icon: '⎇' }
-      case 'Issue': return { icon: '○' }
-      case 'Release': return { icon: '▸' }
-      case 'Discussion': return { icon: '💬' }
-      default: return { icon: '●' }
-    }
-  }
 
   const { stdout } = useStdout()
   const rowWidth = paneWidth(innerWidth, stdout)
@@ -63,8 +89,10 @@ export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigate
   }, [dialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pending guard, status line and refetch-after-write live in useMutation (#453).
-  const markRead = useMutation(id => markNotificationRead(id), { label: 'Marking as read', success: 'Marked as read', invalidates: [() => refetch()] })
-  const markAll = useMutation(() => markAllNotificationsRead(), { label: 'Marking all as read', success: 'All marked as read', invalidates: [() => refetch()] })
+  // Declared writes (src/data/mutations/notifications.js): the row leaves the list at once, a failure
+  // restores it, and nothing is refetched (no PR, issue, run or branch read is touched).
+  const markRead = useMutation(markNotificationReadMutation)
+  const markAll = useMutation(markAllNotificationsReadMutation)
   // One status line: whichever write spoke last.
   const status = markAll.status || markRead.status
 
@@ -81,7 +109,7 @@ export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigate
       const notif = list.selected
       if (notif && onNavigateTo) {
         // Mark as read and navigate
-        markNotificationRead(notif.id).catch(err => logSwallowed('notifications.mark-read', err))
+        markNotificationReadQuietly(notif.id).catch(err => logSwallowed('notifications.mark-read', err))
         onNavigateTo(notif)
       }
       return
@@ -153,26 +181,16 @@ export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigate
           empty="No notifications."
           footer={footer}
         >
-          {() => list.visibleItems.map((notif, i) => {
-            const isSelected = list.scrollOffset + i === list.cursor
-            const typeInfo = notifTypeIcon(notif.subject?.type)
-            // One line, never wider than the pane (#428): fixed cells keep their width, the
-            // title takes the rest, and the reason (then the age) is dropped when it is tight.
-            return (
-              <ListRow key={notif.id} selected={isSelected}>
-                <Box width={3} flexShrink={0}><Text color={isSelected ? t.ui.selected : t.ui.muted}>{typeInfo.icon}</Text></Box>
-                <Text color={isSelected ? t.ui.selected : t.ui.muted}>{fitCell(sanitize(notif.repository?.name || ''), REPO_COLS)} </Text>
-                <Text
-                  color={isSelected ? t.ui.selected : (notif.unread ? undefined : t.ui.muted)}
-                  bold={notif.unread || isSelected}
-                >
-                  {fitCell(sanitize(notif.subject?.title || ''), titleWidth)}
-                </Text>
-                {show.reason && <Text color={isSelected ? t.ui.selected : t.ui.muted}> {fitCell(sanitize(notif.reason || ''), REASON_COLS)}</Text>}
-                {show.age && <Text color={isSelected ? t.ui.selected : t.ui.muted}> {fitCell(format(notif.updatedAt), AGE_COLS)}</Text>}
-              </ListRow>
-            )
-          })}
+          {() => list.visibleItems.map((notif, i) => (
+            <NotificationRow
+              key={notif.id}
+              notif={notif}
+              isSelected={list.scrollOffset + i === list.cursor}
+              titleWidth={titleWidth}
+              showReason={show.reason}
+              showAge={show.age}
+            />
+          ))}
         </QueryBoundary>
       </Box>
     </Box>

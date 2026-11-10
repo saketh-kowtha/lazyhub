@@ -20,7 +20,7 @@ const SELECTION_DIALOGS = { labels: LabelDialog, assignees: AssigneeDialog, revi
 /** Return the active dialog, or null to keep the list visible. */
 export function renderPRListDialog({
   dialog, selectedPR, items, repo, repoInfo, authorFilter, effectiveHeight,
-  mergeOptions, setMergeOptions, setDialog, setCursor, setScrollOffset,
+  mergeOptions, setMergeOptions, setDialog, jumpTop,
   setAuthorFilter, searchText = '', setSearchText = (/** @type {string} */ _query) => {}, showStatus, closeDialog, refetch, refreshPR = refetch,
   runWrite = (_label, fn) => fn(),
 }) {
@@ -30,7 +30,7 @@ export function renderPRListDialog({
         current={searchText}
         onSubmit={(query) => {
           setSearchText(query)
-          setCursor(0); setScrollOffset(0)
+          jumpTop()
           showStatus(query ? `search: ${query}` : 'search cleared')
           closeDialog()
         }}
@@ -48,7 +48,7 @@ export function renderPRListDialog({
         onSubmit={(author) => {
           rememberAuthor(repo, author)
           setAuthorFilter(author)
-          setCursor(0); setScrollOffset(0)
+          jumpTop()
           showStatus(author ? `author: @${author}` : 'author: all')
           closeDialog()
         }}

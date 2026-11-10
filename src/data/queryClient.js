@@ -330,7 +330,8 @@ export function createQueryClient({ maxEntries = QUERY_MAX_ENTRIES, maxBytes = Q
 export const queryClient = createQueryClient()
 
 // Every finished write marks its repository's cached reads stale and revalidates what is mounted.
-onWrite(({ repo }) => { queryClient.invalidateRepo(repo) })
+// A declared write (src/data/mutations) already patched and invalidated exactly what it touches.
+onWrite(({ repo, declared }) => { if (!declared) queryClient.invalidateRepo(repo) })
 
 
 /**
