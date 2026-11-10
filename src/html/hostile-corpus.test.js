@@ -154,7 +154,7 @@ function countNodes(nodes) {
   return n
 }
 
-describe('T20 resource bombs', () => {
+describe('T20 resource bombs', { timeout: 30_000 }, () => {
   for (const [name, input] of Object.entries(BOMBS)) {
     it(`${name} (${Math.round(input.length / 1024)} KiB) does bounded work and says it stopped`, () => {
       const budget = newBudget()

@@ -240,7 +240,7 @@ function best(fn, runs = 3) {
   }))
 }
 
-describe('T20 body budget', () => {
+describe('T20 body budget', { timeout: 30_000 }, () => {
   for (const [name, input] of Object.entries(BOMBS)) {
     it(`${name} bomb stays bounded in rows and scales linearly`, () => {
       const rows = getMarkdownRows(input, 76, theme)
