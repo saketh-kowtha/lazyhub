@@ -32,5 +32,6 @@ export function hasSpoofChars(s) {
  * @returns {string}
  */
 export function cleanHtmlText(raw) {
-  return stripSpoofChars(sanitizeLog(decodeEntitiesOnce(raw)))
+  const clean = sanitizeLog(decodeEntitiesOnce(raw))
+  return SPOOF_TEST_RE.test(clean) || clean.includes('\u2039') || clean.includes('\u203a') ? stripSpoofChars(clean) : clean
 }

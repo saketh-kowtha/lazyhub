@@ -14,6 +14,10 @@ import { getHljs } from './highlight.js'
 import stringWidth from 'string-width'
 import { useTheme } from './theme.js'
 import { sanitizeBlock, sanitizeLog, sanitizeRaw, sanitizePath } from './utils-core.js'
+import { logSwallowed } from './contain.js'
+import { hasMarkup, htmlBlockStart } from './html/detect.js'
+import { renderHtmlSegment, linesToRows } from './html/rows.jsx'
+import { LIMITS, newBudget } from './html/types.js'
 
 export { logger, getLogs, resolvePath, stripAnsi, decodeHtmlEntities, sanitize, sanitizeBlock, sanitizeRaw, sanitizeLog, sanitizeCode, sanitizePath, safeHex, inkSafe } from './utils-core.js'
 
@@ -109,19 +113,15 @@ function highlightCode(code, lang) {
 }
 
 /**
- * Converts markdown text into an array of Ink Box/Text elements.
- * Handles headers, lists, code blocks (with syntax highlighting), and paragraphs.
- * @param {string} text - The markdown content.
- * @param {number} [maxWidth=80] - Maximum width for word wrapping.
- * @param {Object} t - The theme object.
- * @returns {Array<import('react').ReactElement>} Array of Ink elements.
+ * Legacy Markdown line renderer: headers, lists, fenced code (highlighted) and paragraphs.
+ * `lines` are already cleaned; `kb` prefixes the React keys so segments never collide.
+ * @param {string[]} lines
+ * @param {number} maxWidth
+ * @param {Object} t
+ * @param {string} kb
+ * @returns {Array<import('react').ReactElement>}
  */
-export function getMarkdownRows(text, maxWidth = 80, t) {
-  // Clean the INPUT here (once); the renderer's own styling is never cleaned afterwards.
-  const safeText = sanitizeBlock(text)
-  if (!safeText) return []
-
-  const lines = safeText.split('\n')
+function markdownLineRows(lines, maxWidth, t, kb) {
   const rows = []
   let inCodeBlock = false
   let codeBuffer = []
@@ -135,7 +135,7 @@ export function getMarkdownRows(text, maxWidth = 80, t) {
         const highlighted = highlightCode(code, codeLang)
         highlighted.split('\n').forEach((hl, j) => {
           rows.push(
-            <Box key={`code-${i}-${j}`} paddingX={1} backgroundColor={t.ui.headerBg}>
+            <Box key={`${kb}code-${i}-${j}`} paddingX={1} backgroundColor={t.ui.headerBg}>
               <Text>{hl || ' '}</Text>
             </Box>
           )
@@ -160,7 +160,7 @@ export function getMarkdownRows(text, maxWidth = 80, t) {
       const level = line.match(/^#+/)[0].length
       const content = line.replace(/^#+\s*/, '')
       rows.push(
-        <Box key={`h-${i}`} marginBottom={0} marginTop={0} paddingX={1}>
+        <Box key={`${kb}h-${i}`} marginBottom={0} marginTop={0} paddingX={1}>
           <Text bold color={t.ui.selected} underline={level === 1}>
             {level === 1 ? content.toUpperCase() : content}
           </Text>
@@ -173,7 +173,7 @@ export function getMarkdownRows(text, maxWidth = 80, t) {
     if (line.trim().startsWith('* ') || line.trim().startsWith('- ') || /^\d+\.\s/.test(line.trim())) {
       const content = line.trim().replace(/^[*-\d.]+\s+/, '')
       rows.push(
-        <Box key={`li-${i}`} paddingLeft={2} paddingX={1}>
+        <Box key={`${kb}li-${i}`} paddingLeft={2} paddingX={1}>
           <Text color={t.ui.muted}>• </Text>
           <Text>{renderInline(content, t)}</Text>
         </Box>
@@ -183,7 +183,7 @@ export function getMarkdownRows(text, maxWidth = 80, t) {
 
     // Blank lines
     if (!line.trim()) {
-      rows.push(<Box key={`br-${i}`} height={1} />)
+      rows.push(<Box key={`${kb}br-${i}`} height={1} />)
       return
     }
 
@@ -191,7 +191,7 @@ export function getMarkdownRows(text, maxWidth = 80, t) {
     const wrappedLines = wrapLine(line, maxWidth)
     wrappedLines.forEach((wl, j) => {
       rows.push(
-        <Box key={`p-${i}-${j}`} paddingX={1}>
+        <Box key={`${kb}p-${i}-${j}`} paddingX={1}>
           <Text>{renderInline(wl, t)}</Text>
         </Box>
       )
@@ -199,6 +199,159 @@ export function getMarkdownRows(text, maxWidth = 80, t) {
   })
 
   return rows
+}
+
+/**
+ * Split a cleaned (but undecoded) body into Markdown runs, HTML blocks and single lines that hold
+ * inline HTML. Fenced code is never inspected. HTML blocks follow the CommonMark/GFM start rules.
+ * @param {string[]} lines
+ * @returns {Array<{kind: 'md' | 'html' | 'inline', lines: string[]}>}
+ */
+function splitBody(lines) {
+  const segs = []
+  let inFence = false
+  let prevBlank = true
+  const missing = new Set()
+  const pushMd = line => {
+    const last = segs[segs.length - 1]
+    if (last && last.kind === 'md') last.lines.push(line)
+    else segs.push({ kind: 'md', lines: [line] })
+  }
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    if (inFence || line.startsWith('```')) {
+      if (line.startsWith('```')) inFence = !inFence
+      pushMd(line)
+      prevBlank = false
+      i++
+      continue
+    }
+    const start = line.includes('<') ? htmlBlockStart(line, prevBlank) : null
+    if (start) {
+      const block = [line]
+      let j = i + 1
+      if (start.end === 'blank') {
+        while (j < lines.length && lines[j].trim() !== '') block.push(lines[j++])
+      } else {
+        let k = -1
+        if (!missing.has(start.kind)) {
+          for (let q = j; q < lines.length && k < 0; q++) if (start.done(lines[q])) k = q
+          if (k < 0) missing.add(start.kind)
+        }
+        if (k >= 0) {
+          while (j <= k) block.push(lines[j++])
+        } else {
+          // No closer anywhere below: the block ends at the next blank line, not at the end of the body.
+          while (j < lines.length && lines[j].trim() !== '') block.push(lines[j++])
+        }
+      }
+      segs.push({ kind: 'html', lines: block })
+      prevBlank = false
+      i = j
+      continue
+    }
+    if (hasMarkup(line)) {
+      segs.push({ kind: 'inline', lines: [line] })
+      prevBlank = false
+    } else {
+      pushMd(line)
+      prevBlank = line.trim() === ''
+    }
+    i++
+  }
+  return segs
+}
+
+/**
+ * How a Markdown line with inline HTML is laid out: heading and list markers are peeled off first.
+ * @param {string} line
+ * @returns {{src: string, opts: object}}
+ */
+function inlineLineParts(line) {
+  const trimmed = line.trimStart()
+  if (trimmed.startsWith('#')) {
+    let k = 0
+    while (trimmed[k] === '#') k++
+    return { src: trimmed.slice(k).trimStart(), opts: { st0: { b: true, c: 'sel', u: k === 1 }, upper: k === 1 } }
+  }
+  let rest = null
+  if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) rest = trimmed.slice(2)
+  else {
+    let k = 0
+    while (k < trimmed.length && trimmed.charCodeAt(k) >= 48 && trimmed.charCodeAt(k) <= 57) k++
+    if (k > 0 && trimmed.startsWith('. ', k)) rest = trimmed.slice(k + 2)
+  }
+  if (rest === null) return { src: line, opts: {} }
+  return { src: rest.trimStart(), opts: { prefix: { first: [{ text: '\u2022 ', st: { c: 'muted' } }], rest: [{ text: '  ' }] } } }
+}
+
+/**
+ * Wrap an already built row in the gutter of `levels` open details/blockquote containers.
+ * @param {import('react').ReactElement} row
+ * @param {number} levels
+ * @param {Object} t
+ * @returns {import('react').ReactElement}
+ */
+function gutterRow(row, levels, t) {
+  return (
+    <Box key={row.key}>
+      <Text color={t.ui.border ?? t.ui.dim}>{'\u2502 '.repeat(levels)}</Text>
+      {row}
+    </Box>
+  )
+}
+
+/**
+ * Converts markdown text into an array of Ink Box/Text elements.
+ * Handles headers, lists, code blocks (with syntax highlighting), and paragraphs. HTML found in the
+ * body (details, tables, images, links, ...) is rendered by src/html under a strict allowlist: the
+ * HTML path receives the body UNDECODED (entities are decoded exactly once, inside src/html), code
+ * spans and fences are never parsed as HTML, and any render failure falls back to plain text.
+ * @param {string} text - The markdown content.
+ * @param {number} [maxWidth=80] - Maximum width for word wrapping.
+ * @param {Object} t - The theme object.
+ * @param {{base?: string}} [opts] - base: URL that relative links in HTML resolve against (default: the GitHub host).
+ * @returns {Array<import('react').ReactElement>} Array of Ink elements.
+ */
+export function getMarkdownRows(text, maxWidth = 80, t, opts = {}) {
+  // Clean the INPUT here (once); the renderer's own styling is never cleaned afterwards.
+  const legacy = () => {
+    const safeText = sanitizeBlock(text)
+    return safeText ? markdownLineRows(safeText.split('\n'), maxWidth, t, '') : []
+  }
+  if (typeof text !== 'string' || !text.includes('<')) return legacy()
+
+  // Escape strings and control characters go first; entities are NOT decoded here.
+  const segs = splitBody(sanitizeLog(text).split('\n'))
+  if (segs.every(s => s.kind === 'md')) return legacy()
+
+  const rows = []
+  const budget = newBudget()
+  let carry = []
+  segs.forEach((seg, si) => {
+    if (rows.length > LIMITS.MAX_ROWS) return
+    const kb = `s${si}-`
+    const plain = () => markdownLineRows(sanitizeBlock(seg.lines.join('\n')).split('\n'), Math.max(1, maxWidth - 2 * carry.length), t, kb)
+    if (seg.kind === 'md') {
+      rows.push(...(carry.length ? plain().map(r => gutterRow(r, carry.length, t)) : plain()))
+      return
+    }
+    try {
+      const parts = seg.kind === 'inline' ? inlineLineParts(seg.lines[0]) : { src: seg.lines.join('\n'), opts: {} }
+      const out = renderHtmlSegment(parts.src, { width: maxWidth, t, key: kb, budget, md: seg.kind === 'inline', carry, base: opts.base, ...parts.opts })
+      rows.push(...out.rows)
+      carry = out.carryOut
+    } catch (err) {
+      logSwallowed('markdown.html', err)
+      rows.push(...plain())
+    }
+  })
+
+  if (rows.length <= LIMITS.MAX_ROWS) return rows
+  // Layout stops once the cap is passed, so the number of rows left out is not known: say so without one.
+  const notice = linesToRows([{ runs: [{ text: '\u2026 more rows truncated \u2014 open in browser (o)', st: { c: 'dim' } }] }], t, 'cap')
+  return [...rows.slice(0, LIMITS.MAX_ROWS), ...notice]
 }
 
 /**
