@@ -20,6 +20,7 @@ import { render, useApp } from 'ink'
 import { useFocusGlobals } from './focus/FocusProvider.js'
 import { ThemeProvider, useTheme, readRawThemeCfg } from './theme.js'
 import { terminalStdout } from './theme/terminal.js'
+import { vitals } from './perf/vitals.js'
 import { KeyScopeProvider, useActiveScope, useKeyScope, isModalScope, isViewScope, liveScope } from './keyscope.js'
 import { getArmedPrefix } from './config/keymap.js'
 import { useChords } from './shell/useChords.js'
@@ -64,7 +65,7 @@ export function App({ repo, onSwitchRepo }) {
   const pendingInputPerf = useRef([])
   const activeScope = useActiveScope()
   const layout = useLayout()
-  const { cols: columns, rows, sidebarWidth, previewWidth, borderStyle, compactFooter, showSidebar, showPreview, listHeight, tooSmall, minCols, minRows } = layout
+  const { cols: columns, rows, sidebarWidth, previewWidth, borderStyle, compactFooter, showSidebar, showPreview, listHeight, tooSmall, minCols, minRows, termRows } = layout
 
   // ─── Mouse support ────────────────────────────────────────────────────────
   const [mouseEnabled, setMouseEnabled] = useState(
@@ -461,7 +462,7 @@ export function App({ repo, onSwitchRepo }) {
     goToDiff, goToQueueItem, goToEvidenceDetail, returnFromEvidence, goToStory, openStoryFile, storyNav, handleAINavigate, leaderActive, listHeight, onPaneState, pane,
     paneState, repo, rows, selectedItem, setAppMode, setPane, setSelectedItem,
     setShowAI, setShowHelp, setShowPalette, setTheme, setView, showAI, showHelp,
-    showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows,
+    showPalette, showSidebar, sidebarWidth, t, toasts, view, tooSmall, minCols, minRows, termRows,
     showRepoPicker, setShowRepoPicker, onSwitchRepo,
   })
 
@@ -518,7 +519,7 @@ export function renderApp() {
           </KeyScopeProvider>
         </ThemeProvider>
       </ConfigProvider>,
-      { stdout: terminalStdout() }
+      { stdout: vitals.wrapStdout(terminalStdout()) }
     )
 
     // When Ink exits (useApp().exit() called), also restore terminal

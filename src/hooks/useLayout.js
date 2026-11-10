@@ -38,8 +38,11 @@ const BREAKPOINTS = [
  * @param {{ columns: number, rows: number }} size
  * @param {object} [cfg] the `[layout]` preferences (camelCase, as config.js exposes them)
  */
-export function computeLayout({ columns: cols, rows }, cfg = {}) {
-  const tooSmall = cols < MIN_COLS || rows < MIN_ROWS
+export function computeLayout({ columns: cols, rows: termRows }, cfg = {}) {
+  const tooSmall = cols < MIN_COLS || termRows < MIN_ROWS
+  // Every full-height root is drawn at `rows`, so it stays one row shorter than the terminal: Ink
+  // clears the whole terminal and rewrites it whenever the output is as tall as the terminal (#597).
+  const rows = Math.max(1, termRows - 1)
 
   let bp = BREAKPOINTS[0]
   for (const b of BREAKPOINTS) if (cols >= b.minCols) bp = b
@@ -47,7 +50,7 @@ export function computeLayout({ columns: cols, rows }, cfg = {}) {
   // Sidebar: preference, clamped so the main column keeps MIN_MAIN_COLS.
   const prefSidebar = cfg.sidebarWidth ?? bp.sidebarWidth
   const roomForSidebar = cols - MIN_MAIN_COLS
-  const sidebarFits = bp.sidebar && rows >= MIN_SIDEBAR_ROWS && roomForSidebar >= MIN_SIDEBAR_WIDTH
+  const sidebarFits = bp.sidebar && termRows >= MIN_SIDEBAR_ROWS && roomForSidebar >= MIN_SIDEBAR_WIDTH
   const showSidebar = !tooSmall && cfg.sidebar !== false && sidebarFits
   const sidebarWidth = showSidebar ? Math.max(MIN_SIDEBAR_WIDTH, Math.min(prefSidebar, roomForSidebar)) : 0
 
@@ -60,7 +63,7 @@ export function computeLayout({ columns: cols, rows }, cfg = {}) {
   const aiPanelWidth = bp.aiPanelWidth
   const showAIPanel = !tooSmall && aiPanelWidth > 0
   const borderStyle = cfg.borderStyle === 'none' ? undefined : (cfg.borderStyle ?? 'round')
-  const compactFooter = rows < 20 || !!cfg.compactFooter
+  const compactFooter = termRows < 20 || !!cfg.compactFooter
 
   // Chrome: border-top(1) + PaneHeader(1) + border-bottom(1) + statusBar(1) + footerKeys(0|1) + pane-filter-bar(1) = 5|6
   // TabStrip (shown instead of sidebar) adds 1 row.
@@ -69,7 +72,7 @@ export function computeLayout({ columns: cols, rows }, cfg = {}) {
 
   return {
     mode: tooSmall ? 'too-small' : bp.name, tooSmall, minCols: MIN_COLS, minRows: MIN_ROWS,
-    cols, rows,
+    cols, rows, termRows,
     sidebarWidth, previewWidth: showPreview ? previewWidth : 0, aiPanelWidth: showAIPanel ? aiPanelWidth : 0,
     borderStyle, compactFooter,
     showSidebar, showPreview, showAIPanel,
