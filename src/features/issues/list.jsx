@@ -12,7 +12,9 @@ import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { useListController } from '../../hooks/useListController.js'
 import { useMutation } from '../../hooks/useMutation.js'
-import { listIssuesPage, getIssueRow, closeIssue, createIssue } from '../../executor.js'
+import { listIssuesPage, getIssueRow } from '../../executor.js'
+import { ghQueryKey } from '../../data/ghKeys.js'
+import { closeIssueMutation, createIssueMutation } from '../../data/mutations/issues.js'
 import { sanitize } from '../../utils.js'
 import { useKeyScope } from '../../keyscope.js'
 import { loadConfig } from '../../config.js'
@@ -150,19 +152,16 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
 
   // Writes run through useMutation (#453): pending line, double-submit guard, sticky failure.
   // The mutations live here, not in the dialogs, because the dialogs unmount as soon as they close.
-  const closeM = useMutation(number => closeIssue(repo, number), {
-    label: number => `Closing #${number}`,
-    success: (_r, number) => `Closed #${number}`,
-    invalidates: [(_r, [number]) => refreshIssue(number)],
-  })
-  const createM = useMutation(values => createIssue(repo, /** @type {any} */ ({ title: values.title, body: values.body })), {
-    label: 'Creating issue',
-    success: 'Issue created',
-    invalidates: [(created) => {
+  // Declared writes (src/data/mutations/issues.js): close patches the cached row and rolls back on failure;
+  // afterwards the view re-reads just that one issue (one gh call), never the list.
+  const firstPageKey = ghQueryKey(listIssuesPage, [repo, { state: filterState, limit: _cfg.pageSize, sort: sortMode }])
+  const closeM = useMutation(closeIssueMutation(repo, firstPageKey), { onSuccess: (_r, [number]) => refreshIssue(number) })
+  const createM = useMutation(createIssueMutation(repo), {
+    onSuccess: (created) => {
       const number = Number(String(created || '').match(/\/issues\/(\d+)/)?.[1])
       if (number) refreshIssue(number, { added: true })
       else refetch()
-    }],
+    },
   })
   // Non-write notices (filter, copy, label errors): transient; errors stick until a key.
   const [notice, setNotice] = useState(null)
@@ -256,8 +255,8 @@ export function IssueList({ repo, listHeight = 10, innerWidth, onSelectIssue, on
         onJump={list.moveTo}
         onClose={() => setDialog(null)}
         showStatus={showStatus}
-        closeIssue={closeM.mutate}
-        createIssue={createM.mutate}
+        onCloseIssue={closeM.mutate}
+        onCreateIssue={createM.mutate}
         onChanged={refreshIssue}
       />
     )

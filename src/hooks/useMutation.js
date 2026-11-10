@@ -13,6 +13,12 @@
  * key entry is a no-op and panes pass `refetch` functions. Nothing here reaches into
  * queryClient internals, so R3 only has to add `invalidate(key)`.
  *
+ * DECLARED WRITES (V2a, #597): `useMutation(spec, { onSuccess })` takes a spec from
+ * `defineMutation` (src/data/mutations). The spec's `optimistic` patch is applied before the call and
+ * rolled back, with a "reverted" status, if it fails; its `invalidates` are key prefixes; and the
+ * repo-wide invalidation `runGh` announces is suppressed while it runs. A bare function is an
+ * undeclared write: it keeps the repo-wide fallback and logs a dev warning.
+ *
  * Returns `{ mutate, pending, status, dismiss }`; render `status` with <MutationStatus>.
  */
 
@@ -20,18 +26,28 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePendingWrite } from './usePendingWrite.js'
 import { queryClient } from '../data/queryClient.js'
 import { logSwallowed } from '../contain.js'
+import { isDeclared, runMutation } from '../data/mutations/core.js'
 
 const STATUS_MS = 3000
 
 /**
- * @param {(...args: any[]) => Promise<any>} fn
+ * @param {((...args: any[]) => Promise<any>) | import('../data/mutations/core.js').MutationSpec} fn  a function, or a declared spec
  * @param {object} [opts]
+ * @param {(result: any, args: any[]) => void} [opts.onSuccess]  view-local follow-up after a declared write succeeds
  * @param {string | ((...args: any[]) => string)} [opts.label] pending text without the ellipsis
  * @param {string | ((result: any, ...args: any[]) => string)} [opts.success]
  * @param {Array<unknown[] | ((result: any, args: any[]) => void)>} [opts.invalidates]
  * @param {(error: any, args: any[]) => void} [opts.onError]
  */
-export function useMutation(fn, { label = 'Working', success, invalidates = [], onError } = {}) {
+export function useMutation(fn, opts = {}) {
+  const spec = isDeclared(fn) ? fn : null
+  const { onSuccess } = opts
+  const label = opts.label ?? spec?.label ?? 'Working'
+  const success = opts.success ?? spec?.success
+  const invalidates = opts.invalidates ?? []
+  const onError = opts.onError
+  const run0 = spec ? (/** @type {any[]} */ ...args) => runMutation(spec, args) : /** @type {any} */ (fn)
+
   const [status, setStatus] = useState(/** @type {{ msg: string, isError: boolean, persist: boolean } | null} */ (null))
   const timer = useRef(/** @type {ReturnType<typeof setTimeout> | undefined} */ (undefined))
   useEffect(() => () => clearTimeout(timer.current), [])
@@ -44,8 +60,8 @@ export function useMutation(fn, { label = 'Working', success, invalidates = [], 
   const dismiss = useCallback(() => { setStatus(null) }, [])
 
   const { run, pending } = usePendingWrite(msg => show(msg, false, true))
-  const latest = useRef({ fn, label, success, invalidates, onError })
-  latest.current = { fn, label, success, invalidates, onError }
+  const latest = useRef({ fn: run0, label, success, invalidates, onError, onSuccess })
+  latest.current = { fn: run0, label, success, invalidates, onError, onSuccess }
 
   /** Resolves true when the write ran and succeeded; false when ignored or failed. */
   const mutate = useCallback(async (...args) => {
@@ -58,13 +74,14 @@ export function useMutation(fn, { label = 'Working', success, invalidates = [], 
         result = await o.fn(...args)
       })
     } catch (err) {
-      show(`Failed: ${err?.message ?? err}`, true)
+      show(`Failed: ${err?.message ?? err}${err?.rolledBack ? ' (change reverted)' : ''}`, true)
       try { o.onError?.(err, args) } catch (e) { logSwallowed('useMutation.onError', e) }
       return false
     }
     if (!ran) return false
     show(typeof o.success === 'function' ? o.success(result, ...args) : (o.success ?? 'Done'))
     const client = /** @type {any} */ (queryClient)
+    try { o.onSuccess?.(result, args) } catch (e) { logSwallowed('useMutation.onSuccess', e) }
     for (const entry of o.invalidates) {
       try {
         if (typeof entry === 'function') entry(result, args)

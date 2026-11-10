@@ -4,13 +4,15 @@
 
 import { logSwallowed } from '../../contain.js'
 import React, { useState, useCallback, useMemo, useEffect, useRef, memo } from 'react'
-import { currentBranch as gitCurrentBranch, createBranch, push as gitPush, checkout as gitCheckout, findLocalCheckout, noLocalCheckoutMessage } from '../../services/git.js'
+import { currentBranch as gitCurrentBranch, findLocalCheckout, noLocalCheckoutMessage } from '../../services/git.js'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { useListController } from '../../hooks/useListController.js'
 import { useMutation } from '../../hooks/useMutation.js'
-import { listBranches, deleteBranch, listOpenPRBranches } from '../../executor.js'
+import { listBranches, listOpenPRBranches } from '../../executor.js'
+import { ghQueryKey } from '../../data/ghKeys.js'
+import { deleteBranchMutation, pushBranchMutation, checkoutBranchMutation, createBranchMutation } from '../../data/mutations/branches.js'
 import { QueryBoundary } from '../../components/QueryBoundary.jsx'
 import { MutationStatus } from '../../components/MutationStatus.jsx'
 import { ListRow } from '../../ui/ListRow.jsx'
@@ -95,11 +97,11 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
 
   // Every write runs through one useMutation (#453): pending line, double-submit guard,
   // sticky failure. `op` is { label, success, run, failPrefix? }.
-  const act = useMutation(op => op.run(), {
-    label: op => op.label,
-    success: (_r, op) => op.success,
-    invalidates: [(_r, [op]) => op.after?.()],
-  })
+  const del = useMutation(deleteBranchMutation(repo, ghQueryKey(listBranches, [repo])))
+  const push = useMutation(pushBranchMutation)
+  const checkout = useMutation(checkoutBranchMutation, { onSuccess: () => refreshCurrentBranch() })
+  const create = useMutation(createBranchMutation, { onSuccess: () => refreshCurrentBranch() })
+  const writes = [del, push, checkout, create]
   // Non-write notices ("no local checkout", "already on"): transient, errors stick until a key.
   const [notice, setNotice] = useState(/** @type {{ msg: string, isError: boolean, persist: boolean } | null} */ (null))
   const noticeTimer = useRef(/** @type {ReturnType<typeof setTimeout> | undefined} */ (undefined))
@@ -109,8 +111,8 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
     setNotice({ msg, isError, persist: isError })
     if (!isError) noticeTimer.current = setTimeout(() => setNotice(null), 3000)
   }
-  const status = act.status || notice
-  const dismissStatus = () => { act.dismiss(); setNotice(null) }
+  const status = writes.find(w => w.status)?.status || notice
+  const dismissStatus = () => { for (const w of writes) w.dismiss(); setNotice(null) }
 
   const selectedBranch = list.selected
 
@@ -158,7 +160,7 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
     if (matchesAction('branch.push', input, key)) {
       // Push current branch
       if (!requireLocal()) return
-      act.mutate({ label: 'Pushing', success: 'Pushed', run: () => gitPush(localDir, local.remote, 'HEAD') })
+      push.mutate({ dir: localDir, remote: local.remote })
       return
     }
   })
@@ -189,7 +191,7 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
           onConfirm={() => {
             setDialog(null)
             const name = sanitizePath(selectedBranch.name)
-            act.mutate({ label: `Checking out ${name}`, success: `✓ Checked out ${name}`, run: () => gitCheckout(local, selectedBranch.name), after: refreshCurrentBranch })
+            checkout.mutate({ local, name: selectedBranch.name, display: name })
           }}
           onCancel={() => setDialog(null)}
         />
@@ -210,7 +212,7 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
           onConfirm={() => {
             setDialog(null)
             const name = sanitizePath(selectedBranch.name)
-            act.mutate({ label: `Deleting ${name}`, success: `Deleted ${name}`, run: () => deleteBranch(repo, selectedBranch.name), after: refetch })
+            del.mutate({ name: selectedBranch.name, display: name })
           }}
           onCancel={() => setDialog(null)}
         />
@@ -238,12 +240,7 @@ export function BranchList({ repo, listHeight = 10, innerWidth, onPaneState }) {
                 return
               }
               setDialog(null)
-              act.mutate({
-                label: `Creating ${name}`,
-                success: `✓ Created and checked out ${name}`,
-                run: () => createBranch(localDir, name),
-                after: () => { refreshCurrentBranch(); refetch() },
-              })
+              create.mutate({ dir: localDir, name })
             }}
           />
         </Box>

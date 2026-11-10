@@ -9,7 +9,8 @@ import React, { useState, useRef } from 'react'
 import { Box, Text } from 'ink'
 import { useInput } from '../../hooks/useSafeInput.js'
 import { useGh } from '../../hooks/useGh.js'
-import { classifyGhFailure, listLabels, listCollaborators, editIssueMembers, collaboratorsTruncated, COLLAB_MAX_ROWS } from '../../executor.js'
+import { classifyGhFailure, listLabels, listCollaborators, collaboratorsTruncated, COLLAB_MAX_ROWS } from '../../executor.js'
+import { editIssueMembersDeclared } from '../../data/mutations/issues.js'
 import { MultiSelect } from '../../components/dialogs/MultiSelect.jsx'
 import { FailureNotice } from '../../components/FailureNotice.jsx'
 import { useKeyScope } from '../../keyscope.js'
@@ -85,7 +86,7 @@ function IssueSelectionDialog({ repo, issue, current: currentNow, getOptions, fi
         submitted.current = true
         setSaving(true)
         try {
-          await editIssueMembers(repo, issue.number, kind, { add: toAdd, remove: toRemove })
+          await editIssueMembersDeclared(repo, issue.number, kind, { add: toAdd, remove: toRemove })
         } catch (err) {
           if (onError) onError(err)
         }

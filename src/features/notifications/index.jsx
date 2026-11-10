@@ -10,7 +10,8 @@ import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { useListController } from '../../hooks/useListController.js'
 import { useMutation } from '../../hooks/useMutation.js'
-import { listNotifications, markNotificationRead, markAllNotificationsRead } from '../../executor.js'
+import { listNotifications } from '../../executor.js'
+import { markNotificationReadMutation, markAllNotificationsReadMutation, markNotificationReadQuietly } from '../../data/mutations/notifications.js'
 import { sanitize } from '../../utils.js'
 import { fitCell, paneWidth, planRow } from '../../ui/row-layout.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
@@ -88,8 +89,10 @@ export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigate
   }, [dialog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pending guard, status line and refetch-after-write live in useMutation (#453).
-  const markRead = useMutation(id => markNotificationRead(id), { label: 'Marking as read', success: 'Marked as read', invalidates: [() => refetch()] })
-  const markAll = useMutation(() => markAllNotificationsRead(), { label: 'Marking all as read', success: 'All marked as read', invalidates: [() => refetch()] })
+  // Declared writes (src/data/mutations/notifications.js): the row leaves the list at once, a failure
+  // restores it, and nothing is refetched (no PR, issue, run or branch read is touched).
+  const markRead = useMutation(markNotificationReadMutation)
+  const markAll = useMutation(markAllNotificationsReadMutation)
   // One status line: whichever write spoke last.
   const status = markAll.status || markRead.status
 
@@ -106,7 +109,7 @@ export function NotificationList({ repo, listHeight = 10, innerWidth, onNavigate
       const notif = list.selected
       if (notif && onNavigateTo) {
         // Mark as read and navigate
-        markNotificationRead(notif.id).catch(err => logSwallowed('notifications.mark-read', err))
+        markNotificationReadQuietly(notif.id).catch(err => logSwallowed('notifications.mark-read', err))
         onNavigateTo(notif)
       }
       return
