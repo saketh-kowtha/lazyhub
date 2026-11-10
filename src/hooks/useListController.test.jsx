@@ -42,3 +42,14 @@ it('hands out callbacks and a window array whose identity survives cursor moves 
   expect(view.lastFrame()).toContain('cursor=2')
   for (const k of ['handleKey', 'moveTo', 'jumpTop', 'jumpBottom', 'window']) expect(seen[k].size, k).toBe(1)
 })
+
+it('starts at an initial cursor and scroll offset (back-nav restore)', async () => {
+  const items = Array.from({ length: 50 }, (_, i) => ({ id: `r${i}` }))
+  function Start() {
+    const list = useListController({ items, height: 10, getId: i => i.id, initial: { cursor: 23, scroll: 20 } })
+    return <Text>{`cursor=${list.cursor} off=${list.scrollOffset} first=${list.visibleItems[0].id}`}</Text>
+  }
+  const view = renderWithProviders(<Start />)
+  await flush(20)
+  expect(view.lastFrame()).toContain('cursor=23 off=20 first=r20')
+})

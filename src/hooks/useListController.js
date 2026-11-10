@@ -25,9 +25,10 @@ const GG_WINDOW_MS = 400
  * @param {T[]} opts.items
  * @param {number} opts.height rows visible at once
  * @param {(item: T) => string | number} [opts.getId] enables selection memory across refetches
+ * @param {{ cursor?: number, scroll?: number }} [opts.initial] position to start at (back-nav restore); read on mount only
  */
-export function useListController({ items, height, getId }) {
-  const v = useVirtualList({ items, height })
+export function useListController({ items, height, getId, initial }) {
+  const v = useVirtualList({ items, height, initialCursor: initial?.cursor, initialScrollOffset: initial?.scroll })
   const count = items.length
   // The first render after a shrink still holds the old cursor; never expose it.
   const cursor = count === 0 ? 0 : Math.min(v.cursor, count - 1)
