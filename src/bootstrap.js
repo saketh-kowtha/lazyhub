@@ -275,26 +275,26 @@ export function hasBrowser() {
 }
 
 /**
+ * Ask whether to run `gh auth login` now. Opt-in: only `y` or `yes` accepts; Enter, anything else,
+ * Ctrl+C and end of input all decline. Resolves once the prompt is closed, so stdin is free for gh.
  *
- * @param rl
+ * @param {{input?: any, output?: any, command?: string}} [io]
+ * @returns {Promise<boolean>}
  */
-async function readPATFromStdin(rl) {
+export function confirmLogin({ input = process.stdin, output = process.stdout, command = 'gh auth login' } = {}) {
   return new Promise((resolve) => {
-    if (!rl) {
-      rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      })
-    }
-    process.stdout.write('  Paste a GitHub PAT with repo + read:org scopes: ')
-    // Suppress echoing
-    const orig = rl.output
-    rl.output = { write: () => {} }
-    rl.question('', (answer) => {
-      rl.output = orig
+    const rl = readline.createInterface({ input, output, terminal: Boolean(input.isTTY && output.isTTY) })
+    let settled = false
+    const done = (answer) => {
+      if (settled) return
+      settled = true
       rl.close()
-      process.stdout.write('\n')
-      resolve(answer.trim())
+      resolve(answer)
+    }
+    rl.on('SIGINT', () => done(false))
+    rl.on('close', () => done(false))
+    rl.question(`  Sign in now? lazyhub will run \`${command}\` and hand the terminal to gh. [y/N] `, (answer) => {
+      done(/^\s*y(es)?\s*$/i.test(answer))
     })
   })
 }
@@ -315,9 +315,8 @@ export async function getLoggedInUser() {
  */
 async function runLoginFlow() {
   const ghHost = process.env.GH_HOST
-  process.stdout.write('  lazyhub needs GitHub access. Starting login...\n')
-
   if (process.env.GITHUB_TOKEN) {
+    process.stdout.write('  lazyhub needs GitHub access. Signing in with GITHUB_TOKEN...\n')
     try {
       const loginArgs = ghHost
         ? ['auth', 'login', '--hostname', ghHost, '--with-token']
@@ -340,19 +339,17 @@ async function runLoginFlow() {
 
   const loginArgs = ['auth', 'login']
   if (ghHost) loginArgs.push('--hostname', ghHost)
-  if (hasBrowser()) {
-    // Interactive: gh owns the terminal and waits on the user, so no timeout.
-    await runGh([...loginArgs, '--web', '--git-protocol', 'https'], { interactive: true, timeout: 0 })
-      .catch(() => {}) // checkAuth() after the flow reports the outcome
-  } else {
-    const pat = await readPATFromStdin()
-    if (pat) {
-      const withTokenArgs = ghHost
-        ? ['auth', 'login', '--hostname', ghHost, '--with-token']
-        : ['auth', 'login', '--with-token']
-      await runGh(withTokenArgs, { json: false, stdin: pat }).catch(() => {})
-    }
+  const command = `gh ${loginArgs.join(' ')}`
+  // Never sign in unasked: the user confirms, or gets the exact command to run themselves.
+  if (!(await confirmLogin({ command }))) {
+    process.stdout.write('\n')
+    console.error(`  Not signed in. Sign in when you are ready with:\n    ${command}\n  then run lazyhub again.\n`)
+    process.exit(1)
   }
+  process.stdout.write('  Starting login...\n')
+  // gh owns the terminal and waits on the user, so no timeout; lazyhub never sees a token.
+  // checkAuth() after the flow reports the outcome.
+  await runGh(loginArgs, { interactive: true, timeout: 0 }).catch(() => {})
 }
 
 // ─── Step 3: detect repo context ─────────────────────────────────────────────
