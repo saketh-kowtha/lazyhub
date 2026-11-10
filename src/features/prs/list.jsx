@@ -365,7 +365,7 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
     const pr = items[cursor]
     if (!pr) return
 
-    if (matchesAction('pr.open-selected', input, key, _actions)) { seedPRDetail(repo, pr); onSelectPR(pr, smartEnterTarget(pr, { scope, enabled: loadState().smartEnter !== false })); return }
+    if (matchesAction('pr.open-selected', input, key, _actions)) { seedPRDetail(repo, pr); onSelectPR(pr, smartEnterTarget(pr, { scope, enabled: loadState().smartEnter === true })); return }
     if (matchesAction('pr.diff', input, key, _actions)) { onOpenDiff(pr); return }
     if (matchesAction('pr.merge', input, key, _actions)) { openDialog('merge'); return }
     if (matchesAction('pr.labels', input, key, _actions)) { openDialog('labels'); return }
