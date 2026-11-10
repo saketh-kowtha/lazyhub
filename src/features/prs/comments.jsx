@@ -88,7 +88,8 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 8)
 
   // First page of review threads + conversation comments; later pages load on demand (#507).
-  const { data: firstPage, loading, error, refetch: refetchFirst } = useGh(listPRTimelinePage, [repo, prNumber])
+  // The body follows the derived render mode (V4c, #597): loaded rows stay under a revalidate or a failure.
+  const { data: firstPage, mode: pageMode, isFetching, error, refetch: refetchFirst } = useGh(listPRTimelinePage, [repo, prNumber])
   // Every loaded page lives in `loaded`. A write patches it in place, so a reply, edit, delete or
   // resolve never throws the loaded pages away; only an explicit refresh (r) starts over.
   const [loaded, setLoaded] = useState(null)
@@ -449,8 +450,11 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
     }
   })
 
-  if (loading) return <Box paddingX={1}><Text color={t.ui.muted}>Loading comments…</Text></Box>
-  if (error)   return <Box paddingX={1}><Text color={t.ci.fail}>⚠ Failed to load — {firstActionKey('list.refresh', 'r')} to retry</Text></Box>
+  if (!data) {
+    if (pageMode === 'skeleton') return <Box paddingX={1}><Text color={t.ui.muted}>Loading comments…</Text></Box>
+    if (pageMode === 'error' || error) return <Box paddingX={1}><Text color={t.ci.fail}>⚠ Failed to load — {firstActionKey('list.refresh', 'r')} to retry</Text></Box>
+    if (pageMode === 'pending') return null
+  }
 
   const loadedConversation = data?.conversation.length || 0
   const loadedThreads = new Set((data?.comments || []).map(c => c.threadId)).size
@@ -465,6 +469,9 @@ export function PRComments({ prNumber, repo, onBack, onJumpToDiff }) {
         <Text color={t.ui.selected} bold>PR #{prNumber} Comments</Text>
         <Box gap={2}>
           {statusMsg && <Text color={t.ci.pass}>{sanitizeRaw(statusMsg)}</Text>}
+          {error && <Text color={t.ci.fail}>{`⚠ refresh failed, showing loaded comments  [${firstActionKey('list.refresh', 'r')}] retry`}</Text>}
+          {/* Reserved cell: background activity never shifts the layout. */}
+          <Text color={t.ui.dim}>{isFetching ? '⟳' : ' '}</Text>
           <Text color={t.ui.dim}>filter: {filterMode}  {countLabel}{incomplete ? '  (incomplete: GitHub repeated a page cursor)' : ''}{hasMore ? (moreFailed ? '  (load failed, r to retry)' : '  (loading more…)') : ''}</Text>
         </Box>
       </Box>

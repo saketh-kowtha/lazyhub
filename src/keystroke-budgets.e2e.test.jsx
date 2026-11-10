@@ -259,7 +259,8 @@ describe('keystroke budgets', () => {
     it(`${task.name}: at most ${task.budget} keys at ${cols} columns`, async () => {
       layoutState.cols = cols
       currentPR = task.pr || PR
-      saveState({ prScope: task.scope || 'all', prFilters: {} })
+      // Smart Enter is opt-in (#314); its budget rows measure it switched on.
+      saveState({ prScope: task.scope || 'all', prFilters: {}, smartEnter: /smart Enter/.test(task.name) })
       const view = renderWithProviders(<App repo="owner/repo" />)
       await waitForExpectation(() => expect(view.lastFrame()).toContain('Retry in webhook sender'))
       await flush(30)
