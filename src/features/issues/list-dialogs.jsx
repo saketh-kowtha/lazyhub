@@ -10,7 +10,7 @@ import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
 import { FormCompose } from '../../components/dialogs/FormCompose.jsx'
 import { IssueLabelDialog, IssueAssigneeDialog } from './dialogs.jsx'
 
-export function IssueListDialogs({ dialog, repo, items, selectedIssue, onJump, onClose, showStatus, closeIssue, createIssue, onChanged }) {
+export function IssueListDialogs({ dialog, repo, items, selectedIssue, onJump, onClose, showStatus, onCloseIssue, onCreateIssue, onChanged }) {
   // The list owns the writes (useMutation); a dialog only confirms and hands over (D16: one row is patched).
   if (dialog === 'fuzzy') {
     const fuzzyItems = items.map(issue => ({ ...issue, authorLogin: issue.author?.login || '' }))
@@ -38,7 +38,7 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, onJump, o
           destructive={true}
           onConfirm={() => {
             onClose()
-            closeIssue(selectedIssue.number)
+            onCloseIssue(selectedIssue.number)
           }}
           onCancel={onClose}
         />
@@ -58,7 +58,7 @@ export function IssueListDialogs({ dialog, repo, items, selectedIssue, onJump, o
           validate={(values) => ((values.title || '').trim() ? null : 'a title is required')}
           onSubmit={(values) => {
             onClose()
-            createIssue(values)
+            onCreateIssue(values)
           }}
           onCancel={onClose}
         />
