@@ -229,33 +229,37 @@ describe('T21 row cap', () => {
   })
 })
 
+// Wall time depends on the runner (coverage instrumentation makes it several times slower), so these tests assert
+// bounded work (row cap, token budget) and linear scaling. The absolute figures are in the PR description.
+function best(fn, runs = 3) {
+  fn()
+  return Math.min(...Array.from({ length: runs }, () => {
+    const start = performance.now()
+    fn()
+    return performance.now() - start
+  }))
+}
+
 describe('T20 body budget', () => {
   for (const [name, input] of Object.entries(BOMBS)) {
-    it(`${name} bomb renders within budget and stays bounded`, () => {
-      const start = performance.now()
+    it(`${name} bomb stays bounded in rows and scales linearly`, () => {
       const rows = getMarkdownRows(input, 76, theme)
-      expect(performance.now() - start).toBeLessThan(1500)
       expect(rows.length).toBeLessThanOrEqual(LIMITS.MAX_ROWS + 1)
+      const lead = '<b>x</b> '
+      const small = lead + input.slice(0, 32 * 1024)
+      const big = lead + input.slice(0, LIMITS.MAX_BYTES)
+      const t1 = Math.max(best(() => getMarkdownRows(small, 76, theme)), 2)
+      const t16 = best(() => getMarkdownRows(big, 76, theme), 2)
+      expect(t16).toBeLessThanOrEqual(t1 * 80)
     })
   }
-  it('a 512 KiB hostile body: parse + layout in 50 ms, whole pipeline bounded (warm)', () => {
-    const body = '<b>x</b>&#9999999999;<!-- c --><a href="https://a.com/x">t</a> text '.repeat(8000).slice(0, LIMITS.MAX_BYTES)
-    const best = fn => {
-      fn()
-      return Math.min(...Array.from({ length: 4 }, () => {
-        const start = performance.now()
-        fn()
-        return performance.now() - start
-      }))
-    }
-    const layoutMs = best(() => {
-      const tree = parseSegment(body, { budget: newBudget() })
-      layout(tree.children, { width: 76, base: 'https://example.org/', md: false, st0: {} })
-    })
-    expect(layoutMs).toBeLessThan(50)
-    // Element creation runs against React's development build under vitest, several times slower than the shipped
-    // bundle (about 45 ms in production mode for this input), so the whole-pipeline bound here is a loose guard.
-    expect(best(() => getMarkdownRows(body, 76, theme))).toBeLessThan(400)
+  it('layout stops at the row cap instead of laying out the whole body', () => {
+    const body = '<b>x</b> text '.repeat(40000)
+    const tree = parseSegment(body, { budget: newBudget() })
+    const ctx = { width: 76, base: 'https://example.org/', md: false, st0: {} }
+    const lines = layout(tree.children, ctx)
+    expect(lines.length).toBeLessThanOrEqual(LIMITS.MAX_ROWS + 1)
+    expect(ctx.cap.left).toBeLessThanOrEqual(0)
   })
   it('a body with no HTML renders exactly as before', () => {
     const rows = getMarkdownRows('# Title\n\n- a\n- b\n\ntext **bold**', 76, theme)

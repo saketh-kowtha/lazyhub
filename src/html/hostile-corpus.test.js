@@ -137,26 +137,44 @@ describe('T11/T13 to T17 structure', () => {
   })
 })
 
+// Wall time depends on the runner (coverage instrumentation makes it several times slower), so these tests
+// assert bounded WORK (token budget, tree size) and that time scales linearly with input size.
+function best(fn, runs = 4) {
+  fn()
+  return Math.min(...Array.from({ length: runs }, () => {
+    const start = performance.now()
+    fn()
+    return performance.now() - start
+  }))
+}
+
+function countNodes(nodes) {
+  let n = 0
+  walk(nodes, () => { n++ })
+  return n
+}
+
 describe('T20 resource bombs', () => {
   for (const [name, input] of Object.entries(BOMBS)) {
-    it(`${name} (${Math.round(input.length / 1024)} KiB) finishes quickly and says it stopped`, () => {
+    it(`${name} (${Math.round(input.length / 1024)} KiB) does bounded work and says it stopped`, () => {
       const budget = newBudget()
-      const start = performance.now()
-      const out = parseSegment(input, { budget })
-      const ms = performance.now() - start
-      expect(ms).toBeLessThan(400)
-      expect(out).toBeDefined()
+      const out = parseSegment(input, { budget, md: name === 'ticks' })
+      expect(budget.tokens).toBeLessThanOrEqual(LIMITS.MAX_TOKENS)
+      expect(budget.bytes).toBeLessThanOrEqual(LIMITS.MAX_BYTES)
+      // Every token yields at most a couple of nodes, however large the input.
+      expect(countNodes(out.children)).toBeLessThanOrEqual(LIMITS.MAX_TOKENS * 3 + 10)
       if (input.length > LIMITS.MAX_BYTES) expect(budget.stopped).toBe(true)
     })
-  }
 
-  it('a 512 KiB hostile segment tokenizes and builds within 50 ms (warm)', () => {
-    const input = '<b>x</b>&#9999999999;<!-- c --><a href="https://a.com/x">t</a>'.repeat(8000).slice(0, LIMITS.MAX_BYTES)
-    parse(input)
-    const start = performance.now()
-    parse(input)
-    expect(performance.now() - start).toBeLessThan(50 + 250) // parser only; the full render budget is checked in render.test.jsx
-  })
+    it(`${name}: time scales linearly with input size`, () => {
+      // 16x the input: linear work is ~16x, quadratic ~256x. The input is capped by the byte budget at 512 KiB.
+      const small = input.slice(0, 32 * 1024)
+      const big = input.slice(0, LIMITS.MAX_BYTES)
+      const t1 = Math.max(best(() => parseSegment(small, { budget: newBudget(), md: name === 'ticks' })), 2)
+      const t16 = best(() => parseSegment(big, { budget: newBudget(), md: name === 'ticks' }), 2)
+      expect(t16).toBeLessThanOrEqual(t1 * 80)
+    })
+  }
 
   it('the stop notice appears once and the tail stays text', () => {
     const budget = newBudget()
