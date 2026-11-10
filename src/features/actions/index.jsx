@@ -9,18 +9,15 @@ import { useKeymapInput } from '../../config/keymap.js'
 import { useGh } from '../../hooks/useGh.js'
 import { useListController } from '../../hooks/useListController.js'
 import { useMutation } from '../../hooks/useMutation.js'
-import { listRuns, getRunLogs, rerunRun, cancelRun } from '../../executor.js'
+import { listRuns, rerunRun, cancelRun } from '../../executor.js'
 import { ConfirmDialog } from '../../components/dialogs/ConfirmDialog.jsx'
-import { LogViewer } from '../../components/dialogs/LogViewer.jsx'
 import { FuzzySearch } from '../../components/dialogs/FuzzySearch.jsx'
-import { toLogLines, logTitle } from './log-lines.js'
-import { loadFailureExcerpt } from '../prs/ci-log.js'
+import { RunLogDialog } from './RunLogDialog.jsx'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
 import { QueryBoundary } from '../../components/QueryBoundary.jsx'
 import { MutationStatus } from '../../components/MutationStatus.jsx'
 import { ListRow } from '../../ui/ListRow.jsx'
-import { Spinner } from '../../components/Spinner.jsx'
 import { ActionListSkeleton } from '../../components/Skeleton.jsx'
 import { firstActionKey, matchesAction } from '../../config/actions.js'
 import { sanitize } from '../../utils.js'
@@ -72,10 +69,7 @@ export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, ini
   const query = useGh(listRuns, [repo, branchFilter ? { branch: branchFilter } : {}])
   const { data: runs, loading, error, refetch, isStale } = query
   const [dialog, setDialog] = useState(null) // null | 'logs' | 'cancel' | 'rerun' | 'fuzzy'
-  const [logLines, setLogLines] = useState([])
-  const [logTitleText, setLogTitle] = useState('Log Viewer')
-  const [logLoading, setLogLoading] = useState(false)
-  const [logExcerpt, setLogExcerpt] = useState(null)
+  const [logRun, setLogRun] = useState(null)
 
   const items = runs || []
   const list = useListController({ items, height: visibleHeight, getId: r => r.databaseId })
@@ -96,26 +90,14 @@ export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, ini
   // One status line: whichever write spoke last.
   const status = cancel.status || rerun.status
 
-  const openLogs = useCallback(async () => {
+  // The run is captured at open: the list revalidating under the dialog must not change what it shows.
+  const openLogs = useCallback(() => {
     const run = list.selected
     if (!run) return
-    setLogTitle(logTitle(run))
-    setLogLoading(true)
-    setLogExcerpt(null)
+    setLogRun(run)
     // A failed run opens on its failure excerpt (#463); every other run opens on the full log.
-    const failed = /failure|timed_out/i.test(run.conclusion || '')
-    setDialog(failed ? 'failed-logs' : 'logs')
-    const excerptPromise = failed ? loadFailureExcerpt(repo, { runId: run.databaseId }) : Promise.resolve(null)
-    try {
-      const rawLogs = await getRunLogs(repo, run.databaseId)
-      const lines = toLogLines(rawLogs)
-      setLogLines(lines)
-    } catch (err) {
-      setLogLines([`Error loading logs: ${err.message}`])
-    }
-    setLogExcerpt(await excerptPromise.catch(() => ({ state: 'unavailable', detail: 'Could not fetch the failed-step log', excerpt: null })))
-    setLogLoading(false)
-  }, [list.selected, repo])
+    setDialog(/failure|timed_out/i.test(run.conclusion || '') ? 'failed-logs' : 'logs')
+  }, [list.selected])
 
   useKeymapInput((input, key) => {
     if (status?.persist) { rerun.dismiss(); cancel.dismiss() }
@@ -158,22 +140,8 @@ export function ActionList({ repo, listHeight = 10, innerWidth, onPaneState, ini
     )
   }
 
-  if (dialog === 'logs' || dialog === 'failed-logs') {
-    if (logLoading) {
-      return (
-        <Box flexDirection="column" flexGrow={1} paddingX={1}>
-          <Box gap={1}><Spinner /><Text color={t.ui.muted}>Loading logs…</Text></Box>
-        </Box>
-      )
-    }
-    return (
-      <LogViewer
-        title={logTitleText}
-        lines={logLines}
-        excerpt={dialog === 'failed-logs' ? logExcerpt : null}
-        onClose={() => setDialog(null)}
-      />
-    )
+  if ((dialog === 'logs' || dialog === 'failed-logs') && logRun) {
+    return <RunLogDialog repo={repo} run={logRun} failed={dialog === 'failed-logs'} onClose={() => setDialog(null)} />
   }
 
   if (dialog === 'rerun' && list.selected) {

@@ -26,7 +26,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   getPRFilePatch.mockImplementation(fakeFilePatch(DIFF))
   useGh.mockImplementation(fn => ({
-    data: fn === listPRFilesPage ? diffFilesPage(DIFF) : fn === getPR ? { title: 't', state: 'OPEN' }
+    data: fn.name === 'listPRDiffFiles' ? diffFilesPage(DIFF) : fn === getPR ? { title: 't', state: 'OPEN' }
       : fn === getRepoInfo ? {} : fn === getPRDiffStats ? { additions: 2, deletions: 2, changedFiles: 2 }
         : fn === listPRCommentsPage ? { comments: [], truncated: false } : null,
     loading: false, error: null, refetch: vi.fn(), mutate: vi.fn(),

@@ -28,7 +28,7 @@ const ID_RE = /^\d+$/
  * says what happened so the view can show it as unknown rather than guess.
  *
  * @param {string} repo
- * @param {{jobId?: string|number, runId?: string|number}} ref  exactly one id
+ * @param {{jobId?: string|number, runId?: string|number, attempt?: number}} ref  exactly one id (a job id is already unique to its attempt; `attempt` names one for a run)
  * @returns {Promise<FailedLog>}
  */
 export async function getFailedLog(repo, ref = {}) {
@@ -36,9 +36,10 @@ export async function getFailedLog(repo, ref = {}) {
   const runId = ref.runId === undefined ? null : String(ref.runId)
   if ((jobId === null) === (runId === null)) return { state: 'unavailable', text: '', detail: 'Need exactly one of jobId or runId' }
   if (!ID_RE.test(jobId ?? runId)) return { state: 'unavailable', text: '', detail: 'Invalid run or job id' }
+  const attempt = Number.isInteger(ref.attempt) && ref.attempt > 1 ? ['--attempt', String(ref.attempt)] : []
   const args = jobId !== null
     ? ['run', 'view', '--job', jobId, '--repo', getRepo(repo), '--log-failed']
-    : ['run', 'view', runId, '--repo', getRepo(repo), '--log-failed']
+    : ['run', 'view', runId, '--repo', getRepo(repo), '--log-failed', ...attempt]
   try {
     const out = await runGh(args, { json: false, maxBuffer: MAX_LOG_BYTES, timeout: 60_000 })
     const text = typeof out === 'string' ? out : ''

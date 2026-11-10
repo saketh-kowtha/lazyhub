@@ -9,7 +9,7 @@ import { openUrl } from '../../../services/platform.js'
 import { useStdout } from 'ink'
 import { useActionResolver, useKeymapInput } from '../../../config/keymap.js'
 import { useGh } from '../../../hooks/useGh.js'
-import { getPRDiff, listPRCommentsPage, addPRLineComment, getPR as getPRMeta, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo, reviewPR } from '../../../executor.js'
+import { getPRDiff, listPRCommentsPage, addPRLineComment, replyToComment, editPRComment, deletePRComment, mergePR, getRepoInfo, reviewPR } from '../../../executor.js'
 import { contextFooterHints } from '../../../ui/actions.js'
 import { usePendingWrite } from '../../../hooks/usePendingWrite.js'
 import { getAICodeReview, AIError } from '../../../ai/index.js'
@@ -45,7 +45,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   // File patches then load one at a time around the cursor (#509): no all-or-nothing size gate.
   const [focusFile, setFocusFile] = useState(0)
   const diffFiles = usePRDiffFiles({ repo, prNumber, focusIndex: focusFile })
-  const { files, stats: diffStats, loading, refetch, isStale: diffStale } = diffFiles
+  const { files, stats: diffStats, mode, refetch, isStale: diffStale } = diffFiles
   const error = diffFiles.error || diffFiles.refreshError
   // Fetched this visit (not merely cached): secondary calls must not race the revalidation.
   const hasDiff = diffFiles.hasList
@@ -54,7 +54,8 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   const diffRefreshError = diffFiles.refreshError
   const diffError = diffFiles.error
 
-  const { data: prMeta } = useGh(getPRMeta, [repo, prNumber], { ttl: 300_000, enabled: diffReady })
+  // The PR detail is read by the file hook (it carries the head SHA the diff is keyed by).
+  const prMeta = diffFiles.prMeta
   const { data: repoInfo } = useGh(getRepoInfo, [repo], { ttl: 300_000, enabled: diffReady })
   const headRefOid = /^[0-9a-f]{40}$/.test(prMeta?.headRefOid) ? prMeta.headRefOid : null
   const { data: commentsPage, refetch: refetchComments, mutate: mutatePage } = useGh(listPRCommentsPage, [repo, prNumber], { enabled: diffReady })
@@ -637,7 +638,7 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   return {
     stdout, visibleHeight, diffStats, focusFile, totalFiles: diffFiles.totalFiles, listComplete: diffFiles.listComplete, listError: diffFiles.listError,
     commentsTruncated: !!commentsPage?.truncated,
-    prMeta, repoInfo, loading: loading && !hasDiff, error: diffError, diffRefreshError, cursor, scrollOffset, dialog, setDialog,
+    prMeta, repoInfo, mode, error: diffError, diffRefreshError, cursor, scrollOffset, dialog, setDialog,
     mergeChoice, compose, setCompose, COMMENT_TYPES, commentStatus, splitView,
     footerKeys, showTree, treeCursor, findQuery, setFindQuery, findActive,
     findMatches, gotoActive, gotoInput, setGotoInput, fileJumpActive, setFileJumpActive,
