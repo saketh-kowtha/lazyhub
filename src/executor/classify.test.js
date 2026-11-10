@@ -164,3 +164,20 @@ describe('scrub', () => {
     expect(scrub('Your gh token lacks the read:org scope.')).toBe('Your gh token lacks the read:org scope.')
   })
 })
+
+describe('classifyGhFailure: Actions turned off for the repository (F2)', () => {
+  it('says so plainly instead of blaming the login', () => {
+    const err = new GhError({
+      message: 'HTTP 403: Actions has been disabled for this repository. (https://api.github.com/repos/o/r/actions/runs)',
+      stderr: 'HTTP 403: Actions has been disabled for this repository. (https://api.github.com/repos/o/r/actions/runs)',
+      exitCode: 1,
+      args: ['run', 'list'],
+    })
+    const f = classifyGhFailure(err, { now: NOW })
+    expect(f.cause).toMatch(/Actions is turned off for this repository/)
+    expect(f.cause).not.toMatch(/login/i)
+    expect(f.fix).toBeNull()
+    expect(f.notes.join(' ')).toMatch(/Settings/)
+    expect(f.tone).toBe('degraded')
+  })
+})
