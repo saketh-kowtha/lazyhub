@@ -85,7 +85,7 @@ if (process.argv[2] === 'mcp-server') {
 
 // TUI mode: --help, unknown flags and an optional PR/issue reference (#315).
 // Validated before anything is loaded or created on disk.
-const { USAGE, parseCliArgs } = await import('../src/cli/usage.js')
+const { USAGE, parseCliArgs, nonInteractiveMessage } = await import('../src/cli/usage.js')
 const { loadConfig: loadTomlConfig } = await import('../src/config/loader.js')
 const parsedArgs = parseCliArgs(process.argv.slice(2), {
   hosts: [loadTomlConfig().defaults?.repo_host, process.env.GH_HOST].filter(Boolean),
@@ -99,9 +99,24 @@ if (parsedArgs.error) {
   process.exit(2)
 }
 
+// No terminal on stdin or stdout (pipe, redirect, CI, cron): never start the TUI.
+const noTerminal = nonInteractiveMessage()
+if (noTerminal) {
+  process.stderr.write(noTerminal)
+  process.exit(1)
+}
+
+// Ink reads CI once, when it is first imported, and under CI it draws only the final frame, which
+// leaves a real terminal blank. Both streams are terminals here, so this run is interactive:
+// say so while the TUI stack loads, then give the child processes (gh, git) their environment back.
+const ciBefore = process.env.CI
+if (ciBefore !== undefined && ciBefore !== 'false') process.env.CI = 'false'
+
 const { bootstrap } = await import('../src/bootstrap.js')
 const { installCrashHandlers } = await import('../src/crash.js')
 const { renderApp } = await import('../src/app.jsx')
+if (ciBefore === undefined) delete process.env.CI
+else process.env.CI = ciBefore
 const { loadConfig } = await import('../src/config.js')
 const { startIPC } = await import('../src/ipc.js')
 const { scheduleDaemon } = await import('../src/daemon/lifecycle.js')
@@ -129,7 +144,12 @@ if (cfg.ipc?.enabled !== false) {
 
 // The daemon starts after the first frame is drawn, never before it (#491).
 const renderThenStartDaemon = () => {
-  const unmount = renderApp()
+  const unmount = renderApp({
+    onExit: (error) => {
+      if (error) process.stderr.write(`lazyhub: ${error.message}\n`)
+      process.exit(error ? 1 : 0)
+    },
+  })
   scheduleDaemon(cfg, new URL('./lazyhub.js', import.meta.url).pathname)
   return unmount
 }

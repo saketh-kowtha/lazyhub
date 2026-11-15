@@ -270,6 +270,13 @@ export function classifyGhFailure(err, ctx = {}) {
     })
   }
 
+  // A repository with Actions switched off answers 403 (or 404 on some hosts); that is a setting, not a login problem.
+  if (/actions (has been|is) (disabled|turned off)|actions are disabled/i.test(text)) {
+    return failure('forbidden', 'degraded', 'GitHub Actions is turned off for this repository.', {
+      notes: ['Nothing is wrong with your login. A repository admin can enable it under Settings > Actions.'],
+    })
+  }
+
   if (/HTTP 403|forbidden/i.test(text)) {
     return failure('forbidden', 'blocked', 'Your gh login cannot read this.', {
       fix: 'gh auth status',

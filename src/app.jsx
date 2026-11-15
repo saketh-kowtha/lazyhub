@@ -500,7 +500,13 @@ export function AppRoot({ initialRepo }) {
   return <App key={repo} repo={repo} onSwitchRepo={switchRepo} />
 }
 
-export function renderApp() {
+/**
+ * Draw the app. `onExit` runs once Ink has unmounted (q, Ctrl+C or a fatal render error): the
+ * launcher ends the process there, because the editor socket would otherwise keep it alive
+ * with the terminal still in the alternate screen and raw mode.
+ * @param {{ onExit?: (error?: Error) => void }} [opts]
+ */
+export function renderApp({ onExit } = {}) {
   const repo = process.env.GHUI_REPO || ''
   migrateStateJsonToToml()
 
@@ -511,7 +517,7 @@ export function renderApp() {
 
   const initialTheme = readRawThemeCfg()
   try {
-    const { unmount } = render(
+    const { unmount, waitUntilExit } = render(
       <ConfigProvider>
         <ThemeProvider initialTheme={initialTheme}>
           <KeyScopeProvider>
@@ -526,6 +532,7 @@ export function renderApp() {
     // Ink emits its own cleanup; we hook the process 'exit' above which covers it.
     // Store unmount so bootstrap can use it if needed.
     process.env._GHUI_UNMOUNT = '1'
+    if (onExit) waitUntilExit().then(() => onExit(), err => onExit(err))
     return unmount
   } catch (err) {
     logger.error('Fatal App Crash', err)

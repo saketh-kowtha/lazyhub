@@ -1,6 +1,6 @@
 import assert from 'assert/strict'
 import { spawnSync } from 'child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync } from 'fs'
 import { createServer } from 'net'
 import { tmpdir } from 'os'
 import { dirname, join, delimiter } from 'path'
@@ -221,11 +221,57 @@ async function runFirstRunFlow() {
     term = spawnTerminal(env)
     term.onData(data => { output += data })
     await waitForScreen(() => output, /Pick a repository to open/, 'first-run repository list')
+    // NO_COLOR is honoured by the first-run screen too (E2).
+    assert.doesNotMatch(output, /\x1b\[(?:3[0-7]|9[0-7]|4[0-7]|38|48)[;0-9]*m/, 'NO_COLOR: no colour codes on the first-run screen')
     await settle()
     output = ''
     term.write('\r') // key 1: open the highlighted repository
     const screen = await waitForScreen(() => output, /Focus|Pull Requests|PTY harness fixture PR/, 'Focus after one key')
     assert.doesNotMatch(screen, /Coverage \(|ungoverned|Enforcement/, 'no governance report before Focus')
+    term.write('q')
+    await waitForExit(term)
+  } finally {
+    await stopTerminal(term)
+    removeTempDir(temp)
+  }
+}
+
+// E1/E5: the first-run screen follows the terminal: ASCII glyphs under a non-UTF-8 locale, and no
+// full-screen clear (Ink does that when a frame is as tall as the screen) on a short terminal.
+async function runFirstRunTerminalFlow() {
+  for (const { env: extra, cols, rows, check } of [
+    { env: { LANG: 'C', LC_ALL: 'C' }, cols: 80, rows: 24, check: text => assert.doesNotMatch(text, /[^\x00-\x7f]/, 'LANG=C: first-run screen must be ASCII') },
+    { env: {}, cols: 50, rows: 12, check: (text, raw) => assert.equal((raw.match(/\x1b\[[23]J/g) || []).length, 0, 'a 12-row terminal must not be cleared on every frame') },
+    { env: {}, cols: 30, rows: 8, check: text => assert.match(text, /Terminal too small/) },
+  ]) {
+    const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-firstterm-'))
+    let term
+    let output = ''
+    try {
+      const { GHUI_REPO: _preselected, ...env } = childEnv(installGhStub(temp), temp)
+      term = spawnTerminal({ ...env, ...extra }, [], { cols, rows })
+      term.onData(data => { output += data })
+      await waitForScreen(() => output, /Pick a repository to open|Terminal too small/, `first run at ${cols}x${rows}`)
+      await settle()
+      check(stripAnsi(output), output)
+      term.write('q')
+      await waitForExit(term)
+    } finally {
+      await stopTerminal(term)
+      removeTempDir(temp)
+    }
+  }
+}
+
+// E3: CI=true in a real terminal (dev containers, `act` shells) must not blank the UI: Ink only renders the final frame under CI.
+async function runCiEnvFlow() {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-ci-'))
+  let term
+  let output = ''
+  try {
+    term = spawnTerminal({ ...childEnv(installGhStub(temp), temp), CI: 'true' })
+    term.onData(data => { output += data })
+    await waitForScreen(() => output, /Focus|Pull Requests|PTY harness fixture PR/, 'UI under CI=true in a terminal')
     term.write('q')
     await waitForExit(term)
   } finally {
@@ -688,9 +734,56 @@ async function runTmuxResizeFlow() {
 const ptyProblem = nodePtyProblem(pty, ROOT)
 if (ptyProblem) skipOrFail(`node-pty cannot spawn in this shell: ${ptyProblem}`)
 
+// E3: without a terminal on stdin or stdout the TUI must not start: a one-line cause on stderr, nothing on stdout, exit 1.
+async function runNonTtyFlow() {
+  const temp = mkdtempSync(join(tmpdir(), 'lazyhub-pty-nontty-'))
+  try {
+    const env = childEnv(installGhStub(temp), temp)
+    for (const stdio of [['ignore', 'pipe', 'pipe'], ['pipe', 'pipe', 'pipe']]) {
+      const r = spawnSync(process.execPath, [BIN], { env, cwd: ROOT, stdio, input: stdio[0] === 'pipe' ? '' : undefined, timeout: 10000 })
+      assert.equal(r.status, 1, `non-TTY launch must exit 1 (got ${r.status}, signal ${r.signal})`)
+      assert.equal(r.stdout.length, 0, `non-TTY launch must print nothing on stdout: ${JSON.stringify(String(r.stdout).slice(0, 80))}`)
+      assert.match(String(r.stderr), /needs a terminal/)
+    }
+  } finally {
+    removeTempDir(temp)
+  }
+}
+
+// E6: q (and Ctrl+C) must end the process and give the terminal back, with the editor socket enabled (the default).
+async function runQuitFlow() {
+  for (const key of ['q', '\x03']) {
+    // A short HOME: a unix socket path over ~104 bytes cannot bind, which would silently turn the editor socket off.
+    const temp = mkdtempSync(join(existsSync('/tmp') ? '/tmp' : tmpdir(), 'lhq-'))
+    let term
+    let output = ''
+    try {
+      term = spawnTerminal(childEnv(installGhStub(temp), temp))
+      term.onData(data => { output += data })
+      await waitForScreen(() => output, /Focus|Pull Requests|PTY harness fixture PR/, 'startup')
+      await settle()
+      const exited = new Promise(resolve => term.onExit(resolve))
+      term.write(key)
+      const event = await Promise.race([exited, new Promise(resolve => setTimeout(() => resolve(null), 4000))])
+      assert.ok(event, `${JSON.stringify(key)} must end the process within 4s (it hung with the editor socket open)`)
+      assert.equal(event.exitCode, 0)
+      assert.ok(output.includes('\x1b[?1049l'), 'the alternate screen must be left')
+      assert.equal(existsSync(join(temp, '.lazyhub-socket')), false, 'the socket pointer must be removed on quit')
+      assert.deepEqual(existsSync(join(temp, '.config', 'lazyhub', 'run')) ? readdirSync(join(temp, '.config', 'lazyhub', 'run')) : [], [], 'no socket or token files may be left behind')
+    } finally {
+      await stopTerminal(term)
+      removeTempDir(temp)
+    }
+  }
+}
+
 await runLazyhubFlow()
+await runQuitFlow()
+await runCiEnvFlow()
+await runNonTtyFlow()
 await runReferenceFlow()
 await runFirstRunFlow()
+await runFirstRunTerminalFlow()
 await runCrashFlow()
 await runDegradedFlow()
 await runDayOneErrorFlow({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseCliArgs, USAGE } from './usage.js'
+import { nonInteractiveMessage, parseCliArgs, USAGE } from './usage.js'
 
 describe('parseCliArgs', () => {
   it('opens the plain TUI with no arguments and tolerates --mouse and --onboarding', () => {
@@ -51,5 +51,25 @@ describe('parseCliArgs', () => {
 
   it('parses a valid owner/repo#n reference', () => {
     expect(parseCliArgs(['octo/cat#12']).ref).toBeTruthy()
+  })
+})
+
+describe('nonInteractiveMessage (E3: no TUI without a terminal)', () => {
+  it('is null when both stdin and stdout are terminals', () => {
+    expect(nonInteractiveMessage({ stdin: { isTTY: true }, stdout: { isTTY: true } })).toBeNull()
+  })
+
+  it('names the missing stream and the next step when stdout is piped', () => {
+    const msg = nonInteractiveMessage({ stdin: { isTTY: true }, stdout: { isTTY: false } })
+    expect(msg).toMatch(/standard output is not a terminal/)
+    expect(msg).toMatch(/lazyhub status|doctor|--help/)
+  })
+
+  it('names stdin when it is not a terminal (CI, cron, < /dev/null)', () => {
+    expect(nonInteractiveMessage({ stdin: { isTTY: undefined }, stdout: { isTTY: true } })).toMatch(/standard input is not a terminal/)
+  })
+
+  it('names both when neither is a terminal', () => {
+    expect(nonInteractiveMessage({ stdin: {}, stdout: {} })).toMatch(/standard input and standard output are not terminals/)
   })
 })

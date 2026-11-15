@@ -13,8 +13,27 @@ vi.mock('./config.js', () => ({
 }))
 vi.mock('./daemon/audit.js', () => ({ writeAuditEntry: vi.fn(), hashArgs: vi.fn(() => 'h') }))
 
+vi.mock('readline', () => ({ default: { createInterface: vi.fn() } }))
+
 import { execa } from 'execa'
-import { bootstrap } from './bootstrap.js'
+import readline from 'readline'
+import { PassThrough } from 'stream'
+import { bootstrap, confirmLogin } from './bootstrap.js'
+
+/**
+ * Make the next sign-in prompt answer ('' = Enter, null = EOF/Ctrl+C).
+ * @param {string|null} answer
+ * @returns {{question: string|null}} the question text seen
+ */
+function answerPrompt(answer) {
+  const seen = { question: null }
+  readline.createInterface.mockReturnValue({
+    question: (q, cb) => { seen.question = q; if (answer !== null) cb(answer) },
+    on: (ev, cb) => { if (answer === null && ev === 'SIGINT') queueMicrotask(cb) },
+    close: vi.fn(),
+  })
+  return seen
+}
 
 const SECRET = 'ghp_secretsecretsecretsecretsecretsecret12'
 let loggedIn
@@ -63,13 +82,43 @@ describe('bootstrap login via runGh', () => {
     expect(stdinWrites).toEqual([SECRET])
   })
 
-  it('runs browser login with inherited stdio and no timeout', async () => {
+  it('asks before signing in, then hands the terminal to plain `gh auth login` (no token handling)', async () => {
     delete process.env.GITHUB_TOKEN
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin') // hasBrowser() is true
+    const seen = answerPrompt('y')
     await bootstrap(vi.fn())
+    expect(seen.question).toMatch(/gh auth login/)
     const login = execa.mock.calls.find(([, args]) => args[1] === 'login')
-    expect(login[1]).toEqual(['auth', 'login', '--web', '--git-protocol', 'https'])
+    expect(login[1]).toEqual(['auth', 'login'])
     expect(login[2]).toMatchObject({ stdio: 'inherit', timeout: 0 })
+  })
+
+  it('passes --hostname for GitHub Enterprise and names it in the prompt', async () => {
+    delete process.env.GITHUB_TOKEN
+    process.env.GH_HOST = 'ghe.example.com'
+    const seen = answerPrompt('yes')
+    await bootstrap(vi.fn())
+    expect(seen.question).toContain('gh auth login --hostname ghe.example.com')
+    expect(execa.mock.calls.find(([, args]) => args[1] === 'login')[1]).toEqual(['auth', 'login', '--hostname', 'ghe.example.com'])
+  })
+
+  it.each([['Enter', ''], ['n', 'n'], ['Ctrl+C / EOF', null]])('declining (%s) never runs login, prints the exact command and exits 1', async (_name, answer) => {
+    delete process.env.GITHUB_TOKEN
+    answerPrompt(answer)
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`exit ${code}`) })
+    await expect(bootstrap(vi.fn())).rejects.toThrow('exit 1')
+    expect(execa.mock.calls.some(([, args]) => args[1] === 'login')).toBe(false)
+    expect(err.mock.calls.flat().join('\n')).toContain('gh auth login')
+  })
+
+  it('never prompts without a terminal', async () => {
+    delete process.env.GITHUB_TOKEN
+    setTty(false)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`exit ${code}`) })
+    await expect(bootstrap(vi.fn())).rejects.toThrow('exit 1')
+    expect(readline.createInterface).not.toHaveBeenCalled()
+    expect(execa.mock.calls.some(([, args]) => args[1] === 'login')).toBe(false)
   })
 
   it('without a TTY, a failed token login prints guidance and exits non-zero instead of prompting', async () => {
@@ -117,5 +166,34 @@ describe('bootstrap credential handling', () => {
     await expect(runGh(['pr', 'list'], { interactive: true })).rejects.toThrow(/interactive/)
     await expect(runGh(['auth', 'token'], { combine: true })).rejects.toThrow(/combine/)
     expect(execa).not.toHaveBeenCalled()
+  })
+})
+
+describe('confirmLogin', () => {
+  const streams = () => { const input = new PassThrough(); const output = new PassThrough(); input.isTTY = true; output.isTTY = true; return { input, output } }
+  const real = async () => (await vi.importActual('readline')).default
+
+  it('yes and y accept; Enter, n and anything else decline', async () => {
+    const actual = await real()
+    readline.createInterface.mockImplementation((o) => actual.createInterface(o))
+    for (const [text, want] of [['y\n', true], ['YES\n', true], ['\n', false], ['n\n', false], ['sure\n', false]]) {
+      const io = streams()
+      const p = confirmLogin(io)
+      io.input.write(text)
+      expect(await p).toBe(want)
+    }
+  })
+
+  it('Ctrl+C and end of input decline', async () => {
+    const actual = await real()
+    readline.createInterface.mockImplementation((o) => actual.createInterface(o))
+    let io = streams()
+    let p = confirmLogin(io)
+    io.input.write('\x03')
+    expect(await p).toBe(false)
+    io = streams()
+    p = confirmLogin(io)
+    io.input.end()
+    expect(await p).toBe(false)
   })
 })
