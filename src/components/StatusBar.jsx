@@ -14,6 +14,7 @@ const PANE_META = {
   notifications: { icon: '✦',  label: 'Notifications' },
   settings:      { icon: '⌘',  label: 'Settings'      },
   logs:          { icon: '⌸',  label: 'Logs'          },
+  queue:         { icon: '◔',  label: 'Review queue'  },
 }
 
 // Mode chip colors — uses semantic tokens if available, falls back to ci/ui tokens
@@ -35,7 +36,7 @@ function formatAge(ms) {
   return `${Math.floor(s / 3600)}h ago`
 }
 
-export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode = 'NORMAL', ghHealth }) {
+export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode = 'NORMAL', ghHealth, hideAge = false }) {
   const { t } = useTheme()
   const { stdout } = useStdout()
   const cols = stdout?.columns || 80
@@ -60,7 +61,7 @@ export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode
   // age, filter, repo/count, then the banner message is ellipsized (the retry hint is kept).
   const modeW  = mode !== 'NORMAL' ? displayWidth(mode) + 1 : 0
   const scopeW = scopeIndicator ? displayWidth(String(scopeIndicator)) + 3 : 0
-  const ageW   = !narrow ? displayWidth(`⟳ ${formatAge(mountTime)}`) + 1 : 0
+  const ageW   = !narrow && !hideAge ? displayWidth(`⟳ ${formatAge(mountTime)}`) + 1 : 0
   const labelW = displayWidth(`${meta.icon}  ${meta.label}`)
   const inner  = Math.max(0, cols - 2)
   const bannerRoom = inner - labelW - 2 - modeW - scopeW - (degraded && !narrow ? ageW : 0)
@@ -74,7 +75,7 @@ export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode
   const noticeText = !degraded && bannerNotice && noticeRoom >= 12
     ? truncateEllipsis(sanitize(String(bannerNotice)), noticeRoom - 2)
     : null
-  const showAge = !narrow && !errorText && !noticeText
+  const showAge = !narrow && !hideAge && !errorText && !noticeText
   const showContext = !errorText || cols >= 140
 
   return (

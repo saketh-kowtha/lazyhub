@@ -118,10 +118,10 @@ exports[`major screen golden snapshots > covers all 80-column major screens > 80
                    │  ────────────────────────────────────────                  │
                    │                                                            │
                    │  1-9                 jump to pane                          │
-                   │  j/k                 Move the cursor down                  │
-                   │  gg                  Jump to the top                       │
-                   │  G                   Jump to the bottom                    │
-                   │  r                   Refresh the active …                  │
+                   │  Enter               Open PR detail                        │
+                   │  d                   Open PR diff                          │
+                   │  m                   Merge selected PR                     │
+                   │  a                   Approve selected PR                   │
                    │  …                   +22 more                              │
                    │                                                            │
                    │  ────────────────────────────────────────────────────────  │

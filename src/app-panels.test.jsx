@@ -40,6 +40,19 @@ describe('HelpOverlay height budget (#462)', () => {
   }
 })
 
+describe('HelpOverlay own keys first (Alpha journey)', () => {
+  it('lists the review queue\'s own keys before the shared ones at 80x24, so the clip never hides them', () => {
+    const { lastFrame, stdout } = renderWithProviders(
+      <HelpOverlay pane="focus" view="queue" actionCtx={{}} onClose={() => {}} availableWidth={76} availableHeight={21} />
+    )
+    Object.defineProperty(stdout, 'columns', { value: 80, configurable: true })
+    Object.defineProperty(stdout, 'rows', { value: 24, configurable: true })
+    const frame = lastFrame()
+    for (const label of ['Open the selected', 'Next status', 'Load the next page']) expect(frame, frame).toContain(label)
+    expect(frame).toMatch(/Enter\s+Open the selected/)
+  })
+})
+
 describe('PaneHeader (#566)', () => {
   it('is one row with no rule under it: the pane already has its own box', () => {
     const { lastFrame } = renderWithProviders(<PaneHeader pane="prs" count={12} loading={false} error={null} isStale={false} />)

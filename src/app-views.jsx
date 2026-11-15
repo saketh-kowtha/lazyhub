@@ -237,6 +237,7 @@ function buildBaseLayer(ctx, onPaneState) {
             onOpenDetail={goToEvidenceDetail}
             returnTo={selectedItem._fromQueue ? returnTarget({ view: 'queue', key: `${evRepo}#${selectedItem.number}` }) : undefined}
             onReturn={returnFromEvidence}
+            queueRecord={selectedItem._evidence}
           />
         </ErrorBoundary>
       </Shell>
@@ -332,7 +333,7 @@ function buildBaseLayer(ctx, onPaneState) {
   if (view === 'queue') {
     return (
       <Shell {...frame} sidebar={sidebarFor(toList)}
-        status={statusFor({ count: undefined })}
+        status={statusFor({ pane: 'queue', repo: null, count: undefined, scopeIndicator: null, hideAge: true })}
         footer={contextFooterHints(pane, 'queue', {}, _config.toml)}>
         <ErrorBoundary>
           {/* goToQueueItem is the only place that decides what Enter opens (the evidence view, #127). */}

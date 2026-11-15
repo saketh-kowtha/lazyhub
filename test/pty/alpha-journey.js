@@ -166,7 +166,8 @@ async function runJourney({ cols, rows, label, ascii = false, firstRun = false }
     assert.match(row('platform#412'), cols < 100 ? /review requested/ : /review requested of you/, `${label}: the row names the attention reason`)
     assert.match(row('ledger#88'), cols < 100 ? /via/ : /via team @acme\/core/, `${label}: a team request is worded as unverified (the full wording is in the strip)`)
     await s.waitFor(/why\s+review requested of you/, `${label}: the why strip`)
-    assert.match(s.text(), cols < 100 ? /scope: account/ : /scope: account.*read-only/, `${label}: the scope line says account-wide${cols < 100 ? ' (80 columns cut "read-only" off the end)' : ' and read-only'}`)
+    assert.match(s.text(), /scope: account.*read-only/, `${label}: the scope line says account-wide and read-only, also at 80 columns`)
+    assert.doesNotMatch(s.text(), /focus\s+·|⟳ \d+s ago|⟳ just now/, `${label}: the bottom status line does not show the pane the queue was opened from`)
     await s.waitFor(/updated/, `${label}: the queue says how fresh it is`)
 
     // 2. Footer / help actions are live. ] and [ switch group, r refreshes, + loads the next page, o opens the browser.
@@ -183,8 +184,8 @@ async function runJourney({ cols, rows, label, ascii = false, firstRun = false }
     await waitUntil(() => (existsSync(s.opened) && /pull\/\d+/.test(readFileSync(s.opened, 'utf8')) ? true : 'o did not call the (stub) browser opener'), `${label}: o opens the PR URL`)
     s.write('?')
     await s.waitFor(/Keyboard Reference/, `${label}: ? opens help`)
-    // At 80x24 the overlay cuts its list to the first rows ("+5 more"), so the queue's own entries are asserted at 100x30 and up.
-    for (const shown of cols < 100 ? [/Queue view/] : [/Queue view/, /Open the selected/, /Next status/, /Load the next page/]) await s.waitFor(shown, `${label}: help lists ${shown}`)
+    // The queue's own keys come first, so even 80x24 lists them.
+    for (const shown of [/Queue view/, /Enter\s+Open the selected/, /Next status/, /Cycle the queue/, /Load the next page/]) await s.waitFor(shown, `${label}: help lists ${shown}`)
     assert.doesNotMatch(s.text(), /Approve|Merge/, `${label}: the queue help advertises no write`)
     s.write('\x1b')
     await s.gone(/Keyboard Reference/, `${label}: help closes`)
@@ -202,6 +203,9 @@ async function runJourney({ cols, rows, label, ascii = false, firstRun = false }
     // 4. Partial evidence: freshness is stated, and what could not be read says unknown, not fine.
     await s.waitFor(/Revision/, `${label}: the revision section`)
     assert.match(s.text(), /read\s+\d+s ago/, `${label}: the evidence says how old the read is`)
+    await s.scrollTo(/Attention/, `${label}: the attention section`)
+    assert.match(s.text(), /review_requested\s+from review_requests: via team @acme\/core/, `${label}: the evidence gives the same attention reason as the queue row, with "via team"`)
+    assert.doesNotMatch(s.text(), /no attention reason from the facts below/, `${label}: the evidence does not claim there is no attention reason`)
     await s.scrollTo(/Not read/, `${label}: the evidence lists what it could not read`)
     assert.match(s.text(), /files\s+\S{0,2}unknown \(gh: Something went wrong/, `${label}: the unreadable file list is labelled unknown, with the cause`)
     assert.doesNotMatch(s.text(), /no_test_files_changed/, `${label}: no file observation is invented when the list failed`)

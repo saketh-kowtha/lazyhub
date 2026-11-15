@@ -265,6 +265,14 @@ describe('review queue scope in the app (#177)', () => {
     expect(executor.fetchReviewQueueEvidence.mock.calls[0][0].scope).toBeUndefined()
   })
 
+  it('the evidence view is told about the queue\'s review request, so its Attention matches the row', async () => {
+    await openQueue()
+    await press([ENTER])
+    await waitForExpectation(() => expect(executor.loadEvidenceDetail).toHaveBeenCalled())
+    expect(executor.loadEvidenceDetail.mock.calls[0][2]).toMatchObject({ reviewRequestedOfMe: true })
+    await press([ESC])
+  })
+
   it('opening a PR and coming back keeps the chosen scope and makes no new call', async () => {
     process.env.GHUI_REPO = 'acme/platform'
     process.env.GHUI_REPO_SOURCE = 'cwd'

@@ -20,7 +20,7 @@ import { useKeyScope } from '../../keyscope.js'
 import { useActionResolver, useKeymapInput } from '../../config/keymap.js'
 import { classifyGhFailure } from '../../executor.js'
 import { openUrl } from '../../services/platform.js'
-import { sanitize, sanitizePath, shortAge } from '../../utils.js'
+import { displayWidth, truncateEllipsis, sanitize, sanitizePath, shortAge } from '../../utils.js'
 import { fitCell } from '../../ui/row-layout.js'
 import { ageWords, ciCell, groupQueue, rowWhy, truncationSummary, whyLine } from './model.js'
 import { useReviewQueue } from './useReviewQueue.js'
@@ -29,6 +29,8 @@ import { chooseScope, currentScope, loadScopes, nextScope, resetQueueScope } fro
 /** Width from which the status sidebar is drawn; below it the groups are one chip line. */
 export const SIDEBAR_MIN_COLS = 118
 const SIDEBAR_WIDTH = 28
+/** Width of the "why  " label on the strip; the strip is two lines tall. */
+const WHY_PREFIX = 5
 
 // The cursor and group survive opening a PR and coming back (#177 acceptance: return with the
 // cursor intact). The row is remembered by PR identity so a refresh that reorders keeps it.
@@ -137,11 +139,23 @@ export function ReviewQueue({ scopes: given, ...rest }) {
   return <QueueScreen key={scope.id} {...rest} scope={scope} scopes={scopes} onCycleScope={cycle} />
 }
 
-/** The scope row: what is shown, that it is read-only, and what the scope key shows next. */
-function scopeLine(scope, scopes) {
-  const base = scope.kind === 'account' ? 'scope: account · review requests and PRs you opened' : `scope: ${scope.label} (${scope.note})`
-  if (scopes.length === 1) return `${base} · read-only · no org or set in [queue] config`
-  return `${base} · read-only · s: ${nextScope(scopes, scope.id).label}`
+/**
+ * The scope row: what is shown, that it is read-only, and what the scope key shows next. It must
+ * fit one line: the scope name and "read-only" always stay; when the width runs out the
+ * explanation goes first, then the "s: next" hint (the footer has it), and only then the scope
+ * name is cut. Same least-important-first rule as the row layout (R10, #488).
+ */
+export function scopeLine(scope, scopes, width = Infinity) {
+  const name = scope.kind === 'account' ? 'scope: account' : `scope: ${scope.label}`
+  const why = scope.kind === 'account' ? 'review requests and PRs you opened' : `(${scope.note})`
+  const hint = scopes.length === 1 ? 'no org or set in [queue] config' : `s: ${nextScope(scopes, scope.id).label}`
+  const build = (/** @type {string[]} */ ...parts) => parts.filter(Boolean).join(' · ')
+  const joinWhy = scope.kind === 'account' ? [name, why] : [`${name} ${why}`]
+  for (const candidate of [build(...joinWhy, 'read-only', hint), build(name, 'read-only', hint), build(name, 'read-only')]) {
+    if (displayWidth(sanitize(candidate)) <= width) return candidate
+  }
+  // Even the bare form does not fit: cut the scope name, never "read-only".
+  return `${truncateEllipsis(sanitize(name), Math.max(8, width - displayWidth(' · read-only')))} · read-only`
 }
 
 function QueueScreen({ onOpen, innerWidth, listHeight, queueOptions, scope, scopes, onCycleScope }) {
@@ -234,7 +248,7 @@ function QueueScreen({ onOpen, innerWidth, listHeight, queueOptions, scope, scop
         <Text color={t.ui.dim} wrap="truncate">{queue.loading || queue.loadingMore ? '⟳ updating' : updated ? `⟳ updated ${updated}` : ''}</Text>
       </Box>
       <Box height={1} overflow="hidden">
-        <Text color={t.ui.dim} wrap="truncate">{sanitize(scopeLine(scope, scopes))}</Text>
+        <Text color={t.ui.dim} wrap="truncate">{sanitize(scopeLine(scope, scopes, cols - 2))}</Text>
       </Box>
       {!wide && <Chips groups={groups} current={group.id} />}
       <Box flexDirection="row" flexGrow={1} height={rows} overflow="hidden">
@@ -254,7 +268,7 @@ function QueueScreen({ onOpen, innerWidth, listHeight, queueOptions, scope, scop
       </Box>
       <Box height={3} overflow="hidden" borderStyle="single" borderColor={t.ui.border} borderLeft={false} borderRight={false} borderBottom={false}>
         <Text color={t.ui.muted} wrap="wrap">
-          <Text color={t.ui.dim}>why  </Text>{focused ? sanitize(whyLine(focused, now)) : 'select a row to see why it is here'}
+          <Text color={t.ui.dim}>why  </Text>{focused ? sanitize(whyLine(focused, now, 2 * (cols - 2) - WHY_PREFIX - 4)) : 'select a row to see why it is here'}
         </Text>
       </Box>
     </Box>

@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, flush, renderWithProviders, waitForExpectation } from '../../test/test-helpers.jsx'
 import { sendInput } from '../../test/input-bus.js'
 import { openUrl } from '../../services/platform.js'
-import { ReviewQueue, resetQueueSelection } from './view.jsx'
+import { ReviewQueue, resetQueueSelection, scopeLine } from './view.jsx'
+import { whyLine } from './model.js'
+import { displayWidth } from '../../utils.js'
 import { resetQueueMemory } from './useReviewQueue.js'
 import { evidence, FETCHED_AT, queueResult, requestedUser, sampleItems } from './queue.fixtures.js'
 
@@ -232,5 +234,44 @@ describe('ReviewQueue empty and failed states', () => {
   it('shows a loading line in the first frame', () => {
     const { view } = mount({ fetcher: vi.fn(() => new Promise(() => {})) })
     expect(frame(view)).toContain('Loading the review queue')
+  })
+})
+
+describe('ReviewQueue at 80 columns (Alpha journey)', () => {
+  it('keeps the scope and read-only on the scope line, dropping the explanation, then the s hint, first', () => {
+    const scopes = [{ id: 'account', kind: 'account', label: 'account' }, { id: 'org:acme', kind: 'org', label: 'org acme', note: 'all of acme' }]
+    const wide = scopeLine(scopes[0], scopes, 200)
+    expect(wide).toBe('scope: account · review requests and PRs you opened · read-only · s: org acme')
+    expect(scopeLine(scopes[0], scopes, 76)).toBe('scope: account · read-only · s: org acme')
+    expect(scopeLine(scopes[0], scopes, 30)).toBe('scope: account · read-only')
+    expect(scopeLine(scopes[0], scopes, 16)).toMatch(/read-only$/)
+    for (const w of [76, 40, 30]) expect(displayWidth(scopeLine(scopes[1], scopes, w))).toBeLessThanOrEqual(w)
+  })
+
+  it('the why strip keeps the reasons and drops the facts after them (seen, mergeability, CI, head) to fit', async () => {
+    const item = sampleItems()[0]
+    const full = whyLine(item, NOW)
+    expect(full).toMatch(/head .* · CI .* · mergeable · seen/)
+    const cut = whyLine(item, NOW, 50)
+    expect(cut).toBe('review requested of you · head 3fa91c2')
+    expect(whyLine(item, NOW, 10).length).toBeLessThanOrEqual(10)
+  })
+
+  it('+ pressed while a refresh is in flight runs once it finishes', async () => {
+    let release
+    const first = queueResult(sampleItems(), { truncation: { review_requested: { has_more: true, next_cursor: 'c1' } } })
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(first)
+      .mockImplementationOnce(() => new Promise(r => { release = () => r(first) }))
+      .mockResolvedValue(queueResult([]))
+    const { view } = mount({ fetcher })
+    await waitForExpectation(() => expect(frame(view)).toContain('Retry in webhook sender'))
+    await flush(20)
+    await press('r')
+    await press('+')
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    release()
+    await waitForExpectation(() => expect(fetcher).toHaveBeenCalledTimes(3))
+    expect(Object.values(fetcher.mock.calls[2][0].after)).toContain('c1')
   })
 })
