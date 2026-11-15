@@ -1,227 +1,243 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>lazyhub — Review GitHub changes in your terminal</title>
-    <meta name="description" content="Review pull requests, inspect GitHub-visible evidence and check coverage from the terminal using your existing GitHub CLI session.">
-    <style>
-        :root {
-            --bg: #0d1117;
-            --surface: #161b22;
-            --border: #30363d;
-            --text: #c9d1d9;
-            --text-muted: #8b949e;
-            --primary: #58a6ff;
-            --success: #3fb950;
-            --accent: #a371f7;
-            --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-        }
-
-        * { box-sizing: border-box; }
-
-        body {
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
-            line-height: 1.6;
-        }
-
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 0 2rem;
-        }
-
-        header {
-            padding: 4rem 0 2rem 0;
-            text-align: center;
-        }
-
-        .logo {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-        }
-
-        h1 {
-            font-size: 3rem;
-            margin: 0;
-            letter-spacing: -1px;
-            color: #fff;
-        }
-
-        .tagline {
-            font-size: 1.25rem;
-            color: var(--text-muted);
-            margin-top: 1rem;
-        }
-
-        .hero-cta {
-            margin: 3rem 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .install-box {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            padding: 1rem 2rem;
-            border-radius: 8px;
-            font-family: var(--font-mono);
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
-
-        .install-box span { color: var(--success); }
-
-        .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            margin: 4rem 0;
-        }
-
-        .feature-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            padding: 2rem;
-            border-radius: 12px;
-            transition: transform 0.2s;
-        }
-
-        .feature-card:hover {
-            transform: translateY(-5px);
-            border-color: var(--primary);
-        }
-
-        .feature-card h3 {
-            margin-top: 0;
-            color: var(--primary);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .keybindings {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 2rem;
-            margin: 4rem 0;
-        }
-
-        .kb-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
-        }
-
-        .kb-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .kb-key {
-            font-family: var(--font-mono);
-            background: var(--bg);
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-            color: var(--accent);
-        }
-
-        footer {
-            text-align: center;
-            padding: 4rem 0;
-            color: var(--text-muted);
-            border-top: 1px solid var(--border);
-        }
-
-        .badge-group {
-            display: flex;
-            gap: 0.5rem;
-            justify-content: center;
-            margin-top: 1.5rem;
-        }
-
-        code {
-            font-family: var(--font-mono);
-            color: var(--accent);
-        }
-
-        @media (max-width: 600px) {
-            .kb-grid { grid-template-columns: 1fr; }
-            h1 { font-size: 2rem; }
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lazyhub: review pull requests at terminal speed</title>
+  <meta name="description" content="lazyhub is a keyboard-driven terminal workspace for reviewing GitHub pull requests, human or agent-authored: a review queue, evidence for each PR, claims check, collision radar and why CI is red. It uses your existing gh session and sends no telemetry.">
+  <link rel="canonical" href="https://saketh-kowtha.github.io/lazyhub/">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230d1117'/%3E%3Cpath d='M9 8v14h9' fill='none' stroke='%237ee787' stroke-width='3'/%3E%3C/svg%3E">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="lazyhub: review pull requests at terminal speed">
+  <meta property="og:description" content="A terminal workspace for reviewing GitHub pull requests: review queue, evidence, claims check, collision radar, why CI is red. Uses your gh session. No telemetry.">
+  <meta property="og:url" content="https://saketh-kowtha.github.io/lazyhub/">
+  <meta property="og:image" content="https://saketh-kowtha.github.io/lazyhub/demo/out/tour-prs.png">
+  <meta property="og:image:alt" content="lazyhub showing a list of pull requests in a terminal">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="site.css">
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">lazyhub</a>
+    <nav aria-label="Site">
+      <a href="index.html" aria-current="page">Home</a>
+      <a href="guide.html">Guide</a>
+      <a href="keybindings.html">Keybindings</a>
+      <a href="config.html">Config</a>
+      <a href="https://github.com/saketh-kowtha/lazyhub">GitHub</a>
+    </nav>
+  </div>
+</header>
 
-<div class="container">
-    <header>
-        <div class="logo">🦥</div>
-        <h1>lazyhub</h1>
-        <p class="tagline">Review GitHub changes from the terminal.</p>
-        
-        <div class="badge-group">
-            <img src="https://img.shields.io/npm/v/lazyhub?color=3fb950&label=npm" alt="npm">
-            <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="node">
-            <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="license">
-        </div>
-    </header>
+<main id="main">
+  <div class="wrap">
+    <section class="hero" aria-labelledby="hero-title">
+      <h1 id="hero-title">Review pull requests at terminal speed</h1>
+      <p class="lede">lazyhub is a keyboard-driven terminal workspace for reviewing GitHub pull requests, whether a person or an agent wrote them. It tells you what needs your attention, shows the evidence behind a PR, and explains why CI is red. It runs on the <code>gh</code> session you already have.</p>
 
-    <div class="hero-cta">
-        <div class="install-box">
-            <span>$</span> brew install saketh-kowtha/tap/lazyhub
-        </div>
-        <p style="margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-muted)">
-            Also available via <code>npm install -g lazyhub</code>
-        </p>
-    </div>
+      <div class="tabs" role="group" aria-label="Install lazyhub">
+        <input type="radio" name="install" id="tab-npm" checked>
+        <label for="tab-npm">npm</label>
+        <input type="radio" name="install" id="tab-brew">
+        <label for="tab-brew">Homebrew</label>
+        <input type="radio" name="install" id="tab-npx">
+        <label for="tab-npx">npx</label>
+        <div class="panel panel-npm"><pre><code><span class="p">$ </span>npm install -g lazyhub
+<span class="p">$ </span>lazyhub</code></pre></div>
+        <div class="panel panel-brew"><pre><code><span class="p">$ </span>brew install saketh-kowtha/tap/lazyhub
+<span class="p">$ </span>lazyhub</code></pre></div>
+        <div class="panel panel-npx"><pre><code><span class="p">$ </span>npx lazyhub</code></pre></div>
+      </div>
+      <p class="muted">Needs Node.js 20 or later and the <a href="https://cli.github.com/">GitHub CLI</a> (<code>gh auth login</code>). Install the tap by its full name: this is <a href="https://github.com/saketh-kowtha/lazyhub">saketh-kowtha/lazyhub</a>, not the unrelated Go project <code>ryo-ma/lazyhub</code>.</p>
 
-    <section class="features">
-        <div class="feature-card">
-            <h3>🤖 Coverage &amp; Diagnostics</h3>
-            <p>On current main, use the read-only <code>watch-only</code> report, <code>doctor --coverage</code> diagnostics and <code>lazyhub feedback</code> to inspect GitHub-visible PR activity, observation gaps and local setup. None enforces approval.</p>
-        </div>
-        <div class="feature-card">
-            <h3>⚡ Vim-Style Navigation</h3>
-            <p>Browse pull requests, issues, branches, workflow runs and notifications with keyboard navigation (<kbd>g p</kbd>, <kbd>g i</kbd>, <kbd>:</kbd> command palette), using the GitHub CLI session you already have.</p>
-        </div>
-        <div class="feature-card">
-            <h3>🔍 Direct PR &amp; Diff Review</h3>
-            <p>Open pull request details or launch directly with <code>lazyhub owner/repo#123</code>, inspect diffs and conversations, and read CI checks from the terminal.</p>
-        </div>
-        <div class="feature-card">
-            <h3>🎨 TOML Configuration &amp; Themes</h3>
-            <p>Configuration is TOML at <code>~/.config/lazyhub/lazyhub.toml</code>, including themes, keymaps and ASCII/<code>NO_COLOR</code> fallbacks. Published releases may lag current main; optional App-based approval enforcement is future work.</p>
-        </div>
+      <p class="cta">
+        <a class="btn primary" href="guide.html">Get started</a>
+        <a class="btn" href="https://github.com/saketh-kowtha/lazyhub">View on GitHub</a>
+      </p>
+      <ul class="badges" aria-label="At a glance">
+        <li class="pill">MIT licensed</li>
+        <li class="pill">Node 20+</li>
+        <li class="pill">GitHub.com and Enterprise Server</li>
+        <li class="pill">No telemetry</li>
+      </ul>
     </section>
 
-    <section class="keybindings">
-        <h2 style="margin-top: 0; color: #fff;">⌨️ Essential Keybindings</h2>
-        <div class="kb-grid">
-            <div class="kb-item"><span>Cycle / Jump Panes</span> <span class="kb-key">Tab / 1-9 / g p</span></div>
-            <div class="kb-item"><span>Navigate List</span> <span class="kb-key">j / k</span></div>
-            <div class="kb-item"><span>Open Detail</span> <span class="kb-key">Enter</span></div>
-            <div class="kb-item"><span>Open Diff</span> <span class="kb-key">d</span></div>
-            <div class="kb-item"><span>Search / Command Palette</span> <span class="kb-key">/ · :</span></div>
-            <div class="kb-item"><span>Show help</span> <span class="kb-key">?</span></div>
-            <div class="kb-item"><span>Merge PR</span> <span class="kb-key">m</span></div>
-            <div class="kb-item"><span>GitHub approval action</span> <span class="kb-key">a</span></div>
+    <figure>
+      <img class="shot" src="demo/out/tour-prs.png" width="1500" height="860" alt="lazyhub in a terminal: a sidebar of panes next to a list of open pull requests with their CI and review state">
+      <figcaption>The pull request list, from the demo recording against a fixture repository. That recording predates the review queue; see the sections below for what is newer.</figcaption>
+    </figure>
+
+    <section aria-labelledby="what">
+      <h2 id="what">What it does</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Know what to review next</h3>
+          <p>Press <kbd>g</kbd> <kbd>q</kbd> for a queue of open PRs that ask for your review or that you opened. Every row says why it is there. There is no score and no verdict.</p>
         </div>
+        <div class="card">
+          <h3>See the evidence, not the pitch</h3>
+          <p>Press <kbd>e</kbd> on a PR for facts with their source and read time, <kbd>V</kbd> to check the description's claims against the diff, and <kbd>K</kbd> to find open PRs that touch the same files.</p>
+        </div>
+        <div class="card">
+          <h3>Find out why CI is red</h3>
+          <p>Press <kbd>f</kbd> on a PR to go from a failing check to its log excerpt and, where GitHub's diff allows, to the changed line it points at.</p>
+        </div>
+      </div>
     </section>
 
-    <footer>
-        <p>Built with ❤️ using Ink and React by <a href="https://github.com/saketh-kowtha" style="color: var(--primary);">Saketh Kowtha</a></p>
-        <p style="font-size: 0.8rem;">Uses your GitHub CLI session. Reports describe observed evidence and do not enforce approval. Not an official GitHub product.</p>
-    </footer>
-</div>
+    <section aria-labelledby="features">
+      <h2 id="features">Review features</h2>
+      <p class="muted">Everything below is read-only: it reads through <code>gh</code> and writes nothing to GitHub. Anything GitHub did not return is shown as <em>unknown</em>, never as safe.</p>
 
+      <div class="feature">
+        <div>
+          <h3>Review queue</h3>
+          <p>An explainable attention queue grouped by status: needs your review, CI failing, changes requested, waiting, ready. Open a row to land on its evidence and press <kbd>Esc</kbd> to come back to the same place.</p>
+        </div>
+        <ul class="keys" aria-label="Review queue keys">
+          <li><kbd>g</kbd> <kbd>q</kbd> open the queue</li>
+          <li><kbd>]</kbd> <kbd>[</kbd> next and previous status group</li>
+          <li><kbd>Enter</kbd> open the PR's evidence</li>
+          <li><kbd>+</kbd> load more, <kbd>o</kbd> open in the browser</li>
+        </ul>
+      </div>
+
+      <div class="feature">
+        <div>
+          <h3>Evidence</h3>
+          <p>One screen of observed facts about a PR: the head commit, required checks, changed files, unresolved threads and who acted. Each fact names its source and when it was read. If the head moves while you look, the view says the earlier reading no longer applies. PR text written by the author sits under its own heading.</p>
+        </div>
+        <ul class="keys" aria-label="Evidence keys">
+          <li><kbd>e</kbd> from a PR: evidence</li>
+          <li><kbd>Esc</kbd> back to where you were</li>
+        </ul>
+      </div>
+
+      <div class="feature">
+        <div>
+          <h3>Why is CI red?</h3>
+          <p>For each failing check (up to five) lazyhub shows the failing step, a redacted log excerpt, the lines of the PR the log points at, and whether the same check also fails on recent base-branch commits. Anything it cannot determine says <em>unknown</em> with the reason.</p>
+        </div>
+        <ul class="keys" aria-label="Why red keys">
+          <li><kbd>f</kbd> from a PR or its checks: why red</li>
+          <li><kbd>c</kbd> from a PR: checks, <kbd>Enter</kbd> for a log</li>
+        </ul>
+      </div>
+
+      <div class="feature">
+        <div>
+          <h3>Claims check</h3>
+          <p>A PR description says what it does. The claims check reads a fixed set of claim phrasings from it and marks each one verified, contradicted or unverifiable against the changed files and linked issues. A claim is never verified without evidence rows. It is deterministic and uses no AI, and the description is treated as data, never as instructions.</p>
+        </div>
+        <ul class="keys" aria-label="Claims keys">
+          <li><kbd>V</kbd> from a PR: claims</li>
+        </ul>
+      </div>
+
+      <div class="feature">
+        <div>
+          <h3>Collision radar</h3>
+          <p>Lists other open PRs that change the same files, and suggests a merge order. Generated files such as lockfiles are flagged so those PRs are merged one at a time. You can add patterns under <code>[features.prs].generated_files</code>.</p>
+        </div>
+        <ul class="keys" aria-label="Collision keys">
+          <li><kbd>K</kbd> from a PR: collisions</li>
+        </ul>
+      </div>
+
+      <div class="feature">
+        <div>
+          <h3>Review story</h3>
+          <p>A guided walk through a diff: steps such as the core change, call sites, config, tests and noise, each with the reason a file was grouped there (path-based grouping, not a model). It also shows what changed since your last review, or says it is unknown, for example after a force-push.</p>
+        </div>
+        <ul class="keys" aria-label="Story keys">
+          <li><kbd>s</kbd> from a PR: story</li>
+          <li><kbd>n</kbd> <kbd>p</kbd> next and previous step</li>
+          <li><kbd>Enter</kbd> open the diff at the file</li>
+        </ul>
+      </div>
+    </section>
+
+    <section aria-labelledby="daily">
+      <h2 id="daily">The rest of the workspace</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Pull requests, issues, branches, runs, notifications</h3>
+          <p>Vim-style movement (<kbd>j</kbd> <kbd>k</kbd>, <kbd>g</kbd> <kbd>g</kbd>, <kbd>G</kbd>), <kbd>/</kbd> to search, <kbd>:</kbd> for the command palette and <kbd>?</kbd> for help in every view. Diffs, conversations, checks, merge, approve and comment are all there. See the <a href="keybindings.html">full key list</a>.</p>
+        </div>
+        <div class="card">
+          <h3>Enter that goes where you want</h3>
+          <p><kbd>Enter</kbd> opens the plain PR detail. If you want it to jump to a failing check log, to Files changed when your review is requested, or to the merge conflict, turn on smart Enter with <code>[state] smartEnter = true</code>. It is off by default.</p>
+        </div>
+        <div class="card">
+          <h3>HTML in Markdown</h3>
+          <p>PR and issue bodies that contain HTML (tables, <code>&lt;details&gt;</code>, headings, links, image alt text) render as formatted terminal text through a strict allowlist. Scripts, styles and frames are dropped with a visible marker. Images are never fetched.</p>
+        </div>
+        <div class="card">
+          <h3>AI on subscriptions you already have</h3>
+          <p>AI features use a CLI you already have signed in (<code>claude</code>, <code>codex</code> or <code>gemini</code>) in a sandbox, or an API key. For Codex you can opt in to your own login with <code>lazyhub ai login enable codex</code>. <code>lazyhub ai status</code> shows what is set up. Gemini login mode is not built yet, and Claude uses <code>claude setup-token</code> rather than a login mode.</p>
+        </div>
+        <div class="card">
+          <h3>MCP server (read-only)</h3>
+          <p><code>lazyhub --mcp</code> serves pull request, diff, check, issue, notification and branch reads to coding agents over stdio. It advertises no write tools. Review-queue, evidence and why-red tools over MCP are not shipped yet.</p>
+        </div>
+        <div class="card">
+          <h3>Themes and plain terminals</h3>
+          <p>The default theme follows your terminal's own 16 colours. Pick another in TOML, or use <code>NO_COLOR</code> or ASCII icons for limited terminals. With the default theme, the selected row is marked by a gutter glyph as well as colour.</p>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="speed">
+      <h2 id="speed">Fast, and complete</h2>
+      <p>The screen is never cleared and redrawn: lazyhub keeps its output shorter than the terminal so Ink writes only what changed. These numbers come from the repository's own <code>npm run vitals</code> harness: the built app in a pseudo-terminal at 80 by 24, against a fake <code>gh</code> that takes 300 ms per call, on a laptop (macOS, Node 22). They show the app's share of the time, not GitHub's.</p>
+      <div class="grid">
+        <div class="card"><p class="stat">407 ms<small>cold PR list: key to first rows (one 300 ms round trip included)</small></p></div>
+        <div class="card"><p class="stat">7 ms<small>keypress to next frame while moving in a list, 95th percentile</small></p></div>
+        <div class="card"><p class="stat">13 ms<small>reopening a list you already loaded</small></p></div>
+        <div class="card"><p class="stat">0 of 66<small>frames that cleared the screen</small></p></div>
+      </div>
+      <p>Lists and diffs also fill in behind a skeleton instead of blocking, views you navigate away from stay alive so Esc returns instantly, and several write actions update the row before GitHub answers, then say so and revert if GitHub refuses. One reopen path still makes one network call, tracked as a known gap.</p>
+      <p>Speed never means silent cuts. The CI performance budget drives a fixture of 5,000 open and 80,000 closed PRs and a 3,000-file, 100,000-line diff, and asserts the exact pages fetched. GitHub search returns at most 1,000 results, so a list stops there and the footer says so. Peak memory stays between 150 and 225 MB in that run, against a 512 MB budget. Details are in <a href="https://github.com/saketh-kowtha/lazyhub/blob/main/docs/PERF_BUDGETS.md">PERF_BUDGETS</a>.</p>
+    </section>
+
+    <section aria-labelledby="privacy">
+      <h2 id="privacy">Private by design</h2>
+      <ul>
+        <li><strong>No telemetry.</strong> No analytics, no crash reporting, no phone-home. <code>LAZYHUB_PERF=1</code> records timings to a local file only, and <code>lazyhub perf report</code> reads it.</li>
+        <li><strong>Your existing credentials.</strong> lazyhub reaches GitHub only through <code>gh</code>, with the account and host <code>gh</code> is signed in to.</li>
+        <li><strong>Untrusted text stays data.</strong> PR titles, bodies and comments are cleaned of terminal escape sequences before they are drawn, and are never used as instructions or as an authorization input.</li>
+        <li><strong>Reports describe observation.</strong> <code>watch-only</code> and <code>doctor --coverage</code> state what lazyhub could see; they do not approve, block or enforce anything. No GitHub App or required check enforces approval yet.</li>
+        <li><strong>Feedback is yours to send.</strong> <code>lazyhub feedback</code> opens a pre-filled GitHub issue with redacted diagnostics; nothing is sent until you submit it.</li>
+      </ul>
+      <p>Read the <a href="https://github.com/saketh-kowtha/lazyhub/blob/main/docs/THREAT_MODEL.md">threat model</a> and <a href="https://github.com/saketh-kowtha/lazyhub/blob/main/SECURITY.md">security policy</a>.</p>
+    </section>
+
+    <section aria-labelledby="ghes">
+      <h2 id="ghes">GitHub Enterprise Server</h2>
+      <p>If <code>gh</code> is signed in to your Enterprise host, lazyhub picks that host from the repository's remotes, including SSH aliases. To be explicit:</p>
+      <pre><code><span class="p">$ </span>gh auth login --hostname github.example.com
+<span class="p">$ </span>GH_HOST=github.example.com lazyhub --repo owner/name</code></pre>
+      <p>PR and issue URLs on your configured Enterprise host also work as <code>lazyhub &lt;url&gt;</code>. Remotes on GitLab, Bitbucket and other forges are skipped rather than treated as GitHub hosts.</p>
+    </section>
+
+    <section aria-labelledby="start">
+      <h2 id="start">Try it</h2>
+      <p>Run <code>lazyhub</code> inside a clone, or <code>lazyhub owner/repo#123</code> to open one PR. On a first run it helps you pick a repository, then opens the Focus dashboard.</p>
+      <p class="cta" style="justify-content:flex-start">
+        <a class="btn primary" href="guide.html">Read the guide</a>
+        <a class="btn" href="https://github.com/saketh-kowtha/lazyhub">Star or report an issue on GitHub</a>
+      </p>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>lazyhub is MIT licensed, by <a href="https://github.com/saketh-kowtha">Saketh Kowtha</a>. Not an official GitHub product.</p>
+    <p>This site loads no scripts, fonts or trackers.</p>
+  </div>
+</footer>
 </body>
 </html>

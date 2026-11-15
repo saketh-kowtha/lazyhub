@@ -1,281 +1,184 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Getting Started — lazyhub</title>
-  <meta name="description" content="Install lazyhub and learn the keyboard-driven GitHub TUI in minutes." />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #0d1117; --surface: #161b22; --border: #21262d;
-      --green: #3fb950; --blue: #58a6ff; --purple: #a371f7;
-      --orange: #d29922; --muted: #8b949e; --text: #e6edf3; --dim: #484f58;
-    }
-    html { scroll-behavior: smooth; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.7; }
-    a { color: var(--blue); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    nav {
-      background: var(--surface); border-bottom: 1px solid var(--border);
-      padding: .75rem 2rem; display: flex; align-items: center; gap: 2rem; position: sticky; top: 0; z-index: 10;
-    }
-    nav .brand { font-weight: 700; color: var(--blue); font-size: 1.1rem; }
-    nav a { color: var(--muted); font-size: .9rem; }
-    nav a:hover { color: var(--text); }
-    nav a.active { color: var(--blue); }
-
-    .container { max-width: 860px; margin: 0 auto; padding: 3rem 2rem 6rem; }
-    h1 { font-size: 2rem; font-weight: 700; color: var(--text); margin-bottom: .5rem; }
-    .subtitle { color: var(--muted); margin-bottom: 3rem; font-size: 1.05rem; }
-    h2 { font-size: 1.3rem; font-weight: 700; margin: 2.5rem 0 1rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border); }
-    h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 .5rem; color: var(--blue); }
-    p { margin-bottom: 1rem; color: var(--muted); }
-    strong { color: var(--text); }
-    ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; color: var(--muted); }
-    li { margin-bottom: .3rem; }
-
-    pre {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-      padding: 1rem 1.25rem; overflow-x: auto; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: .88rem;
-      margin-bottom: 1.25rem; line-height: 1.6;
-    }
-    code { font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: .88em; background: var(--surface); padding: .1em .35em; border-radius: 4px; color: var(--text); }
-    pre code { background: none; padding: 0; font-size: inherit; }
-    .cmd { color: var(--green); }
-    .comment { color: var(--dim); }
-    .flag { color: var(--orange); }
-
-    .step {
-      display: flex; gap: 1.25rem; margin-bottom: 2rem;
-      padding: 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    }
-    .step-num {
-      flex-shrink: 0; width: 2rem; height: 2rem; border-radius: 50%;
-      background: var(--blue); color: #000; font-weight: 700; font-size: .9rem;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .step-body h3 { margin-top: 0; }
-
-    .tip {
-      background: #0d2a17; border-left: 3px solid var(--green);
-      padding: .75rem 1rem; border-radius: 0 6px 6px 0; margin-bottom: 1rem;
-    }
-    .tip strong { color: var(--green); }
-
-    .warn {
-      background: #2a1d0d; border-left: 3px solid var(--orange);
-      padding: .75rem 1rem; border-radius: 0 6px 6px 0; margin-bottom: 1rem;
-    }
-    .warn strong { color: var(--orange); }
-
-    kbd {
-      display: inline-block; background: var(--surface); border: 1px solid var(--border);
-      border-radius: 4px; padding: .1rem .4rem; font-family: monospace; font-size: .82em;
-      color: var(--text);
-    }
-
-    .workflow {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;
-    }
-    @media (max-width: 600px) { .workflow { grid-template-columns: 1fr; } }
-    .workflow-card {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-      padding: 1rem 1.25rem;
-    }
-    .workflow-card h4 { font-size: .9rem; color: var(--blue); margin-bottom: .5rem; }
-    .workflow-card p { font-size: .85rem; margin: 0; }
-
-    footer { text-align: center; padding: 2rem; color: var(--dim); font-size: .85rem; border-top: 1px solid var(--border); margin-top: 4rem; }
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guide: getting started with lazyhub</title>
+  <meta name="description" content="Install lazyhub, sign in with the GitHub CLI, launch it in or out of a repository, use --repo, GitHub Enterprise Server and doctor, and fix the common first-run problems.">
+  <link rel="canonical" href="https://saketh-kowtha.github.io/lazyhub/guide.html">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230d1117'/%3E%3Cpath d='M9 8v14h9' fill='none' stroke='%237ee787' stroke-width='3'/%3E%3C/svg%3E">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Guide: getting started with lazyhub">
+  <meta property="og:description" content="Install, sign in, launch, review a PR, GitHub Enterprise Server and troubleshooting.">
+  <meta property="og:url" content="https://saketh-kowtha.github.io/lazyhub/guide.html">
+  <meta name="twitter:card" content="summary">
+  <link rel="stylesheet" href="site.css">
 </head>
 <body>
-
-<nav>
-  <span class="brand">lazyhub</span>
-  <a href="index.html">Home</a>
-  <a href="guide.html" class="active">Guide</a>
-  <a href="keybindings.html">Keybindings</a>
-  <a href="config.html">Config</a>
-</nav>
-
-<div class="container">
-  <h1>Getting Started</h1>
-  <p class="subtitle">Install lazyhub, connect it to your existing GitHub CLI session, and review pull requests from the terminal.</p>
-
-  <!-- ── Install ──────────────────────────────────────────────────────────── -->
-  <h2>1 · Installation</h2>
-
-  <h3>Prerequisites</h3>
-  <ul>
-    <li><strong>Node.js 20+</strong> — <code>node --version</code></li>
-    <li><strong>gh CLI</strong> — install it separately and authenticate with <code>gh auth login</code>; check the session with <code>gh auth status</code></li>
-  </ul>
-
-  <h3>Install lazyhub</h3>
-  <pre><span class="comment"># one-time global install (recommended)</span>
-<span class="cmd">npm install -g lazyhub</span>
-
-<span class="comment"># or run without installing</span>
-<span class="cmd">npx lazyhub</span>
-
-<span class="comment"># or from source</span>
-<span class="cmd">git clone https://github.com/saketh-kowtha/lazyhub &amp;&amp; cd lazyhub</span>
-<span class="cmd">npm ci &amp;&amp; npm start</span></pre>
-
-  <div class="tip">
-    <strong>Tip:</strong> After global install, run <code>lazyhub</code> from any directory that contains a Git repo and it auto-detects the GitHub remote, or pass a PR or issue reference directly (e.g. <code>lazyhub owner/repo#123</code>, <code>lazyhub '#123'</code>, or a GitHub PR/issue URL).
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">lazyhub</a>
+    <nav aria-label="Site">
+      <a href="index.html">Home</a>
+      <a href="guide.html" aria-current="page">Guide</a>
+      <a href="keybindings.html">Keybindings</a>
+      <a href="config.html">Config</a>
+      <a href="https://github.com/saketh-kowtha/lazyhub">GitHub</a>
+    </nav>
   </div>
+</header>
 
-  <!-- ── First run ─────────────────────────────────────────────────────────── -->
-  <h2>2 · First Run</h2>
+<main id="main">
+  <div class="wrap">
+    <h1>Guide</h1>
+    <p class="lede">From install to your first review, plus the paths that trip people up.</p>
+    <nav aria-label="On this page" class="toc">
+      <a href="#install">Install</a>
+      <a href="#first-run">First run</a>
+      <a href="#login">Sign in</a>
+      <a href="#launch">Launching</a>
+      <a href="#review">Review a PR</a>
+      <a href="#ghes">GitHub Enterprise Server</a>
+      <a href="#ai-mcp">AI and MCP</a>
+      <a href="#doctor">doctor</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+    </nav>
 
-  <div class="step">
-    <div class="step-num">1</div>
-    <div class="step-body">
-      <h3>gh detection</h3>
-      <p>lazyhub checks for the <code>gh</code> CLI. If not found, it prints platform-specific install instructions and exits cleanly — no stack traces.</p>
+    <h2 id="install">Install</h2>
+    <p>You need <strong>Node.js 20 or later</strong> and the <a href="https://cli.github.com/">GitHub CLI</a> (<code>gh</code>).</p>
+    <pre><code><span class="c"># npm</span>
+<span class="p">$ </span>npm install -g lazyhub
+
+<span class="c"># Homebrew (use the full name)</span>
+<span class="p">$ </span>brew install saketh-kowtha/tap/lazyhub
+
+<span class="c"># no install</span>
+<span class="p">$ </span>npx lazyhub</code></pre>
+    <p>This is <code>saketh-kowtha/lazyhub</code>, not the unrelated Go project <code>ryo-ma/lazyhub</code> that also documents a Homebrew tap. Published npm and Homebrew versions can lag the repository's <code>main</code> branch. If a feature on this site is missing, compare <code>lazyhub --version</code> with the <a href="https://github.com/saketh-kowtha/lazyhub/releases">releases</a> and check <code>lazyhub --help</code>.</p>
+
+    <h2 id="first-run">First run</h2>
+    <ol class="steps">
+      <li>Run <code>lazyhub</code>. It checks that Node is new enough, that <code>gh</code> is installed and that you are signed in. Each failure prints one line saying what is wrong and the exact command to fix it, never a stack trace.</li>
+      <li>Inside a clone of a GitHub repository, lazyhub uses that repository. Elsewhere, on the first interactive run, a short picker lets you search your repositories or type <code>owner/name</code>. When setup completes it writes <code>~/.config/lazyhub/lazyhub.toml</code>. Cancelling saves nothing.</li>
+      <li>You land on <strong>Focus</strong>: PRs waiting for your review, your open PRs and issues assigned to you. Press <kbd>g</kbd> <kbd>q</kbd> for the review queue, <kbd>?</kbd> for help in any view, <kbd>q</kbd> or <kbd>Esc</kbd> to go back.</li>
+    </ol>
+    <p>Rerun the picker any time with <code>lazyhub --onboarding</code>.</p>
+
+    <h2 id="login">Sign in</h2>
+    <p>lazyhub has no login of its own: it uses the account <code>gh</code> is signed in to.</p>
+    <pre><code><span class="p">$ </span>gh auth login
+<span class="p">$ </span>gh auth status</code></pre>
+    <ul>
+      <li>An interactive launch with no session can start the <code>gh</code> login flow for you.</li>
+      <li>In scripts and CI, set <code>GH_TOKEN</code> instead.</li>
+      <li>With several accounts, switch with <code>gh auth switch</code>; lazyhub follows the active one.</li>
+      <li>Behind SAML SSO, lazyhub tells you when an organization has not authorized your token and prints <code>gh auth refresh -h github.com</code>.</li>
+    </ul>
+
+    <h2 id="launch">Launching in and out of a repository</h2>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><code>lazyhub</code></th><td>Opens the repository of the current directory (from its git remote). Outside a repository, uses the repository saved by first-run setup, else the picker.</td></tr>
+        <tr><th scope="row"><code>lazyhub --repo owner/name</code></th><td>Opens that repository for this launch only. It is not saved and it wins over the directory's remote.</td></tr>
+        <tr><th scope="row"><code>lazyhub owner/repo#123</code></th><td>Opens a pull request or issue directly. Also accepts <code>'#123'</code>, <code>123</code> or a PR or issue URL.</td></tr>
+        <tr><th scope="row"><code>lazyhub --onboarding</code></th><td>Reruns the first-run setup. Cannot be combined with <code>--repo</code>.</td></tr>
+        <tr><th scope="row"><code>lazyhub --mouse</code></th><td>Enables mouse scrolling.</td></tr>
+      </tbody>
+    </table>
     </div>
+    <p>To switch repositories without restarting, press <kbd>:</kbd> and run "Switch repository". Precedence at startup is: <code>--repo</code>, the repository picked in a first-run flow, the repository detected from the current directory, the saved <code>[defaults].repo</code>, then the picker. A saved repository is only a fallback.</p>
+    <p>Remotes on GitLab, Bitbucket and other non-GitHub forges are ignored. If a clone has only a non-origin remote (such as <code>upstream</code>), lazyhub falls back to it.</p>
+
+    <h2 id="review">Review a pull request</h2>
+    <ol class="steps">
+      <li>Press <kbd>g</kbd> <kbd>q</kbd>. Each row says why the PR needs you. <kbd>]</kbd> and <kbd>[</kbd> change status group.</li>
+      <li>Press <kbd>Enter</kbd> to open its <strong>evidence</strong>: facts with their source and read time. <kbd>Esc</kbd> returns you to the queue where you were.</li>
+      <li>From a PR, <kbd>f</kbd> shows why CI is red, <kbd>V</kbd> checks the description's claims against the diff, <kbd>K</kbd> lists open PRs that touch the same files and <kbd>s</kbd> walks the diff step by step.</li>
+      <li>Press <kbd>d</kbd> for the diff, <kbd>c</kbd> to comment, and <kbd>a</kbd>, <kbd>x</kbd> or <kbd>m</kbd> to approve, request changes or merge. Writes you start yourself ask for confirmation first.</li>
+    </ol>
+    <p>The queue, evidence, claims, collisions, story and why-red views are read-only and show <em>unknown</em> when GitHub did not return a fact. In the PR list, <kbd>Enter</kbd> opens the plain detail. To have it jump to a failing check log, Files changed or the merge conflict instead, set <code>smartEnter = true</code> under <code>[state]</code> in your config.</p>
+
+    <h2 id="ghes">GitHub Enterprise Server</h2>
+    <pre><code><span class="p">$ </span>gh auth login --hostname github.example.com
+<span class="p">$ </span>cd ~/work/some-clone          <span class="c"># remote on github.example.com</span>
+<span class="p">$ </span>lazyhub
+
+<span class="c"># outside a clone, or to be explicit</span>
+<span class="p">$ </span>GH_HOST=github.example.com lazyhub --repo owner/name</code></pre>
+    <p>lazyhub resolves the remote's host (including SSH aliases) against the hosts <code>gh</code> is signed in to. With <code>--repo</code> inside a clone whose host <code>gh</code> is not signed in to, it prints a note and uses github.com; set <code>GH_HOST</code> for Enterprise. A saved default repository is ignored when <code>GH_HOST</code> differs from the host it was saved under.</p>
+
+    <h2 id="ai-mcp">AI and MCP</h2>
+    <ul>
+      <li><code>lazyhub ai status</code> shows which AI provider is usable and why. AI runs a CLI you already have (<code>claude</code>, <code>codex</code>, <code>gemini</code>) in a sandbox using an API key or token from the environment.</li>
+      <li><code>lazyhub ai login enable codex</code> opts in to using Codex's own signed-in subscription (asks for typed consent); <code>disable</code> revokes it. For Claude, run <code>claude setup-token</code> and export the token. Gemini login mode is not implemented.</li>
+      <li><code>lazyhub --mcp</code> (or <code>lazyhub mcp-server</code>) is a stdio MCP server with read-only tools for pull requests, diffs, checks, issues, notifications and branches. It never prompts and writes nothing to GitHub. Review-queue, evidence and why-red MCP tools are not shipped yet. See the <a href="https://github.com/saketh-kowtha/lazyhub/blob/main/docs/CONTRACT.md">contract</a>.</li>
+    </ul>
+
+    <h2 id="doctor">doctor and the other commands</h2>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Command</th><th scope="col">Use</th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><code>lazyhub doctor [--json]</code></th><td>Checks the config file, that <code>gh</code> is installed and signed in, and prints review-coverage evidence. Safe on a fresh machine: it creates nothing.</td></tr>
+        <tr><th scope="row"><code>lazyhub doctor --coverage --repo owner/name</code></th><td>Local, read-only report of what lazyhub could observe. It does not approve, block or enforce anything.</td></tr>
+        <tr><th scope="row"><code>lazyhub watch-only --repo owner/name</code></th><td>Read-only report of GitHub-visible PR activity.</td></tr>
+        <tr><th scope="row"><code>lazyhub status</code></th><td>Prints review, CI and notification counts for a status bar. Exits 0 on a cold cache.</td></tr>
+        <tr><th scope="row"><code>lazyhub feedback [--print]</code></th><td>Opens a pre-filled GitHub issue with redacted diagnostics. Nothing is sent until you submit it.</td></tr>
+        <tr><th scope="row"><code>lazyhub perf report</code></th><td>Summarizes timings recorded locally with <code>LAZYHUB_PERF=1</code>.</td></tr>
+        <tr><th scope="row"><code>lazyhub serve [--status|--stop]</code></th><td>Manages the optional background daemon.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <details>
+      <summary><code>lazyhub: command not found</code> after installing</summary>
+      <p>Open a new terminal or run <code>hash -r</code>. Make sure the npm global bin directory (run <code>npm prefix -g</code>, then look in its <code>bin</code> folder) is on your <code>PATH</code>.</p>
+    </details>
+    <details>
+      <summary>"needs Node.js 20 or newer"</summary>
+      <p>Install a current Node from <a href="https://nodejs.org">nodejs.org</a> or with <code>nvm install 20</code>.</p>
+    </details>
+    <details>
+      <summary>"gh is not installed" or "too old"</summary>
+      <p>Install or update the GitHub CLI from <a href="https://cli.github.com/">cli.github.com</a> (macOS: <code>brew upgrade gh</code>). lazyhub prints the command for your system.</p>
+    </details>
+    <details>
+      <summary>"You are not signed in to GitHub"</summary>
+      <p>Run <code>gh auth login</code> (add <code>--hostname</code> for Enterprise). A revoked token that still looks present is reported this way too.</p>
+    </details>
+    <details>
+      <summary>"Cannot reach api.github.com", rate limit, or <code>gh did not respond within 10s</code></summary>
+      <p>Check your network or proxy. For a rate limit, lazyhub says when to retry. A hung <code>gh</code> is usually a keychain prompt or slow credential helper waiting; run <code>gh auth status</code> in the same terminal.</p>
+    </details>
+    <details>
+      <summary>"No repositories found" or "No repository selected"</summary>
+      <p>Run lazyhub inside a clone, or pass <code>--repo owner/name</code>.</p>
+    </details>
+    <details>
+      <summary>Garbled icons or colours</summary>
+      <p>Set <code>[ui].icons = "ascii"</code> or <code>NO_COLOR=1</code>. ASCII icons are chosen automatically on <code>TERM=linux</code>, <code>dumb</code> and non-UTF-8 locales. If the terminal is smaller than 40 columns by 10 rows lazyhub shows a "terminal too small" notice instead of a broken layout.</p>
+    </details>
+    <details>
+      <summary>A key does nothing</summary>
+      <p>Press <kbd>?</kbd>: the help overlay lists the keys for the current view. Digits <kbd>1</kbd> to <kbd>9</kbd> jump panes only from list views. Compare with the <a href="keybindings.html">keybindings</a> page, and check your config for a remapped key.</p>
+    </details>
+    <details>
+      <summary>My config looks ignored</summary>
+      <p>Run <code>lazyhub doctor</code>: invalid values are dropped with a warning and defaults fill in. See the <a href="config.html">config reference</a>. Changes apply on the next launch.</p>
+    </details>
+    <p>Still stuck? Run <code>lazyhub feedback</code>, or <a href="https://github.com/saketh-kowtha/lazyhub/issues">open an issue</a>.</p>
   </div>
-
-  <div class="step">
-    <div class="step-num">2</div>
-    <div class="step-body">
-      <h3>Login</h3>
-      <p>lazyhub uses the GitHub CLI session on your machine. If no authenticated session is found, startup can invoke <code>gh auth login</code>; you can also authenticate before launching with that command.</p>
-    </div>
-  </div>
-
-  <div class="step">
-    <div class="step-num">3</div>
-    <div class="step-body">
-      <h3>Repo detection</h3>
-      <p>Inside a repository with a GitHub remote, lazyhub uses that repository. On the first interactive run (or when launched with <code>lazyhub --onboarding</code>), search with <kbd>/</kbd> or choose a repository from the list available to your GitHub CLI session (or type <code>owner/name</code> to look one up); lazyhub saves that selection to TOML when setup completes.</p>
-    </div>
-  </div>
-
-  <div class="step">
-    <div class="step-num">4</div>
-    <div class="step-body">
-      <h3>Read-only first-run report</h3>
-      <p>The first-run flow displays a watch-only report about GitHub-visible PR activity and coverage. It does not approve, merge or block work; cancelling does not save the selected repository.</p>
-    </div>
-  </div>
-
-  <!-- ── Layout ───────────────────────────────────────────────────────────── -->
-  <h2>3 · Interface Layout</h2>
-
-  <pre><span class="comment">┌── sidebar 18 ──┬──── list (flex) ────┬── detail 40 ──┐</span>
-<span class="comment">│ lazyhub           │ ● #42  Fix auth…    │ author        │</span>
-<span class="comment">│                │ ⎇ #41  Add diff…   │ base ← head   │</span>
-<span class="comment">│ ▌ ⎇ Pull Req  │ ● #40  CI: matrix  │ +12 −3 lines  │</span>
-<span class="comment">│   ○ Issues    │                     │               │</span>
-<span class="comment">│   ⎇ Branches  │                     │ Labels …      │</span>
-<span class="comment">│   ▶ Actions   └─────────────────────┴───────────────┘</span>
-<span class="comment">│   ● Notifs    status bar (always visible)            </span>
-<span class="comment">└───────────────  footer keys (always visible)         </span></pre>
-
-  <ul>
-    <li><strong>Sidebar</strong> — pane navigation, configurable via <code>~/.config/lazyhub/lazyhub.toml</code></li>
-    <li><strong>List pane</strong> — scrollable list of items for the current pane</li>
-    <li><strong>Detail pane</strong> — auto-updates as you navigate the list</li>
-    <li>Below <strong>110 cols</strong>: preview panel collapses, Enter opens full-screen detail</li>
-    <li>Below <strong>80 cols</strong>: sidebar hides, Tab or number keys cycle via header tab strip</li>
-    <li>Below <strong>40 cols or 10 rows</strong>: displays a clean "Terminal too small" notice instead of broken layout</li>
-  </ul>
-
-  <!-- ── Workflow ──────────────────────────────────────────────────────────── -->
-  <h2>4 · Common Workflows</h2>
-
-  <div class="workflow">
-    <div class="workflow-card">
-      <h4>Review a PR</h4>
-      <p>Navigate to PRs → <kbd>j</kbd>/<kbd>k</kbd> to select → <kbd>Enter</kbd> for detail → <kbd>d</kbd> for diff → <kbd>a</kbd> to approve</p>
-    </div>
-    <div class="workflow-card">
-      <h4>Merge a PR</h4>
-      <p>Select PR → <kbd>m</kbd> → pick merge/squash/rebase → optional commit message → Enter to confirm</p>
-    </div>
-    <div class="workflow-card">
-      <h4>Work on a branch</h4>
-      <p>Navigate to Branches → <kbd>Enter</kbd> to checkout, or PRs → <kbd>b</kbd> to checkout PR branch</p>
-    </div>
-    <div class="workflow-card">
-      <h4>Triage issues</h4>
-      <p>Issues pane → <kbd>f</kbd> to toggle open/closed → <kbd>l</kbd> to edit labels → <kbd>A</kbd> to assign</p>
-    </div>
-    <div class="workflow-card">
-      <h4>Watch CI</h4>
-      <p>Actions pane → <kbd>Enter</kbd> / <kbd>l</kbd> for logs → <kbd>Ctrl+R</kbd> to re-run failed</p>
-    </div>
-    <div class="workflow-card">
-      <h4>Clear notifications</h4>
-      <p>Notifications pane → <kbd>Enter</kbd> to open → <kbd>u</kbd> mark read → <kbd>U</kbd> mark all read</p>
-    </div>
-  </div>
-
-  <!-- ── Diff ─────────────────────────────────────────────────────────────── -->
-  <h2>5 · Diff View</h2>
-
-  <p>Press <kbd>d</kbd> on any PR to open the diff view.</p>
-
-  <pre><span class="comment"> 42  43  context line (syntax highlighted)       </span>
-<span style="color:#56d364">+    44  + added line (green bg + green gutter)    </span>
-<span style="color:#ff7b72">- 43      deleted line (red bg + red gutter)       </span>
-<span class="comment">@@ -42,7 +42,8 @@ function example() {             </span></pre>
-
-  <ul>
-    <li>Syntax highlighting adapts to the file language (JS, TS, Python, Go, Rust, …)</li>
-    <li><kbd>c</kbd> on any line — add an inline comment or reply to an existing thread (<kbd>e</kbd> to edit, <kbd>Ctrl+X</kbd> to delete)</li>
-    <li><kbd>}</kbd>/<kbd>{</kbd> — jump between comment threads; <kbd>n</kbd>/<kbd>N</kbd> — next/previous search match</li>
-    <li><kbd>]</kbd>/<kbd>[</kbd> — next/previous file; <kbd>t</kbd>/<kbd>T</kbd> — find file / toggle file tree; <kbd>g</kbd> <kbd>l</kbd> — go to line</li>
-    <li><kbd>w</kbd> — toggle split/unified view</li>
-  </ul>
-
-  <!-- ── Search ───────────────────────────────────────────────────────────── -->
-  <h2>6 · Fuzzy Search</h2>
-
-  <p>Press <kbd>/</kbd> in any list pane to open fuzzy search. Type to filter in real-time:</p>
-
-  <ul>
-    <li><strong>PRs</strong> — title, number, author, branch name</li>
-    <li><strong>Issues</strong> — title, number, author</li>
-    <li><strong>Branches</strong> — branch name</li>
-    <li><strong>Notifications</strong> — title, repo</li>
-  </ul>
-
-  <p>Matched characters are <strong>highlighted in bold</strong>. <kbd>↑</kbd>/<kbd>↓</kbd> navigate results, <kbd>Enter</kbd> selects, <kbd>Esc</kbd> cancels.</p>
-
-  <!-- ── Tips ─────────────────────────────────────────────────────────────── -->
-  <h2>7 · Tips &amp; Tricks</h2>
-
-  <ul>
-    <li>Press <kbd>?</kbd> in any view for context-aware keybinding help, or <kbd>:</kbd> (or <kbd>Space</kbd> <kbd>Space</kbd>) for the command palette</li>
-    <li>Press number keys <kbd>1</kbd>–<kbd>9</kbd> to jump directly to the Nth active pane, or <kbd>g</kbd> followed by <kbd>h</kbd>/<kbd>p</kbd>/<kbd>i</kbd>/<kbd>b</kbd>/<kbd>a</kbd>/<kbd>n</kbd> to jump directly to Home (Focus), PRs, Issues, Branches, Actions or Notifications</li>
-    <li><kbd>gg</kbd> jumps to the top of any list, <kbd>G</kbd> jumps to the bottom</li>
-    <li><kbd>r</kbd> force-refreshes the current pane (bypasses 30s cache)</li>
-    <li><kbd>y</kbd> copies the URL of the selected item to clipboard</li>
-    <li><kbd>o</kbd> opens the selected item in your browser</li>
-    <li>Hide panes you don't use via <a href="config.html">lazyhub.toml</a> — fewer tabs = faster navigation</li>
-    <li>Use <kbd>f</kbd> to cycle between open/closed/merged states in PR and Issue lists</li>
-  </ul>
-
-  <div class="warn">
-    <strong>Heads up:</strong> lazyhub relies on the GitHub CLI's authenticated session. Run <code>gh auth status</code> to check it; repository access and organization policy still apply.
-  </div>
-
-  <h2>Next Steps</h2>
-  <ul>
-    <li><a href="keybindings.html">Complete keybinding reference →</a></li>
-    <li><a href="config.html">Configuration reference →</a></li>
-    <li><a href="https://github.com/saketh-kowtha/lazyhub/issues">Report a bug or request a feature →</a></li>
-  </ul>
-</div>
+</main>
 
 <footer>
-  <p>lazyhub is MIT licensed · <a href="https://github.com/saketh-kowtha/lazyhub">GitHub</a></p>
+  <div class="wrap">
+    <p>lazyhub is MIT licensed, by <a href="https://github.com/saketh-kowtha">Saketh Kowtha</a>. Not an official GitHub product.</p>
+    <p>This site loads no scripts, fonts or trackers.</p>
+  </div>
 </footer>
-
 </body>
 </html>
