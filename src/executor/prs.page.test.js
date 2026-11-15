@@ -8,10 +8,10 @@ const q = () => runGh.mock.calls[0][0].find(a => a.startsWith('searchQuery='))
 const node = (over = {}) => ({
   __typename: 'PullRequest', number: 4, title: 't', state: 'OPEN', author: { login: 'a' },
   labels: { nodes: [{ name: 'bug' }] }, reviewRequests: { nodes: [] }, assignees: { nodes: [] },
-  statusCheckRollup: { state: 'FAILURE', contexts: {
+  commits: { nodes: [{ commit: { statusCheckRollup: { state: 'FAILURE', contexts: {
     checkRunCountsByState: [{ state: 'SUCCESS', count: 3 }, { state: 'FAILURE', count: 2 }, { state: 'IN_PROGRESS', count: 1 }],
     statusContextCountsByState: [{ state: 'PENDING', count: 1 }],
-  } },
+  } } } }] },
   ...over,
 })
 

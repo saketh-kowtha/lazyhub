@@ -30,7 +30,7 @@ function prNode(number, title, login, { reviewDecision = null, ci = 'SUCCESS', i
     author: { login },
     labels: { nodes: [{ name: 'a-very-long-label-name-that-keeps-going', color: 'd73a4a' }, { name: 'bug \u{1F41B}', color: '0e8a16' }] },
     reviewRequests: { nodes: [{ requestedReviewer: { __typename: 'User', login: 'reviewer-one', name: 'Reviewer One' } }] },
-    statusCheckRollup: { contexts: { nodes: [{ __typename: 'CheckRun', name: 'build', status: 'COMPLETED', conclusion: ci === 'PENDING' ? null : ci, startedAt: '2026-06-06T10:00:00Z', completedAt: '2026-06-06T10:05:00Z' }] } },
+    commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [{ __typename: 'CheckRun', name: 'build', status: 'COMPLETED', conclusion: ci === 'PENDING' ? null : ci, startedAt: '2026-06-06T10:00:00Z', completedAt: '2026-06-06T10:05:00Z' }] } } } }] },
     reviewDecision,
     updatedAt: '2026-06-06T10:00:00Z',
     isDraft,
