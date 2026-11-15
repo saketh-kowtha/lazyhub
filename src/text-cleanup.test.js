@@ -211,7 +211,9 @@ const LINE_FORMS = { sanitize, sanitizeRaw, sanitizeCode, sanitizePath }
 const ALL = { sanitize, sanitizeBlock, sanitizeRaw, sanitizeLog, sanitizeCode, sanitizePath, stripAnsi }
 const IDEMPOTENT = { sanitizeRaw, sanitizeLog, sanitizeCode, sanitizePath, stripAnsi }
 
-describe(`property tests (seed ${SEED}, ${CASES} cases per function)`, () => {
+// 5000 generated cases per function take a few seconds under CI coverage instrumentation; the
+// assertions are the check, the timeout only has to outlast a loaded runner (same as size bounds).
+describe(`property tests (seed ${SEED}, ${CASES} cases per function)`, { timeout: 30_000 }, () => {
   for (const [name, fn] of Object.entries(ALL)) {
     it(`${name}: never throws, output is clean and well-formed`, () => {
       const rnd = mulberry32(SEED)
