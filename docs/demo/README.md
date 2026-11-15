@@ -13,13 +13,13 @@ npm run demo         # all tapes
 npm run demo -- tour # one tape (file name without .tape)
 ```
 
-Outputs land in `docs/demo/out/` (GIFs, PNG screenshots, and `tour.mp4`).
+Outputs land in `docs/demo/out/` (GIFs, PNG screenshots, and `tour.mp4`). The `tour` tape's screenshots are `tour-queue`, `tour-evidence`, `tour-detail`, `tour-whyred`, `tour-collisions` and `tour-back`.
 
 ## Tapes
 
 | Tape | Shows |
 |---|---|
-| `tour` | launch, PR list, PR detail, diff (also renders `tour.mp4`) |
+| `tour` | review queue, evidence, why CI is red, collisions, back to the queue with position kept (also renders `tour.mp4`) |
 | `panes` | Issues and Actions panes |
 | `watch-only` | `lazyhub watch-only --repo acme/rocket` |
 | `doctor-coverage` | `lazyhub doctor --coverage --repo acme/rocket` |
