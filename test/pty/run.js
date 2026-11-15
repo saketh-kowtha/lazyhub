@@ -676,8 +676,8 @@ async function runKeyOwnershipFlow() {
     await waitUntil(showing(/PTY harness fixture PR/), 'the open filter is back')
 
     // The search box owns the keyboard: pane keys are typed, not run.
-    term.write('/')
-    await waitUntil(showing(/Search pull requests/), 'the search box opens') // keys sent before it owns the keyboard would run as pane keys
+    // Wait for the box itself rather than a fixed delay; a resent `/` is harmless once it is open.
+    await sendUntil(() => term.write('/'), () => screen.text(), /Search pull requests/, 'the search box opens')
     for (const ch of 'qamM') term.write(ch)
     await waitUntil(showing(/qamM/), 'pane keys are typed into the search box')
     assert.doesNotMatch(screen.text(), /Approve PR|Merge PR|auto-merge/i, 'no write dialog opened under the search box')

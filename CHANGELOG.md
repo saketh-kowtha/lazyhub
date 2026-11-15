@@ -1,5 +1,59 @@
 # Changelog
 
+## v26.6.3
+
+# lazyhub v26.6.3
+
+A large feature, correctness and performance release.
+
+### New
+
+- **Review queue**: an explainable attention queue of the pull requests that need you, with the reason each one is listed.
+- **Review evidence**: a read-only evidence view for a PR, reachable from the queue with a way back to where you were.
+- **Why is CI red**: jump from a failing check to the changed line and a short excerpt of the failed job log.
+- **Collision radar**: finds open PRs that overlap and suggests a merge order.
+- **Claims check**: verifies the claims in a PR description against its diff.
+- **Review story**: a guided walkthrough of a PR diff.
+- **AI on your existing subscriptions**: use the AI features through a CLI you are already signed in to, with an opt-in login mode.
+- **HTML in Markdown**: PR, issue and comment bodies render a strict allowlist of HTML.
+- **Fewer key presses**: row actions, remembered choices, and Enter opens the PR detail by default (smart Enter is opt-in).
+- **Keyboard**: a registry-driven keymap, `g`-prefix navigation and a which-key popup.
+- **Optional-approval groundwork**, `lazyhub feedback` with redacted diagnostics, `lazyhub <PR or issue reference>`, `doctor --help`, and ASCII / `NO_COLOR` terminal fallbacks.
+- **Terminal-native theme** with a contrast floor and a single theme system.
+
+### Onboarding and compatibility
+
+- First run opens the Focus dashboard with a zero-configuration watch-only mode, a searchable repository picker that remembers your choice, and clearer day-one error messages and empty states.
+- Onboarding journeys cover install, GitHub sign-in, launch path, repository detection, resume, and terminal environment checks.
+- GitHub Enterprise Server: host resolved from your `gh` logins, a commit-level check rollup and a schema fallback for servers that lack newer fields.
+
+### Fixed
+
+- Many fixes across the PRs, Issues, Branches, Actions, Notifications and Focus panes: pagination and load-more, cursor clamping when lists shrink, visible fetch and update failures, pickers that add and remove only what you changed, merge and review flows, and stale state after checkout or writes.
+- Diff view shows the diff first, with a cached first frame.
+- Configuration: defaults are no longer frozen into your `lazyhub.toml`, saving a setting only writes that setting, and a broken file never crashes the app.
+- Layout: responsive widths, resize handling, single-width icons, and a clear too-small message.
+- The `lazyhub --mcp` preflight and a cold-cache `--format json` status now print valid output.
+
+### Performance
+
+- A derived render mode with structural sharing, batched notifications and row-level re-render isolation, so lists and details redraw only what changed.
+- Overlays as layers, a keep-alive navigation stack, declared mutations with targeted invalidation and optimistic patches, and SHA-keyed immutable caching for diffs and logs.
+- Lazy updates and a TUI vitals recorder with budgets checked in CI; a bounded gh concurrency and capped caches; code-splitting so CLI commands skip the TUI stack.
+- The npm package is now self-contained, with no runtime dependencies.
+
+### Security
+
+- Hardening of how GitHub-provided text and links are handled; details will follow in advisories.
+
+### Release
+
+- Published to npm through GitHub OIDC trusted publishing with provenance, and the Homebrew tap is updated and checked as part of promotion.
+
+**Full Changelog:** [`v26.6.2...v26.6.3`](https://github.com/saketh-kowtha/lazyhub/compare/v26.6.2...v26.6.3)
+
+---
+
 ## v26.6.2
 
 # lazyhub v26.6.2
@@ -24,7 +78,7 @@ This is a patch release with no user-facing changes.
 
 ---
 
-**Full Changelog:** [`v26.6.0...v26.6.1`](https://github.com/your-org/lazyhub/compare/v26.6.0...v26.6.1)
+**Full Changelog:** [`v26.6.0...v26.6.1`](https://github.com/saketh-kowtha/lazyhub/compare/v26.6.0...v26.6.1)
 
 ---
 
@@ -84,7 +138,7 @@ A batch of smaller UI polish fixes — layout inconsistencies, edge-case renderi
 brew upgrade lazyhub
 
 # Go
-go install github.com/yourusername/lazyhub@v26.6.0
+go install github.com/saketh-kowtha/lazyhub@v26.6.0
 
 # From source
 git checkout v26.6.0 && make install
@@ -94,7 +148,7 @@ git checkout v26.6.0 && make install
 
 ## 🔗 Full Changelog
 
-`v26.5.0...v26.6.0` — [compare on GitHub](https://github.com/yourusername/lazyhub/compare/v26.5.0...v26.6.0)
+`v26.5.0...v26.6.0` — [compare on GitHub](https://github.com/saketh-kowtha/lazyhub/compare/v26.5.0...v26.6.0)
 
 | Commit | PR | Description |
 |---|---|---|
@@ -118,7 +172,7 @@ git checkout v26.6.0 && make install
 
 ---
 
-**Full Changelog**: https://github.com/reacherhq/lazyhub/compare/v26.5.3...v26.5.4
+**Full Changelog**: https://github.com/saketh-kowtha/lazyhub/compare/v26.5.3...v26.5.4
 
 ---
 
@@ -142,7 +196,7 @@ git checkout v26.6.0 && make install
 
 This is a **patch release** with no user-facing functional changes. The fix addresses an internal test issue, helping maintain codebase stability and CI health.
 
-**Full Changelog:** https://github.com/yourusername/lazyhub/compare/v26.5.2...v26.5.3
+**Full Changelog:** https://github.com/saketh-kowtha/lazyhub/compare/v26.5.2...v26.5.3
 
 ---
 
@@ -158,7 +212,7 @@ This is a **patch release** with no user-facing functional changes. The fix addr
 
 ---
 
-**Full Changelog:** [`v26.5.1...v26.5.2`](https://github.com/yourusername/lazyhub/compare/v26.5.1...v26.5.2)
+**Full Changelog:** [`v26.5.1...v26.5.2`](https://github.com/saketh-kowtha/lazyhub/compare/v26.5.1...v26.5.2)
 
 ---
 
@@ -188,7 +242,7 @@ This is a **patch release** with no user-facing functional changes. The fix addr
 brew upgrade lazyhub
 
 # Go
-go install github.com/yourorg/lazyhub@v26.5.1
+go install github.com/saketh-kowtha/lazyhub@v26.5.1
 ```
 
 ---

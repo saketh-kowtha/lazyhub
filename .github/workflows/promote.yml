@@ -26,9 +26,9 @@ jobs:
       contents: read
       id-token: write # npm OIDC trusted publishing (dist-tag)
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
@@ -126,7 +126,7 @@ jobs:
         run: node scripts/homebrew-formula.mjs render "$URL" "$SHA256" "$VERSION" > "$RUNNER_TEMP/lazyhub.rb"
 
       - name: Push Homebrew formula
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           VERSION: ${{ steps.sha.outputs.version }}
           FORMULA_FILE: ${{ runner.temp }}/lazyhub.rb

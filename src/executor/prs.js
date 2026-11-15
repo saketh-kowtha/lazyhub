@@ -1,10 +1,13 @@
 // @ts-nocheck
 // TODO(#197): typed gh PR payload shapes should replace broad JS destructuring.
 import { getRepo, runGh } from './core.js'
+import { withSchemaFallback } from './schema-compat.js'
 
 const PR_LIST_MAX_GRAPHQL_NODES = 100
 // GitHub search never returns more than 1,000 results, so paging stops there.
 const PR_LIST_MAX_RESULTS = 1000
+// Context nodes read per PR by the degraded (no counts-by-state) row query.
+const ROLLUP_NODE_PAGE = 100
 const PR_SEARCH_STATES = new Set(['open', 'closed', 'merged', 'all'])
 
 function compact(value) {
@@ -42,6 +45,14 @@ function normalizeReviewRequests(reviewRequests) {
       login: reviewer.login || (reviewer.slug ? (reviewer.organization?.login ? `${reviewer.organization.login}/${reviewer.slug}` : reviewer.slug) : reviewer.name) || '',
       name: reviewer.name || reviewer.login || reviewer.slug || '',
     }))
+}
+
+/**
+ * The head commit's check rollup. `Commit.statusCheckRollup` exists on every GitHub host; `PullRequest.statusCheckRollup` does not (older GHES).
+ * @param {Record<string, any>} pr
+ */
+function headRollup(pr) {
+  return pr?.commits?.nodes?.[0]?.commit?.statusCheckRollup || null
 }
 
 function normalizeStatusCheck(node) {
@@ -86,7 +97,7 @@ export function normalizePRListGraphQL(result) {
       author: pr.author ? { login: pr.author.login } : null,
       labels: pr.labels?.nodes || [],
       reviewRequests: normalizeReviewRequests(pr.reviewRequests),
-      statusCheckRollup: (pr.statusCheckRollup?.contexts?.nodes || []).map(normalizeStatusCheck).filter(Boolean),
+      statusCheckRollup: (headRollup(pr)?.contexts?.nodes || []).map(normalizeStatusCheck).filter(Boolean),
       reviewDecision: pr.reviewDecision,
       updatedAt: pr.updatedAt,
       isDraft: Boolean(pr.isDraft),
@@ -131,12 +142,18 @@ export async function listPRs(repo, filter = {}) {
                 }
               }
             }
-            statusCheckRollup {
-              contexts(first: 50) {
-                nodes {
-                  __typename
-                  ... on CheckRun { name status conclusion startedAt completedAt }
-                  ... on StatusContext { context state }
+            commits(last: 1) {
+              nodes {
+                commit {
+                  statusCheckRollup {
+                    contexts(first: 50) {
+                      nodes {
+                        __typename
+                        ... on CheckRun { name status conclusion startedAt completedAt }
+                        ... on StatusContext { context state }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -253,7 +270,40 @@ function prPageSearchQuery(repo, filter) {
 
 // Slim row: the list never needs check contexts, files or a full body. CI is a few
 // counters; the heavy fields load on demand for the preview (getPRPreview).
-const PR_ROW_FIELDS = `
+// Check state comes from the head commit's rollup (`Commit.statusCheckRollup`, present on every
+// GitHub host), never `PullRequest.statusCheckRollup` (missing on older GHES).
+// Capability `rollupCounts`: the counts-by-state fields are newer than the rollup itself, so a host
+// without them gets the first 100 context nodes instead and the counters are computed from those.
+const ROLLUP_COUNTS = `
+  commits(last: 1) { nodes { commit { statusCheckRollup {
+    state
+    contexts(first: 1) {
+      checkRunCountsByState { state count }
+      statusContextCountsByState { state count }
+    }
+  } } } }
+`
+const ROLLUP_NODES = `
+  commits(last: 1) { nodes { commit { statusCheckRollup {
+    state
+    contexts(first: ${ROLLUP_NODE_PAGE}) {
+      totalCount
+      nodes {
+        __typename
+        ... on CheckRun { status conclusion }
+        ... on StatusContext { state }
+      }
+    }
+  } } } }
+`
+
+/** Capabilities of the slim row query: name -> the field names whose absence degrades it. */
+const ROW_CAPABILITIES = { rollupCounts: /checkRunCountsByState|statusContextCountsByState/ }
+
+// Slim row: the list never needs check contexts, files or a full body. CI is a few
+// counters; the heavy fields load on demand for the preview (getPRPreview).
+function prRowFields(degraded = new Set()) {
+  return `
   number title state url updatedAt isDraft headRefName baseRefName
   reviewDecision mergeable
   author { login }
@@ -269,21 +319,37 @@ const PR_ROW_FIELDS = `
   }
   assignees(first: 10) { nodes { login name } }
   autoMergeRequest { enabledAt }
-  statusCheckRollup {
-    state
-    contexts(first: 1) {
-      checkRunCountsByState { state count }
-      statusContextCountsByState { state count }
-    }
-  }
+  ${degraded.has('rollupCounts') ? ROLLUP_NODES : ROLLUP_COUNTS}
 `
+}
+
+/**
+ * Counts-by-state equivalent of a context node (the CheckRunState / StatusState names).
+ * @param {Record<string, any>} node
+ */
+function nodeState(node) {
+  if (node?.__typename === 'StatusContext') return { kind: 'statusContext', state: node.state || '' }
+  return { kind: 'checkRun', state: node?.status === 'COMPLETED' ? (node.conclusion || '') : (node?.status || '') }
+}
 
 function checkSummaryOf(rollup) {
   if (!rollup) return null
-  const counts = [
-    ...(rollup.contexts?.checkRunCountsByState || []),
-    ...(rollup.contexts?.statusContextCountsByState || []),
-  ]
+  let counts
+  let partial = false
+  let declared = 0
+  if (rollup.contexts?.checkRunCountsByState || rollup.contexts?.statusContextCountsByState) {
+    counts = [
+      ...(rollup.contexts?.checkRunCountsByState || []),
+      ...(rollup.contexts?.statusContextCountsByState || []),
+    ]
+  } else {
+    // Degraded variant (host without counts-by-state): count the fetched nodes. A rollup with more
+    // contexts than were fetched reports the real total and flags the failing/pending counts as lower bounds.
+    const nodes = rollup.contexts?.nodes || []
+    counts = nodes.map(n => ({ state: nodeState(n).state, count: 1 }))
+    declared = Number(rollup.contexts?.totalCount ?? nodes.length)
+    partial = declared > nodes.length
+  }
   let total = 0
   let failing = 0
   let pending = 0
@@ -292,8 +358,9 @@ function checkSummaryOf(rollup) {
     if (/failure|error/i.test(state)) failing += count
     else if (/pending|in_progress|queued/i.test(state)) pending += count
   }
+  if (partial) total = declared
   if (total === 0) return null
-  return { total, failing, pending }
+  return partial ? { total, failing, pending, partial: true } : { total, failing, pending }
 }
 
 /**
@@ -308,7 +375,7 @@ export function normalizePRRow(pr) {
     author: pr.author ? { login: pr.author.login } : null,
     labels: pr.labels?.nodes || [],
     reviewRequests: normalizeReviewRequests(pr.reviewRequests),
-    checkSummary: checkSummaryOf(pr.statusCheckRollup),
+    checkSummary: checkSummaryOf(headRollup(pr)),
     reviewDecision: pr.reviewDecision,
     updatedAt: pr.updatedAt,
     isDraft: Boolean(pr.isDraft),
@@ -331,22 +398,25 @@ export function normalizePRRow(pr) {
 export async function listPRsPage(repo, filter = {}) {
   const r = getRepo(repo)
   const limit = Math.max(1, Math.min(Number(filter.limit || 50), PR_LIST_MAX_GRAPHQL_NODES))
-  const query = `
+  const searchQuery = prPageSearchQuery(r, filter)
+  const result = await withSchemaFallback(ROW_CAPABILITIES, degraded => {
+    const query = `
     query($searchQuery: String!, $limit: Int!, $after: String) {
       search(type: ISSUE, first: $limit, after: $after, query: $searchQuery) {
         issueCount
         pageInfo { hasNextPage endCursor }
-        nodes { __typename ... on PullRequest { ${PR_ROW_FIELDS} } }
+        nodes { __typename ... on PullRequest { ${prRowFields(degraded)} } }
       }
     }
   `
-  const result = await runGh([
-    'api', 'graphql',
-    '-f', `query=${query}`,
-    '-f', `searchQuery=${prPageSearchQuery(r, filter)}`,
-    '-F', `limit=${limit}`,
-    ...(filter.after ? ['-f', `after=${filter.after}`] : []),
-  ])
+    return runGh([
+      'api', 'graphql',
+      '-f', `query=${query}`,
+      '-f', `searchQuery=${searchQuery}`,
+      '-F', `limit=${limit}`,
+      ...(filter.after ? ['-f', `after=${filter.after}`] : []),
+    ])
+  })
   const search = result?.data?.search
   const items = (search?.nodes || []).filter(n => n?.__typename === 'PullRequest').map(normalizePRRow)
   return {
@@ -367,13 +437,13 @@ export async function listPRsPage(repo, filter = {}) {
  */
 export async function getPRRow(repo, number) {
   const [owner, name] = getRepo(repo).split('/')
-  const result = await runGh([
+  const result = await withSchemaFallback(ROW_CAPABILITIES, degraded => runGh([
     'api', 'graphql',
-    '-f', `query=query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { ${PR_ROW_FIELDS} } } }`,
+    '-f', `query=query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { ${prRowFields(degraded)} } } }`,
     '-f', `owner=${owner}`,
     '-f', `name=${name}`,
     '-F', `number=${Number(number)}`,
-  ])
+  ]))
   const pr = result?.data?.repository?.pullRequest
   if (!pr) throw new Error(`Pull request #${number} not found`)
   return normalizePRRow(pr)

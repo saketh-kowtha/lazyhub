@@ -10,6 +10,7 @@
 
 import { GhError } from './gh-error.js'
 import { getRepo, repoPath, runGh } from './core.js'
+import { withSchemaFallback } from './schema-compat.js'
 
 const REPO_PART_RE = /^[a-zA-Z0-9._-]+$/
 
@@ -26,7 +27,8 @@ const SUBJECT = `
   ... on PullRequest { number title url repository { nameWithOwner } }
 `
 
-const NODE_FIELDS = `
+// Capability `closeReason`: ClosedEvent.stateReason is newer than the rest; a host without it reports no reason.
+const nodeFields = (degraded = new Set()) => `
   __typename
   ... on IssueComment {
     id databaseId body url createdAt lastEditedAt authorAssociation
@@ -39,7 +41,7 @@ const NODE_FIELDS = `
   ... on AssignedEvent { id createdAt actor { login } assignee { ... on Actor { login } } }
   ... on UnassignedEvent { id createdAt actor { login } assignee { ... on Actor { login } } }
   ... on ClosedEvent {
-    id createdAt stateReason actor { login }
+    id createdAt ${degraded.has('closeReason') ? '' : 'stateReason'} actor { login }
     closer { __typename ... on PullRequest { number title url } ... on Commit { abbreviatedOid url } }
   }
   ... on ReopenedEvent { id createdAt actor { login } }
@@ -160,7 +162,8 @@ export async function listIssueTimelinePage(repo, number, { after = null, pageSi
   if (!REPO_PART_RE.test(owner || '') || !REPO_PART_RE.test(name || '')) {
     throw new GhError({ message: `Invalid repository format: ${r}`, stderr: '', exitCode: 1, args: [] })
   }
-  const query = `
+  const result = await withSchemaFallback({ closeReason: /stateReason/ }, degraded => {
+    const query = `
     query($owner: String!, $name: String!, $number: Int!, $size: Int!, $after: String) {
       viewer { login }
       repository(owner: $owner, name: $name) {
@@ -168,22 +171,23 @@ export async function listIssueTimelinePage(repo, number, { after = null, pageSi
           timelineItems(first: $size, after: $after, itemTypes: [${ITEM_TYPES}]) {
             totalCount
             pageInfo { hasNextPage endCursor }
-            nodes { ${NODE_FIELDS} }
+            nodes { ${nodeFields(degraded)} }
           }
         }
       }
     }
   `
-  const args = [
-    'api', 'graphql',
-    '-f', `owner=${owner}`,
-    '-f', `name=${name}`,
-    '-F', `number=${Number(number)}`,
-    '-F', `size=${Number(pageSize)}`,
-  ]
-  if (after) args.push('-f', `after=${after}`)
-  args.push('-f', `query=${query}`)
-  const result = await runGh(args)
+    const args = [
+      'api', 'graphql',
+      '-f', `owner=${owner}`,
+      '-f', `name=${name}`,
+      '-F', `number=${Number(number)}`,
+      '-F', `size=${Number(pageSize)}`,
+    ]
+    if (after) args.push('-f', `after=${after}`)
+    args.push('-f', `query=${query}`)
+    return runGh(args)
+  })
   const conn = result?.data?.repository?.issue?.timelineItems
   const items = (conn?.nodes || []).map(n => mapIssueTimelineNode(n, number)).filter(Boolean)
   return { items, page: pageOf(conn, after), viewer: result?.data?.viewer?.login || '' }

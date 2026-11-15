@@ -229,7 +229,7 @@ describe('listPRs()', () => {
             author: { login: 'octocat' },
             labels: { nodes: [{ name: 'perf', color: 'f00' }] },
             reviewRequests: { nodes: [{ requestedReviewer: { __typename: 'User', login: 'alice', name: 'Alice' } }] },
-            statusCheckRollup: { contexts: { nodes: [{ __typename: 'CheckRun', name: 'CI', status: 'COMPLETED', conclusion: 'FAILURE' }] } },
+            commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [{ __typename: 'CheckRun', name: 'CI', status: 'COMPLETED', conclusion: 'FAILURE' }] } } } }] },
             reviewDecision: 'CHANGES_REQUESTED',
             updatedAt: '2026-06-13T00:00:00Z',
             isDraft: true,

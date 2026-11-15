@@ -50,3 +50,51 @@ codes in new machine surfaces.
 
 New JSON-producing commands should include `schema_version`. Existing surfaces
 without that field are compatibility gaps, not a precedent to copy.
+
+## GitHub Enterprise Server GraphQL schema
+
+lazyhub reads GitHub through GraphQL documents under `src/executor/`. An older
+GitHub Enterprise Server (GHES) schema lacks some fields, and GraphQL rejects the
+whole document when one field is missing (`Field 'x' doesn't exist on type 'Y'`).
+Rules:
+
+- github.com always gets the full queries. A schema error there is a bug and is
+  not retried.
+- On any other host, `classifyGhFailure` reports the error as kind `schema`
+  (`src/executor/classify.js`). `withSchemaFallback` (`src/executor/schema-compat.js`)
+  then retries ONCE with the lower-capability variant named in the table, and
+  remembers the degraded capability per host for the session, so later calls skip
+  the failing document.
+- A degraded field is never dropped silently (D16): the data shows as unknown or
+  unavailable, or as a lower bound (`✗ 2+/150`).
+- Approval binding (`approval-context.js`) has no fallback by design: it fails
+  closed (THREAT_MODEL, invariant 17).
+
+"Minimum GHES" is `unverified` unless a source is given: GitHub does not publish a
+per-field GHES matrix in the public docs, and the schema reference for each GHES
+version is the authority (`https://docs.github.com/en/enterprise-server@<version>/graphql/reference/objects`).
+`Commit.statusCheckRollup` is documented in the GHES 3.16 to 3.19 and github.com
+`commits` reference pages (`https://docs.github.com/en/enterprise-server@3.17/graphql/reference/commits`);
+No documentation or changelog entry for `PullRequest.statusCheckRollup`, and a GHES host
+rejects it (see `docs/bugs/ghes-schema-compat.md`).
+
+| Document (file) | Field or argument | Minimum GHES | Status in lazyhub |
+|---|---|---|---|
+| PR list, row, legacy list (`prs.js`) | `PullRequest.statusCheckRollup` | not documented; missing on the reporting host | REMOVED. Read from `commits(last: 1) { nodes { commit { statusCheckRollup } } }` on every host |
+| PR row (`prs.js`) | `StatusCheckRollupContextConnection.checkRunCountsByState`, `statusContextCountsByState` | unverified (newer than the rollup) | capability `rollupCounts`. Variant: first 100 context nodes, counters computed from them; `partial: true` (shown as `N+`) when the PR has more |
+| Evidence detail (`evidence-detail.js`) | `CheckRun.isRequired(pullRequestNumber:)`, `StatusContext.isRequired` | unverified | capability `isRequired`. Variant: none can answer; required checks are `unknown` with the reason in the detail errors |
+| Issue timeline (`issue-timeline.js`) | `ClosedEvent.stateReason` | unverified (github.com added it in 2022) | capability `closeReason`. Variant: no `stateReason`; the close event shows no reason |
+| Evidence queue and record (`activity.js`, `evidence.js`) | `Commit.statusCheckRollup` | documented, long standing | none needed; this is the path the PR documents now use |
+| Evidence (`activity.js`) | `PullRequest.latestOpinionatedReviews`, `reviewThreads`, `reviewRequests`, `mergeable`, `reviewDecision`, `changedFiles` | unverified, old fields | none; a missing field surfaces as the classified `schema` notice, and `evidence.js` already maps an absent selection to `unknown` |
+| Evidence and files (`evidence-detail.js`, `pr-files.js`, `collisions.js`) | `PullRequestChangedFile.changeType`, `PullRequest.files` | unverified | none (surfaces the classified `schema` notice) |
+| Review delta (`pr-story.js`) | `PullRequest.viewerLatestReview` | unverified | none (surfaces the classified `schema` notice) |
+| Approval context (`approval-context.js`) | `PullRequest.autoMergeRequest`, `isCrossRepository`, `baseRefOid`, `headRepository`, `viewer.id` | unverified | none by design: fails closed |
+| PR row, legacy list (`prs.js`) | `PullRequest.autoMergeRequest` | unverified (auto-merge shipped in GHES 3.1) | none |
+| Comments (`pr-comments.js`) | `reviewThreads`, `PullRequestReviewThread.isResolved`, `resolveReviewThread` | unverified, old | none |
+| Activity (`activity.js`) | `HEAD_REF_FORCE_PUSHED_EVENT` item type, `Commit.authors`, `checkSuites`, `rateLimit`, `mergedBy` | unverified, old | none |
+| Issues (`issues.js`) | `search(type: ISSUE)`, `Issue.comments.totalCount` | old | none |
+| Branches (`branches.js`) | `pullRequests(states: OPEN)`, `isCrossRepository` | old | none |
+| `mergeQueueEntry`, `latestReviews` | not queried by lazyhub | n/a | n/a |
+
+`gh pr view --json statusCheckRollup` (preview, `getPR`, branches) is `gh`'s own query: gh builds
+it from the commit rollup, so it is not a lazyhub GraphQL document.

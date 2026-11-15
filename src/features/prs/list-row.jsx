@@ -28,6 +28,7 @@ function PRStateBadge({ pr, t, isSelected }) {
 function CIBadge({ pr, t, isSelected }) {
   const checks = pr.statusCheckRollup
   let total; let failing; let pending
+  const partial = !(checks && checks.length > 0) && pr.checkSummary?.partial === true
   if (checks && checks.length > 0) {
     total   = checks.length
     const states = checks.map(c => c.state || c.conclusion || c.status || '')
@@ -39,9 +40,11 @@ function CIBadge({ pr, t, isSelected }) {
   } else {
     return null
   }
-  if (failing > 0) return <Text color={t.ci.fail} bold> ✗ {failing}/{total}</Text>
-  if (pending > 0) return <Text color={t.ci.pending}> ● {pending}/{total}</Text>
-  return <Text color={isSelected ? t.ui.selected : t.ui.muted}> ✓</Text>
+  // `partial`: the host cannot count by state, so only the first checks were read; the counts are lower bounds.
+  const more = partial ? '+' : ''
+  if (failing > 0) return <Text color={t.ci.fail} bold> ✗ {failing}{more}/{total}</Text>
+  if (pending > 0) return <Text color={t.ci.pending}> ● {pending}{more}/{total}</Text>
+  return <Text color={isSelected ? t.ui.selected : t.ui.muted}> ✓{more}</Text>
 }
 
 function ReviewBadge({ pr, t, isSelected }) {
