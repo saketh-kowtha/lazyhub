@@ -14,7 +14,7 @@
 import { sanitize } from '../utils-core.js'
 
 /**
- * @typedef {'gh_missing'|'gh_too_old'|'not_signed_in'|'wrong_host'|'sso'|'scope'|'rate_limit'|'secondary_limit'|'repo_not_found'|'not_found'|'offline'|'forbidden'|'unknown'} FailureKind
+ * @typedef {'gh_missing'|'gh_too_old'|'schema'|'not_signed_in'|'wrong_host'|'sso'|'scope'|'rate_limit'|'secondary_limit'|'repo_not_found'|'not_found'|'offline'|'forbidden'|'unknown'} FailureKind
  * @typedef {'blocked'|'degraded'|'waiting'|'offline'} FailureTone
  * @typedef {Record<string, any>} Failure
  * @property {FailureKind} kind
@@ -175,6 +175,15 @@ export function classifyGhFailure(err, ctx = {}) {
   if (/unknown (flag|command|shorthand flag)\b|Unknown JSON field/i.test(text)) {
     return failure('gh_too_old', 'blocked', 'Your GitHub CLI is too old for this lazyhub feature.', {
       fixHint: 'Update gh from https://cli.github.com (macOS: brew upgrade gh), then restart lazyhub.',
+    })
+  }
+
+  // A GraphQL document asked for a field or argument this host's schema does not have (an older
+  // GitHub Enterprise Server). Callers with a lower-capability variant retry once (schema-compat.js).
+  if (/Field ['"][^'"]+['"] doesn't (exist on type|accept argument)|doesn't exist on type ['"]|Unknown argument ['"]|Cannot query field ['"]/i.test(text)) {
+    return failure('schema', 'degraded', `${host} does not support part of the GitHub API that lazyhub asked for (older GitHub Enterprise Server).`, {
+      notes: ['The affected data is shown as unknown, never guessed.', 'See docs/COMPATIBILITY.md for the GitHub Enterprise Server versions lazyhub supports.'],
+      subject: { host },
     })
   }
 

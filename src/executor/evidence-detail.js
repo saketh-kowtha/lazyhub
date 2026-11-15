@@ -38,6 +38,7 @@
  */
 
 import { runGh } from './core.js'
+import { compatHost, withSchemaFallback } from './schema-compat.js'
 import { isOwnerName } from '../config/schema.js'
 import { sanitize, sanitizePath, sanitizeRaw } from '../utils-core.js'
 import { UNKNOWN, fact } from './evidence.js'
@@ -213,7 +214,12 @@ export async function fetchFileEvidence(repo, number, { now = Date.now } = {}) {
  */
 export async function fetchRequiredChecks(repo, number, { now = Date.now } = {}) {
   const { owner, name, n } = validate(repo, number)
-  const result = await runGh(['api', 'graphql', '-f', `query=${REQUIRED_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `number=${n}`, '-F', `limit=${CHECKS_PAGE}`])
+  // Capability `isRequired`: a host whose schema lacks it has no variant that can answer, so the
+  // read becomes an explicit "unavailable" (shown as unknown with the reason), never "none required".
+  const result = await withSchemaFallback({ isRequired: /isRequired|pullRequestNumber/ }, degraded => {
+    if (degraded.has('isRequired')) throw new Error(`required-check status is unavailable on ${compatHost()}: its GraphQL schema has no isRequired on check runs`)
+    return runGh(['api', 'graphql', '-f', `query=${REQUIRED_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `number=${n}`, '-F', `limit=${CHECKS_PAGE}`])
+  })
   const pr = result?.data?.repository?.pullRequest
   if (!pr) throw new Error(`could not read required checks for ${repo}#${n}: ${result?.errors?.[0]?.message || 'not found or not readable'}`)
   const rollup = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup
