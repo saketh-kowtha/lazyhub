@@ -151,6 +151,15 @@ async function runJourney({ cols, rows, label, ascii = false, firstRun = false }
 
     // 1. Focus -> queue. Every row says why it is there; the strip repeats it for the cursor row.
     await s.openQueue()
+    await s.waitFor(/scope: (repo|account)/, `${label}: the scope line`)
+    // Once the repo scope (#177 amendment, #643) is on main the queue starts on the launch repository and this
+    // branch is the only path; before that the queue is account-wide from the start and the branch is skipped.
+    if (/scope: repo/.test(s.text())) {
+      assert.match(s.text(), /scope: repo acme\/platform\b/, `${label}: the queue starts on exactly the launch repository`)
+      await s.waitFor(/platform#412/, `${label}: the launch repository's rows`)
+      assert.doesNotMatch(s.text(), /ledger#88/, `${label}: no other repository's PR is shown in the repo scope`)
+      await s.sendUntil('s', /scope: account/, `${label}: s cycles the scope on to account`)
+    }
     await s.waitFor(/platform#412/, `${label}: queue rows`)
     await s.waitFor(/ledger#88/, `${label}: second queue row`)
     const row = text => s.text().split('\n').find(l => l.includes(text)) || ''

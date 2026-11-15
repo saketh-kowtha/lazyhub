@@ -27,7 +27,7 @@ Existing coverage the journey relies on rather than repeats: `lazyhub owner/repo
 
 Pending (not shipped, so deliberately not faked; each gets a flow when it lands):
 
-- Queue filtered to the launch repository, with the account-wide view one key away (#177 amendment). The queue is account-wide today and says `scope: account`, even when launched inside a repository.
+- Queue filtered to the launch repository, with the account-wide view one key away (#177 amendment): covered when #643 is merged. The journey already handles both: if the scope line shows `repo`, it asserts exactly `acme/platform`, presses `s` to account and continues; before #643 the queue is account-wide and that step is skipped.
 - The explicit transition from the review context into legacy management (#201 is still a design issue). Today Enter in the evidence view opens the ordinary PR detail, which keeps its own write keys; the gate covers the read-only side of that boundary, not the transition.
 - SSO-unauthorized organization and wrong-host (GHES) failures inside the queue. The causes are covered by classifier tests; there is no queue-level PTY flow yet.
 - Queue sizes at the #311 budget (500 repositories, 1,000 PRs).

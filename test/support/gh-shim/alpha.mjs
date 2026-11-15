@@ -66,7 +66,9 @@ export default function handle(args, out) {
     if (query.includes('reviewRequested: search')) {
       const mode = process.env.LAZYHUB_ALPHA_QUEUE
       if (mode === 'auth' || mode === 'rate') failQueue(mode)
-      const all = mode === 'empty' ? [] : prs()
+      // A repo:owner/name qualifier in the search narrows the result, as GitHub does (the repo scope of the queue).
+      const only = /(?:^|\s)repo:(\S+)/.exec(field(args, 'reviewQuery'))?.[1]
+      const all = mode === 'empty' ? [] : prs().filter(p => !only || p.repository.nameWithOwner === only)
       // The review-requested search has a second page (cursor c1) holding one more PR, so `+` has something to load.
       const second = field(args, 'reviewAfter') === 'c1'
       const group = (list, more) => ({ issueCount: list.length + (more ? 1 : 0), pageInfo: { hasNextPage: more, endCursor: more ? 'c1' : null }, nodes: list })
