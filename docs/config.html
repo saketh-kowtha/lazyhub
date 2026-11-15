@@ -1,200 +1,419 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Configuration — lazyhub</title>
-  <meta name="description" content="lazyhub configuration reference — customize panes, defaults, and behavior." />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #0d1117; --surface: #161b22; --border: #21262d;
-      --green: #3fb950; --blue: #58a6ff; --purple: #a371f7;
-      --orange: #d29922; --muted: #8b949e; --text: #e6edf3; --dim: #484f58;
-    }
-    html { scroll-behavior: smooth; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.7; }
-    a { color: var(--blue); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    nav {
-      background: var(--surface); border-bottom: 1px solid var(--border);
-      padding: .75rem 2rem; display: flex; align-items: center; gap: 2rem; position: sticky; top: 0; z-index: 10;
-    }
-    nav .brand { font-weight: 700; color: var(--blue); font-size: 1.1rem; }
-    nav a { color: var(--muted); font-size: .9rem; }
-    nav a:hover { color: var(--text); }
-    nav a.active { color: var(--blue); }
-
-    .container { max-width: 860px; margin: 0 auto; padding: 3rem 2rem 6rem; }
-    h1 { font-size: 2rem; font-weight: 700; color: var(--text); margin-bottom: .5rem; }
-    .subtitle { color: var(--muted); margin-bottom: 3rem; font-size: 1.05rem; }
-    h2 { font-size: 1.3rem; font-weight: 700; margin: 2.5rem 0 1rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border); }
-    h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 .5rem; color: var(--blue); }
-    p { margin-bottom: 1rem; color: var(--muted); }
-    strong { color: var(--text); }
-    ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; color: var(--muted); }
-    li { margin-bottom: .4rem; }
-
-    pre {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-      padding: 1rem 1.25rem; overflow-x: auto; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: .88rem;
-      margin-bottom: 1.25rem; line-height: 1.6;
-    }
-    code { font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: .88em; background: var(--surface); padding: .1em .35em; border-radius: 4px; color: var(--text); }
-    pre code { background: none; padding: 0; font-size: inherit; }
-
-    .key { color: var(--blue); }
-    .str { color: #a5d6ff; }
-    .bool { color: var(--purple); }
-    .arr { color: var(--orange); }
-    .comment { color: var(--dim); }
-
-    .schema-table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
-    .schema-table th { text-align: left; padding: .5rem 1rem; font-size: .82rem; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); border-bottom: 1px solid var(--border); }
-    .schema-table td { padding: .55rem 1rem; font-size: .88rem; border-bottom: 1px solid var(--border); vertical-align: top; }
-    .schema-table tr:last-child td { border-bottom: none; }
-    .schema-table td:first-child { font-family: monospace; color: var(--text); white-space: nowrap; }
-    .schema-table td:nth-child(2) { color: var(--purple); white-space: nowrap; }
-    .schema-table td:nth-child(3) { color: var(--muted); }
-    .schema-table td:nth-child(4) { color: var(--green); font-family: monospace; font-size: .82rem; }
-
-    .tip {
-      background: #0d2a17; border-left: 3px solid var(--green);
-      padding: .75rem 1rem; border-radius: 0 6px 6px 0; margin-bottom: 1rem;
-    }
-    .tip strong { color: var(--green); }
-
-    .pane-list { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0 1rem; }
-    .pane-chip {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 4px; padding: .2rem .6rem; font-family: monospace; font-size: .85rem; color: var(--text);
-    }
-
-    footer { text-align: center; padding: 2rem; color: var(--dim); font-size: .85rem; border-top: 1px solid var(--border); margin-top: 4rem; }
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Config: lazyhub TOML reference</title>
+  <meta name="description" content="Configure lazyhub with TOML: file location, precedence, repository selection, themes, layout, environment variables and every default value, generated from the shipped config.">
+  <link rel="canonical" href="https://saketh-kowtha.github.io/lazyhub/config.html">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230d1117'/%3E%3Cpath d='M9 8v14h9' fill='none' stroke='%237ee787' stroke-width='3'/%3E%3C/svg%3E">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Config: lazyhub TOML reference">
+  <meta property="og:description" content="Where the config lives, what you can set, and every default.">
+  <meta property="og:url" content="https://saketh-kowtha.github.io/lazyhub/config.html">
+  <meta name="twitter:card" content="summary">
+  <link rel="stylesheet" href="site.css">
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">lazyhub</a>
+    <nav aria-label="Site">
+      <a href="index.html">Home</a>
+      <a href="guide.html">Guide</a>
+      <a href="keybindings.html">Keybindings</a>
+      <a href="config.html" aria-current="page">Config</a>
+      <a href="https://github.com/saketh-kowtha/lazyhub">GitHub</a>
+    </nav>
+  </div>
+</header>
 
-<nav>
-  <span class="brand">lazyhub</span>
-  <a href="index.html">Home</a>
-  <a href="guide.html">Guide</a>
-  <a href="keybindings.html">Keybindings</a>
-  <a href="config.html" class="active">Config</a>
-</nav>
+<main id="main">
+  <div class="wrap">
+    <h1>Configuration</h1>
+    <p class="lede">lazyhub works with no config. Everything here is optional.</p>
 
-<div class="container">
-  <h1>Configuration</h1>
-  <p class="subtitle">lazyhub is zero-config out of the box. Everything here is optional.</p>
-
-  <h2>Config file location</h2>
-
-  <pre><span class="comment"># macOS / Linux</span>
-~/.config/lazyhub/lazyhub.toml
-
-<span class="comment"># Windows</span>
-%APPDATA%\lazyhub\lazyhub.toml</pre>
-
-  <p>Create the file if it doesn't exist — lazyhub uses sensible defaults for any missing keys.</p>
-
-  <h2>Quick TOML example</h2>
-
-  <p>Configuration uses TOML. This example selects the default panes and theme, and saves a repository fallback:</p>
-
-  <pre>[app]
-active_panes = ["focus", "prs", "issues", "branches", "actions", "notifications"]
-default_pane = "focus"
-
-[theme]
-name = "lazyhub-dark"
+    <h2 id="file">The file</h2>
+    <p>Configuration is TOML at <code>~/.config/lazyhub/lazyhub.toml</code>. The file is sparse: it holds only what you chose, and first run writes a comment header, never a copy of the defaults, so upgrades can change default keys and actions. Changes apply on the next launch. Invalid or unknown values are dropped with a warning (see <code>lazyhub doctor</code>) and the defaults fill in; a broken file never stops lazyhub from starting.</p>
+    <pre><code><span class="p">$ </span>mkdir -p ~/.config/lazyhub &amp;&amp; $EDITOR ~/.config/lazyhub/lazyhub.toml</code></pre>
+    <pre><code>[theme]
+name = "catppuccin-mocha"
 
 [defaults]
-repo = "owner/name"</pre>
+repo = "owner/name"
 
-  <h2>Common settings</h2>
+[app]
+active_panes = ["focus", "prs", "issues"]
+default_pane = "focus"
 
-  <table class="schema-table">
-    <thead>
-      <tr><th>Key</th><th>Type</th><th>Description</th><th>Default</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>app.active_panes</td>
-        <td>string[]</td>
-        <td>Visible panes and their Tab order. The default includes Focus, PRs, Issues, Branches, Actions and Notifications.</td>
-        <td>Focus + 5 panes</td>
-      </tr>
-      <tr>
-        <td>app.default_pane</td>
-        <td>string</td>
-        <td>Pane opened at startup. The default is <code>focus</code>.</td>
-        <td>"focus"</td>
-      </tr>
-      <tr>
-        <td>theme.name</td>
-        <td>string</td>
-        <td>Theme selected for the app; theme overrides can be set in <code>[theme.overrides]</code>.</td>
-        <td>lazyhub-dark</td>
-      </tr>
-      <tr>
-        <td>defaults.repo</td>
-        <td>string</td>
-        <td>Fallback repository in <code>owner/name</code> form when no repository is detected from the current directory.</td>
-        <td>empty</td>
-      </tr>
-    </tbody>
-  </table>
+[state]
+smartEnter = true     # Enter on a PR row jumps to the failing log, Files changed or conflicts</code></pre>
+    <p>The <code>[state]</code> table is owned by lazyhub, which may rewrite it at the end of the file when it remembers a choice (for example a PR filter per repository). Keep hand-written notes elsewhere.</p>
 
-  <h2>Active panes</h2>
+    <h2 id="repo">Which repository opens</h2>
+    <ol>
+      <li><code>--repo owner/name</code> (this launch only, never saved)</li>
+      <li>The repository picked in a first-run flow for this launch</li>
+      <li>The repository detected from the current directory (remote URL or <code>gh repo view</code>)</li>
+      <li><code>[defaults].repo</code>, with <code>[defaults].repo_host</code> the host it was saved under; ignored when <code>GH_HOST</code> differs</li>
+      <li>The interactive picker</li>
+    </ol>
 
-  <p>Set <code>app.active_panes</code> to control which panes are shown and their Tab order. The default configuration includes:</p>
+    <h2 id="themes">Themes and terminals</h2>
+    <p>The default theme uses only your terminal's 16 ANSI colours, so it follows your terminal scheme. Set <code>[theme].name</code> to one of: <code>terminal</code>, <code>lazyhub-dark</code>, <code>lazyhub-light</code>, <code>github-dark</code>, <code>github-light</code>, <code>catppuccin-mocha</code>, <code>catppuccin-latte</code>, <code>tokyo-night</code>, <code>ansi-16</code>, <code>aurora-dark</code>, <code>aurora-light</code>. Individual tokens go in <code>[theme.overrides]</code>, for example <code>"accent.primary" = "#ff7eb6"</code>.</p>
+    <ul>
+      <li><code>[ui].icons</code> is <code>auto</code>, <code>unicode</code> or <code>ascii</code>. Auto picks ASCII on <code>TERM=linux</code> or <code>dumb</code>, non-UTF-8 locales and legacy Windows consoles.</li>
+      <li><code>[ui].no_color = true</code> or a non-empty <code>NO_COLOR</code> drops colour but keeps bold and inverse. <code>FORCE_COLOR</code> and <code>--no-color</code> are honoured, and colour depth follows <code>COLORTERM</code> and <code>TERM</code>.</li>
+      <li><code>[ui].show_hints = false</code> hides the footer key hints.</li>
+    </ul>
 
-  <div class="pane-list">
-    <span class="pane-chip">focus</span>
-    <span class="pane-chip">prs</span>
-    <span class="pane-chip">issues</span>
-    <span class="pane-chip">branches</span>
-    <span class="pane-chip">actions</span>
-    <span class="pane-chip">notifications</span>
+    <h2 id="env">Environment variables</h2>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Variable</th><th scope="col">Effect</th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><code>GH_HOST</code></th><td>The GitHub host, for Enterprise Server. Read by <code>gh</code> and lazyhub.</td></tr>
+        <tr><th scope="row"><code>GH_TOKEN</code></th><td>A token for <code>gh</code>, for scripts and CI.</td></tr>
+        <tr><th scope="row"><code>NO_COLOR</code></th><td>Same as <code>[ui].no_color = true</code> when non-empty.</td></tr>
+        <tr><th scope="row"><code>LAZYHUB_GH_CONCURRENCY</code></th><td>Positive integer, default 4: how many <code>gh</code> processes run at once. Extra calls queue in order. Not a TOML key.</td></tr>
+        <tr><th scope="row"><code>LAZYHUB_PERF</code></th><td>Set to <code>1</code> to record timings to a local file for <code>lazyhub perf report</code>. Nothing is sent anywhere.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h2 id="keys">Keys and actions</h2>
+    <p>Key bindings live in <code>[actions.*]</code> (keys plus label and description) and <code>[keymaps.*]</code>. The shipped defaults are on the <a href="keybindings.html">keybindings page</a>. A binding that matches a value lazyhub once shipped is treated as an old frozen copy and ignored so upgrades can change defaults; actions you define yourself are kept.</p>
+    <p>The <code>[ipc].allow_writes</code> setting (default <code>false</code>) lets editor integrations reply to and resolve review threads; a remote <code>config_url</code> can never set it.</p>
+
+    <h2 id="defaults">Defaults</h2>
+    <!-- gen:config:start -->
+    <p class="muted">Built from <code>src/config/defaultConfig.toml</code> (panes: prs, issues, branches, actions, notifications). Any key you leave out keeps this value.</p>
+    <section id="s-meta" aria-labelledby="h-s-meta">
+      <h3 id="h-s-meta"><code>[meta]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>schema_version</code></th><td><code>&quot;1.0&quot;</code></td><td>bumped on breaking schema changes</td></tr>
+          <tr><th scope="row"><code>config_url</code></th><td><code>&quot;&quot;</code></td><td>optional HTTPS URL; remote may set only theme, layout, ui, diff, pane labels/icons</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-theme" aria-labelledby="h-s-theme">
+      <h3 id="h-s-theme"><code>[theme]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>name</code></th><td><code>&quot;lazyhub-dark&quot;</code></td><td>lazyhub-dark | lazyhub-light | lazyhub-high-contrast | &lt;user&gt;-&lt;repo&gt;</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-defaults" aria-labelledby="h-s-defaults">
+      <h3 id="h-s-defaults"><code>[defaults]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>ai_provider</code></th><td><code>&quot;claude-code&quot;</code></td><td>claude-code | codex | gemini-cli | anthropic-api | openai-compatible</td></tr>
+          <tr><th scope="row"><code>repo</code></th><td><code>&quot;&quot;</code></td><td>owner/name saved by first-run onboarding; used only when no repo is detected from the current directory</td></tr>
+          <tr><th scope="row"><code>repo_host</code></th><td><code>&quot;&quot;</code></td><td>host that repo belongs to; the saved repo is ignored under a different GH_HOST</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-app" aria-labelledby="h-s-app">
+      <h3 id="h-s-app"><code>[app]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>active_panes</code></th><td><code>[&quot;focus&quot;, &quot;prs&quot;, &quot;issues&quot;, &quot;branches&quot;, &quot;actions&quot;, &quot;notifications&quot;]</code></td><td>Panes shown, in Tab order.</td></tr>
+          <tr><th scope="row"><code>default_pane</code></th><td><code>&quot;focus&quot;</code></td><td>Pane opened at startup.</td></tr>
+          <tr><th scope="row"><code>mouse</code></th><td><code>false</code></td><td>Mouse scrolling (also --mouse).</td></tr>
+          <tr><th scope="row"><code>ai_review_enabled</code></th><td><code>true</code></td><td>Allow the AI review actions.</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-panes-prs" aria-labelledby="h-s-panes-prs">
+      <h3 id="h-s-panes-prs"><code>[panes.prs]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>label</code></th><td><code>&quot;Pull Requests&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>icon</code></th><td><code>&quot;⎇&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>description</code></th><td><code>&quot;Review and manage pull requests&quot;</code></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-panes-issues" aria-labelledby="h-s-panes-issues">
+      <h3 id="h-s-panes-issues"><code>[panes.issues]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>label</code></th><td><code>&quot;Issues&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>icon</code></th><td><code>&quot;⚑&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>description</code></th><td><code>&quot;Triage repository issues&quot;</code></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-panes-branches" aria-labelledby="h-s-panes-branches">
+      <h3 id="h-s-panes-branches"><code>[panes.branches]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>label</code></th><td><code>&quot;Branches&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>icon</code></th><td><code>&quot;⌥&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>description</code></th><td><code>&quot;Inspect and checkout branches&quot;</code></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-panes-actions" aria-labelledby="h-s-panes-actions">
+      <h3 id="h-s-panes-actions"><code>[panes.actions]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>label</code></th><td><code>&quot;Actions&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>icon</code></th><td><code>&quot;↯&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>description</code></th><td><code>&quot;Inspect workflow runs&quot;</code></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-panes-notifications" aria-labelledby="h-s-panes-notifications">
+      <h3 id="h-s-panes-notifications"><code>[panes.notifications]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>label</code></th><td><code>&quot;Notifications&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>icon</code></th><td><code>&quot;✦&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>description</code></th><td><code>&quot;Review GitHub notifications&quot;</code></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-features-prs" aria-labelledby="h-s-features-prs">
+      <h3 id="h-s-features-prs"><code>[features.prs]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>default_filter</code></th><td><code>&quot;open&quot;</code></td><td>State filter of the PR list at launch.</td></tr>
+          <tr><th scope="row"><code>default_scope</code></th><td><code>&quot;mine&quot;</code></td><td>mine, reviewing or all. The last scope you used is remembered afterwards.</td></tr>
+          <tr><th scope="row"><code>page_size</code></th><td><code>100</code></td><td>PRs fetched per page.</td></tr>
+          <tr><th scope="row"><code>generated_files</code></th><td><code>[]</code></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-features-issues" aria-labelledby="h-s-features-issues">
+      <h3 id="h-s-features-issues"><code>[features.issues]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>default_filter</code></th><td><code>&quot;open&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>page_size</code></th><td><code>50</code></td><td>Issues fetched per page.</td></tr>
+          <tr><th scope="row"><code>refresh_seconds</code></th><td><code>30</code></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-features-actions" aria-labelledby="h-s-features-actions">
+      <h3 id="h-s-features-actions"><code>[features.actions]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>page_size</code></th><td><code>30</code></td><td>Workflow runs fetched per page.</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-layout" aria-labelledby="h-s-layout">
+      <h3 id="h-s-layout"><code>[layout]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>sidebar_width</code></th><td><code>24</code></td><td>Columns used by the sidebar.</td></tr>
+          <tr><th scope="row"><code>sidebar</code></th><td><code>true</code></td><td>Show the sidebar when the terminal is wide enough.</td></tr>
+          <tr><th scope="row"><code>preview_panel</code></th><td><code>true</code></td><td>Show the PR preview that floats over the list.</td></tr>
+          <tr><th scope="row"><code>preview_width</code></th><td><code>40</code></td><td>Columns used by the preview.</td></tr>
+          <tr><th scope="row"><code>border_style</code></th><td><code>&quot;round&quot;</code></td><td>Border glyph set.</td></tr>
+          <tr><th scope="row"><code>compact_footer</code></th><td><code>false</code></td><td>One-line footer.</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-diff" aria-labelledby="h-s-diff">
+      <h3 id="h-s-diff"><code>[diff]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>default_view</code></th><td><code>&quot;unified&quot;</code></td><td>unified or split.</td></tr>
+          <tr><th scope="row"><code>syntax_highlight</code></th><td><code>true</code></td><td>Highlight code in diffs.</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-editor" aria-labelledby="h-s-editor">
+      <h3 id="h-s-editor"><code>[editor]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>command</code></th><td><code>&quot;auto&quot;</code></td><td>Editor for open-in-editor actions; auto picks one.</td></tr>
+          <tr><th scope="row"><code>custom_command</code></th><td><code>&quot;&quot;</code></td><td>Used when command is set to custom.</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-ipc" aria-labelledby="h-s-ipc">
+      <h3 id="h-s-ipc"><code>[ipc]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>enabled</code></th><td><code>true</code></td><td></td></tr>
+          <tr><th scope="row"><code>allow_writes</code></th><td><code>false</code></td><td>true lets editor integrations reply to/resolve review threads over the IDE socket</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-ui" aria-labelledby="h-s-ui">
+      <h3 id="h-s-ui"><code>[ui]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>show_hints</code></th><td><code>true</code></td><td>false hides the footer key hints (same layout as [layout].compact_footer)</td></tr>
+          <tr><th scope="row"><code>no_color</code></th><td><code>false</code></td><td>also honored when $NO_COLOR is set and non-empty</td></tr>
+          <tr><th scope="row"><code>icons</code></th><td><code>&quot;auto&quot;</code></td><td>auto | unicode | ascii (auto: ASCII on TERM=linux/dumb, non-UTF-8 locales, legacy Windows consoles)</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-ai" aria-labelledby="h-s-ai">
+      <h3 id="h-s-ai"><code>[ai]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>provider</code></th><td><code>&quot;anthropic&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>model</code></th><td><code>&quot;&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>anthropic_api_key</code></th><td><code>&quot;&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>openai_api_key</code></th><td><code>&quot;&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>openai_base_url</code></th><td><code>&quot;&quot;</code></td><td>empty = provider default (OpenAI: api.openai.com, Ollama: localhost:11434)</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-ai-openai-compatible" aria-labelledby="h-s-ai-openai-compatible">
+      <h3 id="h-s-ai-openai-compatible"><code>[ai.openai_compatible]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>base_url</code></th><td><code>&quot;http://localhost:11434/v1&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>api_key</code></th><td><code>&quot;&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>model</code></th><td><code>&quot;qwen2.5-coder:32b&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>timeout_ms</code></th><td><code>60000</code></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-ai-login" aria-labelledby="h-s-ai-login">
+      <h3 id="h-s-ai-login"><code>[ai.login]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>codex</code></th><td><code>false</code></td><td></td></tr>
+          <tr><th scope="row"><code>gemini_cli</code></th><td><code>false</code></td><td></td></tr>
+          <tr><th scope="row"><code>agy</code></th><td><code>false</code></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-ai-second-opinion" aria-labelledby="h-s-ai-second-opinion">
+      <h3 id="h-s-ai-second-opinion"><code>[ai.second_opinion]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>enabled</code></th><td><code>true</code></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-ai-second-opinion-map" aria-labelledby="h-s-ai-second-opinion-map">
+      <h3 id="h-s-ai-second-opinion-map"><code>[ai.second_opinion.map]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>copilot</code></th><td><code>&quot;anthropic-api&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>claude</code></th><td><code>&quot;codex&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>codex</code></th><td><code>&quot;anthropic-api&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>gemini</code></th><td><code>&quot;anthropic-api&quot;</code></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-ai-budget" aria-labelledby="h-s-ai-budget">
+      <h3 id="h-s-ai-budget"><code>[ai.budget]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>monthly_usd_cap</code></th><td><code>0</code></td><td>0 = unlimited</td></tr>
+          <tr><th scope="row"><code>per_call_usd_cap</code></th><td><code>0</code></td><td>0 = unlimited</td></tr>
+          <tr><th scope="row"><code>on_cap_exceeded</code></th><td><code>&quot;warn&quot;</code></td><td>warn | block</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section id="s-agent" aria-labelledby="h-s-agent">
+      <h3 id="h-s-agent"><code>[agent]</code></h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">Default</th><th scope="col">Notes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>auto_spawn_daemon</code></th><td><code>true</code></td><td></td></tr>
+          <tr><th scope="row"><code>mcp_auto_register</code></th><td><code>false</code></td><td></td></tr>
+          <tr><th scope="row"><code>default_scope</code></th><td><code>&quot;read-only&quot;</code></td><td></td></tr>
+          <tr><th scope="row"><code>require_confirm</code></th><td><code>false</code></td><td></td></tr>
+          <tr><th scope="row"><code>audit_log_path</code></th><td><code>&quot;~/.config/lazyhub/audit.log&quot;</code></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <!-- gen:config:end -->
+
+    <h2 id="more">Full reference</h2>
+    <p>The repository's <a href="https://github.com/saketh-kowtha/lazyhub/blob/main/docs/CONFIG_REFERENCE.md">CONFIG_REFERENCE.md</a> covers the remaining tables (AI providers, agent scope, state) and setup behaviour in more detail.</p>
   </div>
-
-  <h3>Show only PRs and Issues</h3>
-  <pre>[app]
-active_panes = ["prs", "issues"]
-default_pane = "prs"</pre>
-
-  <h3>Start with Issues</h3>
-  <pre>[app]
-active_panes = ["focus", "issues", "prs", "branches", "actions", "notifications"]
-default_pane = "issues"</pre>
-
-  <div class="tip">
-    <strong>Tip:</strong> If the selected <code>default_pane</code> is not active, lazyhub falls back to the first active pane.
-  </div>
-
-  <h2>Editing the config live</h2>
-
-  <p>Changes to <code>lazyhub.toml</code> take effect on the next launch. There is no hot-reload — exit lazyhub (<kbd>q</kbd>) and re-open.</p>
-
-  <pre><span class="comment"># Quick edit</span>
-$EDITOR ~/.config/lazyhub/lazyhub.toml
-
-<span class="comment"># Create the directory if it doesn't exist</span>
-mkdir -p ~/.config/lazyhub && $EDITOR ~/.config/lazyhub/lazyhub.toml</pre>
-
-  <h2>Validation</h2>
-
-  <p>lazyhub validates TOML at startup. Invalid or unknown values produce warnings and are ignored; defaults fill in values that were not accepted.</p>
-
-  <h2>Full reference</h2>
-
-  <p>This page covers common settings. See the <a href="CONFIG_REFERENCE.md">TOML configuration reference</a> for the full schema, environment variables, defaults and setup behavior.</p>
-</div>
+</main>
 
 <footer>
-  <p>lazyhub is MIT licensed · <a href="https://github.com/saketh-kowtha/lazyhub">GitHub</a></p>
+  <div class="wrap">
+    <p>lazyhub is MIT licensed, by <a href="https://github.com/saketh-kowtha">Saketh Kowtha</a>. Not an official GitHub product.</p>
+    <p>This site loads no scripts, fonts or trackers.</p>
+  </div>
 </footer>
-
 </body>
 </html>

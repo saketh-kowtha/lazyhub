@@ -1,284 +1,378 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Keybindings — lazyhub</title>
-  <meta name="description" content="Complete keyboard reference for lazyhub — every key, every pane." />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #0d1117; --surface: #161b22; --border: #21262d;
-      --green: #3fb950; --blue: #58a6ff; --purple: #a371f7;
-      --orange: #d29922; --muted: #8b949e; --text: #e6edf3; --dim: #484f58;
-    }
-    html { scroll-behavior: smooth; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
-    a { color: var(--blue); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    nav {
-      background: var(--surface); border-bottom: 1px solid var(--border);
-      padding: .75rem 2rem; display: flex; align-items: center; gap: 2rem; position: sticky; top: 0; z-index: 10;
-    }
-    nav .brand { font-weight: 700; color: var(--blue); font-size: 1.1rem; }
-    nav a { color: var(--muted); font-size: .9rem; }
-    nav a:hover { color: var(--text); }
-    nav a.active { color: var(--blue); }
-
-    .container { max-width: 960px; margin: 0 auto; padding: 3rem 2rem 6rem; }
-    h1 { font-size: 2rem; font-weight: 700; color: var(--text); margin-bottom: .5rem; }
-    .subtitle { color: var(--muted); margin-bottom: 3rem; font-size: 1.05rem; }
-    h2 { font-size: 1.2rem; font-weight: 700; margin: 2.5rem 0 1rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border); }
-
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-    @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
-
-    .card {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-      overflow: hidden;
-    }
-    .card-header {
-      padding: .75rem 1.25rem; border-bottom: 1px solid var(--border);
-      font-weight: 600; font-size: .95rem;
-    }
-    .card-header .icon { margin-right: .5rem; }
-
-    table { width: 100%; border-collapse: collapse; }
-    td { padding: .45rem 1.25rem; font-size: .88rem; border-bottom: 1px solid var(--border); }
-    tr:last-child td { border-bottom: none; }
-    td:first-child { width: 30%; white-space: nowrap; }
-    td:last-child { color: var(--muted); }
-
-    kbd {
-      display: inline-block; background: var(--bg); border: 1px solid var(--border);
-      border-radius: 4px; padding: .1rem .4rem; font-family: monospace; font-size: .82em;
-      color: var(--text); white-space: nowrap;
-    }
-
-    .search-bar {
-      margin-bottom: 2rem;
-    }
-    .search-bar input {
-      width: 100%; padding: .6rem 1rem; background: var(--surface); border: 1px solid var(--border);
-      border-radius: 8px; color: var(--text); font-size: .95rem; outline: none;
-    }
-    .search-bar input:focus { border-color: var(--blue); }
-    .search-bar input::placeholder { color: var(--dim); }
-
-    tr.hidden { display: none; }
-
-    footer { text-align: center; padding: 2rem; color: var(--dim); font-size: .85rem; border-top: 1px solid var(--border); margin-top: 4rem; }
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Keybindings: every lazyhub key</title>
+  <meta name="description" content="Every default lazyhub key by view, generated from the shipped action registry: review queue, PR detail, evidence, claims, collisions, story, why red, diff, comments and more.">
+  <link rel="canonical" href="https://saketh-kowtha.github.io/lazyhub/keybindings.html">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230d1117'/%3E%3Cpath d='M9 8v14h9' fill='none' stroke='%237ee787' stroke-width='3'/%3E%3C/svg%3E">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Keybindings: every lazyhub key">
+  <meta property="og:description" content="Every default key by view, generated from the shipped config.">
+  <meta property="og:url" content="https://saketh-kowtha.github.io/lazyhub/keybindings.html">
+  <meta name="twitter:card" content="summary">
+  <link rel="stylesheet" href="site.css">
 </head>
 <body>
-
-<nav>
-  <span class="brand">lazyhub</span>
-  <a href="index.html">Home</a>
-  <a href="guide.html">Guide</a>
-  <a href="keybindings.html" class="active">Keybindings</a>
-  <a href="config.html">Config</a>
-</nav>
-
-<div class="container">
-  <h1>Keybindings</h1>
-  <p class="subtitle">Every key in every view. Press <kbd>?</kbd> inside lazyhub for context-aware help.</p>
-
-  <div class="search-bar">
-    <input type="text" id="search" placeholder="Filter keybindings…" autocomplete="off" />
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">lazyhub</a>
+    <nav aria-label="Site">
+      <a href="index.html">Home</a>
+      <a href="guide.html">Guide</a>
+      <a href="keybindings.html" aria-current="page">Keybindings</a>
+      <a href="config.html">Config</a>
+      <a href="https://github.com/saketh-kowtha/lazyhub">GitHub</a>
+    </nav>
   </div>
+</header>
 
-  <h2>Global — works everywhere</h2>
-  <div class="grid">
-    <div class="card">
-      <table id="tbl-global">
-        <tr><td><kbd>Tab</kbd></td><td>Next pane</td></tr>
-        <tr><td><kbd>Shift+Tab</kbd></td><td>Previous pane</td></tr>
-        <tr><td><kbd>1</kbd>–<kbd>9</kbd></td><td>Jump to the Nth active pane (list and detail views)</td></tr>
-        <tr><td><kbd>g</kbd> <kbd>h</kbd> / <kbd>p</kbd> / <kbd>i</kbd> / <kbd>b</kbd> / <kbd>a</kbd> / <kbd>n</kbd></td><td>Go to Home / PRs / Issues / Branches / Actions / Notifications (a which-key popup lists them after <kbd>g</kbd>)</td></tr>
-        <tr><td><kbd>Ctrl+A</kbd></td><td>Open AI assistant overlay (read-only)</td></tr>
-        <tr><td><kbd>,</kbd></td><td>Settings</td></tr>
-        <tr><td><kbd>:</kbd> / <kbd>Space</kbd> <kbd>Space</kbd></td><td>Command palette (fuzzy match, recent actions first)</td></tr>
-        <tr><td><kbd>q</kbd> / <kbd>Esc</kbd></td><td>Back one level; <kbd>q</kbd> quits at the root, <kbd>Esc</kbd> never does</td></tr>
-        <tr><td><kbd>?</kbd></td><td>Toggle context-aware help overlay</td></tr>
-        <tr><td><kbd>r</kbd></td><td>Refresh current pane (bypass cache)</td></tr>
-        <tr><td><kbd>o</kbd></td><td>Open current item in browser</td></tr>
-        <tr><td><kbd>/</kbd></td><td>Fuzzy search within current list</td></tr>
-        <tr><td><kbd>j</kbd> / <kbd>↓</kbd></td><td>Move cursor down</td></tr>
-        <tr><td><kbd>k</kbd> / <kbd>↑</kbd></td><td>Move cursor up</td></tr>
-        <tr><td><kbd>gg</kbd></td><td>Jump to top of list</td></tr>
-        <tr><td><kbd>G</kbd></td><td>Jump to bottom of list</td></tr>
-        <tr><td><kbd>y</kbd></td><td>Copy URL of selected item to clipboard</td></tr>
-        <tr><td><kbd>Ctrl+D</kbd></td><td>Write a local debug-state dump</td></tr>
-      </table>
-    </div>
-  </div>
+<main id="main">
+  <div class="wrap">
+    <h1>Keybindings</h1>
+    <p class="lede">The default keys for every view. Press <kbd>?</kbd> inside lazyhub for the keys of the view you are in.</p>
+    <p class="muted">This page is generated from the <code>[actions.*]</code> registry in <code>src/config/defaultConfig.toml</code> by <code>scripts/gen-site.mjs</code>, and a test fails if it drifts. Your own <code>[keymaps.*]</code> and <code>[actions.*]</code> overrides are not reflected. Keys are case-sensitive: <kbd>G</kbd> is Shift+g. A key shown as <kbd>g</kbd> <kbd>h</kbd> is two presses in a row. The <code>Space</code> leader and a few typing fields are not listed here.</p>
 
-  <h2>Focus &amp; Custom Dashboards</h2>
-  <div class="grid">
-    <div class="card">
-      <div class="card-header"><span class="icon">⌂</span> Dashboard View</div>
-      <table id="tbl-focus">
-        <tr><td><kbd>Enter</kbd></td><td>Open selected PR or issue detail</td></tr>
-        <tr><td><kbd>o</kbd></td><td>Open selected item in browser</td></tr>
-        <tr><td><kbd>]</kbd> / <kbd>[</kbd></td><td>Next / previous dashboard section</td></tr>
-        <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Move cursor down / up</td></tr>
-        <tr><td><kbd>gg</kbd> / <kbd>G</kbd></td><td>Jump to top / bottom of section</td></tr>
-        <tr><td><kbd>r</kbd></td><td>Refresh dashboard sections</td></tr>
+    <!-- gen:keys:start -->
+    <nav class="toc" aria-label="Sections">
+      <a href="#global">Everywhere</a>
+      <a href="#queue">Review queue</a>
+      <a href="#focus">Focus and custom tabs</a>
+      <a href="#lists">Lists</a>
+      <a href="#pr-list">Pull request list</a>
+      <a href="#pr-detail">Pull request detail</a>
+      <a href="#story">Review story</a>
+      <a href="#checks">CI checks</a>
+      <a href="#diff">Diff</a>
+      <a href="#comments">PR comments</a>
+      <a href="#issue-list">Issue list</a>
+      <a href="#issue-detail">Issue detail</a>
+      <a href="#branches">Branches</a>
+      <a href="#actions">Actions (workflow runs)</a>
+      <a href="#notifications">Notifications</a>
+      <a href="#leader">Leader (Space)</a>
+      <a href="#dialogs">Dialogs and pickers</a>
+    </nav>
+    <div class="cards">
+    <section class="card" id="global" aria-labelledby="h-global">
+      <h2 id="h-global">Everywhere</h2>
+      <p class="muted">Work in every view that is not typing into a field.</p>
+      <table>
+        <caption class="sr-only">Everywhere keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>Ctrl+A</kbd></th><td>Open the AI assistant overlay</td></tr>
+          <tr><th scope="row"><kbd>Tab</kbd></th><td>Cycle panes forward</td></tr>
+          <tr><th scope="row"><kbd>1</kbd> to <kbd>9</kbd></th><td>Jump to the Nth active pane (list views only)</td></tr>
+          <tr><th scope="row"><kbd>Shift+Tab</kbd></th><td>Cycle panes backward</td></tr>
+          <tr><th scope="row"><kbd>?</kbd></th><td>Toggle contextual help</td></tr>
+          <tr><th scope="row"><kbd>,</kbd></th><td>Open settings</td></tr>
+          <tr><th scope="row"><span class="muted">no default key (command palette)</span></th><td>Open lazyhub.toml in the editor (command palette)</td></tr>
+          <tr><th scope="row"><kbd>q</kbd> or <kbd>Esc</kbd></th><td>Back one level; q quits at the root, Esc never does</td></tr>
+          <tr><th scope="row"><kbd>:</kbd> or <kbd>Space</kbd> <kbd>Space</kbd></th><td>Open the command palette</td></tr>
+          <tr><th scope="row"><kbd>L</kbd></th><td>Open debug logs when LAZYHUB_DEBUG=1</td></tr>
+          <tr><th scope="row"><kbd>Ctrl+D</kbd></th><td>Write a local debug-state dump</td></tr>
+          <tr><th scope="row"><kbd>Space</kbd></th><td>Start a leader-key chord</td></tr>
+          <tr><th scope="row"><kbd>g</kbd> <kbd>h</kbd></th><td>Go to the Home (Focus) pane</td></tr>
+          <tr><th scope="row"><kbd>g</kbd> <kbd>p</kbd></th><td>Go to Pull Requests</td></tr>
+          <tr><th scope="row"><kbd>g</kbd> <kbd>i</kbd></th><td>Go to Issues</td></tr>
+          <tr><th scope="row"><kbd>g</kbd> <kbd>b</kbd></th><td>Go to Branches</td></tr>
+          <tr><th scope="row"><kbd>g</kbd> <kbd>a</kbd></th><td>Go to Actions</td></tr>
+          <tr><th scope="row"><kbd>g</kbd> <kbd>n</kbd></th><td>Go to Notifications</td></tr>
+          <tr><th scope="row"><kbd>g</kbd> <kbd>q</kbd></th><td>Open the review queue: PRs that need your attention, each with why</td></tr>
+        </tbody>
       </table>
+    </section>
+    <section class="card" id="queue" aria-labelledby="h-queue">
+      <h2 id="h-queue">Review queue</h2>
+      <p class="muted">Open it with g q. Each row says why the PR is there.</p>
+      <table>
+        <caption class="sr-only">Review queue keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>Enter</kbd></th><td>Open the selected pull request</td></tr>
+          <tr><th scope="row"><kbd>o</kbd></th><td>Open the selected pull request in the browser</td></tr>
+          <tr><th scope="row"><kbd>]</kbd></th><td>Next status group</td></tr>
+          <tr><th scope="row"><kbd>[</kbd></th><td>Previous status group</td></tr>
+          <tr><th scope="row"><kbd>+</kbd></th><td>Load the next page of review requests and your PRs</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="focus" aria-labelledby="h-focus">
+      <h2 id="h-focus">Focus and custom tabs</h2>
+      <p class="muted">The Focus dashboard and any tab declared in your config.</p>
+      <table>
+        <caption class="sr-only">Focus and custom tabs keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>Enter</kbd></th><td>Open the selected item</td></tr>
+          <tr><th scope="row"><kbd>o</kbd></th><td>Open the selected item in the browser</td></tr>
+          <tr><th scope="row"><kbd>]</kbd></th><td>Next section</td></tr>
+          <tr><th scope="row"><kbd>[</kbd></th><td>Previous section</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="lists" aria-labelledby="h-lists">
+      <h2 id="h-lists">Lists</h2>
+      <p class="muted">Movement and search in every list.</p>
+      <table>
+        <caption class="sr-only">Lists keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>j</kbd> or <kbd>Down</kbd></th><td>Move the cursor down</td></tr>
+          <tr><th scope="row"><kbd>k</kbd> or <kbd>Up</kbd></th><td>Move the cursor up</td></tr>
+          <tr><th scope="row"><kbd>g</kbd> <kbd>g</kbd></th><td>Jump to the top</td></tr>
+          <tr><th scope="row"><kbd>G</kbd></th><td>Jump to the bottom</td></tr>
+          <tr><th scope="row"><kbd>r</kbd></th><td>Refresh the active list</td></tr>
+          <tr><th scope="row"><kbd>/</kbd></th><td>Search the active list</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="pr-list" aria-labelledby="h-pr-list">
+      <h2 id="h-pr-list">Pull request list</h2>
+      <table>
+        <caption class="sr-only">Pull request list keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>Enter</kbd></th><td>Open PR detail</td></tr>
+          <tr><th scope="row"><kbd>d</kbd></th><td>Open PR diff</td></tr>
+          <tr><th scope="row"><kbd>m</kbd></th><td>Merge selected PR</td></tr>
+          <tr><th scope="row"><span class="muted">no default key (command palette)</span></th><td>Toggle auto-merge for selected PR (merge picker m, or command palette)</td></tr>
+          <tr><th scope="row"><kbd>a</kbd></th><td>Approve selected PR</td></tr>
+          <tr><th scope="row"><kbd>x</kbd></th><td>Request changes on selected PR</td></tr>
+          <tr><th scope="row"><kbd>c</kbd></th><td>Comment on the selected PR without opening it</td></tr>
+          <tr><th scope="row"><kbd>X</kbd></th><td>Close selected PR</td></tr>
+          <tr><th scope="row"><kbd>l</kbd></th><td>Edit PR labels</td></tr>
+          <tr><th scope="row"><kbd>A</kbd></th><td>Edit PR assignees</td></tr>
+          <tr><th scope="row"><kbd>R</kbd></th><td>Request PR reviewers</td></tr>
+          <tr><th scope="row"><kbd>b</kbd></th><td>Checkout PR branch locally</td></tr>
+          <tr><th scope="row"><kbd>y</kbd></th><td>Copy PR URL to clipboard</td></tr>
+          <tr><th scope="row"><kbd>o</kbd></th><td>Open PR in browser</td></tr>
+          <tr><th scope="row"><kbd>f</kbd></th><td>Cycle PR filter state</td></tr>
+          <tr><th scope="row"><kbd>O</kbd></th><td>Toggle open PRs</td></tr>
+          <tr><th scope="row"><kbd>C</kbd></th><td>Toggle closed PRs</td></tr>
+          <tr><th scope="row"><kbd>M</kbd></th><td>Toggle merged PRs</td></tr>
+          <tr><th scope="row"><kbd>s</kbd></th><td>Cycle PR list scope</td></tr>
+          <tr><th scope="row"><kbd>@</kbd></th><td>Filter PRs by author</td></tr>
+          <tr><th scope="row"><kbd>p</kbd></th><td>Show or hide the PR preview panel</td></tr>
+          <tr><th scope="row"><kbd>n</kbd></th><td>Create a new PR</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="pr-detail" aria-labelledby="h-pr-detail">
+      <h2 id="h-pr-detail">Pull request detail</h2>
+      <p class="muted">Includes the read-only evidence, claims, collisions, story and why-red views.</p>
+      <table>
+        <caption class="sr-only">Pull request detail keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>d</kbd></th><td>Open PR diff</td></tr>
+          <tr><th scope="row"><kbd>m</kbd></th><td>Merge selected PR</td></tr>
+          <tr><th scope="row"><span class="muted">no default key (command palette)</span></th><td>Toggle auto-merge for selected PR (merge picker m, or command palette)</td></tr>
+          <tr><th scope="row"><kbd>a</kbd></th><td>Approve selected PR</td></tr>
+          <tr><th scope="row"><kbd>x</kbd></th><td>Request changes on selected PR</td></tr>
+          <tr><th scope="row"><kbd>X</kbd></th><td>Close selected PR</td></tr>
+          <tr><th scope="row"><kbd>l</kbd></th><td>Edit PR labels</td></tr>
+          <tr><th scope="row"><kbd>A</kbd></th><td>Edit PR assignees</td></tr>
+          <tr><th scope="row"><kbd>R</kbd></th><td>Request PR reviewers</td></tr>
+          <tr><th scope="row"><kbd>o</kbd></th><td>Open PR in browser</td></tr>
+          <tr><th scope="row"><kbd>c</kbd></th><td>Enter checks navigation mode</td></tr>
+          <tr><th scope="row"><kbd>f</kbd></th><td>Why is CI red? Failing check, log excerpt and the PR lines that likely caused it</td></tr>
+          <tr><th scope="row"><kbd>C</kbd></th><td>Resolve conflicts, or open Actions for this branch</td></tr>
+          <tr><th scope="row"><kbd>D</kbd></th><td>Toggle draft / ready for review</td></tr>
+          <tr><th scope="row"><kbd>B</kbd></th><td>Change the base branch</td></tr>
+          <tr><th scope="row"><kbd>K</kbd></th><td>Show open PRs that overlap this one and a suggested merge order</td></tr>
+          <tr><th scope="row"><kbd>v</kbd></th><td>Open the comments view</td></tr>
+          <tr><th scope="row"><kbd>V</kbd></th><td>Check the claims in the PR description against the diff</td></tr>
+          <tr><th scope="row"><kbd>e</kbd></th><td>Read-only review evidence: facts, sources, freshness and the inspected head</td></tr>
+          <tr><th scope="row"><kbd>E</kbd></th><td>Open the first changed file, or the cursor line in the diff, in $EDITOR</td></tr>
+          <tr><th scope="row"><kbd>s</kbd></th><td>Review story: a guided step-by-step walkthrough of the diff</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="story" aria-labelledby="h-story">
+      <h2 id="h-story">Review story</h2>
+      <p class="muted">Opened with s from a pull request.</p>
+      <table>
+        <caption class="sr-only">Review story keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>n</kbd></th><td>Next step of the review story</td></tr>
+          <tr><th scope="row"><kbd>p</kbd></th><td>Previous step of the review story</td></tr>
+          <tr><th scope="row"><kbd>Enter</kbd></th><td>Open the diff at the selected file</td></tr>
+          <tr><th scope="row"><kbd>Space</kbd></th><td>Expand or collapse the noise step</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="checks" aria-labelledby="h-checks">
+      <h2 id="h-checks">CI checks</h2>
+      <table>
+        <caption class="sr-only">CI checks keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>f</kbd></th><td>Why is CI red? Failing check, log excerpt and the PR lines that likely caused it</td></tr>
+          <tr><th scope="row"><kbd>Enter</kbd></th><td>Show the selected check log</td></tr>
+          <tr><th scope="row"><kbd>o</kbd></th><td>Open the selected check in the browser</td></tr>
+          <tr><th scope="row"><kbd>Ctrl+R</kbd></th><td>Re-run the selected check</td></tr>
+          <tr><th scope="row"><kbd>Esc</kbd></th><td>Leave checks mode</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="diff" aria-labelledby="h-diff">
+      <h2 id="h-diff">Diff</h2>
+      <table>
+        <caption class="sr-only">Diff keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>m</kbd></th><td>Merge selected PR</td></tr>
+          <tr><th scope="row"><kbd>a</kbd></th><td>Approve selected PR</td></tr>
+          <tr><th scope="row"><kbd>x</kbd></th><td>Request changes on selected PR</td></tr>
+          <tr><th scope="row"><kbd>o</kbd></th><td>Open PR in browser</td></tr>
+          <tr><th scope="row"><kbd>v</kbd></th><td>Open the comments view</td></tr>
+          <tr><th scope="row"><kbd>E</kbd></th><td>Open the first changed file, or the cursor line in the diff, in $EDITOR</td></tr>
+          <tr><th scope="row"><kbd>t</kbd></th><td>Jump to a file in the diff</td></tr>
+          <tr><th scope="row"><kbd>T</kbd></th><td>Toggle the file tree</td></tr>
+          <tr><th scope="row"><kbd>]</kbd></th><td>Jump to the next file</td></tr>
+          <tr><th scope="row"><kbd>[</kbd></th><td>Jump to the previous file</td></tr>
+          <tr><th scope="row"><kbd>}</kbd></th><td>Jump to the next comment thread</td></tr>
+          <tr><th scope="row"><kbd>{</kbd></th><td>Jump to the previous comment thread</td></tr>
+          <tr><th scope="row"><kbd>n</kbd></th><td>Next search match</td></tr>
+          <tr><th scope="row"><kbd>N</kbd></th><td>Previous search match</td></tr>
+          <tr><th scope="row"><kbd>w</kbd></th><td>Toggle split / unified view</td></tr>
+          <tr><th scope="row"><kbd>g</kbd> <kbd>l</kbd></th><td>Jump to a line number</td></tr>
+          <tr><th scope="row"><kbd>c</kbd></th><td>Comment on the cursor line, or reply when the line has a thread</td></tr>
+          <tr><th scope="row"><kbd>e</kbd></th><td>Edit your comment on the cursor line</td></tr>
+          <tr><th scope="row"><kbd>Ctrl+X</kbd></th><td>Delete your comment on the cursor line (confirms)</td></tr>
+          <tr><th scope="row"><kbd>A</kbd></th><td>Run an AI code review of the diff</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="comments" aria-labelledby="h-comments">
+      <h2 id="h-comments">PR comments</h2>
+      <table>
+        <caption class="sr-only">PR comments keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>c</kbd></th><td>Reply to the selected comment</td></tr>
+          <tr><th scope="row"><kbd>e</kbd></th><td>Edit the selected comment</td></tr>
+          <tr><th scope="row"><kbd>Ctrl+X</kbd></th><td>Delete the selected comment (confirms)</td></tr>
+          <tr><th scope="row"><kbd>z</kbd></th><td>Resolve the selected thread</td></tr>
+          <tr><th scope="row"><kbd>f</kbd></th><td>Cycle all / open / resolved</td></tr>
+          <tr><th scope="row"><kbd>J</kbd></th><td>Jump to this line in the diff</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="issue-list" aria-labelledby="h-issue-list">
+      <h2 id="h-issue-list">Issue list</h2>
+      <table>
+        <caption class="sr-only">Issue list keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>Enter</kbd></th><td>Open issue detail</td></tr>
+          <tr><th scope="row"><kbd>n</kbd></th><td>Create an issue</td></tr>
+          <tr><th scope="row"><kbd>X</kbd></th><td>Close selected issue</td></tr>
+          <tr><th scope="row"><kbd>l</kbd></th><td>Edit issue labels</td></tr>
+          <tr><th scope="row"><kbd>A</kbd></th><td>Edit issue assignees</td></tr>
+          <tr><th scope="row"><kbd>y</kbd></th><td>Copy issue URL</td></tr>
+          <tr><th scope="row"><kbd>o</kbd></th><td>Open issue in browser</td></tr>
+          <tr><th scope="row"><kbd>f</kbd></th><td>Cycle issue filter state</td></tr>
+          <tr><th scope="row"><kbd>O</kbd></th><td>Toggle open issues</td></tr>
+          <tr><th scope="row"><kbd>C</kbd></th><td>Toggle closed issues</td></tr>
+          <tr><th scope="row"><kbd>s</kbd></th><td>Cycle issue sort order</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="issue-detail" aria-labelledby="h-issue-detail">
+      <h2 id="h-issue-detail">Issue detail</h2>
+      <table>
+        <caption class="sr-only">Issue detail keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>l</kbd></th><td>Edit issue labels</td></tr>
+          <tr><th scope="row"><kbd>A</kbd></th><td>Edit issue assignees</td></tr>
+          <tr><th scope="row"><kbd>o</kbd></th><td>Open issue in browser</td></tr>
+          <tr><th scope="row"><kbd>c</kbd></th><td>Comment on the issue</td></tr>
+          <tr><th scope="row"><kbd>Q</kbd></th><td>Quote-reply to the selected comment</td></tr>
+          <tr><th scope="row"><kbd>e</kbd></th><td>Edit your selected comment</td></tr>
+          <tr><th scope="row"><kbd>Ctrl+X</kbd></th><td>Delete your selected comment (confirms)</td></tr>
+          <tr><th scope="row"><kbd>n</kbd></th><td>Load comments that arrived while you were reading</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="branches" aria-labelledby="h-branches">
+      <h2 id="h-branches">Branches</h2>
+      <table>
+        <caption class="sr-only">Branches keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>Enter</kbd></th><td>Checkout selected branch</td></tr>
+          <tr><th scope="row"><kbd>n</kbd></th><td>Create a new branch</td></tr>
+          <tr><th scope="row"><kbd>Ctrl+X</kbd></th><td>Delete selected branch</td></tr>
+          <tr><th scope="row"><kbd>p</kbd></th><td>Push current branch</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="actions" aria-labelledby="h-actions">
+      <h2 id="h-actions">Actions (workflow runs)</h2>
+      <table>
+        <caption class="sr-only">Actions (workflow runs) keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>Enter</kbd> or <kbd>l</kbd></th><td>Open workflow run logs</td></tr>
+          <tr><th scope="row"><kbd>Ctrl+R</kbd></th><td>Re-run selected workflow run</td></tr>
+          <tr><th scope="row"><kbd>X</kbd></th><td>Cancel selected workflow run</td></tr>
+          <tr><th scope="row"><kbd>F</kbd></th><td>Clear workflow branch filter</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="notifications" aria-labelledby="h-notifications">
+      <h2 id="h-notifications">Notifications</h2>
+      <table>
+        <caption class="sr-only">Notifications keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>Enter</kbd></th><td>Open selected notification target</td></tr>
+          <tr><th scope="row"><kbd>u</kbd></th><td>Mark selected notification as read</td></tr>
+          <tr><th scope="row"><kbd>U</kbd></th><td>Mark all notifications as read</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="leader" aria-labelledby="h-leader">
+      <h2 id="h-leader">Leader (Space)</h2>
+      <p class="muted">Press Space, then one of these.</p>
+      <table>
+        <caption class="sr-only">Leader (Space) keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>t</kbd></th><td>Open theme controls from leader mode</td></tr>
+          <tr><th scope="row"><kbd>a</kbd></th><td>Open AI assistant from leader mode</td></tr>
+          <tr><th scope="row"><kbd>?</kbd></th><td>Open help from leader mode</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="dialogs" aria-labelledby="h-dialogs">
+      <h2 id="h-dialogs">Dialogs and pickers</h2>
+      <table>
+        <caption class="sr-only">Dialogs and pickers keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>/</kbd></th><td>Filter log output</td></tr>
+          <tr><th scope="row"><kbd>f</kbd></th><td>Switch between the failure excerpt and the full log</td></tr>
+          <tr><th scope="row"><kbd>Esc</kbd></th><td>Cancel or close the active dialog</td></tr>
+          <tr><th scope="row"><kbd>Enter</kbd></th><td>Confirm the current dialog action</td></tr>
+          <tr><th scope="row"><kbd>j</kbd> or <kbd>Down</kbd></th><td>Move down in a dialog list</td></tr>
+          <tr><th scope="row"><kbd>k</kbd> or <kbd>Up</kbd></th><td>Move up in a dialog list</td></tr>
+          <tr><th scope="row"><kbd>g</kbd></th><td>Jump to the top of a dialog list</td></tr>
+          <tr><th scope="row"><kbd>G</kbd></th><td>Jump to the bottom of a dialog list</td></tr>
+          <tr><th scope="row"><kbd>Space</kbd></th><td>Toggle current selection</td></tr>
+          <tr><th scope="row"><kbd>Ctrl+G</kbd></th><td>Submit composed form content</td></tr>
+          <tr><th scope="row"><kbd>Ctrl+E</kbd></th><td>Open the current field in $EDITOR</td></tr>
+          <tr><th scope="row"><em>type</em></th><td>Type to filter in real time</td></tr>
+          <tr><th scope="row"><kbd>Tab</kbd></th><td>Move to the next form field</td></tr>
+          <tr><th scope="row"><kbd>y</kbd></th><td>Confirm a prompt</td></tr>
+          <tr><th scope="row"><kbd>n</kbd> or <kbd>Esc</kbd></th><td>Cancel a prompt</td></tr>
+          <tr><th scope="row"><kbd>Up</kbd> or <kbd>Ctrl+K</kbd></th><td>Move up while typing in a filter dialog</td></tr>
+          <tr><th scope="row"><kbd>Down</kbd> or <kbd>Ctrl+J</kbd></th><td>Move down while typing in a filter dialog</td></tr>
+          <tr><th scope="row"><kbd>Ctrl+T</kbd></th><td>Jump to top while typing in a filter dialog</td></tr>
+          <tr><th scope="row"><kbd>Ctrl+B</kbd></th><td>Jump to bottom while typing in a filter dialog</td></tr>
+        </tbody>
+      </table>
+    </section>
     </div>
+    <!-- gen:keys:end -->
   </div>
-
-  <h2>Pull Requests</h2>
-  <div class="grid">
-    <div class="card">
-      <div class="card-header"><span class="icon">⎇</span> PR List</div>
-      <table id="tbl-prs">
-        <tr><td><kbd>Enter</kbd></td><td>Open PR detail view</td></tr>
-        <tr><td><kbd>d</kbd></td><td>Open diff view</td></tr>
-        <tr><td><kbd>b</kbd></td><td>Checkout PR branch locally</td></tr>
-        <tr><td><kbd>m</kbd></td><td>Merge (pick merge/squash/rebase)</td></tr>
-        <tr><td><kbd>M</kbd></td><td>Toggle merged filter</td></tr>
-        <tr><td><kbd>a</kbd></td><td>Approve PR</td></tr>
-        <tr><td><kbd>x</kbd></td><td>Request changes</td></tr>
-        <tr><td><kbd>X</kbd></td><td>Close PR</td></tr>
-        <tr><td><kbd>n</kbd></td><td>Create a new PR</td></tr>
-        <tr><td><kbd>l</kbd></td><td>Edit labels (multi-select)</td></tr>
-        <tr><td><kbd>A</kbd></td><td>Edit assignees (multi-select)</td></tr>
-        <tr><td><kbd>R</kbd></td><td>Request reviewers (multi-select)</td></tr>
-        <tr><td><kbd>f</kbd> / <kbd>O</kbd> / <kbd>C</kbd></td><td>Cycle filter (open → closed → merged) or toggle open / closed</td></tr>
-        <tr><td><kbd>s</kbd> / <kbd>@</kbd></td><td>Cycle PR scope / filter by author</td></tr>
-      </table>
-    </div>
-    <div class="card">
-      <div class="card-header"><span class="icon">⎇</span> PR Detail</div>
-      <table id="tbl-pr-detail">
-        <tr><td><kbd>d</kbd></td><td>Open diff view</td></tr>
-        <tr><td><kbd>v</kbd></td><td>Open comments view</td></tr>
-        <tr><td><kbd>c</kbd></td><td>Enter checks navigation (<kbd>Enter</kbd> log, <kbd>o</kbd> browser, <kbd>Ctrl+R</kbd> re-run, <kbd>Esc</kbd> exit)</td></tr>
-        <tr><td><kbd>C</kbd></td><td>Resolve conflicts, or open Actions for this branch</td></tr>
-        <tr><td><kbd>D</kbd> / <kbd>B</kbd></td><td>Toggle draft state / change base branch</td></tr>
-        <tr><td><kbd>E</kbd></td><td>Open first changed file in $EDITOR</td></tr>
-        <tr><td><kbd>m</kbd> / <kbd>M</kbd></td><td>Merge PR (picker includes auto-merge) / toggle merged filter (list)</td></tr>
-        <tr><td><kbd>a</kbd> / <kbd>x</kbd> / <kbd>X</kbd></td><td>Approve / request changes / close PR</td></tr>
-        <tr><td><kbd>l</kbd> / <kbd>A</kbd> / <kbd>R</kbd></td><td>Edit labels / assignees / reviewers</td></tr>
-      </table>
-    </div>
-    <div class="card">
-      <div class="card-header"><span class="icon">⎇</span> Diff View</div>
-      <table id="tbl-diff">
-        <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Scroll lines down / up</td></tr>
-        <tr><td><kbd>]</kbd></td><td>Jump to next file</td></tr>
-        <tr><td><kbd>[</kbd></td><td>Jump to previous file</td></tr>
-        <tr><td><kbd>}</kbd></td><td>Next comment thread</td></tr>
-        <tr><td><kbd>{</kbd></td><td>Previous comment thread</td></tr>
-        <tr><td><kbd>n</kbd> / <kbd>N</kbd></td><td>Next / previous search match</td></tr>
-        <tr><td><kbd>t</kbd> / <kbd>T</kbd></td><td>Jump to file / toggle file tree</td></tr>
-        <tr><td><kbd>g</kbd> <kbd>l</kbd></td><td>Go to line</td></tr>
-        <tr><td><kbd>c</kbd></td><td>Comment on cursor line (replies when the line has a thread)</td></tr>
-        <tr><td><kbd>e</kbd> / <kbd>Ctrl+X</kbd></td><td>Edit / delete your comment on the cursor line</td></tr>
-        <tr><td><kbd>v</kbd></td><td>Switch to comments view</td></tr>
-        <tr><td><kbd>w</kbd></td><td>Toggle split / unified view</td></tr>
-        <tr><td><kbd>E</kbd></td><td>Open cursor line in $EDITOR</td></tr>
-        <tr><td><kbd>A</kbd></td><td>Run AI code review of the diff</td></tr>
-        <tr><td><kbd>gg</kbd></td><td>Jump to top</td></tr>
-        <tr><td><kbd>G</kbd></td><td>Jump to bottom</td></tr>
-        <tr><td><kbd>Esc</kbd></td><td>Back to PR detail</td></tr>
-      </table>
-    </div>
-    <div class="card">
-      <div class="card-header"><span class="icon">💬</span> Comment Compose &amp; Threads</div>
-      <table id="tbl-comment">
-        <tr><td><kbd>Tab</kbd></td><td>Cycle comment type / next field</td></tr>
-        <tr><td><kbd>Ctrl+E</kbd></td><td>Open $EDITOR for full body</td></tr>
-        <tr><td><kbd>Ctrl+G</kbd> / <kbd>Ctrl+Enter</kbd></td><td>Submit comment</td></tr>
-        <tr><td><kbd>z</kbd> / <kbd>J</kbd> / <kbd>f</kbd></td><td>In comments view: resolve thread / jump to diff / filter</td></tr>
-        <tr><td><kbd>Esc</kbd></td><td>Cancel</td></tr>
-      </table>
-    </div>
-  </div>
-
-  <h2>Issues</h2>
-  <div class="grid">
-    <div class="card">
-      <div class="card-header"><span class="icon">○</span> Issue List</div>
-      <table id="tbl-issues">
-        <tr><td><kbd>Enter</kbd></td><td>Open issue detail (<kbd>c</kbd> to comment in detail view)</td></tr>
-        <tr><td><kbd>n</kbd></td><td>New issue (compose form)</td></tr>
-        <tr><td><kbd>X</kbd></td><td>Close issue (confirm dialog)</td></tr>
-        <tr><td><kbd>l</kbd></td><td>Edit labels (multi-select)</td></tr>
-        <tr><td><kbd>A</kbd></td><td>Edit assignees (multi-select)</td></tr>
-        <tr><td><kbd>f</kbd> / <kbd>O</kbd> / <kbd>C</kbd></td><td>Cycle filter (open → closed) or toggle open / closed</td></tr>
-        <tr><td><kbd>s</kbd></td><td>Cycle sort order</td></tr>
-      </table>
-    </div>
-  </div>
-
-  <h2>Branches</h2>
-  <div class="grid">
-    <div class="card">
-      <div class="card-header"><span class="icon">⎇</span> Branch List</div>
-      <table id="tbl-branches">
-        <tr><td><kbd>Enter</kbd></td><td>Checkout branch</td></tr>
-        <tr><td><kbd>n</kbd></td><td>New branch (prompt for name + base)</td></tr>
-        <tr><td><kbd>Ctrl+X</kbd></td><td>Delete branch (confirm, warns if open PR)</td></tr>
-        <tr><td><kbd>p</kbd></td><td>Push current branch to remote</td></tr>
-      </table>
-    </div>
-  </div>
-
-  <h2>Actions</h2>
-  <div class="grid">
-    <div class="card">
-      <div class="card-header"><span class="icon">▶</span> Actions List</div>
-      <table id="tbl-actions">
-        <tr><td><kbd>Enter</kbd> / <kbd>l</kbd></td><td>View run logs (log viewer)</td></tr>
-        <tr><td><kbd>Ctrl+R</kbd></td><td>Re-run failed jobs</td></tr>
-        <tr><td><kbd>X</kbd></td><td>Cancel run (confirm dialog)</td></tr>
-        <tr><td><kbd>F</kbd></td><td>Clear branch filter</td></tr>
-      </table>
-    </div>
-    <div class="card">
-      <div class="card-header"><span class="icon">📋</span> Log Viewer</div>
-      <table id="tbl-logs">
-        <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Scroll down / up</td></tr>
-        <tr><td><kbd>gg</kbd></td><td>Jump to top</td></tr>
-        <tr><td><kbd>G</kbd></td><td>Jump to bottom</td></tr>
-        <tr><td><kbd>f</kbd></td><td>Filter log lines</td></tr>
-        <tr><td><kbd>Esc</kbd></td><td>Back</td></tr>
-      </table>
-    </div>
-  </div>
-
-  <h2>Notifications</h2>
-  <div class="grid">
-    <div class="card">
-      <div class="card-header"><span class="icon">●</span> Notification List</div>
-      <table id="tbl-notifications">
-        <tr><td><kbd>Enter</kbd></td><td>Open item (routes to correct pane)</td></tr>
-        <tr><td><kbd>u</kbd></td><td>Mark current as read</td></tr>
-        <tr><td><kbd>U</kbd></td><td>Mark all as read (confirm)</td></tr>
-      </table>
-    </div>
-  </div>
-</div>
+</main>
 
 <footer>
-  <p>lazyhub is MIT licensed · <a href="https://github.com/saketh-kowtha/lazyhub">GitHub</a></p>
+  <div class="wrap">
+    <p>lazyhub is MIT licensed, by <a href="https://github.com/saketh-kowtha">Saketh Kowtha</a>. Not an official GitHub product.</p>
+    <p>This site loads no scripts, fonts or trackers.</p>
+  </div>
 </footer>
-
-<script>
-  const input = document.getElementById('search')
-  input.addEventListener('input', () => {
-    const q = input.value.toLowerCase()
-    document.querySelectorAll('table tr').forEach(tr => {
-      if (!q) { tr.classList.remove('hidden'); return }
-      const text = tr.textContent.toLowerCase()
-      tr.classList.toggle('hidden', !text.includes(q))
-    })
-  })
-</script>
-
 </body>
 </html>
