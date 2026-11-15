@@ -143,8 +143,13 @@ describe('every key-bearing action has an owner (#485)', () => {
   const PANE_SCOPES = new Set(['pr-list', 'issue-list', 'branch-list', 'workflow-list', 'notification-list', 'tab-list',
     'pr-detail', 'pr-checks', 'pr-story', 'pr-comments', 'diff', 'issue-detail', 'queue-list'])
 
+  // Full-screen sub-views and overlays outside the (pane, view) model. Their handlers call
+  // matchesAction() with these ids; #312 moved them off hard-coded letters.
+  const MODAL_VIEW_SCOPES = new Set(['settings', 'conflict', 'new-pr', 'collisions', 'logs',
+    'custom-pane', 'ai', 'onboarding'])
+
   it('declares only scopes that a context resolves, so no key is bound where nothing listens', () => {
-    const known = new Set([...SHELL_SCOPES, ...PANE_SCOPES])
+    const known = new Set([...SHELL_SCOPES, ...PANE_SCOPES, ...MODAL_VIEW_SCOPES])
     const stray = []
     for (const [id, action] of Object.entries(config.actions)) {
       if (!action.keys.length) continue

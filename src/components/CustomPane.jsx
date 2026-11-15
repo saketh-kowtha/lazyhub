@@ -31,10 +31,11 @@
  *   Supports action value: "open" (same as o), "copy" (same as y)
  */
 
-import React, { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react'
+import React, { useState, useCallback, useEffect, useMemo, memo } from 'react'
 import { openUrl, copyToClipboard, runConfiguredCommand } from '../services/platform.js'
 import { Box, Text, useStdout } from 'ink'
 import { useInput } from '../hooks/useSafeInput.js'
+import { useActionResolver } from '../config/keymap.js'
 import { format } from 'timeago.js'
 import { FuzzySearch } from './dialogs/FuzzySearch.jsx'
 import { useKeyScope } from '../keyscope.js'
@@ -99,8 +100,7 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
   const [scrollOffset, setScrollOffset] = useState(0)
   const [dialog, setDialog]       = useState(null)
   const [statusMsg, setStatusMsg] = useState(null)
-  const lastKeyRef   = useRef(null)
-  const lastKeyTimer = useRef(null)
+  const resolve = useActionResolver(['tab-list', 'custom-pane'])
 
   const showStatus = (msg, isError = false) => {
     setStatusMsg({ msg, isError })
@@ -177,37 +177,26 @@ export function CustomPane({ paneDef, repo, listHeight = 10, onPaneState }) {
   }, [])
 
   useInput((input, key) => {
-    // gg → top
-    if (input === 'g') {
-      if (lastKeyRef.current === 'g') {
-        clearTimeout(lastKeyTimer.current)
-        lastKeyRef.current = null
-        setCursor(0); setScrollOffset(0)
-        return
-      }
-      lastKeyRef.current = 'g'
-      lastKeyTimer.current = setTimeout(() => { lastKeyRef.current = null }, 400)
-      return
-    }
-    lastKeyRef.current = null
-
-    if (input === 'G') {
+    // Chords (gg) and keys resolve through the registry, so a [keymaps.*] rebind reaches this pane.
+    const action = resolve(input, key)
+    if (action === 'cursor.top') { setCursor(0); setScrollOffset(0); return }
+    if (action === 'cursor.bottom') {
       if (items.length > 0) {
         const last = items.length - 1
         setCursor(last); setScrollOffset(Math.max(0, last - visibleHeight + 1))
       }
       return
     }
-    if (input === 'j' || key.downArrow) { moveCursor(1);  return }
-    if (input === 'k' || key.upArrow)   { moveCursor(-1); return }
-    if (input === 'r') { refetch(); return }
-    if (input === '/') { setDialog('fuzzy'); return }
+    if (action === 'cursor.down') { moveCursor(1);  return }
+    if (action === 'cursor.up')   { moveCursor(-1); return }
+    if (action === 'list.refresh') { refetch(); return }
+    if (action === 'list.search') { setDialog('fuzzy'); return }
 
     if (!selectedItem) return
 
     // Built-in actions
-    if (input === 'y') { copyUrl(selectedItem.url); return }
-    if (input === 'o') { openInBrowser(selectedItem.url); return }
+    if (action === 'custom.copy-url') { copyUrl(selectedItem.url); return }
+    if (action === 'tab.open-browser') { openInBrowser(selectedItem.url); return }
 
     // User-defined actions
     const userActions = paneDef.actions || {}

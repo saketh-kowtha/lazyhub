@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react'
 import { Box, Text } from 'ink'
 import { useInput } from '../hooks/useSafeInput.js'
+import { matchesAction } from '../config/actions.js'
 import { useTheme } from '../theme.js'
 import { useKeyScope } from '../keyscope.js'
 import { AppContext } from '../context.js'
@@ -91,23 +92,23 @@ export function AIAssistant({ repo, pane, selectedItem, onClose, onNavigate, aiC
 
     // Navigation prompt takes priority
     if (navPrompt) {
-      if (input === 'y' || key.return) {
+      if (matchesAction('dialog.yes', input, key) || matchesAction('dialog.confirm', input, key)) {
         const nav = navPrompt
         setNavPrompt(null)
         onNavigate(nav)
         return
       }
-      if (input === 'n' || key.escape) { setNavPrompt(null); return }
+      if (matchesAction('dialog.no', input, key)) { setNavPrompt(null); return }
       return
     }
 
     if (key.escape) { onClose(); return }
 
     // Scroll bindings avoid plain j/k/g/G — those are typed into the prompt.
-    if (key.downArrow || (key.ctrl && input === 'j')) { setScrollOffset(s => Math.min(s + 1, maxOffset)); return }
-    if (key.upArrow   || (key.ctrl && input === 'k')) { setScrollOffset(s => Math.max(0, s - 1));         return }
-    if (key.pageDown || (key.ctrl && input === 'G')) { setScrollOffset(maxOffset); return }
-    if (key.pageUp   || (key.ctrl && input === 'g')) { setScrollOffset(0);         return }
+    if (matchesAction('dialog.filter-down', input, key)) { setScrollOffset(s => Math.min(s + 1, maxOffset)); return }
+    if (matchesAction('dialog.filter-up', input, key)) { setScrollOffset(s => Math.max(0, s - 1));         return }
+    if (matchesAction('assistant.scroll-end', input, key)) { setScrollOffset(maxOffset); return }
+    if (matchesAction('assistant.scroll-top', input, key) || (key.ctrl && input === 'g')) { setScrollOffset(0);         return }
   })
 
   // ─── Submit message ───────────────────────────────────────────────────────

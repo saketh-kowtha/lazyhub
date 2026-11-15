@@ -54,6 +54,14 @@
       <a href="#notifications">Notifications</a>
       <a href="#leader">Leader (Space)</a>
       <a href="#dialogs">Dialogs and pickers</a>
+      <a href="#settings">Settings</a>
+      <a href="#conflict">Resolve conflicts</a>
+      <a href="#new-pr">New pull request</a>
+      <a href="#collisions">Collisions radar</a>
+      <a href="#logs">Debug logs</a>
+      <a href="#ai">AI review and assistant</a>
+      <a href="#custom-pane">Custom panes</a>
+      <a href="#onboarding">First-run setup</a>
     </nav>
     <div class="cards">
     <section class="card" id="global" aria-labelledby="h-global">
@@ -360,6 +368,96 @@
           <tr><th scope="row"><kbd>Down</kbd> or <kbd>Ctrl+J</kbd></th><td>Move down while typing in a filter dialog</td></tr>
           <tr><th scope="row"><kbd>Ctrl+T</kbd></th><td>Jump to top while typing in a filter dialog</td></tr>
           <tr><th scope="row"><kbd>Ctrl+B</kbd></th><td>Jump to bottom while typing in a filter dialog</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="settings" aria-labelledby="h-settings">
+      <h2 id="h-settings">Settings</h2>
+      <p class="muted">Opened with a comma. Movement and Esc use the shared list and back keys.</p>
+      <table>
+        <caption class="sr-only">Settings keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>s</kbd></th><td>Configure the OpenAI-compatible endpoint</td></tr>
+          <tr><th scope="row"><kbd>s</kbd></th><td>Save the form (Ctrl+G also saves)</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="conflict" aria-labelledby="h-conflict">
+      <h2 id="h-conflict">Resolve conflicts</h2>
+      <p class="muted">Opened with C from a conflicting pull request.</p>
+      <table>
+        <caption class="sr-only">Resolve conflicts keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>s</kbd></th><td>Prepare the local merge so conflicts can be resolved</td></tr>
+          <tr><th scope="row"><kbd>e</kbd></th><td>Open the selected conflicted file in the editor</td></tr>
+          <tr><th scope="row"><kbd>Space</kbd></th><td>Stage or unstage the selected file</td></tr>
+          <tr><th scope="row"><kbd>c</kbd></th><td>Commit and push once every file is staged</td></tr>
+          <tr><th scope="row"><kbd>A</kbd></th><td>Abort the merge (confirms)</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="new-pr" aria-labelledby="h-new-pr">
+      <h2 id="h-new-pr">New pull request</h2>
+      <p class="muted">Push prompts shown before the form.</p>
+      <table>
+        <caption class="sr-only">New pull request keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>p</kbd></th><td>Push the head branch to origin</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="collisions" aria-labelledby="h-collisions">
+      <h2 id="h-collisions">Collisions radar</h2>
+      <p class="muted">Opened with K from a pull request.</p>
+      <table>
+        <caption class="sr-only">Collisions radar keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>Tab</kbd> or <kbd>Shift+Tab</kbd> or <kbd>K</kbd></th><td>Switch between this PR and the whole repo</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="logs" aria-labelledby="h-logs">
+      <h2 id="h-logs">Debug logs</h2>
+      <p class="muted">Available with LAZYHUB_DEBUG=1.</p>
+      <table>
+        <caption class="sr-only">Debug logs keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>y</kbd></th><td>Copy the selected log entry</td></tr>
+          <tr><th scope="row"><kbd>f</kbd></th><td>Cycle the log level filter</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="ai" aria-labelledby="h-ai">
+      <h2 id="h-ai">AI review and assistant</h2>
+      <table>
+        <caption class="sr-only">AI review and assistant keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>s</kbd></th><td>Post this AI review comment</td></tr>
+          <tr><th scope="row"><kbd>n</kbd> or <kbd>Space</kbd></th><td>Skip this AI review comment</td></tr>
+          <tr><th scope="row"><kbd>i</kbd></th><td>Edit the comment inline</td></tr>
+          <tr><th scope="row"><kbd>e</kbd></th><td>Edit the comment in $EDITOR</td></tr>
+          <tr><th scope="row"><kbd>PageUp</kbd></th><td>Scroll the assistant transcript to the top</td></tr>
+          <tr><th scope="row"><kbd>PageDown</kbd> or <kbd>Ctrl+Shift+G</kbd></th><td>Scroll the assistant transcript to the end</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="custom-pane" aria-labelledby="h-custom-pane">
+      <h2 id="h-custom-pane">Custom panes</h2>
+      <p class="muted">Panes declared with [panes.&lt;name&gt;] in your config.</p>
+      <table>
+        <caption class="sr-only">Custom panes keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>y</kbd></th><td>Copy the selected item URL in a custom pane</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="card" id="onboarding" aria-labelledby="h-onboarding">
+      <h2 id="h-onboarding">First-run setup</h2>
+      <table>
+        <caption class="sr-only">First-run setup keys</caption>
+        <tbody>
+          <tr><th scope="row"><kbd>q</kbd></th><td>Leave first-run setup without writing anything</td></tr>
+          <tr><th scope="row"><kbd>r</kbd></th><td>Retry loading your repositories</td></tr>
         </tbody>
       </table>
     </section>

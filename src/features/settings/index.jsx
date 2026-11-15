@@ -7,6 +7,7 @@
 import React, { useState, useContext, useRef } from 'react'
 import { Box, Text } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
+import { matchesAction } from '../../config/actions.js'
 import { THEME_NAMES, useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -90,19 +91,19 @@ export function SettingsPane({ onBack }) {
   }
 
   useKeymapInput((input, key) => {
-    if (key.escape || input === 'q') { onBack(); return }
-    if (input === 'j' || key.downArrow) {
+    if (matchesAction('app.back', input, key)) { onBack(); return }
+    if (matchesAction('cursor.down', input, key)) {
       cursorRef.current = (cursorRef.current + 1) % OPTIONS.length
       setCursor(cursorRef.current)
       return
     }
-    if (input === 'k' || key.upArrow) {
+    if (matchesAction('cursor.up', input, key)) {
       cursorRef.current = (cursorRef.current - 1 + OPTIONS.length) % OPTIONS.length
       setCursor(cursorRef.current)
       return
     }
     const activeCursor = cursorRef.current
-    if (input === 's' && OPTIONS[activeCursor]?.id === 'aiProvider' && ai.provider === 'openai-compatible') {
+    if (matchesAction('settings.configure', input, key) && OPTIONS[activeCursor]?.id === 'aiProvider' && ai.provider === 'openai-compatible') {
       const openaiCompatible = ai.openai_compatible || ai.openaiCompatible || {}
       updateAI({
         provider: 'openai-compatible',
@@ -341,9 +342,9 @@ function AIProviderEditor({ ai, onSave, onCancel }) {
       }
       return
     }
-    if ((key.ctrl && input === 'g') || input === 's') { onSave(configFromValues(values)); return }
-    if (input === 'j' || key.downArrow) { setCursor(c => (c + 1) % fields.length); return }
-    if (input === 'k' || key.upArrow)   { setCursor(c => (c - 1 + fields.length) % fields.length); return }
+    if (matchesAction('dialog.submit', input, key) || matchesAction('settings.save', input, key)) { onSave(configFromValues(values)); return }
+    if (matchesAction('cursor.down', input, key)) { setCursor(c => (c + 1) % fields.length); return }
+    if (matchesAction('cursor.up', input, key))   { setCursor(c => (c - 1 + fields.length) % fields.length); return }
   })
 
   if (editing) {
@@ -443,8 +444,8 @@ function ThemePicker({ current, onSelect, onCancel }) {
 
   useKeymapInput((input, key) => {
     if (key.escape) { onCancel(); return }
-    if (input === 'j' || key.downArrow) { setCursor(c => (c + 1) % THEME_NAMES.length); return }
-    if (input === 'k' || key.upArrow)   { setCursor(c => (c - 1 + THEME_NAMES.length) % THEME_NAMES.length); return }
+    if (matchesAction('cursor.down', input, key)) { setCursor(c => (c + 1) % THEME_NAMES.length); return }
+    if (matchesAction('cursor.up', input, key))   { setCursor(c => (c - 1 + THEME_NAMES.length) % THEME_NAMES.length); return }
     if (key.return) { onSelect(THEME_NAMES[cursor]); return }
   })
 

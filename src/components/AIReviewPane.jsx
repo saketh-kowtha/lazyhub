@@ -20,6 +20,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Box, Text } from 'ink'
 import { useInput } from '../hooks/useSafeInput.js'
+import { matchesAction } from '../config/actions.js'
 import { useTheme } from '../theme.js'
 import { TextInput, sanitizeLog, sanitizePath, sanitizeRaw } from '../utils.js'
 import { useKeyScope } from '../keyscope.js'
@@ -111,13 +112,13 @@ export function AIReviewPane({
 
   useInput((input, key) => {
     // Always: q/Esc closes (unless editing inline)
-    if (!editing && (key.escape || input === 'q')) {
+    if (!editing && matchesAction('app.back', input, key)) {
       onClose()
       return
     }
 
     if (phase === 'summary') {
-      if (key.return || input === ' ') {
+      if (matchesAction('dialog.confirm', input, key) || matchesAction('dialog.toggle', input, key)) {
         if (total === 0) { onClose(); return }
         setIndex(0)
         setPhase('step')
@@ -146,10 +147,10 @@ export function AIReviewPane({
     }
 
     // Command mode (not editing)
-    if (key.return || input === 's') { doPost(); return }
-    if (input === 'n' || input === ' ') { doSkip(); return }
-    if (input === 'i') { setEditing(true); return }  // inline edit
-    if (input === 'e') { doOpenEditor(); return }     // $EDITOR
+    if (matchesAction('dialog.confirm', input, key) || matchesAction('ai-review.post', input, key)) { doPost(); return }
+    if (matchesAction('ai-review.skip', input, key)) { doSkip(); return }
+    if (matchesAction('ai-review.edit-inline', input, key)) { setEditing(true); return }
+    if (matchesAction('ai-review.edit-editor', input, key)) { doOpenEditor(); return } // $EDITOR
   })
 
   // ── Summary phase ─────────────────────────────────────────────────────────

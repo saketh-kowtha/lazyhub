@@ -197,3 +197,26 @@ describe('createKeymap with shared scopes', () => {
     }
   })
 })
+
+describe('modal-view actions moved off hard-coded letters (#312)', () => {
+  const key = (extra = {}) => ({ ctrl: false, meta: false, shift: false, ...extra })
+
+  it('keep their default keys', async () => {
+    const { matchesAction } = await import('./actions.js')
+    const cases = [
+      ['settings.configure', 's', key()], ['settings.save', 's', key()], ['conflict.stage', ' ', key()],
+      ['conflict.abort', 'A', key()], ['conflict.commit', 'c', key()], ['new-pr.push', 'p', key()],
+      ['collisions.switch-tab', 'K', key()], ['collisions.switch-tab', '', key({ tab: true })],
+      ['logs.level', 'f', key()], ['ai-review.skip', ' ', key()], ['assistant.scroll-top', '', key({ pageUp: true })],
+      ['assistant.scroll-end', '', key({ pageDown: true })], ['onboarding.quit', 'q', key()],
+    ]
+    for (const [id, input, k] of cases) expect(matchesAction(id, input, k, config), id).toBe(true)
+    expect(matchesAction('conflict.commit', 'c', key({ ctrl: true }), config)).toBe(false)
+  })
+
+  it('follow a [keymaps.*] rebind', async () => {
+    const { matchesAction } = await import('./actions.js')
+    const rebound = { ...config, keymaps: { conflict: { x: 'conflict.commit' } } }
+    expect(matchesAction('conflict.commit', 'x', key(), rebound)).toBe(true)
+  })
+})

@@ -31,12 +31,12 @@ export function CollisionRadar({ repo, prNumber, onClose }) {
 
   useInput((input, key) => {
     if (matchesAction('dialog.cancel', input, key)) { onClose(); return }
-    if (key.tab || input === 'K') { setTab(v => (v === 'pr' ? 'repo' : 'pr')); setOffset(0); return }
-    if (input === 'r') { refetch(); return }
-    if (input === 'j' || key.downArrow) { setOffset(o => Math.min(maxOffset, o + 1)); return }
-    if (input === 'k' || key.upArrow) { setOffset(o => Math.max(0, o - 1)); return }
-    if (input === 'G') { setOffset(maxOffset); return }
-    if (input === 'g') { setOffset(0) }
+    if (matchesAction('collisions.switch-tab', input, key)) { setTab(v => (v === 'pr' ? 'repo' : 'pr')); setOffset(0); return }
+    if (matchesAction('list.refresh', input, key)) { refetch(); return }
+    if (matchesAction('dialog.down', input, key)) { setOffset(o => Math.min(maxOffset, o + 1)); return }
+    if (matchesAction('dialog.up', input, key)) { setOffset(o => Math.max(0, o - 1)); return }
+    if (matchesAction('dialog.bottom', input, key)) { setOffset(maxOffset); return }
+    if (matchesAction('dialog.top', input, key)) { setOffset(0) }
   })
 
   const tone = { head: t.ui.selected, likely: t.ci.fail, warn: t.ci.pending, dim: t.ui.dim, ok: t.ci.pass, normal: t.ui.muted }

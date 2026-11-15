@@ -5,6 +5,7 @@
 import React from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
+import { matchesAction } from '../../config/actions.js'
 import { useTheme } from '../../theme.js'
 import { sanitizeRaw, sanitizeLog, sanitizePath, TextInput } from '../../utils.js'
 
@@ -13,8 +14,8 @@ import { sanitizeRaw, sanitizeLog, sanitizePath, TextInput } from '../../utils.j
 function PushRequiredScreen({ branch, onPush, onBack }) {
   const { t } = useTheme()
   useKeymapInput((input, key) => {
-    if (key.escape || input === 'n') { onBack(); return }
-    if (input === 'p' || input === 'y' || key.return) { onPush(); return }
+    if (matchesAction('dialog.no', input, key)) { onBack(); return }
+    if (matchesAction('new-pr.push', input, key) || matchesAction('dialog.yes', input, key) || matchesAction('dialog.confirm', input, key)) { onPush(); return }
   })
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={t.ci.fail}
@@ -37,9 +38,9 @@ function PushRequiredScreen({ branch, onPush, onBack }) {
 function UnpushedCommitsScreen({ commits, onPush, onSkip, onBack }) {
   const { t } = useTheme()
   useKeymapInput((input, key) => {
-    if (key.escape) { onBack(); return }
-    if (input === 'p' || input === 'y') { onPush(); return }
-    if (input === 'n') { onSkip(); return }
+    if (matchesAction('dialog.cancel', input, key)) { onBack(); return }
+    if (matchesAction('new-pr.push', input, key) || matchesAction('dialog.yes', input, key)) { onPush(); return }
+    if (matchesAction('dialog.no', input, key)) { onSkip(); return }
   })
   const shown = commits.slice(0, 8)
   return (
@@ -83,7 +84,7 @@ function PushingScreen({ branch }) {
 function NoDiffScreen({ head, base, onBack }) {
   const { t } = useTheme()
   useKeymapInput((input, key) => {
-    if (key.escape || input === 'q') onBack()
+    if (matchesAction('app.back', input, key)) onBack()
   })
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={t.ui.border}
