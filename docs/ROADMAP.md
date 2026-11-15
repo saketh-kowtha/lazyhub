@@ -23,6 +23,8 @@ Each stage has separate entry and exit criteria. Progress in one does not prove 
 | Optional approval | `stage:approval` | Add commit-bound approval records and the App-pinned `lazyhub/approval` check (Slice 2). D1-D11 stay unchanged; Lazyhub never executes merges. This stage does not block Review Alpha. | #277 feasibility and #278 contracts (including the #145 dependency audit); #245, #235, #244 and #203; live sandbox proof in #141. |
 | Demand-gated | `stage:demand-gated` | Review progress and changes since last inspection (#294), first external integration (#297), and the serve/policy service (#145). | Start only when pilot evidence supports the specific work; each issue defines its own gate. |
 
+**Readiness record:** the evidence-based go/no-go for the Dec 1 Review Alpha (#134, #629), with per-gate status and the ordered blocking list, is in [`ALPHA_READINESS.md`](ALPHA_READINESS.md). As of 2026-11-15 it is a no-go: release provenance (#248) needs maintainer setup, the read-only journey (#295) is in progress, the in-repo queue filter (#177) and part of the registry migration (#312) are open, and the pilot (#286) has not run. Optional approval gates are listed there separately and do not block Review Alpha.
+
 Contributor enablement (#296) supports adoption without a marketplace. Local-agent coverage can be called `managed_gateway`, and eligible cloud-agent coverage `github_enforced`, only after the corresponding gateway or App-source and ruleset verification exists. Team availability and an always-on verifier are Beta work.
 
 ## Review Alpha order
