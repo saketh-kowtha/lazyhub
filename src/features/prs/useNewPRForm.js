@@ -6,6 +6,7 @@ import { logSwallowed } from '../../contain.js'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { editTextInEditor } from '../../services/platform.js'
 import { useKeymapInput } from '../../config/keymap.js'
+import { matchesAction } from '../../config/actions.js'
 import { getRemoteBranch, compareBranches, getRepoInfo, createPR } from '../../executor.js'
 import { findLocalCheckout, currentBranch as gitCurrentBranch, unpushedCommits, push, noLocalCheckoutMessage } from '../../services/git.js'
 
@@ -214,13 +215,13 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
 
     // Current-branch hint: [y] to accept, [n] to skip
     if (showBranchHint && FIELDS[activeField] === 'head' && !form.head) {
-      if (input === 'y') {
+      if (matchesAction('dialog.yes', input, key)) {
         setForm(f => ({ ...f, head: currentBranch }))
         setShowBranchHint(false)
         validateHead(currentBranch, form.base)
         return
       }
-      if (input === 'n') {
+      if (matchesAction('dialog.no', input, key)) {
         setShowBranchHint(false)
         return
       }
@@ -230,11 +231,11 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
     if (key.tab)               { goNext(); return }
 
     // Ctrl+Enter OR Ctrl+G — Ctrl+Enter is indistinguishable from Enter on macOS terminals
-    if ((key.return && key.ctrl) || (key.ctrl && input === 'g')) { doSubmit(); return }
+    if ((key.return && key.ctrl) || matchesAction('dialog.submit', input, key)) { doSubmit(); return }
 
     // [p] trigger push whenever head branch has issues — available from any field
     // NOTE: must be checked before field-level text editing so 'p' is not typed into inputs
-    if (input === 'p') {
+    if (matchesAction('new-pr.push', input, key)) {
       if (headStatus === 'not-in-remote') { setScreen('push-required'); return }
       if (headStatus === 'unpushed')      { setScreen('unpushed-commits'); return }
     }
@@ -242,7 +243,7 @@ export function useNewPRForm({ repo, onClose, onCreated }) {
     // Field-level editing
     const fieldName = FIELDS[activeField]
     // Use Ctrl+E for editor to avoid 'e' key hijacking
-    if (fieldName === 'body' && key.ctrl && input === 'e') {
+    if (fieldName === 'body' && matchesAction('dialog.editor', input, key)) {
       openEditor();
       return
     }

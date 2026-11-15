@@ -239,3 +239,62 @@ describe('no double dimming (#566)', () => {
     expect(textTags('<Text color={t.ui.dim} onClick={() => go()}>x</Text><Text dimColor>y</Text>').some(doubleDimmed)).toBe(false)
   })
 })
+
+describe('key handlers go through the action registry (#312, #489)', () => {
+  // `input === 'x'` in a handler is a binding the TOML keymap, the footer, `?` help and the palette cannot see.
+  // User actions are matched with matchesAction()/useActionResolver(); this scan covers every non-test file under src.
+  const LITERAL_KEY = /(?<!typeof )\binput === ['"]/g
+  // The only places a literal key comparison may stay, each with its exact count (it may only go down) and why.
+  const EXEMPT = {
+    'src/config/actions.js': { count: 10, reason: 'matchesKeyToken: the registry matcher itself turns a token such as Ctrl+J into a comparison' },
+    'src/config/keymap.js': { count: 1, reason: 'eventToTokens: the keymap implementation synthesises the Space token' },
+    'src/utils.js': { count: 4, reason: 'TextInput line editing (Ctrl+A/E/U/K): text editing inside an input field, not an app action' },
+    'src/app.jsx': { count: 2, reason: 'LAZYHUB_CRASH_TEST hook: debug-only, env-gated, must not depend on the keymap' },
+    'src/components/ErrorBoundary.jsx': { count: 2, reason: 'last-resort fallback screen: its reset/dismiss keys must work even when config or registry loading is what failed' },
+    'src/components/AIAssistant.jsx': { count: 1, reason: 'Ctrl+G scroll-to-top alias: Ctrl+G is owned by dialog.submit (keymap-registry.test.js), so the alias cannot be a registry key; follow-up to choose a verb' },
+  }
+  const sources = (/** @type {string} */ dir) => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) return entry.name === 'test' ? [] : sources(full)
+    return /\.(?:js|jsx|mjs)$/.test(entry.name) && !/\.test\./.test(entry.name) ? [full] : []
+  })
+  const count = (/** @type {string} */ code) => code.split('\n')
+    .filter(line => !/^\s*(?:\*|\/\/|\/\*)/.test(line))
+    .reduce((n, line) => n + (line.match(LITERAL_KEY) || []).length, 0)
+  const found = () => Object.fromEntries(sources(join(ROOT, 'src'))
+    .map(f => [relative(ROOT, f), count(readFileSync(f, 'utf8'))])
+    .filter(([, n]) => n > 0))
+
+  it('no file outside the exemption list compares input to a literal key', () => {
+    const stray = Object.entries(found()).filter(([file]) => !EXEMPT[file])
+    expect(stray, 'route the key through matchesAction() with a registry action instead').toEqual([])
+  })
+
+  it('exempt files hold exactly their recorded count (lower it when you migrate one)', () => {
+    const now = found()
+    for (const [file, { count: n }] of Object.entries(EXEMPT)) expect(now[file] ?? 0, file).toBe(n)
+  })
+
+  it('every registry id a view dispatches on exists, so a typo cannot silently disable a key', async () => {
+    const { DEFAULT_CONFIG } = await import('./config/schema.js')
+    const missing = []
+    for (const file of sources(join(ROOT, 'src'))) {
+      for (const m of readFileSync(file, 'utf8').matchAll(/matchesAction\(\s*'([\w.-]+)'/g)) {
+        if (!DEFAULT_CONFIG.actions[m[1]]) missing.push(`${relative(ROOT, file)}: ${m[1]}`)
+      }
+    }
+    expect(missing).toEqual([])
+  })
+
+  it('every exemption says why', () => {
+    for (const [file, { reason }] of Object.entries(EXEMPT)) expect(reason.length, file).toBeGreaterThan(20)
+  })
+
+  it('the pattern catches what it guards against', () => {
+    expect(count("if (input === 'x') go()")).toBe(1)
+    expect(count('if (key.ctrl && input === "g") go()')).toBe(1)
+    expect(count("const s = typeof input === 'string' ? input : ''")).toBe(0)
+    expect(count("// if (input === 'x') old\n * input === 'y'")).toBe(0)
+    expect(count("if (matchesAction('list.refresh', input, key)) go()")).toBe(0)
+  })
+})

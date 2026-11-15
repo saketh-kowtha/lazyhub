@@ -40,6 +40,14 @@ export const SECTIONS = [
   { scope: 'notification-list', id: 'notifications', title: 'Notifications', blurb: '' },
   { scope: 'leader', id: 'leader', title: 'Leader (Space)', blurb: 'Press Space, then one of these.' },
   { scope: 'dialog', id: 'dialogs', title: 'Dialogs and pickers', blurb: '' },
+  { scope: 'settings', id: 'settings', title: 'Settings', blurb: 'Opened with a comma. Movement and Esc use the shared list and back keys.' },
+  { scope: 'conflict', id: 'conflict', title: 'Resolve conflicts', blurb: 'Opened with C from a conflicting pull request.' },
+  { scope: 'new-pr', id: 'new-pr', title: 'New pull request', blurb: 'Push prompts shown before the form.' },
+  { scope: 'collisions', id: 'collisions', title: 'Collisions radar', blurb: 'Opened with K from a pull request.' },
+  { scope: 'logs', id: 'logs', title: 'Debug logs', blurb: 'Available with LAZYHUB_DEBUG=1.' },
+  { scope: 'ai', id: 'ai', title: 'AI review and assistant', blurb: '' },
+  { scope: 'custom-pane', id: 'custom-pane', title: 'Custom panes', blurb: 'Panes declared with [panes.<name>] in your config.' },
+  { scope: 'onboarding', id: 'onboarding', title: 'First-run setup', blurb: '' },
 ]
 
 /** @returns {Record<string, any>} the shipped defaults, parsed */

@@ -60,7 +60,8 @@ describe('Settings pane user flows', () => {
 
     await flush(120)
     expect(view.lastFrame()).toContain('Page Size')
-    expect(view.lastFrame()).toContain('[Enter] confirm')
+    // The first key resolves through the registry, which loads the config once; allow for a busy machine.
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('[Enter] confirm'))
   })
 
   it('keys typed into the Page Size editor never reach the pane handler (#485)', async () => {

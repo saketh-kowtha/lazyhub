@@ -70,6 +70,20 @@ export function actionHints(/** @type {any} */ ids, config = getActionConfig()) 
 const effectiveKeyCache = new WeakMap()
 
 /**
+ * Effective keys per action id for a config, built once per config object (handlers call this on every keypress).
+ * @param {Record<string, any>} config effective config
+ * @returns {Record<string, string[]>} action id to bound keys
+ */
+function effectiveKeys(config) {
+  let keys = effectiveKeyCache.get(config)
+  if (!keys) {
+    keys = buildEffectiveActionKeys(config)
+    effectiveKeyCache.set(config, keys)
+  }
+  return keys
+}
+
+/**
  * The key to show for an action: its effective binding after `[keymaps.*]`
  * rebinds, or null when the action is unbound. This is what every hint line
  * renders, so a hint can never name a key the keymap does not bind (#511).
@@ -78,11 +92,7 @@ const effectiveKeyCache = new WeakMap()
  * @returns {string|null} key label, e.g. 'Ctrl+R'
  */
 export function effectiveHintKey(id, config = getActionConfig()) {
-  let keys = effectiveKeyCache.get(config)
-  if (!keys) {
-    keys = buildEffectiveActionKeys(config)
-    effectiveKeyCache.set(config, keys)
-  }
+  const keys = effectiveKeys(config)
   const bound = keys[id] || []
   if (bound.length === 0) return null
   const action = getAction(id, config)
@@ -143,7 +153,7 @@ function matchesKeyToken(/** @type {any} */ token, /** @type {any} */ input, /**
  */
 export function matchesAction(/** @type {any} */ id, /** @type {any} */ input, /** @type {any} */ key, config = getActionConfig()) {
   const action = getAction(id, config)
-  const effective = buildEffectiveActionKeys(config)[id] || action?.keys || []
+  const effective = effectiveKeys(config)[id] || action?.keys || []
   const event = eventToTokens(input, key)
   return Boolean(effective.some((/** @type {any} */ token) => event.has(token) || matchesKeyToken(token, input, key)))
 }

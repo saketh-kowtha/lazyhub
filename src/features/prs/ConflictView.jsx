@@ -21,6 +21,7 @@ import React, { useState, useEffect, useCallback, useContext, useRef } from 'rea
 import { openUrl } from '../../services/platform.js'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
+import { matchesAction } from '../../config/actions.js'
 import { useKeyScope } from '../../keyscope.js'
 import { useTheme } from '../../theme.js'
 import { AppContext } from '../../context.js'
@@ -151,39 +152,39 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
     if (busy || dialog) return
     if (phase === PHASE.CHECKING || phase === PHASE.COMMITTING) return
 
-    if (key.escape || input === 'q') { onBack(); return }
+    if (matchesAction('app.back', input, key)) { onBack(); return }
 
     if (phase === PHASE.DONE) return
 
     if (phase === PHASE.NO_CHECKOUT) {
-      if (input === 'o') openInBrowser()
+      if (matchesAction('pr.open-browser', input, key)) openInBrowser()
       return
     }
 
     if (phase === PHASE.SETUP) {
-      if (key.return || input === 's') { guard('Setting up merge', doSetup); return }
-      if (input === 'o') { openInBrowser(); return }
+      if (matchesAction('dialog.confirm', input, key) || matchesAction('conflict.setup', input, key)) { guard('Setting up merge', doSetup); return }
+      if (matchesAction('pr.open-browser', input, key)) { openInBrowser(); return }
       return
     }
 
     // CONFLICTS phase
-    if (key.upArrow   || input === 'k') { setCursor(c => Math.max(0, c - 1)); return }
-    if (key.downArrow || input === 'j') { setCursor(c => Math.min(files.length - 1, c + 1)); return }
+    if (matchesAction('cursor.up', input, key)) { setCursor(c => Math.max(0, c - 1)); return }
+    if (matchesAction('cursor.down', input, key)) { setCursor(c => Math.min(files.length - 1, c + 1)); return }
 
     const file = files[cursor]
 
-    if ((key.return || input === 'e') && file) {
+    if ((matchesAction('dialog.confirm', input, key) || matchesAction('conflict.edit', input, key)) && file) {
       openInEditor(file.path, 1, _editorCfg).catch(err => logSwallowed('prs.conflict.open-editor', err))
       showStatus(`Opened ${file.path} in editor — resolve conflicts, save, then [Space] to stage`)
       return
     }
 
-    if (input === ' ' && file) {
+    if (matchesAction('conflict.stage', input, key) && file) {
       if (file.staged) { guard(`Unstaging ${file.path}`, () => doUnstage(file)) } else { guard(`Staging ${file.path}`, () => doStage(file)) }
       return
     }
 
-    if (input === 'r') {
+    if (matchesAction('list.refresh', input, key)) {
       setBusy(true)
       loadFiles()
         .then(fs => {
@@ -198,7 +199,7 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
       return
     }
 
-    if (input === 'c') {
+    if (matchesAction('conflict.commit', input, key)) {
       const allStaged = files.length > 0 && files.every(f => f.staged)
       if (!allStaged) {
         showStatus('✗ Stage all resolved files first ([Space] to stage)', true)
@@ -208,8 +209,8 @@ export function ConflictView({ pr, repo, onBack, onResolved }) {
       return
     }
 
-    if (input === 'A') { setDialog('abort'); return }
-    if (input === 'o') { openInBrowser(); return }
+    if (matchesAction('conflict.abort', input, key)) { setDialog('abort'); return }
+    if (matchesAction('pr.open-browser', input, key)) { openInBrowser(); return }
   })
 
   // ── Actions ───────────────────────────────────────────────────────────────

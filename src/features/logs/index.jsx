@@ -7,6 +7,7 @@
 import React, { useState, useMemo, useEffect, useContext } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useKeymapInput } from '../../config/keymap.js'
+import { matchesAction } from '../../config/actions.js'
 import { format } from 'timeago.js'
 import { getLogs, logger, sanitizeRaw, TextInput } from '../../utils.js'
 import { copyToClipboard } from '../../services/platform.js'
@@ -75,8 +76,8 @@ export function LogPane({ onBack }) {
 
   useKeymapInput((input, key) => {
     if (selectedLog) {
-      if (input === 'y') { doCopy(selectedLog); return }
-      if (key.escape || input === 'q') { setSelectedLog(null); return }
+      if (matchesAction('logs.copy', input, key)) { doCopy(selectedLog); return }
+      if (matchesAction('app.back', input, key)) { setSelectedLog(null); return }
       return
     }
 
@@ -86,31 +87,31 @@ export function LogPane({ onBack }) {
       return
     }
 
-    if (input === 'r') { refreshLogs(); return }
-    if (input === 'f') {
+    if (matchesAction('list.refresh', input, key)) { refreshLogs(); return }
+    if (matchesAction('logs.level', input, key)) {
       const idx = LEVELS.indexOf(filterLevel)
       setFilterLevel(LEVELS[(idx + 1) % LEVELS.length])
       setCursor(0); setScrollOffset(0)
       return
     }
-    if (input === '/') { setSearching(true); return }
-    if (key.escape || input === 'q') { onBack(); return }
+    if (matchesAction('list.search', input, key)) { setSearching(true); return }
+    if (matchesAction('app.back', input, key)) { onBack(); return }
 
-    if (input === 'j' || key.downArrow) {
+    if (matchesAction('cursor.down', input, key)) {
       setCursor(c => {
         const next = Math.max(0, Math.min(filteredLogs.length - 1, c + 1))
         if (next >= scrollOffset + visibleHeight) setScrollOffset(next - visibleHeight + 1)
         return next
       })
     }
-    if (input === 'k' || key.upArrow) {
+    if (matchesAction('cursor.up', input, key)) {
       setCursor(c => {
         const next = Math.max(0, c - 1)
         if (next < scrollOffset) setScrollOffset(next)
         return next
       })
     }
-    if (input === 'y' && filteredLogs[cursor]) {
+    if (matchesAction('logs.copy', input, key) && filteredLogs[cursor]) {
       doCopy(filteredLogs[cursor])
       return
     }

@@ -11,6 +11,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Box, Text, render, useApp, useStdout } from 'ink'
 import { useInput } from '../../hooks/useSafeInput.js'
+import { matchesAction } from '../../config/actions.js'
 import { ThemeProvider, useTheme, readRawThemeCfg } from '../../theme.js'
 import { FooterKeys } from '../../components/FooterKeys.jsx'
 import { Spinner } from '../../components/Spinner.jsx'
@@ -132,11 +133,11 @@ export function Onboarding({ onDone, embedded = false, loadSessionFn = loadSessi
       else if (input && !key.ctrl && !key.meta && /^[A-Za-z0-9._/-]+$/.test(input)) edit(query + input)
       return
     }
-    if (input === 'q') return finish({ status: 'cancelled' })
-    if (phase === 'error' && input === 'r') {
+    if (matchesAction('onboarding.quit', input, key)) return finish({ status: 'cancelled' })
+    if (phase === 'error' && matchesAction('onboarding.retry', input, key)) {
       setAttempt(n => n + 1)
     } else if (phase === 'repos') {
-      if (input === '/') setSearching(true)
+      if (matchesAction('list.search', input, key)) setSearching(true)
       else if (key.downArrow) move(1)
       else if (key.upArrow) move(-1)
       else if (/^[jk]+$/.test(input)) for (const ch of input) move(ch === 'j' ? 1 : -1)
