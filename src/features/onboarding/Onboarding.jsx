@@ -242,7 +242,7 @@ export async function runOnboarding() {
       </ThemeProvider>,
       // Same downgrades as the main app: NO_COLOR, [ui] no_color, and the ASCII glyph map for
       // terminals that cannot show Unicode (TERM=dumb/linux, a non-UTF-8 locale).
-      { stdout: terminalStdout() },
+      { stdout: /** @type {any} */ (terminalStdout()) },
     )
     await app.waitUntilExit()
   } finally {
