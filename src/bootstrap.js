@@ -603,7 +603,17 @@ export async function bootstrap(renderApp, { repo: chosenRepo, repoOverride, ope
   // current directory > repo saved by onboarding ([defaults].repo) > interactive picker.
   // A reference names its repo; a bare #N / N needs the current directory's repo.
   // `--repo` (repoOverride) names the repository for this launch only: it wins over everything and is never saved.
-  let repo = open ? (open.repo || repoOverride || await detectRepo()) : (repoOverride || chosenRepo || await detectRepo() || loadSavedRepo())
+  // `repoSource` records where the repository came from; the review queue (#177) starts filtered
+  // to it only when it is the clone the user launched in or named with --repo.
+  /** @type {'reference'|'flag'|'cwd'|'onboarding'|'saved'|'picker'} */
+  let repoSource = 'cwd'
+  let repo
+  if (open) {
+    if (open.repo) { repo = open.repo; repoSource = 'reference' } else if (repoOverride) { repo = repoOverride; repoSource = 'flag' } else repo = await detectRepo()
+  } else if (repoOverride) { repo = repoOverride; repoSource = 'flag' } else if (chosenRepo) { repo = chosenRepo; repoSource = 'onboarding' } else {
+    repo = await detectRepo()
+    if (!repo) { repo = loadSavedRepo(); repoSource = 'saved' }
+  }
   if (open && !repo) {
     console.error(`\n  ✗ #${open.number} needs a repository: run inside a clone, or use owner/repo#${open.number}.\n`)
     process.exit(2)
@@ -619,8 +629,10 @@ export async function bootstrap(renderApp, { repo: chosenRepo, repoOverride, ope
       console.error('\n  ✗ No repository selected. Exiting.\n')
       process.exit(1)
     }
+    repoSource = 'picker'
   }
   process.env.GHUI_REPO = repo
+  process.env.GHUI_REPO_SOURCE = repoSource
 
   if (open) {
     const kind = open.kind || await resolveItemKind(repo, open.number)

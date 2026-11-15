@@ -113,6 +113,14 @@ show_hints    = true        # false hides the footer key hints (same layout as [
 no_color      = false       # also honored when $NO_COLOR is set and non-empty
 icons         = "auto"      # auto | unicode | ascii (auto: ASCII on TERM=linux/dumb, non-UTF-8 locales, legacy Windows consoles)
 
+# ── Review queue scopes (#177) ───────────────────────────────────────────
+# `s` in the queue cycles: this repo (when launched inside one), account, each org below,
+# each set below. Example:  orgs = ["acme"]   and   [queue.sets]  work = ["acme/api", "acme/web"]
+[queue]
+orgs = []
+
+[queue.sets]
+
 # ── Keymaps ──────────────────────────────────────────────────────────────
 [keymaps.global]
 ":"              = "command-palette.open"
@@ -920,6 +928,14 @@ keys = ["["]
 hint = "]/["
 label = "group"
 description = "Previous status group"
+scope = "queue-list"
+group = "nav"
+
+[actions."queue.scope"]
+keys = ["s"]
+hint = "s"
+label = "scope"
+description = "Cycle the queue scope: this repo, account, an org, a repository set"
 scope = "queue-list"
 group = "nav"
 

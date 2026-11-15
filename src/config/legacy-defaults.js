@@ -807,6 +807,14 @@ export const LEGACY_ACTION_VALUES = {
     scope: ["queue-list"],
     group: ["nav"],
   },
+  "queue.scope": {
+    keys: [["s"]],
+    hint: ["s"],
+    label: ["scope"],
+    description: ["Cycle the queue scope: this repo, account, an org, a repository set"],
+    scope: ["queue-list"],
+    group: ["nav"],
+  },
   "queue.more": {
     keys: [["+"]],
     hint: ["+"],

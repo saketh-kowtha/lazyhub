@@ -24,11 +24,14 @@ export const QUEUE_PAGE = 30
 
 const hostKey = () => process.env.GH_HOST || 'github.com'
 
-/** @type {{host: string, state: any} | null} */
-let memory = null
+// One remembered result per host and scope, so cycling the scope and coming back shows the rows at
+// once and spawns no gh call while they are fresh (#177). Scopes are never merged into each other.
+/** @type {Map<string, any>} */
+const memory = new Map()
+const memoryKey = (/** @type {string} */ scopeId) => `${hostKey()}|${scopeId}`
 
-/** Forget the remembered queue (tests). */
-export function resetQueueMemory() { memory = null }
+/** Forget the remembered queues (tests). */
+export function resetQueueMemory() { memory.clear() }
 
 const EMPTY = { items: [], cursors: { reviewRequested: null, authored: null }, truncation: null, meta: null, fetchedAtMs: 0 }
 
@@ -64,14 +67,16 @@ function fold(prev, result, { reset, advance }) {
  * @param {typeof fetchReviewQueueEvidence} [opts.fetcher] replaced in tests
  * @param {number} [opts.ttlMs]
  * @param {() => number} [opts.now]
+ * @param {{id: string, fetch?: {org?: string, repos?: string[]}}} [opts.scope] search filter; the hook is
+ *   mounted once per scope (the view keys it by scope id), so it never changes while mounted
  * @returns {{
  *   items: any[], truncation: any, meta: any, fetchedAtMs: number,
  *   loading: boolean, loadingMore: boolean, error: Error|null, hasMore: boolean,
  *   refresh: () => void, loadMore: () => void,
  * }}
  */
-export function useReviewQueue({ fetcher = fetchReviewQueueEvidence, ttlMs = QUEUE_TTL_MS, now = Date.now } = {}) {
-  const seeded = memory && memory.host === hostKey() ? memory.state : null
+export function useReviewQueue({ fetcher = fetchReviewQueueEvidence, ttlMs = QUEUE_TTL_MS, now = Date.now, scope = { id: 'account' } } = {}) {
+  const seeded = memory.get(memoryKey(scope.id)) || null
   const [state, setState] = useState(seeded || EMPTY)
   const [phase, setPhase] = useState({ loading: !seeded, loadingMore: false, error: null })
   const mounted = useRef(true)
@@ -86,9 +91,9 @@ export function useReviewQueue({ fetcher = fetchReviewQueueEvidence, ttlMs = QUE
     const advance = reset ? {} : { reviewRequested: before.cursors.reviewRequested, authored: before.cursors.authored }
     if (mounted.current) setPhase(p => ({ ...p, error: null, loading: reset && before.items.length === 0, loadingMore: !reset }))
     try {
-      const result = await fetcher({ limit: QUEUE_PAGE, after: reset ? {} : Object.fromEntries(Object.entries(advance).filter(([, v]) => v)), now })
+      const result = await fetcher({ limit: QUEUE_PAGE, after: reset ? {} : Object.fromEntries(Object.entries(advance).filter(([, v]) => v)), now, ...(scope.fetch ? { scope: scope.fetch } : {}) })
       const next = fold(latest.current, result, { reset, advance })
-      memory = { host: hostKey(), state: next }
+      memory.set(memoryKey(scope.id), next)
       if (mounted.current) { setState(next); setPhase({ loading: false, loadingMore: false, error: null }) }
     } catch (error) {
       logSwallowed('queue.load', error)
@@ -96,7 +101,7 @@ export function useReviewQueue({ fetcher = fetchReviewQueueEvidence, ttlMs = QUE
     } finally {
       busy.current = false
     }
-  }, [fetcher, now])
+  }, [fetcher, now, scope.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     mounted.current = true

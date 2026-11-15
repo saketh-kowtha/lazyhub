@@ -491,6 +491,7 @@ export function AppRoot({ initialRepo }) {
   const [repo, setRepo] = useState(initialRepo)
   const switchRepo = useCallback((next) => {
     process.env.GHUI_REPO = next
+    process.env.GHUI_REPO_SOURCE = 'switch'
     // A launch like `lazyhub a/b#42` must not open #42 in the repo switched to.
     delete process.env.GHUI_PR
     delete process.env.GHUI_ISSUE

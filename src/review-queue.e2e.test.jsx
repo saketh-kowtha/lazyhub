@@ -212,3 +212,72 @@ describe('review queue in the app (#177)', () => {
     expect(help).not.toMatch(/Search|Filter/)
   })
 })
+
+
+describe('review queue scope in the app (#177)', () => {
+  const saved = { repo: process.env.GHUI_REPO, source: process.env.GHUI_REPO_SOURCE }
+  beforeEach(() => {
+    vi.clearAllMocks()
+    executor.fetchReviewQueueEvidence.mockImplementation(async ({ scope } = {}) => {
+      const rows = scope?.repos ? sampleItems().filter(i => scope.repos.includes(i.identity.repo)) : sampleItems()
+      return { ...queueResult(rows), fetched_at: new Date().toISOString() }
+    })
+    useGh.mockImplementation(() => ghResult([]))
+  })
+  afterEach(() => {
+    for (const [k, v] of [['GHUI_REPO', saved.repo], ['GHUI_REPO_SOURCE', saved.source]]) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v
+    }
+    disarmPrefix(); resetTabSelection(); resetQueueMemory(); resetQueueSelection(); cleanup()
+  })
+
+  async function open() {
+    const view = renderWithProviders(<App repo="acme/platform" />)
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Review requested'))
+    await flush(30)
+    await press([key('g'), key('q')])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Review queue'))
+    await flush(30)
+    return view
+  }
+
+  it('launched in a clone the queue is filtered to that repo and s widens to the account', async () => {
+    process.env.GHUI_REPO = 'acme/platform'
+    process.env.GHUI_REPO_SOURCE = 'cwd'
+    const view = await open()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Retry in webhook sender'))
+    expect(view.lastFrame()).toContain('scope: repo acme/platform (from this directory)')
+    expect(view.lastFrame()).not.toContain('New form lib')
+    expect(executor.fetchReviewQueueEvidence.mock.calls[0][0].scope).toEqual({ repos: ['acme/platform'] })
+    // the hint comes from the registry
+    expect(view.lastFrame()).toMatch(/s\s+scope/)
+    await press([key('s')])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('scope: account'))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('New form lib'))
+    expect(executor.fetchReviewQueueEvidence.mock.calls[1][0].scope).toBeUndefined()
+  })
+
+  it('launched outside a clone the queue is account-wide', async () => {
+    delete process.env.GHUI_REPO_SOURCE
+    const view = await open()
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('New form lib'))
+    expect(view.lastFrame()).toContain('scope: account')
+    expect(executor.fetchReviewQueueEvidence.mock.calls[0][0].scope).toBeUndefined()
+  })
+
+  it('opening a PR and coming back keeps the chosen scope and makes no new call', async () => {
+    process.env.GHUI_REPO = 'acme/platform'
+    process.env.GHUI_REPO_SOURCE = 'cwd'
+    executor.loadEvidenceDetail.mockImplementation(async (repo, number) => evidenceDetail(repo, number, `PR ${number}`))
+    const view = await open()
+    await press([key('s')])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('New form lib'))
+    await flush(30)
+    await press([ENTER])
+    await waitForExpectation(() => expect(executor.loadEvidenceDetail).toHaveBeenCalled())
+    await press([ESC])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Review queue'))
+    expect(view.lastFrame()).toContain('scope: account')
+    expect(executor.fetchReviewQueueEvidence).toHaveBeenCalledTimes(2)
+  })
+})

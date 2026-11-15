@@ -116,7 +116,7 @@ const FOOTER_IDS = {
   'workflow-list': ['cursor.down', 'workflow.logs', 'workflow.rerun', 'workflow.cancel', 'list.search'],
   'notification-list': ['cursor.down', 'notification.open', 'notification.mark-read', 'notification.mark-all'],
   'tab-list': ['cursor.down', 'tab.open-selected', 'tab.open-browser', 'tab.next-section'],
-  'queue-list': ['cursor.down', 'queue.open', 'queue.browser', 'queue.next-group', 'queue.more', 'list.refresh', 'app.back'],
+  'queue-list': ['cursor.down', 'queue.open', 'queue.browser', 'queue.next-group', 'queue.scope', 'queue.more', 'list.refresh', 'app.back'],
   'pr-detail': ['cursor.down', 'pr.diff', 'pr.checks', 'pr.approve', 'pr.merge', 'pr.comments', 'pr.open-browser', 'app.back', 'pr.why-red'],
   'issue-detail': ['cursor.down', 'issue.reply', 'issue.quote', 'issue.labels', 'issue.assignees', 'issue.open-browser', 'app.back'],
   'diff': ['cursor.down', 'diff.next-file', 'diff.next-thread', 'diff.comment', 'diff.file-jump', 'diff.split', 'list.search', 'app.back'],
