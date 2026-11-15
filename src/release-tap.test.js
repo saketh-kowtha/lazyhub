@@ -95,6 +95,7 @@ describe('release workflows (#248)', () => {
   const release = read('../.github/workflows/release.yml')
   const promote = read('../.github/workflows/promote.yml')
   const tapCheck = read('../.github/workflows/tap-check.yml')
+  const ci = read('../.github/workflows/ci.yml')
   const jobBlock = (text, job) => {
     const start = text.indexOf(`\n  ${job}:`)
     const next = text.slice(start + 1).search(/\n  [a-z-]+:\n/)
@@ -122,7 +123,7 @@ describe('release workflows (#248)', () => {
   })
 
   it('pins every action to a full commit SHA (docs/CI_SIMPLIFICATION.md)', () => {
-    for (const wf of [release, promote, tapCheck]) {
+    for (const wf of [release, promote, tapCheck, ci]) {
       const uses = [...wf.matchAll(/uses:\s*(\S+)/g)].map(m => m[1])
       expect(uses.length).toBeGreaterThan(0)
       for (const u of uses) expect(u).toMatch(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/)

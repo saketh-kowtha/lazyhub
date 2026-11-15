@@ -18,9 +18,10 @@ repository impact. Remove live secrets from attachments.
 
 ## Supported versions
 
-Until the first stable gateway release, security fixes target the latest npm
-release and the current `main` branch. Maintainers may ask reporters to verify a
-private candidate build before coordinated disclosure.
+The supported line is the latest 26.6.x release, the version that npm serves as
+`latest` (`npm view lazyhub dist-tags.latest`), together with the current `main`
+branch. Older releases are not patched; update to the latest. Maintainers may ask
+reporters to verify a private candidate build before coordinated disclosure.
 
 ## Security model
 
@@ -105,7 +106,10 @@ the operations you need.
 
 ## Incident response
 
-For maintainers, when a vulnerability or compromised release is confirmed:
+For maintainers, when a vulnerability or compromised release is confirmed, follow
+the rollback, deprecation and access-revocation steps in
+[`docs/RELEASING.md`](docs/RELEASING.md) (sections "Rollback", "Deprecating a Bad
+Release" and "Revoking Access After a Suspected Compromise"). In short:
 
 1. Run `npm deprecate lazyhub@"<affected range>" "<reason; upgrade to X>"` for
    every affected version.

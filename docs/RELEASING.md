@@ -82,9 +82,11 @@ Do them in this order. Do not skip ahead: step 8 removes the fallback.
    Settings -> Trusted Publisher): `release.yml` with `npm publish`, and
    `promote.yml` with `npm dist-tag`, both bound to environment `npm-publish`
    (details above).
-3. **Add `TAP_TOKEN`** (a fine-grained token with contents write on
-   `saketh-kowtha/homebrew-tap` only) as a secret of the `npm-publish`
-   environment. `Promote` fails before moving any tag if it is missing.
+3. **Add `TAP_TOKEN`**: a fine-grained personal access token scoped to the
+   `saketh-kowtha/homebrew-tap` repository only, with Contents read and write and
+   nothing else, and a short expiry. Store it as a secret of the `npm-publish`
+   environment (not a repository secret), so only the reviewed `Promote` job can
+   read it. `Promote` fails before moving any tag if it is missing.
 4. **Prerelease exercise**: tag an `rc.0` (see "Prerelease Exercise") and confirm
    `publish`, `smoke` and `github-release` pass and provenance verifies.
 5. **Tag `v26.6.3`** from `main` (`package.json` already says 26.6.3). It publishes
