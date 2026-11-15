@@ -128,6 +128,11 @@ export const DEFAULT_CONFIG = {
     no_color: false,
     icons: 'auto',
   },
+  // Review queue scope filters (#177): organisations to offer, and named repository sets.
+  queue: {
+    orgs: /** @type {string[]} */ ([]),
+    sets: /** @type {Record<string, string[]>} */ ({}),
+  },
   keymaps: {
     global: {
       ':': 'command-palette.open',
@@ -257,6 +262,7 @@ export const DEFAULT_CONFIG = {
     'queue.browser':         { keys: ['o'], hint: 'o', label: 'browser', description: 'Open the selected pull request in the browser', scope: 'queue-list', group: 'action' },
     'queue.next-group':      { keys: [']'], hint: ']/[', label: 'group', description: 'Next status group', scope: 'queue-list', group: 'nav' },
     'queue.prev-group':      { keys: ['['], hint: ']/[', label: 'group', description: 'Previous status group', scope: 'queue-list', group: 'nav' },
+    'queue.scope':           { keys: ['s'], hint: 's', label: 'scope', description: 'Cycle the queue scope: this repo, account, an org, a repository set', scope: 'queue-list', group: 'nav' },
     'queue.more':            { keys: ['+'], hint: '+', label: 'more', description: 'Load the next page of review requests and your PRs', scope: 'queue-list', group: 'action' },
     'pr.checks':             { keys: ['c'], hint: 'c', label: 'checks', description: 'Enter checks navigation mode', scope: 'pr-detail', group: 'action' },
     'pr.why-red':            { keys: ['f'], hint: 'f', label: 'why red', description: 'Why is CI red? Failing check, log excerpt and the PR lines that likely caused it', scope: 'pr-detail,pr-checks', group: 'action' },
@@ -820,6 +826,54 @@ function validateScopes(/** @type {any} */ val, /** @type {any} */ warnings) {
   return out
 }
 
+// Queue scope filters (#177). Every value becomes a search qualifier, so each must be a
+// well-formed owner or owner/name (isOwnerName); a set is capped so the search text stays short.
+export const QUEUE_SET_MAX_REPOS = 20
+const QUEUE_SET_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,31}$/
+
+function validateQueue(/** @type {any} */ val, /** @type {any} */ warnings) {
+  if (!isPlainObject(val)) {
+    warnings.push('[queue] must be a table — section ignored')
+    return undefined
+  }
+  /** @type {Record<string, any>} */ const out = {}
+  for (const [k, v] of Object.entries(val)) {
+    if (k === 'orgs') {
+      if (!Array.isArray(v) || !v.every((s) => typeof s === 'string')) {
+        warnings.push('[queue].orgs expected array of strings — ignored')
+        continue
+      }
+      out.orgs = []
+      for (const org of v) {
+        if (isOwnerName(`${org}/x`)) out.orgs.push(org)
+        else warnings.push(`[queue].orgs: "${org}" is not an organisation name — ignored`)
+      }
+    } else if (k === 'sets') {
+      if (!isPlainObject(v)) {
+        warnings.push('[queue.sets] must be a table — ignored')
+        continue
+      }
+      /** @type {Record<string, string[]>} */ const sets = {}
+      for (const [name, repos] of Object.entries(v)) {
+        if (!QUEUE_SET_NAME_RE.test(name)) { warnings.push(`[queue.sets].${name}: name must be 1-32 letters, digits, space, . _ - — ignored`); continue }
+        if (!Array.isArray(repos) || !repos.every((s) => typeof s === 'string')) { warnings.push(`[queue.sets].${name} expected array of owner/name strings — ignored`); continue }
+        const good = repos.filter((r) => {
+          const ok = isOwnerName(r)
+          if (!ok) warnings.push(`[queue.sets].${name}: "${r}" is not owner/name — ignored`)
+          return ok
+        })
+        if (good.length > QUEUE_SET_MAX_REPOS) warnings.push(`[queue.sets].${name}: only the first ${QUEUE_SET_MAX_REPOS} repositories are used`)
+        if (good.length) sets[name] = good.slice(0, QUEUE_SET_MAX_REPOS)
+        else warnings.push(`[queue.sets].${name} has no valid repositories — ignored`)
+      }
+      out.sets = sets
+    } else {
+      warnings.push(`unknown key "${k}" in [queue] — ignored`)
+    }
+  }
+  return out
+}
+
 function validateAi(/** @type {any} */ val, /** @type {any} */ warnings) {
   if (!isPlainObject(val)) {
     warnings.push('[ai] must be a table — section ignored')
@@ -905,6 +959,7 @@ export function validateConfig(raw) {
       case 'agent':    set('agent',    validateFlat(val, AGENT_SPEC,    warnings, 'agent')); break
       case 'daemon':   set('daemon',   validateFlat(val, DAEMON_SPEC,   warnings, 'daemon')); break
       case 'scopes':   set('scopes',   validateScopes(val, warnings)); break
+      case 'queue':    set('queue',    validateQueue(val, warnings)); break
       case 'ai':       set('ai',       validateAi(val, warnings)); break
       case 'state':    set('state',    validateState(val, warnings)); break
       default:         warnings.push(`unknown config section [${key}] — ignored`)
@@ -934,7 +989,7 @@ export function validateConfig(raw) {
 
 // A remote config (`[meta].config_url`, or its cached copy) may only change
 // presentation settings. Deny by default: anything not listed here — editor,
-// ai, meta, defaults, agent, daemon, ipc, scopes, tabs, keymaps, actions, app,
+// ai, meta, defaults, agent, daemon, ipc, queue, scopes, tabs, keymaps, actions, app,
 // features, state — is dropped, as is any pane field other than display text.
 const REMOTE_ALLOWED_SECTIONS = ['theme', 'layout', 'ui', 'diff']
 const REMOTE_ALLOWED_PANE_FIELDS = ['label', 'icon', 'description']

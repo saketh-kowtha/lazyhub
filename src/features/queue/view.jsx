@@ -24,6 +24,7 @@ import { sanitize, sanitizePath, shortAge } from '../../utils.js'
 import { fitCell } from '../../ui/row-layout.js'
 import { ageWords, ciCell, groupQueue, rowWhy, truncationSummary, whyLine } from './model.js'
 import { useReviewQueue } from './useReviewQueue.js'
+import { chooseScope, currentScope, loadScopes, nextScope, resetQueueScope } from './scope.js'
 
 /** Width from which the status sidebar is drawn; below it the groups are one chip line. */
 export const SIDEBAR_MIN_COLS = 118
@@ -35,7 +36,7 @@ const SIDEBAR_WIDTH = 28
 let selectionMemory = { group: null, key: null }
 
 /** Forget the remembered group and row (tests). */
-export function resetQueueSelection() { selectionMemory = { group: null, key: null } }
+export function resetQueueSelection() { selectionMemory = { group: null, key: null }; resetQueueScope() }
 
 const keyOf = item => `${item.identity.repo}#${item.identity.number}`
 
@@ -114,19 +115,42 @@ function Rows({ items, idx, offset, rows, width, wide }) {
 }
 
 /**
+ * The queue for one scope. The scope (this repo, account, an org or a repository set, #177) picks
+ * the search filter; it is held here so opening a PR and coming back keeps it, and the screen
+ * below is keyed by it so each scope has its own rows, loading state and freshness.
  * @param {object} props
  * @param {(item: object) => void} props.onOpen the evidence seam: receives the focused row's evidence record
  * @param {number} [props.innerWidth] columns inside the pane border
  * @param {number} [props.listHeight] rows available to the pane
  * @param {object} [props.queueOptions] passed to useReviewQueue (tests)
+ * @param {import('./scope.js').QueueScope[]} [props.scopes] replaces the scopes built from the launch repo and config (tests)
  */
-export function ReviewQueue({ onOpen, innerWidth, listHeight, queueOptions }) {
+export function ReviewQueue({ scopes: given, ...rest }) {
+  const scopes = useMemo(() => given || loadScopes(), [given])
+  const [scopeId, setScopeId] = useState(() => currentScope(scopes).id)
+  const scope = scopes.find(s => s.id === scopeId) || currentScope(scopes)
+  const cycle = () => {
+    const next = nextScope(scopes, scope.id)
+    chooseScope(next)
+    setScopeId(next.id)
+  }
+  return <QueueScreen key={scope.id} {...rest} scope={scope} scopes={scopes} onCycleScope={cycle} />
+}
+
+/** The scope row: what is shown, that it is read-only, and what the scope key shows next. */
+function scopeLine(scope, scopes) {
+  const base = scope.kind === 'account' ? 'scope: account · review requests and PRs you opened' : `scope: ${scope.label} (${scope.note})`
+  if (scopes.length === 1) return `${base} · read-only · no org or set in [queue] config`
+  return `${base} · read-only · s: ${nextScope(scopes, scope.id).label}`
+}
+
+function QueueScreen({ onOpen, innerWidth, listHeight, queueOptions, scope, scopes, onCycleScope }) {
   const { t } = useTheme()
   const { stdout } = useStdout()
   useKeyScope('pane')
   const cols = innerWidth || (stdout?.columns || 80) - 2
   const wide = cols >= SIDEBAR_MIN_COLS
-  const queue = useReviewQueue(queueOptions)
+  const queue = useReviewQueue({ ...queueOptions, scope })
   const resolve = useActionResolver('queue-list')
 
   const groups = useMemo(() => groupQueue(queue.items), [queue.items])
@@ -161,6 +185,7 @@ export function ReviewQueue({ onOpen, innerWidth, listHeight, queueOptions }) {
       case 'cursor.bottom': if (items.length) remember({ group: group.id, key: keyOf(items[items.length - 1]) }); return
       case 'queue.next-group': moveGroup(1); return
       case 'queue.prev-group': moveGroup(-1); return
+      case 'queue.scope': onCycleScope(); return
       case 'list.refresh': queue.refresh(); return
       case 'queue.more': queue.loadMore(); return
       case 'queue.open': if (focused && onOpen) { remember({ group: group.id, key: keyOf(focused) }); onOpen(focused) } return
@@ -189,8 +214,8 @@ export function ReviewQueue({ onOpen, innerWidth, listHeight, queueOptions }) {
     body = (
       <Box flexDirection="column">
         <Text>Nothing needs your attention here.</Text>
-        <Text color={t.ui.muted}>No open pull request requests your review or was opened by you on {sanitize(meta?.host || 'this host')}.</Text>
-        <Text color={t.ui.muted}>Review requests from other repositories appear here as GitHub reports them; press r to check again.</Text>
+        <Text color={t.ui.muted}>{`No open pull request requests your review or was opened by you ${scope.kind === 'account' ? 'on' : `in ${sanitize(scope.label)} on`} ${sanitize(meta?.host || 'this host')}.`}</Text>
+        <Text color={t.ui.muted}>{scopes.length > 1 ? `s changes the scope (next: ${sanitize(nextScope(scopes, scope.id).label)}); r checks again.` : 'Review requests from other repositories appear here as GitHub reports them; press r to check again.'}</Text>
       </Box>
     )
   } else if (items.length === 0) {
@@ -204,12 +229,12 @@ export function ReviewQueue({ onOpen, innerWidth, listHeight, queueOptions }) {
       <Box height={1} overflow="hidden" justifyContent="space-between">
         <Text wrap="truncate">
           <Text color={t.ui.selected} bold>Review queue</Text>
-          <Text color={t.ui.dim}>{`  ${meta ? `account @${sanitizePath(String(meta.account))} · ${sanitize(meta.host)}` : 'loading'}`}</Text>
+          <Text color={t.ui.dim}>{`  ${meta ? `${scope.kind === 'account' ? `account @${sanitizePath(String(meta.account))}` : sanitize(scope.label)} · ${sanitize(meta.host)}` : 'loading'}`}</Text>
         </Text>
         <Text color={t.ui.dim} wrap="truncate">{queue.loading || queue.loadingMore ? '⟳ updating' : updated ? `⟳ updated ${updated}` : ''}</Text>
       </Box>
       <Box height={1} overflow="hidden">
-        <Text color={t.ui.dim} wrap="truncate">scope: account · review requests and PRs you opened · read-only</Text>
+        <Text color={t.ui.dim} wrap="truncate">{sanitize(scopeLine(scope, scopes))}</Text>
       </Box>
       {!wide && <Chips groups={groups} current={group.id} />}
       <Box flexDirection="row" flexGrow={1} height={rows} overflow="hidden">
