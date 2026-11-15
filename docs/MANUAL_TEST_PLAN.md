@@ -76,6 +76,50 @@ Press `q` at the PR list.
 
 ---
 
+## Section 1b — Review Alpha fixture walkthrough (#295)
+
+The read-only maintainer journey on the same fixture the PTY gate uses, so it needs no GitHub account, App, MCP server or AI provider. It is the manual twin of `test/pty/alpha-journey.js`; run it once per release candidate and whenever the review queue or evidence view changes.
+
+Setup (nothing here touches your real config or GitHub):
+
+```sh
+T=$(mktemp -d) && mkdir -p $T/bin $T/work/platform $T/home
+node -e "import('./test/support/gh-shim/shim.mjs').then(m => m.installShim(process.argv[1], 'alpha'))" $T/bin
+cd $T/work/platform && git init -q -b main && git remote add origin https://github.com/acme/platform.git
+PATH=$T/bin:$PATH HOME=$T LAZYHUB_NO_DAEMON=1 LAZYHUB_GH_LOG=$T/gh.log node /path/to/lazyhub/dist/lazyhub.js
+```
+
+Fixture queue: `acme/platform#412` (review requested of you), `acme/ledger#88` (review requested via a team; its file list always fails to load), `acme/platform#409` (yours, one failing check), and `acme/platform#77` on a second page. Variants: `LAZYHUB_ALPHA_QUEUE=empty|auth|rate`, `LAZYHUB_ALPHA_HOSTILE=1` (every GitHub string carries terminal control sequences).
+
+### A-01 — First launch inside a repo
+- [ ] The first-run list offers `acme/platform (current directory)`; one Enter opens Focus.
+
+### A-02 — Queue, and why
+`g` then `q`.
+- [ ] Rows `platform#412` and `ledger#88` show a reason (`review requested of you`, `via team @acme/core`); the strip under the list repeats the reason for the cursor row with its evidence.
+- [ ] The header says `scope: account`, `read-only` and `updated ...`; a `not all loaded ... + loads more` note is shown, and `+` loads `platform#77`.
+
+### A-03 — Evidence, freshness, unknown
+`j` to `ledger#88`, `Enter`.
+- [ ] Header `Evidence acme/ledger#88 ... read-only`; `Revision` shows the head, `inspected same head`, and `read Ns ago`.
+- [ ] Scroll (`j`): the `files` row says `unknown (gh: ...)` and a `Not read` section lists it; nothing about the files is stated as fine.
+- [ ] `Esc` returns to the queue with the cursor still on `ledger#88` and the same group; `$T/gh.log` shows no new queue request.
+
+### A-04 — Nothing can write from here
+In the queue and again in the evidence view press `a`, `m`, `x`, `X`, `M`, `A`, `c`, `l`, `e`.
+- [ ] No dialog opens and the footer and `?` help list no write verb.
+- [ ] `$T/gh.log` has no `pr merge`, `pr review`, `pr close`, REST write or GraphQL mutation.
+
+### A-05 — Footer keys are live
+- [ ] `]` and `[` change group, `r` refreshes, `+` loads more, `o` opens the browser (put a stub `open` on PATH), `?` opens help, `q` returns to the pane you came from.
+
+### A-06 — Terminals and states
+- [ ] 80x24: every row fits, nothing wraps or flashes. `LANG=C` or `NO_COLOR=1`: ASCII glyphs, no colour.
+- [ ] `LAZYHUB_ALPHA_QUEUE=empty` shows `Nothing needs your attention here`; `auth` says you are not signed in; `rate` names the rate limit; none show stale rows as current.
+- [ ] `LAZYHUB_ALPHA_HOSTILE=1`: titles, bodies, branch names, file paths, check names and the check log cause no beep, cursor jump, clipboard write or link; the inert words stay visible with a visible escape picture where the control byte was.
+
+---
+
 ## Section 2 — Current high-risk regressions (HIGH priority)
 
 These are the areas that changed most across the recent stability passes: host detection, dialog/input behavior, TOML-backed settings, editor handoff, custom panes, and PR workflows. Regressions here are most likely.
