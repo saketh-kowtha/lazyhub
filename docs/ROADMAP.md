@@ -35,7 +35,7 @@ Canonical decisions (#293) land first. `∥` means the work can proceed in paral
 2. (#276 then #284, one owner) ∥ (#287, #288, #292) ∥ release work (#265 then #282)
 3. #201 mockups
 4. (#279 then #177) ∥ (#175 then #127) ∥ (#280 with #290) ∥ #281
-5. #295, then refresh flagged demos, then run the #286 pilot
+5. #295, then refresh flagged demos, then run the #286 pilot (protocol: [`PILOT_PLAN.md`](PILOT_PLAN.md))
 
 Ownership overlaps or strict sequences: #276/#284, #265/#282, #279/#177, #175/#127 and #280/#290. Other Review Alpha work without an ordering constraint includes #253, #248 (maintainer npm setup), #283, #285, #289, #296 and #134. Enforcement feasibility (#277) may proceed alongside Review Alpha.
 
