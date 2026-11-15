@@ -2,7 +2,9 @@
 
 **Review pull requests, evidence and CI from your terminal.** A keyboard-driven GitHub workspace for maintainers who now review more agent-written PRs than they can read line by line. It uses the `gh` session you already have.
 
-![lazyhub PR review demo](docs/demo/out/tour.gif)
+![lazyhub demo: review queue, evidence, why CI is red, and back to the queue](docs/demo/out/tour.gif)
+
+*Fixture recording against a fictional repository: find the PR that needs you, read its evidence (what is fresh, what is unknown), see why CI is red, then return to the queue where you left it. It shows facts and sources; it does not claim a change is safe.*
 
 [![CI](https://github.com/saketh-kowtha/lazyhub/actions/workflows/ci.yml/badge.svg)](https://github.com/saketh-kowtha/lazyhub/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/lazyhub?color=3fb950&label=npm)](https://www.npmjs.com/package/lazyhub)
