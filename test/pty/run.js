@@ -677,7 +677,7 @@ async function runKeyOwnershipFlow() {
 
     // The search box owns the keyboard: pane keys are typed, not run.
     term.write('/')
-    await new Promise(resolve => setTimeout(resolve, 300))
+    await waitUntil(showing(/Search pull requests/), 'the search box opens') // keys sent before it owns the keyboard would run as pane keys
     for (const ch of 'qamM') term.write(ch)
     await waitUntil(showing(/qamM/), 'pane keys are typed into the search box')
     assert.doesNotMatch(screen.text(), /Approve PR|Merge PR|auto-merge/i, 'no write dialog opened under the search box')
@@ -807,6 +807,7 @@ await runFocusReturnFlow({ cols: 80, rows: 24 })
 await runFocusReturnFlow({ cols: 60, rows: 16, single: true })
 await import('./clear.js') // CLEAR gate (#597): runs its 50-key session on import
 await import('./layers.js') // WARM-GH gate (#597 V3): overlays and back-navigation spawn no gh
+await import('./alpha-journey.js') // Review Alpha gate (#295): the read-only maintainer journey, runs on import
 
 if (spawnSync('tmux', ['-V']).status === 0) {
   await runLazyhubFlow({ useTmux: true })

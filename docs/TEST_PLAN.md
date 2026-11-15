@@ -8,6 +8,33 @@ Coverage gate (#283): `vite.config.js` no longer excludes `src/cli/**` or `src/d
 
 ---
 
+## Review Alpha journey gate (#295)
+
+`test/pty/alpha-journey.js` (run from `test/pty/run.js`, about 40 s) drives the read-only maintainer journey on real PTYs with `test/support/gh-shim/alpha.mjs`, a fixture gh set that serves the review queue, the evidence view and PR detail and falls through to the PTY fixture for everything else. Each flow starts lazyhub in a throwaway git repository whose `origin` is `acme/platform`, with a temp HOME and recording stubs for `open`, `xdg-open` and `pbcopy`; none needs a provider, App or MCP configuration. Waits are on screen text; the only fixed pauses are the 50 ms between the keys of a chord or burst (Ink reads back-to-back writes as one input string).
+
+| Flow | What it proves |
+|---|---|
+| first launch 100x30 | first launch in a repo shows the picker with the launch directory's repository, one Enter reaches Focus; `g q` opens the queue; each row names its reason and the strip repeats it; evidence shows `read-only`, freshness (`read Ns ago`) and, for a failed file read, `unknown` plus a `Not read` section; Esc returns to the same row and group without a new queue request; `]` `[` `r` `+` `o` `?` `q` all do what the footer says |
+| read-only boundary | with a positive control (`a` opens a confirm dialog in the PR detail), `a m x X M A c l e` in the queue and in the evidence view open no dialog and make no `pr merge/review/close`, REST write or GraphQL mutation |
+| narrow 80x24 (return launch) | a saved repository goes straight to Focus; same journey; every row fits 80 columns, nothing wraps |
+| ascii 120x30 | `LANG=C`: the whole journey renders ASCII only; `NO_COLOR` (set in every flow) emits no colour codes |
+| empty / auth / rate | empty queue message; not-signed-in and GraphQL rate-limit causes; no rows shown as current; the queue still closes with `q` |
+| display safety | titles, bodies, authors, file paths, team slugs, thread text, branch names, labels, check names and the failing-check log all carry OSC 52, OSC 8, CSI, BEL and raw ESC; the PTY stream contains none of them as control sequences (the ESC byte becomes a visible picture) and the stub opener and clipboard are never called |
+
+Every flow also asserts the fake gh saw no mutating call (`classifyGh(args) === 'write'`, any `pr merge|review|close|edit|comment`, any REST write method or GraphQL `mutation`).
+
+Existing coverage the journey relies on rather than repeats: `lazyhub owner/repo#N` to detail and back (`runReferenceFlow`, #315), repository precedence (`src/launch-paths.test.js`, #290), day-one gh failures and wording (`src/executor/gh-stderr-fixtures.js`, #313), Focus return positions (`runFocusReturnFlow`, #279), the 512 MB container run (`test:memory`, #311), keystroke budgets (`src/keystroke-budgets.e2e.test.jsx`, #312).
+
+Pending (not shipped, so deliberately not faked; each gets a flow when it lands):
+
+- Queue filtered to the launch repository, with the account-wide view one key away (#177 amendment). The queue is account-wide today and says `scope: account`, even when launched inside a repository.
+- The explicit transition from the review context into legacy management (#201 is still a design issue). Today Enter in the evidence view opens the ordinary PR detail, which keeps its own write keys; the gate covers the read-only side of that boundary, not the transition.
+- SSO-unauthorized organization and wrong-host (GHES) failures inside the queue. The causes are covered by classifier tests; there is no queue-level PTY flow yet.
+- Queue sizes at the #311 budget (500 repositories, 1,000 PRs).
+- Durable inspection baselines (tracked in the pilot-gated progress issue).
+
+---
+
 ## Strategy overview
 
 Four complementary layers, each catching a different class of bug:
