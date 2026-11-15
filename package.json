@@ -1,6 +1,6 @@
 {
   "name": "lazyhub",
-  "version": "26.6.3-rc.0",
+  "version": "26.6.3",
   "description": "A lazygit-style GitHub TUI for reviewing pull requests, issues and CI from your terminal",
   "type": "module",
   "bin": {
