@@ -153,6 +153,16 @@ describe('loadEvidenceDetail', () => {
     expect(rows.find(r => r.label === 'files').value).toMatch(/^unknown \(.*rate limit/)
     expect(rows.some(r => r.section === 'Not read' && r.label === 'files')).toBe(true)
   })
+  it('shows the queue\'s review-request reason, with "via team", for a team request the single-PR read cannot confirm', async () => {
+    const team = prNode({ reviewDecision: null, mergeable: 'MERGEABLE', reviewThreads: { totalCount: 0, pageInfo: { hasNextPage: false }, nodes: [] }, commits: { nodes: [{ commit: { oid: 'head2aaaa', statusCheckRollup: { state: 'SUCCESS', contexts: { totalCount: 1, nodes: [{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' }] } } } }] }, reviewRequests: { pageInfo: { hasNextPage: false }, nodes: [{ requestedReviewer: { __typename: 'Team', slug: 'acme/core' } }] } })
+    route({ record: { data: { viewer: { login: 'octocat' }, repository: { pullRequest: team } } } })
+    const plain = evidenceRows(await loadEvidenceDetail('acme/web', 7, { now }), { now })
+    expect(plain.some(r => r.section === 'Attention' && r.label === 'review_requested')).toBe(false)
+    const d = await loadEvidenceDetail('acme/web', 7, { now, reviewRequestedOfMe: true })
+    const row = evidenceRows(d, { now }).find(r => r.section === 'Attention' && r.label === 'review_requested')
+    expect(row.value).toMatch(/via team @acme\/core/)
+    expect(d.record.group.group).toBe('needs_my_review')
+  })
   it('throws when the record itself cannot be read (nothing to show)', async () => {
     route({ record: new Error('not found') })
     await expect(loadEvidenceDetail('acme/web', 7, { now })).rejects.toThrow(/not found/)

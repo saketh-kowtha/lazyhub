@@ -41,7 +41,7 @@ import { runGh } from './core.js'
 import { compatHost, withSchemaFallback } from './schema-compat.js'
 import { isOwnerName } from '../config/schema.js'
 import { sanitize, sanitizePath, sanitizeRaw } from '../utils-core.js'
-import { UNKNOWN, fact } from './evidence.js'
+import { UNKNOWN, fact, attentionReasons, queueGroup } from './evidence.js'
 import { fetchPRReviewEvidence } from './activity.js'
 
 export const EVIDENCE_DETAIL_VERSION = 1
@@ -256,9 +256,11 @@ const messageOf = err => sanitizeRaw(err instanceof Error ? err.message : String
  * @param {any} [opts.cache]            createEvidenceCache() instance
  * @param {boolean} [opts.force]
  * @param {string|null} [opts.inspectedHead] head the user first inspected; defaults to the head read now
+ * @param {boolean} [opts.reviewRequestedOfMe] the review queue placed this PR via the review-requested search; a single-PR read
+ *   cannot know that for a team request, so the attention reasons are derived again with it (same function as the queue)
  * @param {() => number} [opts.now]
  */
-export async function loadEvidenceDetail(repo, number, { cache, force = false, inspectedHead = null, now = Date.now } = {}) {
+export async function loadEvidenceDetail(repo, number, { cache, force = false, inspectedHead = null, reviewRequestedOfMe = false, now = Date.now } = {}) {
   validate(repo, number)
   const [recordR, filesR, requiredR] = await Promise.allSettled([
     fetchPRReviewEvidence(repo, number, { cache, force, now }),
@@ -278,7 +280,10 @@ export async function loadEvidenceDetail(repo, number, { cache, force = false, i
   const required = settle(requiredR, 'required_checks')
   const base = /** @type {any} */ (recordR.value)
   const currentHead = base.context.head.value
-  const record = { ...base, facts: { ...base.facts, required_checks: required } }
+  const facts = { ...base.facts, required_checks: required }
+  const asked = reviewRequestedOfMe || base.attention.some((/** @type {any} */ r) => r.code === 'review_requested')
+  const attention = asked ? attentionReasons(facts, true) : base.attention
+  const record = { ...base, facts, attention, group: asked ? queueGroup(attention, facts) : base.group }
   return {
     schema_version: EVIDENCE_DETAIL_VERSION,
     record,
@@ -330,8 +335,21 @@ function revisionRows(/** @type {Builder} */ b, /** @type {any} */ detail, /** @
 
 const BAD_REASONS = new Set(['ci_failing', 'merge_conflict', 'changes_requested', 'stale_approval'])
 
+/**
+ * The review-request reason names how it was found; a team request says so (same words as the queue row).
+ * @param {any} a an entry of `record.attention`
+ * @returns {string}
+ */
+function attentionNote(a) {
+  if (a.code === 'review_requested' && a.value?.via === 'team_unverified') {
+    const teams = (a.value.teams || []).map((/** @type {string} */ s) => `@${sanitizePath(String(s))}`).join(', ')
+    return `: via team ${teams || 'a team'}`
+  }
+  return a.detail ? `: ${sanitize(a.detail)}` : ''
+}
+
 function attentionRows(/** @type {Builder} */ b, /** @type {any} */ rec) {
-  for (const a of rec.attention) b.row('Attention', word(a.code), `from ${word(a.fact)}${a.detail ? `: ${sanitize(a.detail)}` : ''}`, BAD_REASONS.has(a.code) ? 'bad' : 'warn', { source: a.source, fetched_at: rec.fetched_at })
+  for (const a of rec.attention) b.row('Attention', word(a.code), `from ${word(a.fact)}${attentionNote(a)}`, BAD_REASONS.has(a.code) ? 'bad' : 'warn', { source: a.source, fetched_at: rec.fetched_at })
   if (rec.attention.length === 0) b.row('Attention', 'none', 'no attention reason from the facts below', 'muted')
 }
 

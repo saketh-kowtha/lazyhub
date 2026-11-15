@@ -30,18 +30,23 @@ export function HelpOverlay({ pane, view, actionCtx, onClose, availableWidth, av
   // The overlay lives inside the pane area (below the status bar and footer), so it
   // never claims more than the terminal has: width is clamped, and a short terminal
   // clips the lower rows instead of pushing the frame off-screen.
-  const compactPad = cols < 60 || termRows < 24
+  const compactBase = cols < 60 || termRows < 24
   const roomW = availableWidth ?? cols
   const narrow = roomW < 90
   const roomH = availableHeight ?? termRows
   const outerWidth = Math.max(20, Math.min(roomW - 2, narrow ? 62 : 90))
-  const colWidth = Math.max(16, Math.min(40, outerWidth - (compactPad ? 4 : 6)))
-  const keyWidth = Math.min(18, Math.max(8, Math.floor(colWidth / 2)))
   const maxHeight = Math.max(6, roomH - 2)
   // Ink has no maxHeight: the box is given an explicit height, and each column shows only the rows
   // that fit, ending in "+N more", so the overlay never spills past its own footer (#462).
   const globalKeys = [...GLOBAL_KEYS, ...(isListView ? LIST_GLOBAL_KEYS : [])]
-  const chrome = 2 + (compactPad ? 0 : 2) + 1 + (compactPad ? 0 : 1) + 2 + (compactPad ? 0 : 1) + (compactPad ? 2 : 4)
+  const chromeFor = (compact) => 2 + (compact ? 0 : 2) + 1 + (compact ? 0 : 1) + 2 + (compact ? 0 : 1) + (compact ? 2 : 4)
+  // When dropping the padding is what lets every key of the view itself show (instead of "+N more"
+  // hiding some of them), the padding goes. A view with more own keys than fit either way is unchanged.
+  const ownKeys = contextKeys.filter(k => /** @type {any} */ (k).own).length
+  const compactPad = compactBase || (ownKeys > 0 && ownKeys > maxHeight - chromeFor(false) - 1 && ownKeys <= maxHeight - chromeFor(true))
+  const chrome = chromeFor(compactPad)
+  const colWidth = Math.max(16, Math.min(40, outerWidth - (compactPad ? 4 : 6)))
+  const keyWidth = Math.min(18, Math.max(8, Math.floor(colWidth / 2)))
   const bodyRows = Math.max(2, maxHeight - chrome)
   const clip = (rows) => (rows.length > bodyRows
     ? [...rows.slice(0, bodyRows - 1), { key: '…', label: `+${rows.length - bodyRows + 1} more` }]

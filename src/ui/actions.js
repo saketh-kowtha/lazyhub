@@ -202,9 +202,21 @@ export function contextHelpRows(pane, view, ctx = {}, config = getActionConfig()
     const sig = `${hint.key}:${hint.label}`
     if (seen.has(sig)) continue
     seen.add(sig)
-    rows.push({ id, key: hint.key, label: action.description || hint.label, group: hint.group })
+    rows.push({ id, key: hint.key, label: action.description || hint.label, group: hint.group, own: ownsScope(action.scope, scopes) })
   }
-  return rows
+  // The view's own keys first, then the verbs it shares with other lists: a short help overlay
+  // clips the end, and must never hide the keys only this view has (matches the footer).
+  return [...rows.filter(r => r.own), ...rows.filter(r => !r.own)]
+}
+
+/**
+ * True when an action is declared for one of the view's own scopes, not only the shared `list` one.
+ * @param {string} actionScope declared scope(s), comma separated
+ * @param {string[]} scopes the view's scopes
+ * @returns {boolean}
+ */
+function ownsScope(actionScope, scopes) {
+  return String(actionScope || '').split(',').some(declared => declared !== 'list' && scopes.includes(declared))
 }
 
 /**

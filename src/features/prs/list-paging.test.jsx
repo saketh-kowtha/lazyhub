@@ -285,6 +285,17 @@ describe('PR list "/" searches GitHub (#508)', () => {
     expect(useGh.mock.calls.filter(c => c[0] === listPRsPage).every(c => !c[1][1].search)).toBe(true)
   })
 
+  it('the box opens empty: the "/" that opened it is not typed into it (Enter applies no search)', async () => {
+    const view = mount()
+    await flush(20)
+    await sendInput('/')
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Search pull requests'))
+    await sendInput('', { return: true })
+    await flush(20)
+    expect(useGh.mock.calls.filter(c => c[0] === listPRsPage).every(c => !c[1][1].search)).toBe(true)
+    expect(view.lastFrame()).not.toContain('repo:')
+  })
+
   it('an empty query clears the search', async () => {
     const view = mount()
     await flush(20)

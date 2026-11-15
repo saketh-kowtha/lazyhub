@@ -81,6 +81,8 @@ export function useReviewQueue({ fetcher = fetchReviewQueueEvidence, ttlMs = QUE
   const [phase, setPhase] = useState({ loading: !seeded, loadingMore: false, error: null })
   const mounted = useRef(true)
   const busy = useRef(false)
+  // `+` pressed while a fetch is in flight is remembered and run when it ends, never dropped.
+  const wantMore = useRef(false)
   const latest = useRef(state)
   latest.current = state
 
@@ -94,12 +96,18 @@ export function useReviewQueue({ fetcher = fetchReviewQueueEvidence, ttlMs = QUE
       const result = await fetcher({ limit: QUEUE_PAGE, after: reset ? {} : Object.fromEntries(Object.entries(advance).filter(([, v]) => v)), now, ...(scope.fetch ? { scope: scope.fetch } : {}) })
       const next = fold(latest.current, result, { reset, advance })
       memory.set(memoryKey(scope.id), next)
+      latest.current = next // a queued `+` runs before React renders again
       if (mounted.current) { setState(next); setPhase({ loading: false, loadingMore: false, error: null }) }
     } catch (error) {
       logSwallowed('queue.load', error)
       if (mounted.current) setPhase({ loading: false, loadingMore: false, error })
     } finally {
       busy.current = false
+      if (wantMore.current && mounted.current) {
+        wantMore.current = false
+        const c = latest.current.cursors
+        if (c.reviewRequested || c.authored) run({ reset: false })
+      }
     }
   }, [fetcher, now, scope.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -121,6 +129,9 @@ export function useReviewQueue({ fetcher = fetchReviewQueueEvidence, ttlMs = QUE
     error: phase.error,
     hasMore,
     refresh: useCallback(() => { run({ reset: true }) }, [run]),
-    loadMore: useCallback(() => { if (hasMore) run({ reset: false }) }, [run, hasMore]),
+    loadMore: useCallback(() => {
+      if (busy.current) { wantMore.current = true; return }
+      if (hasMore) run({ reset: false })
+    }, [run, hasMore]),
   }
 }

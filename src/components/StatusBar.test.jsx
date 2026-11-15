@@ -29,3 +29,11 @@ describe('status bar notice (#491)', () => {
     expect(frame).not.toMatch(/background helper/)
   })
 })
+
+describe('status bar for the review queue', () => {
+  it('names the queue and shows no stale pane, repo or freshness', () => {
+    const frame = renderWithProviders(<StatusBar repo={null} pane="queue" hideAge ghHealth={getGhHealthSnapshot()} />).lastFrame()
+    expect(frame).toMatch(/Review queue/)
+    expect(frame).not.toMatch(/focus|ago|just now/)
+  })
+})

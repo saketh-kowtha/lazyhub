@@ -37,8 +37,9 @@ const evidenceCache = () => (cache ||= createEvidenceCache())
  * @param {() => void} [props.onOpenDetail] Enter: open the full PR detail (only offered when the caller passes it)
  * @param {{ view: string, position: number, filter: string, key: string }} [props.returnTo] where Esc should go back to
  * @param {(target: object) => void} [props.onReturn]
+ * @param {object} [props.queueRecord] the queue's evidence record when opened from the queue: its attention reasons are the ones shown
  */
-export function EvidenceView({ pr, repo, onClose, onOpenDiff, onOpenDetail, returnTo, onReturn }) {
+export function EvidenceView({ pr, repo, onClose, onOpenDiff, onOpenDetail, returnTo, onReturn, queueRecord }) {
   useKeyScope('dialog')
   const { t } = useTheme()
   const { stdout } = useStdout()
@@ -48,10 +49,11 @@ export function EvidenceView({ pr, repo, onClose, onOpenDiff, onOpenDetail, retu
   const [reload, setReload] = useState(0)
   const inspected = useRef(null)
   const force = useRef(false)
+  const queueAsked = Boolean(queueRecord?.attention?.some(r => r.code === 'review_requested'))
 
   useEffect(() => {
     let live = true
-    loadEvidenceDetail(repo, pr.number, { cache: evidenceCache(), force: force.current, inspectedHead: inspected.current })
+    loadEvidenceDetail(repo, pr.number, { cache: evidenceCache(), force: force.current, inspectedHead: inspected.current, reviewRequestedOfMe: queueAsked })
       .then(detail => {
         if (!live) return
         // The first head read is the revision the user inspects; later refreshes are compared with it.
@@ -60,7 +62,7 @@ export function EvidenceView({ pr, repo, onClose, onOpenDiff, onOpenDetail, retu
       })
       .catch(error => { if (live) setState({ phase: 'error', detail: null, error }) })
     return () => { live = false }
-  }, [repo, pr?.number, reload])
+  }, [repo, pr?.number, reload, queueAsked])
 
   const rows = useMemo(() => (state.detail ? evidenceRows(state.detail) : []), [state.detail])
   // Display list: a heading whenever the section changes. The cursor walks every line.

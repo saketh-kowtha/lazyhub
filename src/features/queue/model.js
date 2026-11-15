@@ -12,6 +12,24 @@
  */
 
 import { sanitize, sanitizePath } from '../../utils-core.js'
+import stringWidth from 'string-width'
+
+const displayWidth = (/** @type {string} */ s) => stringWidth(s)
+
+/**
+ * Cut to `max` columns with an ellipsis (pure; the display helpers in utils.js import React).
+ * @param {string} text
+ * @param {number} max columns
+ * @returns {string}
+ */
+function cutTo(text, max) {
+  let out = ''
+  for (const ch of text) {
+    if (displayWidth(out + ch) > max - 1) break
+    out += ch
+  }
+  return `${out}…`
+}
 
 const UNKNOWN = 'unknown'
 
@@ -124,13 +142,17 @@ export function ageWords(ms) {
  * head, CI counts, mergeability. Unavailable facts are said to be unavailable.
  * @param {any} item evidence record
  * @param {number} [now] epoch ms, for the "seen" age
+ * @param {number} [maxWidth] columns the line may take; the facts after the reasons are dropped, last
+ *   first ("seen", mergeability, CI, head), until it fits. The reasons are never dropped (cut only as a last resort).
  * @returns {string}
  */
-export function whyLine(item, now = Date.now()) {
+export function whyLine(item, now = Date.now(), maxWidth = Infinity) {
   const reasons = Array.isArray(item?.attention) ? item.attention : []
-  const parts = reasons.length > 0
+  const why = reasons.length > 0
     ? reasons.map((/** @type {any} */ r) => reasonText(r))
     : [BECAUSE_TEXT[String(item?.group?.because)] || 'no attention reason recorded']
+  /** @type {string[]} */
+  const parts = []
   const head = item?.context?.head?.value
   parts.push(known(head) ? `head ${String(head).slice(0, 7)}` : 'head unavailable')
   const checks = item?.facts?.checks?.value
@@ -141,7 +163,10 @@ export function whyLine(item, now = Date.now()) {
   parts.push(known(merge) ? String(merge).toLowerCase() : 'mergeability unavailable')
   const seen = item?.fetched_at ? ageWords(now - Date.parse(item.fetched_at)) : null
   if (seen) parts.push(`seen ${seen}`)
-  return parts.join(' · ')
+  const width = (/** @type {string[]} */ list) => displayWidth(list.join(' · '))
+  while (parts.length > 0 && width([...why, ...parts]) > maxWidth) parts.pop()
+  const line = [...why, ...parts].join(' · ')
+  return displayWidth(line) > maxWidth ? cutTo(line, Math.max(2, maxWidth)) : line
 }
 
 /**
