@@ -11,7 +11,9 @@ promotion moves a soaked build to `latest` and updates Homebrew.
 3. The `Release` workflow (after approval of the `npm-publish` environment)
    builds and publishes `lazyhub@<version>` with
    `npm publish --tag next --provenance` via OIDC trusted publishing, then runs
-   `scripts/release-smoke.mjs` against the published tarball, then creates the
+   `scripts/release-smoke.mjs` against the published tarball (integrity, SLSA
+   provenance bound to the tarball digest and to `release.yml` in this repository,
+   `npm audit signatures`, file inventory, and the installed binary's `--version`), then creates the
    GitHub prerelease. No npm token is used anywhere.
 4. Let the `next` build soak for 3-7 days.
 5. Run the `Promote` workflow manually. Enter the version twice.
@@ -19,6 +21,9 @@ promotion moves a soaked build to `latest` and updates Homebrew.
    before anything is promoted if the secret is missing), moves `lazyhub@<version>` to
    `latest`, updates the Homebrew tap, and fails unless the tap is on that version
    (`docs/homebrew.md`). A weekly `Tap check` workflow flags a tap that has fallen behind.
+
+Workflow actions are pinned to full commit SHAs (the version is in a trailing
+comment); update them deliberately, not by tag.
 
 ## npm Trusted Publisher Setup (one-time, maintainer)
 
@@ -64,6 +69,38 @@ and a short expiry. Do not reintroduce a broad automation token.
    provenance badge and `npm view lazyhub@<version> dist.attestations` is set.
 5. Run `Promote` with the rc version only if you want to exercise dist-tag over
    OIDC; roll `latest` back afterwards (see Rollback).
+
+## 26.6.3 / pilot release checklist (maintainer actions, in order)
+
+The code and docs are ready; these steps need maintainer rights on GitHub and npm.
+Do them in this order. Do not skip ahead: step 8 removes the fallback.
+
+1. **Protect the `npm-publish` environment** (GitHub -> Settings -> Environments):
+   add required reviewers, and restrict deployment branches and tags to `v*` tags
+   and `main`.
+2. **Add the two npm Trusted Publisher entries** (npmjs.com -> `lazyhub` ->
+   Settings -> Trusted Publisher): `release.yml` with `npm publish`, and
+   `promote.yml` with `npm dist-tag`, both bound to environment `npm-publish`
+   (details above).
+3. **Add `TAP_TOKEN`** (a fine-grained token with contents write on
+   `saketh-kowtha/homebrew-tap` only) as a secret of the `npm-publish`
+   environment. `Promote` fails before moving any tag if it is missing.
+4. **Prerelease exercise**: tag an `rc.0` (see "Prerelease Exercise") and confirm
+   `publish`, `smoke` and `github-release` pass and provenance verifies.
+5. **Tag `v26.6.3`** from `main` (`package.json` already says 26.6.3). It publishes
+   to `next`; let it soak there (3-7 days).
+6. **Run `Promote`** for 26.6.3. It moves `latest` and updates the Homebrew tap,
+   then fails unless the tap matches npm. Confirm the weekly `Tap check` goes green.
+7. **Publish the drafted security advisories** only after 26.6.3 is `latest`.
+8. **After provenance is verified on a real release**: set npm package
+   Settings -> Publishing access to "Require two-factor authentication and
+   disallow tokens", revoke the old automation token on npmjs.com, and delete the
+   `NPM_TOKEN` repository secret.
+
+If anything goes wrong after step 6, use "Rollback" and "Deprecating a Bad
+Release" below. If a credential may be exposed, use "Revoking Access After a
+Suspected Compromise" (npm tokens, `TAP_TOKEN`, and any GitHub App or OAuth
+integration).
 
 ## Self-contained package (no runtime dependencies)
 
