@@ -2,6 +2,7 @@
  * #472: the Homebrew formula comes from one tested template, `--version` is expected to exit 0,
  * the promotion cannot skip the tap, and a tap that differs from npm is a failure.
  */
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { compareTap, formulaVersion, renderFormula } from '../scripts/homebrew-formula.mjs'
@@ -25,6 +26,14 @@ describe('formula template', () => {
     expect(test).toMatch(/shell_output\("#\{bin\}\/lazyhub --version"\)/)
     expect(test).not.toMatch(/shell_output\([^)]*,\s*1\)/)
     expect(test).toContain('version.to_s')
+  })
+
+  it('the CLI render command prints a formula whose test expects exit 0 and the version (#472)', () => {
+    const script = new URL('../scripts/homebrew-formula.mjs', import.meta.url).pathname
+    const out = execFileSync(process.execPath, [script, 'render', URL_, SHA, '26.6.2'], { encoding: 'utf8' })
+    expect(out).toContain('version "26.6.2"')
+    expect(out).toMatch(/assert_match version\.to_s, shell_output\("#\{bin\}\/lazyhub --version"\)/)
+    expect(out).not.toMatch(/shell_output\([^)]*,\s*[1-9]\)/)
   })
 
   it('refuses values that do not look like an npm tarball, a digest or a version', () => {
@@ -79,5 +88,55 @@ describe('promote workflow', () => {
     expect(check).toMatch(/schedule:/)
     expect(check).toContain('homebrew-formula.mjs check')
     expect(check).not.toMatch(/TAP_TOKEN|npm publish|dist-tag|createOrUpdateFileContents/)
+  })
+})
+
+describe('release workflows (#248)', () => {
+  const release = read('../.github/workflows/release.yml')
+  const promote = read('../.github/workflows/promote.yml')
+  const tapCheck = read('../.github/workflows/tap-check.yml')
+  const jobBlock = (text, job) => {
+    const start = text.indexOf(`\n  ${job}:`)
+    const next = text.slice(start + 1).search(/\n  [a-z-]+:\n/)
+    return text.slice(start, next < 0 ? undefined : start + 1 + next)
+  }
+
+  it('uses no npm token anywhere', () => {
+    for (const wf of [release, promote, tapCheck]) expect(wf.replace(/^\s*#.*$/gm, '')).not.toMatch(/NODE_AUTH_TOKEN|NPM_TOKEN|_authToken/)
+  })
+
+  it('denies all permissions by default and grants the least per job', () => {
+    for (const wf of [release, promote, tapCheck]) expect(wf).toMatch(/^permissions: \{\}$/m)
+    expect(jobBlock(release, 'publish')).toMatch(/permissions:\n\s+contents: read\n\s+id-token: write/)
+    expect(jobBlock(release, 'smoke')).not.toContain('id-token')
+    expect(jobBlock(release, 'smoke')).not.toContain('environment:')
+    expect(jobBlock(release, 'github-release')).toMatch(/permissions:\n\s+contents: write/)
+    expect(jobBlock(promote, 'promote')).toMatch(/permissions:\n\s+contents: read\n\s+id-token: write/)
+  })
+
+  it('publishes and promotes only through the npm-publish environment', () => {
+    expect(jobBlock(release, 'publish')).toContain('environment: npm-publish')
+    expect(jobBlock(promote, 'promote')).toContain('environment: npm-publish')
+    expect(release).toMatch(/npm publish --access public --tag next --provenance/)
+    expect(release).not.toMatch(/--tag latest/)
+  })
+
+  it('pins every action to a full commit SHA (docs/CI_SIMPLIFICATION.md)', () => {
+    for (const wf of [release, promote, tapCheck]) {
+      const uses = [...wf.matchAll(/uses:\s*(\S+)/g)].map(m => m[1])
+      expect(uses.length).toBeGreaterThan(0)
+      for (const u of uses) expect(u).toMatch(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/)
+    }
+  })
+
+  it('the smoke test checks the exact tarball, its provenance, its inventory and the binary', () => {
+    const smoke = read('../scripts/release-smoke.mjs')
+    expect(smoke).toContain("'pack', spec")
+    expect(smoke).toContain('dist.integrity')
+    expect(smoke).toContain('slsa.dev/provenance')
+    expect(smoke).toContain('audit')
+    expect(smoke).toContain('ALLOWED')
+    expect(smoke).toContain("'--version'")
+    expect(release).toContain('scripts/release-smoke.mjs')
   })
 })

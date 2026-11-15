@@ -25,6 +25,8 @@ if (!version || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
 }
 
 const spec = `${pkg}@${version}`
+const EXPECTED_REPO = 'https://github.com/saketh-kowtha/lazyhub'
+const EXPECTED_WORKFLOW = '.github/workflows/release.yml'
 const ALLOWED = [
   /^package\/package\.json$/,
   /^package\/README(\.md)?$/,
@@ -61,9 +63,26 @@ try {
   } else {
     const res = await fetch(attUrl)
     const body = res.ok ? await res.json() : null
-    const types = (body?.attestations ?? []).map((a) => a.predicateType)
-    if (types.some((t) => t.startsWith('https://slsa.dev/provenance/'))) ok('SLSA provenance attestation present')
-    else fail(`no SLSA provenance attestation (http ${res.status}, types=${JSON.stringify(types)})`)
+    const atts = body?.attestations ?? []
+    const types = atts.map((a) => a.predicateType)
+    const slsa = atts.find((a) => a.predicateType?.startsWith('https://slsa.dev/provenance/'))
+    if (!slsa) {
+      fail(`no SLSA provenance attestation (http ${res.status}, types=${JSON.stringify(types)})`)
+    } else {
+      ok('SLSA provenance attestation present')
+      // Bind the attestation to these exact bytes and to this repository's release workflow.
+      try {
+        const statement = JSON.parse(Buffer.from(slsa.bundle.dsseEnvelope.payload, 'base64').toString('utf8'))
+        const want = createHash('sha512').update(readFileSync(tgz)).digest('hex')
+        if (statement.subject?.some((s) => s.digest?.sha512 === want)) ok('provenance subject digest matches the downloaded tarball')
+        else fail('provenance subject digest does not match the downloaded tarball')
+        const wf = statement.predicate?.buildDefinition?.externalParameters?.workflow
+        if (wf?.repository === EXPECTED_REPO && wf?.path === EXPECTED_WORKFLOW) ok(`provenance built by ${wf.repository} ${wf.path}`)
+        else fail(`provenance workflow is ${JSON.stringify(wf)}, expected ${EXPECTED_REPO} ${EXPECTED_WORKFLOW}`)
+      } catch (err) {
+        fail(`could not read the provenance statement: ${err.message}`)
+      }
+    }
   }
 
   // 4. Registry signatures and attestations verify in a clean registry install.
