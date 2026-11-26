@@ -84,10 +84,10 @@ jobs:
 
       - name: Verify published tarball
         run: |
-          # Registry propagation can lag the publish by a short while.
-          for i in $(seq 1 12); do
+          # Registry propagation can lag the publish by several minutes (26.6.3 took over 2).
+          for i in $(seq 1 30); do
             [ -n "$(npm view "lazyhub@${GITHUB_REF_NAME#v}" dist.attestations.url 2>/dev/null)" ] && break
-            echo "waiting for registry ($i/12)"; sleep 10
+            echo "waiting for registry ($i/30)"; sleep 10
           done
           node scripts/release-smoke.mjs "${GITHUB_REF_NAME#v}"
 
