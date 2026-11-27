@@ -145,6 +145,22 @@ describe('daemon MCP adapter', () => {
     expect(pr).toEqual({ number: 1 })
   })
 
+  it('describes every tool and input for agent tool selection (#626)', async () => {
+    const { TOOLS, TOOL_ALIASES } = await import('./mcp-adapter.js')
+    const by = Object.fromEntries(TOOLS.map(t => [t.name, t]))
+    for (const tool of TOOLS) {
+      expect(tool.description.length, tool.name).toBeGreaterThanOrEqual(60)
+      expect(tool.description, tool.name).toMatch(/read-only/i)
+      for (const [prop, spec] of Object.entries(tool.inputSchema.properties)) {
+        expect(spec.description, `${tool.name}.${prop}`).toMatch(/\w{3,}/)
+      }
+      const canonical = TOOL_ALIASES[tool.name]
+      if (canonical) expect(tool.description, tool.name).toBe(by[canonical].description)
+    }
+    expect(by.list_prs.description).toContain('checksSummary')
+    expect(by.list_prs.description).toContain('`gh pr list`')
+  })
+
   it('keeps resource_type in the input schemas the validator accepts', async () => {
     const { TOOLS } = await import('./mcp-adapter.js')
     const by = Object.fromEntries(TOOLS.map(t => [t.name, t.inputSchema]))

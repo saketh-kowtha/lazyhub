@@ -30,6 +30,12 @@ Commands:
   watch-only [--repo owner/name]  read-only coverage report
   serve [--status|--stop]         manage the background daemon
 
+For agents and scripts (non-interactive, read-only, never prompts):
+  --mcp                           MCP server on stdio (JSON-RPC); same as \`lazyhub mcp-server\`.
+                                  Client config: {"command": "lazyhub", "args": ["--mcp"]}
+  doctor --json                   setup and coverage report as JSON
+  status --format json            cached review/CI/notification counts as JSON
+
 Options:
   --repo owner/name               open this repository for this launch (not saved);
                                   on GitHub Enterprise Server: GH_HOST=host lazyhub --repo owner/name
