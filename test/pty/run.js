@@ -808,6 +808,7 @@ await runFocusReturnFlow({ cols: 60, rows: 16, single: true })
 await import('./clear.js') // CLEAR gate (#597): runs its 50-key session on import
 await import('./layers.js') // WARM-GH gate (#597 V3): overlays and back-navigation spawn no gh
 await import('./alpha-journey.js') // Review Alpha gate (#295): the read-only maintainer journey, runs on import
+await import('./claims.js') // claims check (#361): fixture PR, every status with evidence, AI pass fails closed, hostile text
 
 if (spawnSync('tmux', ['-V']).status === 0) {
   await runLazyhubFlow({ useTmux: true })

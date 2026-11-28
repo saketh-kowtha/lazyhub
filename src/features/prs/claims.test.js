@@ -167,3 +167,75 @@ describe('invariants', () => {
     ])
   })
 })
+
+// Acceptance (#361): every claim type has a positive, a negative and an unknown fixture. Performance and
+// security have no positive or negative by design: wording is never evidence, so they are always unknown.
+describe('fixture matrix: verified / contradicted / unverifiable per claim type', () => {
+  const issue = { closing: [7], issues: { 7: { body: 'Crash in src/parser.js' } } }
+  const MATRIX = {
+    fixes: [
+      ['Fixes #7', [file('src/parser.js')], issue],
+      ['Fixes #7', [file('src/other.js')], issue],
+      ['Fixes #7', [file('src/parser.js')], { closing: [7], issues: { 7: { body: 'it is broken' } } }],
+    ],
+    tests: [
+      ['Adds tests', [file('a.test.js', patch("+test('x', () => {"))]],
+      ['Adds tests', [file('src/a.js')]],
+      ['Adds tests', [file('a.test.js', patch('+  expect(1)'))]],
+    ],
+    docs: [
+      ['Updates docs', [file('README.md', patch('+x'))]],
+      ['Updates docs', [file('src/a.js')]],
+      ['Updates docs', []],
+    ],
+    'no-breaking': [
+      ['No breaking changes', [file('docs/a.md')]],
+      ['No breaking changes', [file('src/cli.js', patch("-  .option('--json')"))]],
+      ['No breaking changes', [file('src/a.js', patch('+const x = 1'))]],
+    ],
+    'only-touches': [
+      ['Only touches src/ai.', [file('src/ai/a.js')]],
+      ['Only touches src/ai', [file('src/ai/a.js'), file('bin/x.js')]],
+      ['only changes the parser', [file('src/lexer.js')]],
+    ],
+    version: [
+      ['Bump version to 2.1.0', [file('package.json', patch('+  "version": "2.1.0",'))]],
+      ['Bump version to 2.1.0', [file('src/a.js')]],
+      ['Bump version to 2.1.0', [file('package.json', patch('+  "name": "x",'))]],
+    ],
+  }
+  for (const [type, [pos, neg, unk]] of Object.entries(MATRIX)) {
+    it(`${type}`, () => {
+      const status = ([body, files, ctx = {}]) => only(run(body, files, ctx), type)?.status
+      expect(status(pos)).toBe(STATUS.VERIFIED)
+      expect(status(neg)).toBe(STATUS.CONTRADICTED)
+      expect(status(unk)).toBe(STATUS.UNVERIFIABLE)
+    })
+  }
+  it('performance and security: always unverifiable, even with a matching diff', () => {
+    for (const body of ['Improves performance', '3x faster', 'Fixes CVE-2024-1234', 'security fix']) {
+      const r = run(body, [file('bench/a.bench.js', patch('+fast')), file('SECURITY.md', patch('+x'))])
+      expect(r.claims).toHaveLength(1)
+      expect(r.claims[0].status).toBe(STATUS.UNVERIFIABLE)
+    }
+  })
+})
+
+describe('a capped or empty file list never contradicts or verifies by absence', () => {
+  const capped = { filesTruncated: true }
+  it('absence becomes unverifiable when GitHub capped the file list', () => {
+    for (const body of ['Adds tests', 'Updates docs', 'Bump version to 2.1.0']) {
+      expect(run(body, [file('src/a.js')], capped).claims[0]).toMatchObject({ status: STATUS.UNVERIFIABLE, reason: expect.stringMatching(/capped/) })
+    }
+    expect(only(run('Fixes #7', [file('src/other.js')], { ...capped, closing: [7], issues: { 7: { body: 'src/parser.js' } } }), 'fixes').status).toBe(STATUS.UNVERIFIABLE)
+  })
+  it('"all files are inside" cannot be verified from a capped list', () => {
+    expect(only(run('Only touches src', [file('src/a.js')], capped), 'only-touches').status).toBe(STATUS.UNVERIFIABLE)
+    expect(only(run('No breaking changes', [file('docs/a.md')], capped), 'no-breaking').status).toBe(STATUS.UNVERIFIABLE)
+    // A file outside the scope is still a contradiction, capped or not.
+    expect(only(run('Only touches src', [file('src/a.js'), file('bin/b.js')], capped), 'only-touches').status).toBe(STATUS.CONTRADICTED)
+  })
+  it('no changed files is unverifiable, not contradicted', () => {
+    for (const body of ['Adds tests', 'Updates docs', 'Bump version to 2.1.0']) expect(run(body, []).claims[0].status).toBe(STATUS.UNVERIFIABLE)
+  })
+})
