@@ -60,6 +60,15 @@ smartEnter = true     # Enter on a PR row jumps to the failing log, Files change
       <li>The interactive picker</li>
     </ol>
 
+    <h2 id="queue">Review queue scopes</h2>
+    <p>The review queue (<kbd>g</kbd> <kbd>q</kbd>) starts on the repository you launched in, from the current directory or <code>--repo</code>. A repository that only came from <code>[defaults].repo</code>, the picker or a <code>owner/repo#123</code> reference does not narrow it. Without a launch repository it opens on the scope you used last, else your whole account. <kbd>s</kbd> cycles: this repository, the account, its organisation and each one below, then each repository set.</p>
+    <pre><code>[queue]
+orgs = ["acme"]
+
+[queue.sets]
+work = ["acme/api", "acme/web"]   # up to 20 owner/name entries per set</code></pre>
+    <p>Set names are 1 to 32 letters, digits, spaces, <code>.</code>, <code>_</code> or <code>-</code>. Invalid entries are dropped with a warning that <code>lazyhub doctor</code> shows. Queries only ever run against the host <code>gh</code> uses for this launch.</p>
+
     <h2 id="themes">Themes and terminals</h2>
     <p>The default theme uses only your terminal's 16 ANSI colours, so it follows your terminal scheme. Set <code>[theme].name</code> to one of: <code>terminal</code>, <code>lazyhub-dark</code>, <code>lazyhub-light</code>, <code>github-dark</code>, <code>github-light</code>, <code>catppuccin-mocha</code>, <code>catppuccin-latte</code>, <code>tokyo-night</code>, <code>ansi-16</code>, <code>aurora-dark</code>, <code>aurora-light</code>. Individual tokens go in <code>[theme.overrides]</code>, for example <code>"accent.primary" = "#ff7eb6"</code>.</p>
     <ul>

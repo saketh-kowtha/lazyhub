@@ -25,6 +25,8 @@ Each stage has separate entry and exit criteria. Progress in one does not prove 
 
 **Readiness record:** the evidence-based go/no-go for the Dec 1 Review Alpha (#134, #629), with per-gate status and the ordered blocking list, is in [`ALPHA_READINESS.md`](ALPHA_READINESS.md). As of 2026-11-15 it is a no-go: release provenance (#248) needs maintainer setup, the read-only journey (#295) is in progress, the in-repo queue filter (#177) and part of the registry migration (#312) are open, and the pilot (#286) has not run. Optional approval gates are listed there separately and do not block Review Alpha.
 
+Observed since that record (2026-11-27, not a re-run of the gates): `26.6.3` is published on npm with a provenance attestation (`npm view lazyhub@26.6.3 dist.attestations`) and the Homebrew formula is at `26.6.3`; the in-repo queue scope (#643), the registry migration (#644) and the read-only journey gate (#648) merged. #134, #177, #248, #286 and #295 are still open, and the pilot has not reported. Staging, channels and conversion signals for the launch are in [`LAUNCH_PLAN.md`](LAUNCH_PLAN.md).
+
 Contributor enablement (#296) supports adoption without a marketplace. Local-agent coverage can be called `managed_gateway`, and eligible cloud-agent coverage `github_enforced`, only after the corresponding gateway or App-source and ruleset verification exists. Team availability and an always-on verifier are Beta work.
 
 ## Review Alpha order

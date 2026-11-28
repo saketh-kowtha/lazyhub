@@ -74,7 +74,7 @@
       <div class="grid">
         <div class="card">
           <h3>Know what to review next</h3>
-          <p>Press <kbd>g</kbd> <kbd>q</kbd> for a queue of open PRs that ask for your review or that you opened. Every row says why it is there. There is no score and no verdict.</p>
+          <p>Press <kbd>g</kbd> <kbd>q</kbd> for a queue of open PRs that ask for your review or that you opened, starting with the repository you are in. Every row says why it is there. There is no score and no verdict.</p>
         </div>
         <div class="card">
           <h3>See the evidence, not the pitch</h3>
@@ -94,12 +94,13 @@
       <div class="feature">
         <div>
           <h3>Review queue</h3>
-          <p>An explainable attention queue grouped by status: needs your review, CI failing, changes requested, waiting, ready. Open a row to land on its evidence and press <kbd>Esc</kbd> to come back to the same place.</p>
+          <p>An explainable attention queue grouped by status: needs your review, CI failing, changes requested, waiting, ready. Launched inside a clone it shows that repository; <kbd>s</kbd> switches to your whole account, an organisation or a repository set from <code>[queue]</code> in your config. Open a row to land on its evidence and press <kbd>Esc</kbd> to come back to the same place.</p>
         </div>
         <ul class="keys" aria-label="Review queue keys">
           <li><kbd>g</kbd> <kbd>q</kbd> open the queue</li>
           <li><kbd>]</kbd> <kbd>[</kbd> next and previous status group</li>
           <li><kbd>Enter</kbd> open the PR's evidence</li>
+          <li><kbd>s</kbd> repository, account, organisation or set</li>
           <li><kbd>+</kbd> load more, <kbd>o</kbd> open in the browser</li>
         </ul>
       </div>
@@ -191,14 +192,14 @@
 
     <section aria-labelledby="speed">
       <h2 id="speed">Fast, and complete</h2>
-      <p>The screen is never cleared and redrawn: lazyhub keeps its output shorter than the terminal so Ink writes only what changed. These numbers come from the repository's own <code>npm run vitals</code> harness: the built app in a pseudo-terminal at 80 by 24, against a fake <code>gh</code> that takes 300 ms per call, on a laptop (macOS, Node 22). They show the app's share of the time, not GitHub's.</p>
+      <p>lazyhub keeps its output shorter than the terminal so Ink writes only what changed instead of clearing and redrawing the screen. These numbers come from the repository's own <code>npm run vitals</code> harness: the built app in a pseudo-terminal at 80 by 24, against a fake <code>gh</code> that takes 300 ms per call, on a laptop (macOS, Node 22). Ranges are the spread across several local runs. They show the app's share of the time on a fixture, not GitHub's, and are not a promise about your network.</p>
       <div class="grid">
-        <div class="card"><p class="stat">407 ms<small>cold PR list: key to first rows (one 300 ms round trip included)</small></p></div>
-        <div class="card"><p class="stat">7 ms<small>keypress to next frame while moving in a list, 95th percentile</small></p></div>
-        <div class="card"><p class="stat">13 ms<small>reopening a list you already loaded</small></p></div>
-        <div class="card"><p class="stat">0 of 66<small>frames that cleared the screen</small></p></div>
+        <div class="card"><p class="stat">400&ndash;460 ms<small>cold PR list: key to first rows (one 300 ms round trip included)</small></p></div>
+        <div class="card"><p class="stat">7&ndash;11 ms<small>keypress to next frame while moving in a list, 95th percentile</small></p></div>
+        <div class="card"><p class="stat">13&ndash;22 ms<small>reopening a list you already loaded</small></p></div>
+        <div class="card"><p class="stat">0<small>frames that cleared the screen, of about 66 in the run</small></p></div>
       </div>
-      <p>Lists and diffs also fill in behind a skeleton instead of blocking, views you navigate away from stay alive so Esc returns instantly, and several write actions update the row before GitHub answers, then say so and revert if GitHub refuses. One reopen path still makes one network call, tracked as a known gap.</p>
+      <p>Lists and diffs also fill in behind a skeleton instead of blocking, views you navigate away from stay alive so Esc goes back without a new <code>gh</code> call, and several write actions update the row before GitHub answers, then say so and revert if GitHub refuses. One reopen path still makes one network call, tracked as a known gap.</p>
       <p>Speed never means silent cuts. The CI performance budget drives a fixture of 5,000 open and 80,000 closed PRs and a 3,000-file, 100,000-line diff, and asserts the exact pages fetched. GitHub search returns at most 1,000 results, so a list stops there and the footer says so. Peak memory stays between 150 and 225 MB in that run, against a 512 MB budget. Details are in <a href="https://github.com/saketh-kowtha/lazyhub/blob/main/docs/PERF_BUDGETS.md">PERF_BUDGETS</a>.</p>
     </section>
 
@@ -212,6 +213,18 @@
         <li><strong>Feedback is yours to send.</strong> <code>lazyhub feedback</code> opens a pre-filled GitHub issue with redacted diagnostics; nothing is sent until you submit it.</li>
       </ul>
       <p>Read the <a href="https://github.com/saketh-kowtha/lazyhub/blob/main/docs/THREAT_MODEL.md">threat model</a> and <a href="https://github.com/saketh-kowtha/lazyhub/blob/main/SECURITY.md">security policy</a>.</p>
+    </section>
+
+    <section aria-labelledby="alpha">
+      <h2 id="alpha">Review Alpha: what it is and isn't</h2>
+      <p>lazyhub is in its Review Alpha stage. <strong>It is</strong> the read-only review journey on this page, over your existing <code>gh</code> login: queue, evidence, why CI is red, claims, collisions and story, installed from npm or Homebrew.</p>
+      <ul>
+        <li><strong>Not an enforcement system.</strong> No GitHub App or required check enforces approval. That is a separate, optional stage that is not built.</li>
+        <li><strong>Not a verdict.</strong> It shows facts, sources and unknowns, and never says a change is safe.</li>
+        <li><strong>Not an agent that writes.</strong> The MCP server and the AI assistant are read-only. Review tools over MCP, a Claude Code plugin, hand-off to a coding agent and a GitHub Action are not shipped.</li>
+        <li><strong>Not a stable 1.0.</strong> Keys, views and config may still change between releases.</li>
+      </ul>
+      <p>The project learns only what you choose to send: an issue, <code>lazyhub feedback</code>, or a pilot session you agreed to.</p>
     </section>
 
     <section aria-labelledby="ghes">

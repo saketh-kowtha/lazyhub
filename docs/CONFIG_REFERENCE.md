@@ -7,7 +7,7 @@ This page is generated from the same TOML metadata lazyhub uses at runtime.
 The single source of truth is `~/.config/lazyhub/lazyhub.toml`.
 
 - `[theme]` selects the active theme.
-- `[app]`, `[panes.*]`, `[features.*]`, `[layout]`, `[diff]`, `[editor]`, `[ipc]`, and `[ai]` provide app configuration.
+- `[app]`, `[panes.*]`, `[features.*]`, `[layout]`, `[diff]`, `[editor]`, `[ipc]`, `[queue]`, and `[ai]` provide app configuration.
 - `[ipc].allow_writes` (default `false`) lets editor integrations reply to and
   resolve PR review threads over the IDE socket. Reads and navigation always
   work. Local-only: a remote `config_url` cannot set it.
@@ -26,6 +26,7 @@ The single source of truth is `~/.config/lazyhub/lazyhub.toml`.
 - `[ui].show_hints` (default `true`): `false` hides the footer key hints, the same layout as `[layout].compact_footer = true`.
 - `[layout].preview_panel` (default `true`): `false` turns off the PR detail popover that floats over the PR list.
 - `[features.prs].default_scope` (`mine` | `reviewing` | `all`, default `mine`) is the PR list scope on first launch; afterwards the last scope you used is remembered. `[defaults].pr_scope` is a retired alias, honoured only while `default_scope` is left at its default.
+- `[queue].orgs` (array of organisation names, default empty) and `[queue.sets]` (named arrays of `"owner/name"`, at most 20 per set; names are 1-32 letters, digits, space, `.`, `_` or `-`) add review queue scopes. `s` in the queue cycles: the repository you launched in (current directory or `--repo` only), the account, that repository's organisation and each listed one, then each set. Without a launch repository the queue opens on the scope used last (`[state].queueScope`), else the account.
 - Removed because nothing read them: `[ui].density`, `[ui].high_contrast` (pick the `lazyhub-high-contrast` theme instead) and `[diff].max_lines` (diffs are never cut off). Old files that still contain them load without a warning.
 - `[state]` stores auto-managed runtime state migrated from the old `state.json`.
 - `[ai.second_opinion]` controls cross-model review routing for agent-authored
