@@ -300,6 +300,42 @@ const ROLLUP_NODES = `
 /** Capabilities of the slim row query: name -> the field names whose absence degrades it. */
 const ROW_CAPABILITIES = { rollupCounts: /checkRunCountsByState|statusContextCountsByState/ }
 
+// ─── Repository info riding on the first PR list page (#622) ─────────────────
+// `gh repo view --json <REPO_INFO_FIELDS>` is a GraphQL read of these same Repository fields, so
+// the list's first page asks for them too and the list's getRepoInfo() that starts beside it is
+// answered from that response instead of spawning its own gh. A host whose schema lacks one of
+// them drops the block (capability `repoInfo`) and getRepoInfo() runs `gh repo view` as before.
+const REPO_INFO_FIELDS = 'name,owner,defaultBranchRef,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed,deleteBranchOnMerge,viewerPermission'
+const REPO_INFO_SELECTION = 'name owner { id login } defaultBranchRef { name } squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed deleteBranchOnMerge viewerPermission'
+const PAGE_CAPABILITIES = { ...ROW_CAPABILITIES, repoInfo: /\b(?:squashMergeAllowed|mergeCommitAllowed|rebaseMergeAllowed|deleteBranchOnMerge|viewerPermission|defaultBranchRef)\b/ }
+
+/** repo -> the repository fields of a first list page in flight (null when it carried none). @type {Map<string, Promise<object|null>>} */
+const repoInfoInFlight = new Map()
+
+/**
+ * The `gh repo view --json` shape of a GraphQL Repository node, or null when the node does not
+ * carry every field (a fixture or a degraded host).
+ * @param {Record<string, any>|null|undefined} node
+ */
+function repoInfoFromNode(node) {
+  if (!node || typeof node !== 'object' || typeof node.name !== 'string' || !node.owner?.login) return null
+  for (const key of ['squashMergeAllowed', 'mergeCommitAllowed', 'rebaseMergeAllowed', 'deleteBranchOnMerge']) {
+    if (typeof node[key] !== 'boolean') return null
+  }
+  if (!('viewerPermission' in node) || !('defaultBranchRef' in node)) return null
+  // gh exports these from Go structs: a null branch ref or permission comes out as "".
+  return {
+    name: node.name,
+    owner: { id: node.owner.id ?? '', login: node.owner.login },
+    defaultBranchRef: { name: node.defaultBranchRef?.name ?? '' },
+    squashMergeAllowed: node.squashMergeAllowed,
+    mergeCommitAllowed: node.mergeCommitAllowed,
+    rebaseMergeAllowed: node.rebaseMergeAllowed,
+    deleteBranchOnMerge: node.deleteBranchOnMerge,
+    viewerPermission: node.viewerPermission ?? '',
+  }
+}
+
 // Slim row: the list never needs check contexts, files or a full body. CI is a few
 // counters; the heavy fields load on demand for the preview (getPRPreview).
 function prRowFields(degraded = new Set()) {
@@ -399,14 +435,19 @@ export async function listPRsPage(repo, filter = {}) {
   const r = getRepo(repo)
   const limit = Math.max(1, Math.min(Number(filter.limit || 50), PR_LIST_MAX_GRAPHQL_NODES))
   const searchQuery = prPageSearchQuery(r, filter)
-  const result = await withSchemaFallback(ROW_CAPABILITIES, degraded => {
+  const [owner, name] = String(r).split('/')
+  // Only the first page carries the repository fields (a cursor page is never the list's first read).
+  const withRepo = !filter.after && Boolean(owner && name)
+  const pending = withSchemaFallback(PAGE_CAPABILITIES, degraded => {
+    const repoBlock = withRepo && !degraded.has('repoInfo')
     const query = `
-    query($searchQuery: String!, $limit: Int!, $after: String) {
+    query($searchQuery: String!, $limit: Int!, $after: String${repoBlock ? ', $owner: String!, $name: String!' : ''}) {
       search(type: ISSUE, first: $limit, after: $after, query: $searchQuery) {
         issueCount
         pageInfo { hasNextPage endCursor }
         nodes { __typename ... on PullRequest { ${prRowFields(degraded)} } }
-      }
+      }${repoBlock ? `
+      repository(owner: $owner, name: $name) { ${REPO_INFO_SELECTION} }` : ''}
     }
   `
     return runGh([
@@ -415,8 +456,17 @@ export async function listPRsPage(repo, filter = {}) {
       '-f', `searchQuery=${searchQuery}`,
       '-F', `limit=${limit}`,
       ...(filter.after ? ['-f', `after=${filter.after}`] : []),
+      ...(repoBlock ? ['-f', `owner=${owner}`, '-f', `name=${name}`] : []),
     ])
   })
+  if (withRepo) {
+    // Registered before the list's getRepoInfo() starts (same render), so it can join this read.
+    const info = pending.then(res => repoInfoFromNode(res?.data?.repository), () => null)
+    repoInfoInFlight.set(r, info)
+    const drop = () => { if (repoInfoInFlight.get(r) === info) repoInfoInFlight.delete(r) }
+    info.then(drop)
+  }
+  const result = await pending
   const search = result?.data?.search
   const items = (search?.nodes || []).filter(n => n?.__typename === 'PullRequest').map(normalizePRRow)
   return {
@@ -466,12 +516,39 @@ export async function getPRPreview(repo, number) {
  * @param number
  */
 export async function getPR(repo, number) {
+  const r = getRepo(repo)
   const args = [
     'pr', 'view', String(number),
-    '--repo', getRepo(repo),
+    '--repo', r,
     '--json', 'number,title,state,author,body,labels,reviewRequests,reviews,statusCheckRollup,updatedAt,isDraft,headRefName,baseRefName,headRefOid,assignees,files,additions,deletions,changedFiles,mergeStateStatus,mergeable,autoMergeRequest,url',
   ]
-  return runGh(args)
+  const call = runGh(args)
+  // The detail's getPRChecks() starts beside this read and only needs its headRefOid (#622).
+  const key = prKey(r, number)
+  const head = call.then(pr => pr?.headRefOid ?? null, () => null)
+  prHeadInFlight.set(key, head)
+  head.then(() => { if (prHeadInFlight.get(key) === head) prHeadInFlight.delete(key) })
+  return call
+}
+
+/** `repo#number` -> the headRefOid of a getPR() read in flight. @type {Map<string, Promise<string|null>>} */
+const prHeadInFlight = new Map()
+/**
+ * @param {string} repo
+ * @param {number|string} number
+ */
+const prKey = (repo, number) => `${repo}#${Number(number)}`
+
+/**
+ * The head commit of a getPR() read of this PR that is in flight right now, or null when there
+ * is none (or it fails or carries no head). Never a cached value: the head can move.
+ * @param {string} repo
+ * @param {number|string} number
+ * @returns {Promise<string|null>}
+ */
+export async function pendingPRHead(repo, number) {
+  const head = prHeadInFlight.get(prKey(getRepo(repo), number))
+  return head ? head : null
 }
 
 /**
@@ -573,9 +650,16 @@ export async function reviewPR(repo, number, event, body = '') {
  * @param repo
  */
 export async function getRepoInfo(repo) {
+  const r = getRepo(repo)
+  // A first PR list page in flight for this repository asks for the same fields (#622).
+  const riding = repoInfoInFlight.get(r)
+  if (riding) {
+    const info = await riding
+    if (info) return info
+  }
   const args = [
-    'repo', 'view', getRepo(repo),
-    '--json', 'name,owner,defaultBranchRef,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed,deleteBranchOnMerge,viewerPermission',
+    'repo', 'view', r,
+    '--json', REPO_INFO_FIELDS,
   ]
   return runGh(args)
 }
