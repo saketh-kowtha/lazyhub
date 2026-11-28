@@ -117,6 +117,15 @@ describe('[queue] config', () => {
     expect(warnings.join('\n')).toMatch(/unknown key "extra" in \[queue\]/)
   })
 
+  it('stale_days (Start here) is a whole number of days from 1 to 365, else ignored with a warning', () => {
+    expect(validateConfig({ queue: { stale_days: 30 } }).config.queue.stale_days).toBe(30)
+    for (const bad of [0, -1, 2.5, 'ten', 400]) {
+      const { config, warnings } = validateConfig({ queue: { stale_days: bad } })
+      expect(config.queue.stale_days).toBeUndefined() // the default (14) applies
+      expect(warnings.join('\n')).toMatch(/stale_days expected a whole number of days/)
+    }
+  })
+
   it('caps a set so the search text stays short', () => {
     const repos = Array.from({ length: 25 }, (_, i) => `acme/r${i}`)
     const { config, warnings } = validateConfig({ queue: { sets: { big: repos } } })

@@ -146,7 +146,7 @@ describe('review queue in the app (#177)', () => {
 
   it('Enter opens the evidence view of that PR, Esc returns to the same group and row', async () => {
     const view = await openQueue()
-    await press([key('j'), key(']'), ENTER])
+    await press([key('j'), key(']'), key(']'), ENTER]) // Start here, then Review, then CI failing
     await waitForExpectation(() => expect(executor.loadEvidenceDetail).toHaveBeenCalled())
     expect(executor.loadEvidenceDetail.mock.calls[0].slice(0, 2)).toEqual(['acme/platform', 409])
     await waitForExpectation(() => expect(view.lastFrame()).toContain('acme/platform#409'))
@@ -162,7 +162,7 @@ describe('review queue in the app (#177)', () => {
 
   it('evidence -> diff -> Esc returns to the evidence view, then Esc to the queue', async () => {
     const view = await openQueue()
-    await press([key('j'), key(']'), ENTER])
+    await press([key('j'), key(']'), key(']'), ENTER]) // Start here, then Review, then CI failing
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Revision'))
     await press([key('d')])
     await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DIFF 409'))
@@ -176,7 +176,7 @@ describe('review queue in the app (#177)', () => {
 
   it('Enter in the evidence view reaches the full PR detail, Esc from there returns to the queue', async () => {
     const view = await openQueue()
-    await press([key('j'), key(']'), ENTER])
+    await press([key('j'), key(']'), key(']'), ENTER]) // Start here, then Review, then CI failing
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Revision'))
     expect(view.lastFrame()).toContain('PR detail')
     await press([ENTER])

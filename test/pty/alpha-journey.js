@@ -123,7 +123,7 @@ function start({ cols = 100, rows = 30, env = {}, saved = true } = {}) {
 }
 
 // The group chips mark the current group with brackets; the row marker is the cursor.
-const CI_GROUP = /\[\S+ CI \d+\]/
+const START_GROUP = /\[\S+ Start \d+\]/
 const REVIEW_GROUP = /\[\S+ Review \d+\]/
 const cursorOn = id => new RegExp(`[▶>]\\s+\\S*${id}`)
 const mutating = args => classifyGh(args) === 'write'
@@ -170,11 +170,16 @@ async function runJourney({ cols, rows, label, ascii = false, firstRun = false }
     assert.doesNotMatch(s.text(), /focus\s+·|⟳ \d+s ago|⟳ just now/, `${label}: the bottom status line does not show the pane the queue was opened from`)
     await s.waitFor(/updated/, `${label}: the queue says how fresh it is`)
 
+    // The queue opens on Start here (#177 phase 2): ranked, with the rank keys of the cursor row named.
+    await s.waitFor(START_GROUP, `${label}: the queue opens on Start here`)
+    await s.waitFor(/rank\s+\d+ of \d+: Needs you > review/, `${label}: the strip names the rank keys`)
+    assert.match(s.text(), /NEEDS YOU \d+/, `${label}: Start here lists its sections`)
+
     // 2. Footer / help actions are live. ] and [ switch group, r refreshes, + loads the next page, o opens the browser.
     s.write(']')
-    await s.waitFor(CI_GROUP, `${label}: ] moves to the next group`)
+    await s.waitFor(REVIEW_GROUP, `${label}: ] moves to the next group`)
     s.write('[')
-    await s.waitFor(REVIEW_GROUP, `${label}: [ moves back`)
+    await s.waitFor(START_GROUP, `${label}: [ moves back`)
     const loads = queueReads(s).length
     s.write('r')
     await waitUntil(() => (queueReads(s).length > loads ? true : 'r did not refetch'), `${label}: r refetches the queue`)
@@ -213,7 +218,7 @@ async function runJourney({ cols, rows, label, ascii = false, firstRun = false }
     s.write('\x1b')
     await s.waitFor(/Review queue/, `${label}: Esc returns to the queue`)
     await s.waitFor(cursorOn('ledger#88'), `${label}: position kept`)
-    await s.waitFor(REVIEW_GROUP, `${label}: group kept`)
+    await s.waitFor(START_GROUP, `${label}: group kept`)
     await waitUntil(() => (row('ledger#88') === pickedRow ? true : `${row('ledger#88')}\n!= ${pickedRow}`), `${label}: the same row is under the cursor after coming back`)
     assert.equal(queueReads(s).length, loads + 2, `${label}: coming back reuses the loaded rows (only r and + read the queue)`)
 
@@ -256,10 +261,10 @@ async function runBoundary() {
     await s.keys(KEYS)
     // Probe: ] is handled by the queue only when no dialog took the keyboard, and its effect proves the keys above were consumed first.
     s.write(']')
-    await s.waitFor(CI_GROUP, 'the queue handled ] after the write keys (no dialog took the keyboard)')
+    await s.waitFor(REVIEW_GROUP, 'the queue handled ] after the write keys (no dialog took the keyboard)')
     assert.doesNotMatch(s.text(), DIALOG, 'no confirm dialog is on screen in the queue')
     s.write('[')
-    await s.waitFor(REVIEW_GROUP, 'back to the first group')
+    await s.waitFor(START_GROUP, 'back to the first group')
 
     // Evidence view: the same keys, then d (a read) proves they were consumed.
     s.write('\r')
