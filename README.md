@@ -79,7 +79,9 @@ Other ways in: `lazyhub owner/repo#123` (also `'#123'`, `123` or a PR/issue URL)
 - `A` in the diff runs an AI review; `Ctrl+A` opens a read-only assistant. AI output is labelled as AI and is never posted to GitHub automatically.
 - Providers: Claude Code, Codex, Gemini CLI, the Anthropic API, or an OpenAI-compatible endpoint (`[defaults] ai_provider`).
 - **Existing subscriptions.** For Claude Code run `claude setup-token` and export `CLAUDE_CODE_OAUTH_TOKEN`. For Codex, `lazyhub ai login enable codex` (asks for consent first) uses its own subscription login, and `lazyhub ai login disable codex` revokes it at once. `lazyhub ai status` shows each provider and why one is unavailable. Login mode for Gemini CLI is not implemented yet.
-- **MCP server:** `lazyhub --mcp` serves GitHub reads over stdio to MCP clients. It is read-only: every model- or agent-originated write is disabled. Review-specific MCP tools (queue, evidence, why-red, claims) are not shipped yet.
+- **MCP server:** `lazyhub --mcp` serves GitHub reads over stdio to MCP clients. It is read-only: every model- or agent-originated write is disabled. Besides PR, issue and check reads it offers the review tools `review_queue`, `pr_evidence`, `why_ci_red`, `claims_check`, `collisions` and `review_story`, with versioned JSON (see `docs/CONTRACT.md`). GitHub text comes back cleaned and marked as untrusted data.
+  - Claude Code: `claude mcp add lazyhub -- lazyhub --mcp`
+  - VS Code (`.vscode/mcp.json`): `{"servers": {"lazyhub": {"type": "stdio", "command": "lazyhub", "args": ["--mcp"]}}}`
 
 ## Keys
 

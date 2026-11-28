@@ -11,6 +11,7 @@ import {
   listPRs,
 } from '../executor.js'
 import { isRepoSlug, isPositiveId } from '../input-validation.js'
+import { REVIEW_TOOLS, ReviewToolError, inputSchema as reviewInputSchema, reviewToolByName, runReviewTool } from '../review-tools/index.js'
 
 const TOOL_ALIASES = {
   lazyhub_pr_list: 'list_prs',
@@ -139,6 +140,8 @@ const TOOLS = [
   ['list_notifications', 'list_notifications'],
   ['list_branches', 'list_branches'],
 ].map(([name, canonical]) => ({ name, description: DESCRIPTIONS[canonical], inputSchema: SCHEMAS[canonical] }))
+  // Review tools (#603): one shared, read-only core with the `--json` CLI (src/review-tools/).
+  .concat(REVIEW_TOOLS.map(tool => ({ name: tool.name, description: tool.description, inputSchema: reviewInputSchema(tool) })))
 
 const FAILING = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE'])
 const PASSING = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED'])
@@ -174,6 +177,21 @@ function slimPR(pr) {
 const repo = () => process.env.GHUI_REPO || null
 
 /**
+ * Run a review tool (#603) through the shared core; its error codes gain the MCP_ prefix.
+ * @param {string} name
+ * @param {object} args
+ */
+async function callReviewTool(name, args) {
+  try {
+    return await runReviewTool(name, args, { defaultRepo: repo() })
+  } catch (err) {
+    if (!(err instanceof ReviewToolError)) throw err
+    const extra = [err.extra?.kind && `kind: ${err.extra.kind}`, err.extra?.fix && `fix: ${err.extra.fix}`].filter(Boolean).join('; ')
+    throw fail(`MCP_${err.code}`, extra ? `${err.message} (${extra})` : err.message)
+  }
+}
+
+/**
  * Execute one MCP tool by name.
  *
  * @param {string} name
@@ -183,6 +201,7 @@ async function callTool(name, args = {}) {
   if (typeof name !== 'string' || !name) throw fail('MCP_INVALID_TOOL', 'Tool name must be a non-empty string')
   const canonical = TOOL_ALIASES[name] || name
   if (MUTATING_TOOLS.has(canonical)) throw fail('MCP_MUTATIONS_DISABLED', MCP_MUTATIONS_DISABLED)
+  if (reviewToolByName(canonical)) return callReviewTool(canonical, args)
   validateArgs(canonical, args)
 
   const r = args.repo || repo()
