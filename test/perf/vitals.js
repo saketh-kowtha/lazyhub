@@ -1,23 +1,25 @@
 // TUI vitals harness (#597, V0): drives the built dist/lazyhub.js in an 80x24 PTY against the
 // generated `perf` fake gh (300 ms per call) and prints the vitals table
-// (#597): FMF-cold, FMF-warm, KTF, FLASH, CLEAR, WARM-GH, FRAME-BYTES, PRIVACY.
+// (#597): FMF-cold, FMF-warm, KTF, FLASH, CLEAR, WARM-GH, FRAME-BYTES, PRIVACY, and (#620) IDLE-WAKEUPS,
+// IDLE-CPU and IDLE-RESUME over 60 s windows in which nothing changes.
 // (REMOUNT is in-process: src/perf/vitals.mount.test.jsx. SHIFT, ROW-RENDER, ACT-GH and OPT-FB need
 // the lanes that add the hooks they measure and are not reported yet.)
 //
-// Metrics that fail on main today are EXPECTED-FAIL baselines (EXPECT_FAIL below): they print as
-// "fail (baseline)" and never turn this run red. The run only exits non-zero when the harness itself
-// breaks, or when a metric that is OK on main regresses. When a lane fixes a baseline the metric prints
-// "FIXED: remove from EXPECT_FAIL"; the gate flip is lane V6.
+// Every gated metric must meet its target or the run exits non-zero (lane V6, the gate flip: CI runs this
+// in the "Performance budget" job). EXPECT_FAIL is the escape hatch for a metric that is known to fail
+// on main: it prints as "fail (baseline)" without turning the run red, and "FIXED: remove from
+// EXPECT_FAIL" once it passes. It is empty: every metric is enforced. Reported-only metrics never gate.
 //
 // Run: npm run build && npm run vitals          (add --json for machine-readable output)
-import { band, clearFrames, flashCount, percentile } from '../../src/perf/vitals-metrics.js'
+import { band, clearFrames, flashCount, idleWakeups, percentile } from '../../src/perf/vitals-metrics.js'
 import { nodePtyProblem, skipOrFail } from '../pty/fixtures.js'
 import pty from 'node-pty'
 import { BIN, ROOT, VitalsSession, sleep } from './vitals-lib.js'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
+import { execFileSync } from 'child_process'
 
 /** Metric ids whose value fails its target on main today (measured by this harness; see the PR). */
-export const EXPECT_FAIL = new Set(['WARM-GH:reopen']) // CLEAR went to 0 with #598 and is now enforced
+export const EXPECT_FAIL = new Set() // CLEAR went to 0 with #598, WARM-GH:reopen with #620's lane; all enforced
 
 const problem = nodePtyProblem(pty, ROOT)
 if (problem) skipOrFail(`node-pty cannot spawn: ${problem}`)
@@ -29,6 +31,43 @@ const issueData = text => /\b\d+ of 2000\b/.test(text)
 const prListKind = text => (listData(text) ? 'data' : /Pull Requests\s+(loading|refreshing)/i.test(text) ? 'placeholder' : null)
 
 const metrics = []
+const IDLE_WINDOW_MS = 60_000
+/** The shared clock (status bar age, relative times) is the one allowed idle wakeup: <= 6 per minute. */
+const CLOCK_MAX = 6
+
+/** CPU seconds (user + system) the app process has used so far, or NaN when it cannot be read. */
+function cpuSeconds(pid) {
+  try {
+    if (process.platform === 'linux') {
+      const fields = readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1].split(' ')
+      return (Number(fields[11]) + Number(fields[12])) / 100 // utime + stime, in USER_HZ (100)
+    }
+    const [rest, frac = '0'] = execFileSync('ps', ['-o', 'time=', '-p', String(pid)]).toString().trim().split('.')
+    const parts = rest.split(':').map(Number)
+    return parts.reduce((acc, n) => acc * 60 + n, 0) + Number(`0.${frac}`)
+  } catch {
+    return NaN
+  }
+}
+
+/**
+ * Sit still for IDLE_WINDOW_MS and count the app's timer wakeups (recorder `wake` events) and its CPU.
+ * @param {VitalsSession} s
+ * @returns {Promise<{ wakes: ReturnType<typeof idleWakeups>, cpuPct: number }>}
+ */
+async function idleWindow(s) {
+  const last = () => { const ev = s.events(); return ev.length ? ev[ev.length - 1].t : 0 }
+  const from = last() + 0.001
+  const cpu0 = cpuSeconds(s.term.pid)
+  await sleep(IDLE_WINDOW_MS)
+  const cpu1 = cpuSeconds(s.term.pid)
+  return { wakes: idleWakeups(s.events(), from, Infinity), cpuPct: Math.round(((cpu1 - cpu0) / (IDLE_WINDOW_MS / 1000)) * 1000) / 10 }
+}
+const describeWakes = w => Object.entries(w.tags).map(([tag, n]) => `${tag} x${n}`)
+const addIdle = (id, { wakes, cpuPct }) => {
+  add(`IDLE-WAKEUPS:${id}`, wakes.other, `wakeups/60s (+${wakes.clock} clock)`, `0 (clock <=${CLOCK_MAX})`, wakes.other === 0 && wakes.clock <= CLOCK_MAX, { detail: describeWakes(wakes) })
+  add(`IDLE-CPU:${id}`, cpuPct, '% of a core', 'reported only', true, { reported: true })
+}
 /** Short, argument-free description of a fake-gh call, for the report. */
 const describeCall = c => `${c.args[0]} ${c.args[1] ?? ''} ${(c.args.find(a => a.startsWith('query=')) ?? '').replace(/\s+/g, ' ').slice(6, 60)} ${(c.args.find(a => a.startsWith('searchQuery=')) ?? '').slice(12, 40)}`.trim()
 const add = (id, value, unit, target, ok, extra = {}) => metrics.push({ id, value, unit, target, ok, ...extra })
@@ -151,8 +190,42 @@ try {
   const written = session.rawVitals()
   const leaked = ['Perf PR', 'octocat', 'hubot', 'mona', 'feature/perf', 'saketh', 'o/r'].filter(word => written.includes(word))
   add('PRIVACY', leaked.length, 'fixture strings', '0', written.length > 0 && leaked.length === 0, { detail: leaked })
+
+  // IDLE-WAKEUPS:covered (#620): the issue detail polls every 30 s; under the help overlay it is covered
+  // and must not wake (the app is not idle yet: the default idle period is 2 minutes).
+  await session.press('gi')
+  await session.waitFor(issueData, 'the issue list rows')
+  await sleep(600)
+  await session.press('\r')
+  await session.waitFor(text => !issueData(text), 'the issue detail')
+  await sleep(2500)
+  await session.press('?')
+  await sleep(1000)
+  addIdle('covered', await idleWindow(session))
 } finally {
   session.stop()
+}
+
+// IDLE-WAKEUPS:idle (#620): a session with a 3 s idle period sits on the issue detail (a polling view).
+// After the idle period nothing may wake but the shared clock; the next key refreshes the overdue poll.
+const idleSession = new VitalsSession({ cols: 80, rows: 24, env: { LAZYHUB_IDLE_MS: '3000' } }).start()
+try {
+  await idleSession.waitFor(text => text.includes('My open PRs'), 'the Focus screen')
+  await sleep(800)
+  await idleSession.press('gi')
+  await idleSession.waitFor(issueData, 'the issue list rows')
+  await sleep(600)
+  await idleSession.press('\r')
+  await idleSession.waitFor(text => !issueData(text), 'the issue detail')
+  await sleep(2500 + 3000 + 500) // its cold fetches, then the idle period
+  addIdle('idle', await idleWindow(idleSession))
+  const since = Date.now()
+  await idleSession.press('j')
+  await sleep(2500)
+  const resumed = idleSession.calls().filter(c => c.t >= since).length
+  add('IDLE-RESUME', resumed, 'gh calls', '>=1 (overdue poll runs on the first key)', resumed >= 1)
+} finally {
+  idleSession.stop()
 }
 
 const json = process.argv.includes('--json')

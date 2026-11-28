@@ -18,7 +18,7 @@ vi.mock('fs', async () => {
   }
 })
 
-const { createRecorder, hasClear, vitals } = await import('./vitals.js')
+const { createRecorder, hasClear, instrumentTimers, tagTimer, vitals } = await import('./vitals.js')
 
 describe('vitals recorder, disabled (default)', () => {
   it('the env-driven singleton is off without LAZYHUB_VITALS=1', () => {
@@ -97,6 +97,39 @@ describe('vitals recorder, enabled', () => {
     const file = lines.join('')
     for (const secret of FIXTURES) expect(file).not.toContain(secret)
     expect(file).toContain('"view":"?"')
+  })
+
+  it('instrumentTimers records one wake per fired callback with its code tag, and restores the globals (#620)', () => {
+    const fired = []
+    const scope = {
+      setTimeout: (fn, ms) => { fired.push(['t', ms]); fn('arg'); return 'tid' },
+      setInterval: (fn, ms) => { fired.push(['i', ms]); fn(); fn(); return 'iid' },
+    }
+    const realTimeout = scope.setTimeout
+    const events = []
+    const restore = instrumentTimers(e => events.push(e), scope)
+    const seen = []
+    expect(scope.setTimeout(tagTimer('clock', a => seen.push(a)), 10_000)).toBe('tid')
+    expect(scope.setInterval(() => seen.push('i'), 120)).toBe('iid')
+    scope.setTimeout(tagTimer(FIXTURES[0], () => {}), 5)
+    expect(seen).toEqual(['arg', 'i', 'i'])
+    expect(events).toEqual([
+      { type: 'wake', tag: 'clock', kind: 't', ms: 10_000 },
+      { type: 'wake', tag: '?', kind: 'i', ms: 120 }, { type: 'wake', tag: '?', kind: 'i', ms: 120 },
+      { type: 'wake', tag: '?', kind: 't', ms: 5 },
+    ])
+    restore()
+    expect(scope.setTimeout).toBe(realTimeout)
+  })
+
+  it('wake events keep only a code tag, the kind and the delay', () => {
+    const { rec, lines } = record()
+    rec.wake({ tag: FIXTURES[2], kind: 'x', ms: -1 })
+    rec.wake({ tag: 'poll.issue-detail', kind: 'i', ms: 30_000 })
+    const file = lines.join('')
+    for (const secret of FIXTURES) expect(file).not.toContain(secret)
+    expect(file).toContain('"tag":"?","kind":"t","ms":0')
+    expect(file).toContain('"tag":"poll.issue-detail","kind":"i","ms":30000')
   })
 
   it('a failing sink never breaks the app', () => {

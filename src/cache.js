@@ -19,6 +19,7 @@ import { createHash, randomBytes } from 'crypto'
 import { homedir } from 'os'
 import { join } from 'path'
 import { ensurePrivateDir, writePrivateFile } from './secure-fs.js'
+import { tagTimer } from './perf/vitals.js'
 
 export const CACHE_DIR = process.env.LAZYHUB_CACHE_DIR || join(homedir(), '.cache', 'lazyhub', 'data')
 const MAX_BYTES = 50 * 1024 * 1024
@@ -407,10 +408,10 @@ async function flushNow() {
 
 function scheduleFlush() {
   if (flushTimer) return
-  flushTimer = setTimeout(() => {
+  flushTimer = setTimeout(tagTimer('cache.flush', () => {
     flushTimer = null
     enqueue(flushNow).catch(() => {})
-  }, FLUSH_DELAY_MS)
+  }), FLUSH_DELAY_MS)
   flushTimer.unref?.()
 }
 

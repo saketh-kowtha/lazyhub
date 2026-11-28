@@ -7,11 +7,14 @@
  *
  *   - input: every listener registered through the focus manager (useInput, useKeyScope,
  *     useFocusEntry) is released while covered and re-claimed on uncover (src/focus/FocusProvider.js);
- *   - polling: a view's timers read `useCovered()`, or use `useCoveredInterval`, and pause;
+ *   - polling: a view's timers read `useCovered()`, or use `useCoveredInterval`, and pause (also
+ *     while the app is idle, src/shell/activity.js);
  *   - output: the shell hides the layer with Ink's `display="none"`, so it costs no stdout bytes.
  */
 
 import { createContext, useContext, useEffect, useRef } from 'react'
+import { useIdle } from './activity.js'
+import { tagTimer } from '../perf/vitals.js'
 
 const CoveredContext = createContext(false)
 export { CoveredContext }
@@ -25,18 +28,35 @@ export function useCovered() {
 }
 
 /**
- * setInterval that stops while the calling view is covered and starts again (a full period later)
- * once it is on screen again. The latest `fn` is always the one called.
+ * setInterval that stops while the calling view is covered or the app is idle (#620) and resumes the
+ * moment it is on screen and active again. A tick that came due while paused runs at once on resume
+ * (so no stale data is shown after it); otherwise the rest of the period is waited out, so a short
+ * overlay open/close costs nothing. The latest `fn` is always the one called.
  * @param {() => void} fn tick
  * @param {number} ms period in milliseconds; falsy or non-positive disables the timer
+ * @param {string} [tag] code name of the timer for the vitals `wake` events
  */
-export function useCoveredInterval(fn, ms) {
+export function useCoveredInterval(fn, ms, tag = 'poll') {
   const covered = useCovered()
+  const idle = useIdle()
   const latest = useRef(fn)
   latest.current = fn
+  const lastRun = useRef(/** @type {number | null} */ (null))
+  const paused = covered || idle || !(ms > 0)
   useEffect(() => {
-    if (covered || !(ms > 0)) return undefined
-    const id = setInterval(() => latest.current(), ms)
-    return () => clearInterval(id)
-  }, [covered, ms])
+    if (paused) return undefined
+    const now = Date.now()
+    if (lastRun.current === null) lastRun.current = now
+    const tick = tagTimer(tag, () => { lastRun.current = Date.now(); latest.current() })
+    /** @type {ReturnType<typeof setInterval> | undefined} */
+    let id
+    const start = tagTimer(tag, () => { tick(); id = setInterval(tick, ms) })
+    const due = lastRun.current + ms - now
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let first
+    if (due <= 0) start()
+    else if (due >= ms) id = setInterval(tick, ms) // a fresh start: a plain interval
+    else first = setTimeout(start, due)
+    return () => { clearTimeout(first); clearInterval(id) }
+  }, [paused, ms, tag])
 }

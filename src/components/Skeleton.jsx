@@ -5,21 +5,29 @@
  * counterpart so the UI doesn't shift when data arrives.
  *
  * Animation: a single 700ms interval per skeleton component pulses all
- * bars between ░ and ▒ — one setInterval total, not one per bar.
+ * bars between ░ and ▒ — one setInterval total, not one per bar. It only ticks while the skeleton is
+ * on screen: a covered view or an idle app holds the current frame and starts no timer (#620).
  */
 
 import React, { useState, useEffect } from 'react'
 import { Box, Text } from 'ink'
 import { useTheme } from '../theme.js'
+import { useCovered } from '../shell/covered.js'
+import { useIdle } from '../shell/activity.js'
+import { tagTimer } from '../perf/vitals.js'
 
 // ─── Pulse hook — one interval per skeleton component ────────────────────────
 
 function usePulse(ms = 700) {
   const [frame, setFrame] = useState(0)
+  const covered = useCovered()
+  const idle = useIdle()
+  const paused = covered || idle
   useEffect(() => {
-    const id = setInterval(() => setFrame(f => 1 - f), ms)
+    if (paused) return undefined
+    const id = setInterval(tagTimer('skeleton', () => setFrame(f => 1 - f)), ms)
     return () => clearInterval(id)
-  }, [ms])
+  }, [ms, paused])
   return frame
 }
 

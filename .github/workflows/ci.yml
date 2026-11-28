@@ -315,6 +315,11 @@ jobs:
       - name: Large-repo budgets
         run: npm run test:perf
 
+      # TUI vitals (#597 V6, #620): first frame, key-to-frame, FLASH, CLEAR, warm-path gh calls and
+      # idle wakeups, all gated (docs/PERF_BUDGETS.md, "TUI vitals").
+      - name: TUI vitals
+        run: npm run vitals
+
   # Terminal portability (#311): ASCII-only, uncolored 80x24 journey on TERM=linux.
   portability-smoke:
     name: TERM=linux PTY smoke

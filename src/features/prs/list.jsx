@@ -198,10 +198,17 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   const { cursor, scrollOffset } = list
   // Back-navigation from detail/diff restores the saved cursor once rows exist, then keeps it saved.
   const restoredCursor = useRef(false)
+  // The row a warm re-open put the cursor back on. Its diff is not prefetched until the cursor moves:
+  // coming back to the list must cost 0 gh calls (#597 WARM-GH:reopen).
+  const [restoredRow, setRestoredRow] = useState(/** @type {number | null} */ (null))
   useEffect(() => {
     if (restoredCursor.current || items.length === 0) return
     restoredCursor.current = true
-    if (savedState.cursor > 0) list.moveTo(Math.min(savedState.cursor, items.length - 1))
+    if (savedState.cursor > 0) {
+      const at = Math.min(savedState.cursor, items.length - 1)
+      list.moveTo(at)
+      setRestoredRow(items[at]?.number ?? null)
+    }
   }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (restoredCursor.current) setSavedState({ cursor, scrollOffset })
@@ -394,8 +401,11 @@ export function PRList({ repo, listHeight = 10, innerWidth, onSelectPR, onOpenDi
   // ── Dialogs ───────────────────────────────────────────────────────────────
 
   const listPR = items[cursor]
+  useEffect(() => {
+    if (restoredRow !== null && listPR && listPR.number !== restoredRow) setRestoredRow(null)
+  }, [listPR?.number, restoredRow]) // eslint-disable-line react-hooks/exhaustive-deps
   // `d` on a resting row finds the changed-file list already fetched (#482).
-  usePrefetchPRDiff(repo, dialog ? null : listPR?.number)
+  usePrefetchPRDiff(repo, dialog || (restoredRow !== null && listPR?.number === restoredRow) ? null : listPR?.number)
   // Heavy fields (body, full checks) load for the focused row only, after the cursor settles,
   // and only while the preview panel is actually on screen.
   const panel = previewPanelLayout({ listWidth: innerWidth || termCols - 2, termRows, previewWidth: _appConfig.layout?.previewWidth })

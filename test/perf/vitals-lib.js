@@ -34,8 +34,10 @@ export class VitalsSession {
    * @param {number} [opts.cols]
    * @param {number} [opts.rows]
    * @param {number} [opts.delayMs] simulated gh round trip
+   * @param {Record<string, string>} [opts.env] extra environment for the app (e.g. LAZYHUB_IDLE_MS)
    */
-  constructor({ cols = 80, rows = 24, delayMs = DELAY_MS } = {}) {
+  constructor({ cols = 80, rows = 24, delayMs = DELAY_MS, env = {} } = {}) {
+    this.env = env
     this.cols = cols
     this.rows = rows
     this.delayMs = delayMs
@@ -60,6 +62,7 @@ export class VitalsSession {
         LAZYHUB_CACHE_DIR: join(this.temp, 'cache'),
         LAZYHUB_GH_DELAY_MS: String(this.delayMs), LAZYHUB_GH_LOG: this.ghLog,
         LAZYHUB_VITALS: '1', LAZYHUB_VITALS_FILE: this.vitalsFile,
+        ...this.env,
       },
     })
     this.term.onData(data => {

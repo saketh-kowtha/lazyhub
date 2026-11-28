@@ -42,7 +42,7 @@ export function hasClear(text) {
  */
 export function createRecorder({ enabled = false, file, append, now = () => performance.now() } = {}) {
   if (!enabled) {
-    return { enabled: false, file: null, key: noop, frame: noop, mount: noop, unmount: noop, mode: noop, gh: noop, rowRender: noop, wrapStdout: stream => stream }
+    return { enabled: false, file: null, key: noop, frame: noop, mount: noop, unmount: noop, mode: noop, gh: noop, rowRender: noop, wake: noop, wrapStdout: stream => stream }
   }
   const target = file || join(tmpdir(), `lazyhub-vitals-${process.pid}.jsonl`)
   const sink = append || ((path, text) => appendFileSync(path, text, { mode: 0o600 }))
@@ -65,6 +65,11 @@ export function createRecorder({ enabled = false, file, append, now = () => perf
     gh: fn => emit({ type: 'gh', fn: safeName(fn) }),
     rowRender: (view, n = 1) => emit({ type: 'rowRender', view: safeName(view), n: count(n) }),
     /**
+     * A timer callback fired (#620).
+     * @param {{ tag?: string, kind?: string, ms?: number }} [event] code tag, `t`imeout or `i`nterval, delay
+     */
+    wake: ({ tag, kind, ms } = {}) => emit({ type: 'wake', tag: safeName(tag), kind: kind === 'i' ? 'i' : 't', ms: count(ms) }),
+    /**
      * Pass-through stdout that timestamps each write. Ink 4 has no onRender hook, so this is the one
      * place a frame is observable.
      * @param {NodeJS.WriteStream} stream
@@ -82,7 +87,50 @@ export function createRecorder({ enabled = false, file, append, now = () => perf
   }
 }
 
+/** Property a timer callback may carry to name its site in `wake` events (a code constant). */
+const TAG = Symbol.for('lazyhub.vitals.timerTag')
+
+/**
+ * Name a timer callback for the vitals `wake` events (#620). Costs one property write; the tag is a
+ * short identifier chosen in code ("clock", "poll.issue-detail"), never data.
+ * @template {Function} F
+ * @param {string} tag
+ * @param {F} fn
+ * @returns {F} the same function
+ */
+export function tagTimer(tag, fn) {
+  // @ts-ignore symbol-keyed marker on a function
+  fn[TAG] = tag
+  return fn
+}
+
+/**
+ * Wrap `scope.setTimeout` / `scope.setInterval` so every timer callback that fires records one
+ * `wake` event ({ tag, kind, ms }) before it runs. Only the enabled recorder calls this (#620): it is
+ * how IDLE-WAKEUPS is counted out of process. Returns the restore function.
+ * @param {(event: object) => void} emit
+ * @param {any} [scope]
+ * @returns {() => void}
+ */
+export function instrumentTimers(emit, scope = globalThis) {
+  const original = { setTimeout: scope.setTimeout, setInterval: scope.setInterval }
+  for (const [name, kind] of /** @type {const} */ ([['setTimeout', 't'], ['setInterval', 'i']])) {
+    const real = original[name]
+    scope[name] = function wrappedTimer(fn, ms, ...args) {
+      if (typeof fn !== 'function') return real.call(this, fn, ms, ...args)
+      const tag = safeName(fn[TAG])
+      const delay = count(Number(ms) || 0)
+      return real.call(this, function firedTimer(...a) {
+        emit({ type: 'wake', tag, kind, ms: delay })
+        return fn.apply(this, a)
+      }, ms, ...args)
+    }
+  }
+  return () => { scope.setTimeout = original.setTimeout; scope.setInterval = original.setInterval }
+}
+
 export const vitals = createRecorder({
   enabled: process.env.LAZYHUB_VITALS === '1',
   file: process.env.LAZYHUB_VITALS_FILE,
 })
+if (vitals.enabled) instrumentTimers(event => vitals.wake(event))

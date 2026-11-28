@@ -26,6 +26,7 @@ import { IssueLabelDialog, IssueAssigneeDialog } from './dialogs.jsx'
 import { buildTimelineRows } from './timeline-rows.jsx'
 import { seedOf, appendPage, reconcileFirst, newItemCount, quoteReply } from './timeline-state.js'
 import { IssueDetailView } from './detail-view.jsx'
+import { useCoveredInterval } from '../../shell/covered.js'
 
 // Start loading the next page when the cursor is within this many entries of the end.
 const LOAD_MORE_MARGIN = 5
@@ -192,18 +193,17 @@ export function IssueDetail({ issueNumber, repo, onBack }) {
   // ── Live updates ──────────────────────────────────────────────────────────
 
   // Revalidate page 1 (and the header) on a bounded interval while this view is the one on screen.
-  // Paused while a dialog, a compose box, a delete confirm or a write is open, and while a load runs.
+  // Paused while a dialog, a compose box, a delete confirm or a write is open, and while a load runs;
+  // the timer itself stops while the view is covered or the app is idle, and a revalidation that
+  // came due meanwhile runs as soon as it is back (#620).
   const pausedRef = useRef(false)
   pausedRef.current = !!dialog || !!compose || !!confirmDelete || busy > 0 || pageFetching
   const everyMs = refreshSeconds() * 1000
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (pausedRef.current || refreshing.current) return
-      refetchHeader()
-      refetchFirst()
-    }, everyMs)
-    return () => clearInterval(id)
-  }, [everyMs, refetchHeader, refetchFirst])
+  useCoveredInterval(() => {
+    if (pausedRef.current || refreshing.current) return
+    refetchHeader()
+    refetchFirst()
+  }, everyMs, 'poll.issue-detail')
 
   // ── Writes ────────────────────────────────────────────────────────────────
 
