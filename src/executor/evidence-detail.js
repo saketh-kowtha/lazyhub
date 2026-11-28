@@ -29,9 +29,11 @@
  *                   returned, truncated, head } (value 'unknown' when it could not be read)
  *   required_checks fact whose value is { required, passing, failing, pending, total, truncated, head }
  *
- * Row: { section, label, value, tone: 'ok'|'bad'|'warn'|'muted'|'plain', source, fetched_at, untrusted? }
+ * Row: { section, label, value, tone: 'ok'|'bad'|'warn'|'muted'|'plain', source, fetched_at, untrusted?, explain }
  *   `untrusted` rows hold author-written prose (already cleaned by sanitize()); they are display
- *   only. Every other row is a computed fact with its source and read time.
+ *   only. Every other row is a computed fact with its source and read time. `explain` is a fixed
+ *   plain-language sentence for the row (evidence-explain.js), never GitHub text.
+ *   ageText(ageMs) -> '12s ago' | '4m ago' | '2h ago' | '3d ago' | 'time unknown'
  *
  * D16: file lists are read by cursor to FILE_CEILING and `truncated` says so with the total;
  * counts that cover only fetched checks/threads are marked as lower bounds, never as totals.
@@ -43,6 +45,7 @@ import { isOwnerName } from '../config/schema.js'
 import { sanitize, sanitizePath, sanitizeRaw } from '../utils-core.js'
 import { UNKNOWN, fact, attentionReasons, queueGroup } from './evidence.js'
 import { fetchPRReviewEvidence } from './activity.js'
+import { explainRow } from './evidence-explain.js'
 
 export const EVIDENCE_DETAIL_VERSION = 1
 const FILES_PAGE = 100
@@ -147,6 +150,19 @@ export function freshness(fetchedAt, now = Date.now(), ttlMs = FRESH_MS) {
   if (!Number.isFinite(at)) return { age_ms: /** @type {number|null} */ (null), stale: true }
   const age = Math.max(0, now - at)
   return { age_ms: /** @type {number|null} */ (age), stale: age > ttlMs }
+}
+
+/**
+ * Short age of a reading: `12s ago`, `4m ago`, `2h ago`; `time unknown` without a valid age.
+ * @param {number|null|undefined} ageMs
+ */
+export function ageText(ageMs) {
+  if (ageMs == null || !Number.isFinite(ageMs) || ageMs < 0) return 'time unknown'
+  const s = Math.floor(ageMs / 1000)
+  if (s < 60) return `${s}s ago`
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (s < 86_400) return `${Math.floor(s / 3600)}h ago`
+  return `${Math.floor(s / 86_400)}d ago`
 }
 
 /**
@@ -298,7 +314,7 @@ export async function loadEvidenceDetail(repo, number, { cache, force = false, i
 // Row builders. Pure: `detail` in, rows out. All GitHub text is cleaned here (prose with
 // sanitize(), paths with sanitizePath()); the view draws row.value as-is.
 
-/** @typedef {{section: string, label: string, value: string, tone: 'ok'|'bad'|'warn'|'muted'|'plain', source?: string, fetched_at?: string, untrusted?: boolean}} Row */
+/** @typedef {{section: string, label: string, value: string, tone: 'ok'|'bad'|'warn'|'muted'|'plain', source?: string, fetched_at?: string, untrusted?: boolean, explain?: string}} Row */
 
 const isUnknown = (/** @type {any} */ f) => f?.value === UNKNOWN
 const plural = (/** @type {number} */ n, /** @type {string} */ one, /** @type {string} */ many) => `${n} ${n === 1 ? one : many}`
@@ -329,8 +345,7 @@ function revisionRows(/** @type {Builder} */ b, /** @type {any} */ detail, /** @
   if (head.state === 'stale') b.row('Revision', 'changed', `head moved since you opened this: ${short(head.inspected)} -> ${short(head.current)}. Read the evidence again; earlier reading no longer applies`, 'bad')
   else if (head.state === 'unknown') b.row('Revision', 'inspected', 'cannot compare: a head is unknown', 'warn')
   else b.row('Revision', 'inspected', 'same head as when you opened this', 'ok')
-  const age = fr.age_ms == null ? 'time unknown' : `${Math.round(fr.age_ms / 1000)}s ago`
-  b.row('Revision', 'read', `${age}${fr.stale ? ', STALE: refresh before relying on it' : ''}`, fr.stale ? 'warn' : 'plain', { source: rec.identity.account === UNKNOWN ? 'github.graphql' : `github.graphql as ${sanitize(rec.identity.account)}`, fetched_at: rec.fetched_at })
+  b.row('Revision', 'read', `${ageText(fr.age_ms)}${fr.stale ? ', STALE: refresh before relying on it' : ''}`, fr.stale ? 'warn' : 'plain', { source: rec.identity.account === UNKNOWN ? 'github.graphql' : `github.graphql as ${sanitize(rec.identity.account)}`, fetched_at: rec.fetched_at })
 }
 
 const BAD_REASONS = new Set(['ci_failing', 'merge_conflict', 'changes_requested', 'stale_approval'])
@@ -442,5 +457,5 @@ export function evidenceRows(detail, { now = Date.now() } = {}) {
   fileRows(b, detail)
   untrustedRows(b, rec)
   for (const e of detail.errors) b.row('Not read', word(e.part), sanitizeRaw(e.message), 'warn')
-  return b.rows
+  return b.rows.map(r => ({ ...r, explain: explainRow(r) }))
 }

@@ -99,7 +99,8 @@ Status: the primitives exist (#175). The PR detail evidence view (#127, key `e`)
   `record.facts.required_checks`; a required check that never reported is not visible. A failed side read is
   `value: "unknown"` plus `errors[{part, message}]`; only a failed record read throws. `head` is
   `compareHead(inspected, current)` = `{state: current|stale|unknown, inspected, current}`.
-  `evidenceRows(detail)` is the cleaned display model; `returnTarget({view, position, filter, key})` is the shape a
+  `evidenceRows(detail)` is the cleaned display model; each row also carries `explain`, a fixed plain sentence
+  (`src/executor/evidence-explain.js`, never GitHub text and never a verdict; additive, version unchanged); `returnTarget({view, position, filter, key})` is the shape a
   caller passes to the view so Esc returns to it.
 - Approval handoff: a record is a snapshot. Revalidation against the live head and exact
   binding remain the approval work's job (#235/#244/#278); nothing may be authorized from a cached record.

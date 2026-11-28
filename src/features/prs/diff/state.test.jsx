@@ -205,6 +205,30 @@ describe('diff state and render contracts', () => {
     release()
     await waitForExpectation(() => expect(currentState.commentStatus).toContain('Approved'))
   })
+
+  it('read-only (opened from the review evidence, #127): no write, AI or comments key acts, and the footer offers none', async () => {
+    const onViewComments = vi.fn()
+    const view = renderWithProviders(
+      <DiffSession repo="owner/repo" prNumber={42} onBack={() => {}} onViewComments={onViewComments} readOnly />,
+    )
+    await waitForExpectation(() => expect(currentState?.rows).toHaveLength(7))
+    expect(view.lastFrame()).toContain('read-only')
+    expect(currentState.footerKeys.map(h => h.id)).not.toContain('diff.comment')
+    for (const id of ['pr.merge', 'pr.approve', 'pr.request-changes', 'diff.comment', 'diff.ai-review', 'pr.comments']) {
+      await sendInput(firstActionKey(id))
+      expect(currentState.dialog).toBeNull()
+      expect(currentState.compose).toBeNull()
+    }
+    expect(view.lastFrame()).not.toMatch(/Merge PR|Approve|Request changes/)
+    expect(view.lastFrame()).toContain('Read-only review diff')
+    expect(onViewComments).not.toHaveBeenCalled()
+    expect(getPRDiff).not.toHaveBeenCalled()
+    expect(mergePR).not.toHaveBeenCalled()
+    expect(reviewPR).not.toHaveBeenCalled()
+    // Reading still works.
+    await sendInput(firstActionKey('diff.split'))
+    await waitForExpectation(() => expect(currentState.splitView).toBe(true))
+  })
 })
 
 it('builds an ordered tree without changing the parser file records', () => {

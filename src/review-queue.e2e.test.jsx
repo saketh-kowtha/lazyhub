@@ -51,7 +51,7 @@ vi.mock('./components/StatusBar.jsx', () => ({ StatusBar: () => null }))
 vi.mock('./features/prs/diff.jsx', async () => {
   const { Text } = await import('ink')
   const { useInput } = await import('./hooks/useSafeInput.js')
-  return { PRDiff: ({ prNumber, onBack }) => { useInput((_i, k) => { if (k.escape) onBack() }); return <Text>{`PR DIFF ${prNumber}`}</Text> } }
+  return { PRDiff: ({ prNumber, onBack, readOnly }) => { useInput((_i, k) => { if (k.escape) onBack() }); return <Text>{`PR DIFF ${prNumber}${readOnly ? ' read-only' : ''}`}</Text> } }
 })
 
 vi.mock('./executor.js', async () => {
@@ -164,14 +164,49 @@ describe('review queue in the app (#177)', () => {
     const view = await openQueue()
     await press([key('j'), key(']'), ENTER])
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Revision'))
+    // Move to a row further down: the round trip must come back to it.
+    await press([key('j'), key('j')])
+    const picked = view.lastFrame().split('\n').find(l => / > /.test(l)) || ''
+    expect(picked).toMatch(/>\s+read\s+\d+s ago/)
     await press([key('d')])
-    await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DIFF 409'))
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DIFF 409 read-only'))
     await press([ESC])
     await waitForExpectation(() => expect(view.lastFrame()).toContain('acme/platform#409'))
     expect(view.lastFrame()).not.toContain('PR DIFF')
+    // Same row under the cursor, the same reading (fresh, so no second read) and the same inspected head.
+    await waitForExpectation(() => expect(view.lastFrame().split('\n').find(l => / > /.test(l)) || '').toMatch(/>\s+read\s+\d+s ago/))
+    expect(view.lastFrame()).toContain('why: How long ago these facts were read')
+    expect(executor.loadEvidenceDetail).toHaveBeenCalledTimes(1)
+    expect(view.lastFrame()).toContain('same head as when you opened this')
     await press([ESC])
     await waitForExpectation(() => expect(view.lastFrame()).toContain('Review queue'))
     expect(rowLine(view, 'Shard the worker queue')).toContain('▶')
+    // Coming back to the queue ends the inspection: opening the PR again reads it afresh from the top.
+    await press([ENTER])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Revision'))
+    expect(executor.loadEvidenceDetail).toHaveBeenCalledTimes(2)
+    expect(executor.loadEvidenceDetail.mock.calls[1][2]).toMatchObject({ inspectedHead: null })
+  })
+
+  it('a diff opened from the evidence after the reading went stale reads again, still against the inspected head', async () => {
+    const old = new Date(Date.now() - 5 * 60_000).toISOString()
+    executor.loadEvidenceDetail.mockImplementationOnce(async (repo, number) => {
+      const d = evidenceDetail(repo, number, `PR ${number}`)
+      return { ...d, record: { ...d.record, fetched_at: old } }
+    })
+    const view = await openQueue()
+    await press([key('j'), key(']'), ENTER])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('older than a minute'))
+    await press([key('d')])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('PR DIFF 409 read-only'))
+    executor.loadEvidenceDetail.mockImplementationOnce(async (repo, number) => {
+      const d = evidenceDetail(repo, number, `PR ${number}`)
+      return { ...d, head: { state: 'stale', inspected: 'head2aaaa', current: 'head3bbbb' } }
+    })
+    await press([ESC])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('head changed since you opened this'))
+    expect(executor.loadEvidenceDetail).toHaveBeenCalledTimes(2)
+    expect(executor.loadEvidenceDetail.mock.calls[1][2]).toMatchObject({ inspectedHead: 'head2aaaa' })
   })
 
   it('Enter in the evidence view reaches the full PR detail, Esc from there returns to the queue', async () => {
@@ -271,6 +306,19 @@ describe('review queue scope in the app (#177)', () => {
     await waitForExpectation(() => expect(executor.loadEvidenceDetail).toHaveBeenCalled())
     expect(executor.loadEvidenceDetail.mock.calls[0][2]).toMatchObject({ reviewRequestedOfMe: true })
     await press([ESC])
+  })
+
+  it('a round trip to the diff keeps the queue record, so the review request is not dropped from the evidence', async () => {
+    const view = await openQueue()
+    await press([ENTER])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Revision'))
+    await press([key('d')])
+    await waitForExpectation(() => expect(view.lastFrame()).toMatch(/PR DIFF \d+ read-only/))
+    await press([ESC])
+    await waitForExpectation(() => expect(view.lastFrame()).toContain('Revision'))
+    await flush(30)
+    for (const call of executor.loadEvidenceDetail.mock.calls) expect(call[2]).toMatchObject({ reviewRequestedOfMe: true })
+    expect(executor.loadEvidenceDetail).toHaveBeenCalledTimes(1)
   })
 
   it('opening a PR and coming back keeps the chosen scope and makes no new call', async () => {

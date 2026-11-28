@@ -32,7 +32,9 @@ existing dialog views; rationale in the PR body.
    modified           +12 -3  src/forms/Settings.tsx
  Written by the author (unverified)
    title              New form lib: settings
- source github.graphql.pullRequest.commits.last.statusCheckRollup, read 2026-11-09T12:00:00.000Z
+ why: The combined status of every check on the head commit. Passing checks show the checks ran
+      green; they do not prove the change works.
+ source github.graphql.pullRequest.commits.last.statusCheckRollup, read 2026-11-09T12:00:00.000Z (4s ago)
  Observation only. It does not approve, merge or authorize anything. No AI was used.
  j/k scroll  r refresh  d diff  Esc back to queue
 ```
@@ -44,3 +46,27 @@ Rules the layout keeps:
 - author-written prose (title, description, thread excerpts, actor) sits under its own heading, cleaned;
 - the selected row shows its source and read time on the line above the footer;
 - `Esc` goes back to the caller's return target (queue position and filter) or closes.
+
+## Freshness, explanations and the diff round trip (#175, #127 follow-up)
+
+Banners under the header, at most one line each, most serious first:
+
+```
+ ✗ The head changed since you opened this. What you read earlier no longer applies.
+ ◐ Read 3m ago, older than a minute: r reads it again before you rely on it.
+ ✗ Refresh failed: <plain cause> Showing the reading from 3m ago.        (instead of the line above)
+```
+
+- the read age ticks while the view is on screen (paused while it is covered); past one minute the
+  stale banner shows and the `read` row says STALE;
+- `r` reads every fact again with the rows kept on screen (`reading…` beside `read-only`); a failed
+  refresh keeps the rows, labelled with their age, instead of blanking them;
+- a refresh never moves the inspected head: the head-changed banner stays until the view is left, so
+  a refresh can never make new commits look already read;
+- the cursor moves over rows only, never a heading, so the selected line always has a `why:`;
+- `why:` (two lines, wrapped) explains the selected row in fixed plain words: what the fact means,
+  where it comes from and what it does not mean. Never a verdict, never GitHub text;
+- `d` opens the diff in read-only form (`PR #1031 Diff  read-only`): merge, approve, request
+  changes, comment, AI review and the conversation view are not offered and do nothing but say where
+  management lives. `Esc` comes back to the same row and inspected head; a reading that went stale
+  while the diff was open is read again on return. `Esc` again returns to the queue row and scope.

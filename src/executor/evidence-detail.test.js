@@ -207,3 +207,45 @@ describe('evidenceRows', () => {
     expect(rows.find(r => r.label === 'note').value).toContain('earlier head')
   })
 })
+
+describe('ageText', () => {
+  it('words an age in the largest whole unit, and an unknown age as unknown', async () => {
+    const { ageText } = await import('./evidence-detail.js')
+    expect(ageText(0)).toBe('0s ago')
+    expect(ageText(59_999)).toBe('59s ago')
+    expect(ageText(60_000)).toBe('1m ago')
+    expect(ageText(2 * 3600_000 + 5)).toBe('2h ago')
+    expect(ageText(3 * 86_400_000)).toBe('3d ago')
+    for (const bad of [null, undefined, NaN, -1]) expect(ageText(bad)).toBe('time unknown')
+  })
+})
+
+describe('row explanations (#175)', () => {
+  const VERDICT = /\b(is|are|looks?) (safe|correct|fine|good to merge)\b|\bsafe to merge\b/i
+  it('gives every row a fixed plain sentence of its own and never a verdict', async () => {
+    const { EXPLAINED_KEYS } = await import('./evidence-explain.js')
+    route({ required: requiredPage([{ __typename: 'CheckRun', name: 'lint', status: 'COMPLETED', conclusion: 'SUCCESS', isRequired: true }]), files: filesPage(['src/a.js', '.github/workflows/ci.yml', 'package-lock.json']) })
+    const rows = evidenceRows(await loadEvidenceDetail('acme/web', 7, { now, inspectedHead: 'head1aaaa' }), { now: NOW + 5 * 60_000 })
+    for (const r of rows) {
+      expect(r.explain, `${r.section}/${r.label}`).toMatch(/\w.{20,}\./)
+      expect(r.explain).not.toMatch(VERDICT)
+      // Each row has its own entry (or its section's), never the generic fallback.
+      expect(EXPLAINED_KEYS.includes(`${r.section}:${r.label}`) || EXPLAINED_KEYS.includes(r.section), `${r.section}/${r.label}`).toBe(true)
+    }
+    expect(rows.find(r => r.label === 'changed' && r.section === 'Revision').explain).toContain('does not mark the new commits as read')
+    expect(rows.find(r => r.label === 'ci_workflow_changed').explain).toContain('.github/workflows')
+    expect(rows.find(r => r.label === 'lockfile_without_manifest').explain).toMatch(/lockfile/)
+  })
+  it('says an unread fact is unknown, never passing', async () => {
+    route({ files: new Error('API rate limit exceeded'), required: new Error('boom') })
+    const rows = evidenceRows(await loadEvidenceDetail('acme/web', 7, { now }), { now })
+    expect(rows.find(r => r.label === 'files').explain).toContain('could not be read')
+    expect(rows.find(r => r.section === 'Checks' && r.label === 'required').explain).toContain('unknown is never counted as passing')
+    expect(rows.find(r => r.section === 'Not read').explain).toContain('never as fine')
+  })
+  it('explains author-written rows as unverified text', async () => {
+    route()
+    const rows = evidenceRows(await loadEvidenceDetail('acme/web', 7, { now }), { now })
+    for (const r of rows.filter(x => x.untrusted)) expect(r.explain).toMatch(/not checked|cannot be verified/)
+  })
+})
