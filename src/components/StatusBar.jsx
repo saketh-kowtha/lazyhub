@@ -1,10 +1,11 @@
 /** StatusBar.jsx — Application status bar showing context and global state. */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useTheme } from '../theme.js'
 import { sanitize, displayWidth, truncateEllipsis } from '../utils.js'
 import { firstActionKey } from '../config/actions.js'
+import { useClock } from '../ui/clock.js'
 
 const PANE_META = {
   prs:           { icon: '⎇',  label: 'Pull Requests' },
@@ -41,16 +42,12 @@ export function StatusBar({ repo, pane, count, filterState, scopeIndicator, mode
   const { stdout } = useStdout()
   const cols = stdout?.columns || 80
   const [mountTime] = useState(Date.now())
-  const [, tick] = useState(0)
-
-  useEffect(() => {
-    const id = setInterval(() => tick(n => n + 1), 10_000)
-    return () => clearInterval(id)
-  }, [])
-
   const meta    = PANE_META[pane] || { icon: '✦', label: pane || '' }
   const chipClr = modeColor(mode, t)
   const narrow  = cols < 100
+  // The "refreshed Ns ago" age re-renders on the shared clock's 10 s tick, and only while the age
+  // can be on screen: a narrow bar never shows it, so it costs no wakeups (#620).
+  useClock(!narrow && !hideAge ? 10_000 : 0)
   const degraded = ghHealth?.degraded
   const multi = degraded && ghHealth.failingCount > 1
   const detail = degraded ? sanitize(String(ghHealth.error?.message || ghHealth.error || 'gh failed')) : ''

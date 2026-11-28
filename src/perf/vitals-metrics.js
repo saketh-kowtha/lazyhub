@@ -97,3 +97,35 @@ export function ghCallsSince(calls, sinceMs) {
 export function parseEvents(text) {
   return text.split('\n').filter(Boolean).map(line => JSON.parse(line))
 }
+
+/**
+ * IDLE-WAKEUPS (#620): timer wakeups recorded in [from, to) (recorder clock), counted the way an OS
+ * counts them: callbacks less than `gapMs` apart are one wakeup (a timer that renders is followed by
+ * Ink's 32 ms render-throttle timer; that is the same wakeup). Each wakeup is named after its first
+ * tagged callback.
+ * @param {{type: string, t: number, tag?: string}[]} events recorder events
+ * @param {number} from
+ * @param {number} to
+ * @param {number} [gapMs]
+ * @returns {{ total: number, clock: number, other: number, tags: Record<string, number> }}
+ */
+export function idleWakeups(events, from, to, gapMs = 100) {
+  const wakes = events.filter(e => e.type === 'wake' && e.t >= from && e.t < to)
+  /** @type {string[][]} */
+  const clusters = []
+  let last = -Infinity
+  for (const e of wakes) {
+    if (e.t - last > gapMs) clusters.push([])
+    clusters[clusters.length - 1].push(e.tag ?? '?')
+    last = e.t
+  }
+  /** @type {Record<string, number>} */
+  const tags = {}
+  let clock = 0
+  for (const c of clusters) {
+    const name = c.find(t => t !== '?') ?? '?'
+    tags[name] = (tags[name] ?? 0) + 1
+    if (name === 'clock') clock += 1
+  }
+  return { total: clusters.length, clock, other: clusters.length - clock, tags }
+}

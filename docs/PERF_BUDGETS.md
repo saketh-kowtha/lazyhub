@@ -47,6 +47,20 @@ Exact assertions (no tolerance):
 The memory container job (150 MB on a 1,200-PR / 1,000-file fixture, `test/pty/memory.js`) is
 unchanged and still required.
 
+## TUI vitals (#597, #620)
+
+`npm run build && npm run vitals` (same CI job, step `TUI vitals`) drives an 80x24 PTY against the same
+fake `gh`. Every gated row fails the run; `EXPECT_FAIL` in `test/perf/vitals.js` is empty.
+
+| Metric | Target | Baseline (macOS, one run) |
+|---|---|---|
+| FMF-cold / FMF-warm | <= 1,200 ms / <= 100 ms | 442 ms / 35 ms |
+| KTF-nav p95 / KTF-open | <= 100 ms / <= 200 ms | 9 ms / 7 ms |
+| FLASH, CLEAR, WARM-GH (reopen, help, palette, back, re-entry) | 0 | 0 |
+| IDLE-WAKEUPS (60 s, covered issue detail; idle issue detail) | 0, plus <= 6 shared-clock ticks | 0 (+0 clock) |
+| IDLE-RESUME (gh calls on the first key after an idle minute) | >= 1 | 2 |
+| FRAME-BYTES, IDLE-CPU | reported only | 1.5x grid; 0.1 % of a core |
+
 ## Proving the gate
 
 With PR list paging stopped after page two (`loadMore` in `src/features/prs/list.jsx` returning unless

@@ -11,6 +11,7 @@
 import { useInput as inkUseInput } from 'ink'
 import { containHandler } from '../contain.js'
 import { useFocusEntry } from '../focus/FocusProvider.js'
+import { noteActivity } from '../shell/activity.js'
 
 /**
  * Contained Ink listener (the focus root, and the no-provider fallback).
@@ -18,7 +19,8 @@ import { useFocusEntry } from '../focus/FocusProvider.js'
  * @param {{ isActive?: boolean }} [options]
  */
 export function useRootInput(handler, options) {
-  return inkUseInput(containHandler(handler), options)
+  // Every key ends the idle state first, so a paused poll or animation resumes on it (#620).
+  return inkUseInput(containHandler((input, key) => { noteActivity(); return handler(input, key) }), options)
 }
 
 /**

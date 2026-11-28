@@ -13,6 +13,7 @@ import { getLogs, logger, sanitizeRaw, TextInput } from '../../utils.js'
 import { copyToClipboard } from '../../services/platform.js'
 import { useTheme } from '../../theme.js'
 import { useKeyScope } from '../../keyscope.js'
+import { useCoveredInterval } from '../../shell/covered.js'
 
 const LEVELS = ['ALL', 'INFO', 'WARN', 'ERROR', 'DEBUG']
 
@@ -39,11 +40,9 @@ export function LogPane({ onBack }) {
     setAllLogs(getLogs())
   }
 
-  useEffect(() => {
-    refreshLogs()
-    const id = setInterval(refreshLogs, 5000)
-    return () => clearInterval(id)
-  }, [])
+  useEffect(() => { refreshLogs() }, [])
+  // Re-read the in-memory log every 5 s while the view is on screen and the app is not idle (#620).
+  useCoveredInterval(refreshLogs, 5000, 'poll.logs')
 
   useKeyScope('dialog', !!(searching || selectedLog))
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { band, clearFrames, extraMounts, flashCount, ghCallsSince, parseEvents, percentile } from './vitals-metrics.js'
+import { band, clearFrames, extraMounts, flashCount, ghCallsSince, idleWakeups, parseEvents, percentile } from './vitals-metrics.js'
 
 describe('vitals metric math', () => {
   it('bands follow the decision-doc thresholds', () => {
@@ -41,5 +41,19 @@ describe('vitals metric math', () => {
   it('WARM-GH counts calls from the window start and the JSONL parser tolerates blank lines', () => {
     expect(ghCallsSince([{ t: 1 }, { t: 5 }, { t: 9 }], 5)).toBe(2)
     expect(parseEvents('{"type":"key"}\n\n{"type":"frame"}\n')).toHaveLength(2)
+  })
+})
+
+describe('IDLE-WAKEUPS (#620)', () => {
+  it('clusters callbacks into wakeups, names each by its first tag and splits out the shared clock', () => {
+    const ev = [
+      { type: 'wake', t: 0, tag: 'clock' }, { type: 'wake', t: 32, tag: '?' }, // clock + Ink throttle: 1 wakeup
+      { type: 'frame', t: 40 },
+      { type: 'wake', t: 10_000, tag: 'clock' },
+      { type: 'wake', t: 20_000, tag: '?' }, { type: 'wake', t: 20_010, tag: 'poll.issue-detail' },
+      { type: 'wake', t: 70_000, tag: 'clock' }, // outside the window
+    ]
+    expect(idleWakeups(ev, 0, 60_000)).toEqual({ total: 3, clock: 2, other: 1, tags: { clock: 2, 'poll.issue-detail': 1 } })
+    expect(idleWakeups(ev, 30_000, 60_000)).toEqual({ total: 0, clock: 0, other: 0, tags: {} })
   })
 })

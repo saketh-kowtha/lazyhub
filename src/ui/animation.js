@@ -5,11 +5,16 @@
  * the first claimant animates and every other one renders a static frame, so a screen full
  * of "loading" leaves still costs one tick stream, not one per leaf. The tick is >= 120 ms and
  * only the owning leaf re-renders on it, never its parents (the state lives in this store).
+ * A leaf in a covered view does not claim the slot, and the tick stops while the app is idle and
+ * restarts on the next key (#620), so a still screen costs no wakeups.
  *
  *   const frame = useAnimationFrame(FRAMES.length, active)   // -1 when not the animated one
  */
 
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
+import { useCovered } from '../shell/covered.js'
+import { isIdle, subscribeIdle } from '../shell/activity.js'
+import { tagTimer } from '../perf/vitals.js'
 
 /** Minimum time between animation frames. */
 export const TICK_MS = 120
@@ -25,16 +30,24 @@ let timer
 function emit() { for (const l of [...listeners]) l() }
 function subscribe(l) { listeners.add(l); return () => { listeners.delete(l) } }
 
+/** @type {(() => void) | undefined} idle subscription, held only while somebody claims the slot */
+let offIdle
+
 function sync() {
-  if (claimants.length > 0 && timer === undefined) {
-    timer = setInterval(() => { frame += 1; emit() }, TICK_MS)
+  if (claimants.length > 0 && !offIdle) offIdle = subscribeIdle(sync)
+  else if (claimants.length === 0 && offIdle) { offIdle(); offIdle = undefined }
+  const run = claimants.length > 0 && !isIdle()
+  if (run && timer === undefined) {
+    timer = setInterval(tick, TICK_MS)
     if (typeof timer === 'object' && typeof timer.unref === 'function') timer.unref()
-  } else if (claimants.length === 0 && timer !== undefined) {
+  } else if (!run && timer !== undefined) {
     clearInterval(timer)
     timer = undefined
-    frame = 0
+    if (claimants.length === 0) frame = 0
   }
 }
+
+const tick = tagTimer('anim', () => { frame += 1; emit() })
 
 function claim(token) {
   claimants.push(token)
@@ -51,6 +64,9 @@ function claim(token) {
 /** Whether something currently animates (tests). */
 export function animationActive() { return claimants.length > 0 && timer !== undefined }
 
+/** Whether any leaf holds the slot, ticking or paused for idle (tests). */
+export function animationClaimed() { return claimants.length > 0 }
+
 /**
  * @param {number} frames number of frames in the cycle
  * @param {boolean} [active] false releases the claim (the leaf is idle)
@@ -58,10 +74,12 @@ export function animationActive() { return claimants.length > 0 && timer !== und
  */
 export function useAnimationFrame(frames, active = true) {
   const token = useRef({}).current
-  useEffect(() => (active ? claim(token) : undefined), [active, token])
+  const covered = useCovered()
+  const on = active && !covered
+  useEffect(() => (on ? claim(token) : undefined), [on, token])
   const getSnapshot = useCallback(
-    () => (active && claimants[0] === token ? frame % frames : -1),
-    [active, token, frames],
+    () => (on && claimants[0] === token ? frame % frames : -1),
+    [on, token, frames],
   )
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
