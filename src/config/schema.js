@@ -129,7 +129,9 @@ export const DEFAULT_CONFIG = {
     icons: 'auto',
   },
   // Review queue scope filters (#177): organisations to offer, and named repository sets.
+  // stale_days: "Start here" moves a PR with no update for more days than this to Stale.
   queue: {
+    stale_days: 14,
     orgs: /** @type {string[]} */ ([]),
     sets: /** @type {Record<string, string[]>} */ ({}),
   },
@@ -858,7 +860,10 @@ function validateQueue(/** @type {any} */ val, /** @type {any} */ warnings) {
   }
   /** @type {Record<string, any>} */ const out = {}
   for (const [k, v] of Object.entries(val)) {
-    if (k === 'orgs') {
+    if (k === 'stale_days') {
+      if (!Number.isInteger(v) || v < 1 || v > 365) warnings.push('[queue].stale_days expected a whole number of days from 1 to 365 — ignored')
+      else out.stale_days = v
+    } else if (k === 'orgs') {
       if (!Array.isArray(v) || !v.every((s) => typeof s === 'string')) {
         warnings.push('[queue].orgs expected array of strings — ignored')
         continue

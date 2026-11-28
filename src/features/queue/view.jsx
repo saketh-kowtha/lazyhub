@@ -9,11 +9,17 @@
  * were read. There is no score and no safe/unsafe verdict. Nothing here writes to GitHub; approving
  * happens from PR detail (maintainer decision 2026-10-22).
  *
+ * START HERE (#177 phase 2, mockup docs/mockups/review-queue-start-here.md): the first group ranks
+ * every loaded row by the fixed keys in rank.js, under Needs you / Waiting on others / Stale
+ * headings; the strip's `rank` line names every key that placed the focused row. Rows carry compact
+ * signal badges (size, CI red, merge conflict, a cached collision-radar result, bot author, draft);
+ * a badge with no source data is hidden.
+ *
  * EVIDENCE SEAM (#127): `onOpen(item)` receives the full evidence record of the focused row and
  * today the app routes it to the existing PR detail. The read-only evidence view replaces that one
  * callback (app-views.jsx, `onOpenPR` of the queue view) and gets the record without refetching.
  */
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useTheme } from '../../theme.js'
 import { useKeyScope } from '../../keyscope.js'
@@ -25,12 +31,29 @@ import { fitCell } from '../../ui/row-layout.js'
 import { ageWords, ciCell, groupQueue, rowWhy, truncationSummary, whyLine } from './model.js'
 import { useReviewQueue } from './useReviewQueue.js'
 import { chooseScope, currentScope, loadScopes, nextScope, resetQueueScope } from './scope.js'
+import { STALE_DAYS_DEFAULT, SECTIONS, badgesFor, fitBadges, rankLine, rankOrderText, rankQueue, sizeOf } from './rank.js'
+import { cachedCollisions } from './signals.js'
+import { loadConfig as loadTomlConfig } from '../../config/loader.js'
+import { logSwallowed } from '../../contain.js'
 
 /** Width from which the status sidebar is drawn; below it the groups are one chip line. */
 export const SIDEBAR_MIN_COLS = 118
 const SIDEBAR_WIDTH = 28
-/** Width of the "why  " label on the strip; the strip is two lines tall. */
+/** Width of the "why  " / "rank " labels on the strip; the strip is rank(1) + signals(1) + why(2). */
 const WHY_PREFIX = 5
+/** The ranked group: every loaded row, in the order of rank.js. */
+export const START_GROUP = Object.freeze({ id: 'start', glyph: '◆', label: 'Start here', chip: 'Start', tone: 'muted' })
+
+/** `[queue].stale_days` from the config, or the default. */
+function configuredStaleDays() {
+  try {
+    const v = /** @type {any} */ (loadTomlConfig()).queue?.stale_days
+    return Number.isInteger(v) && v > 0 ? v : STALE_DAYS_DEFAULT
+  } catch (error) {
+    logSwallowed('queue.stale_days', error)
+    return STALE_DAYS_DEFAULT
+  }
+}
 
 // The cursor and group survive opening a PR and coming back (#177 acceptance: return with the
 // cursor intact). The row is remembered by PR identity so a refresh that reorders keeps it.
@@ -71,8 +94,15 @@ function StatusSidebar({ groups, current, height }) {
   const tones = useTones()
   return (
     <Box flexDirection="column" width={SIDEBAR_WIDTH} flexShrink={0} height={height} overflow="hidden">
+      {groups.filter(g => g.id === START_GROUP.id).map(g => (
+        <Box key={g.id} height={1}>
+          <Text color={g.id === current ? t.ui.selected : t.ui.muted} bold={g.id === current} wrap="truncate">
+            {g.id === current ? '▶' : ' '} {g.glyph} {fitCell(g.label, 19)}{String(g.items.length).padStart(3)}
+          </Text>
+        </Box>
+      ))}
       <Text color={t.ui.dim}>STATUS</Text>
-      {groups.map(g => (
+      {groups.filter(g => g.id !== START_GROUP.id).map(g => (
         <Box key={g.id} height={1}>
           <Text color={g.id === current ? t.ui.selected : tones[g.tone]} bold={g.id === current} wrap="truncate">
             {g.id === current ? '▶' : ' '} {g.glyph} {fitCell(g.label, 19)}{String(g.items.length).padStart(3)}
@@ -80,32 +110,71 @@ function StatusSidebar({ groups, current, height }) {
         </Box>
       ))}
       <Text color={t.ui.dim}>{' '}</Text>
-      <Text color={t.ui.dim} wrap="truncate">{`  total ${groups.reduce((n, g) => n + g.items.length, 0)} loaded`}</Text>
+      <Text color={t.ui.dim} wrap="truncate">{`  total ${groups.filter(g => g.id !== START_GROUP.id).reduce((n, g) => n + g.items.length, 0)} loaded`}</Text>
     </Box>
   )
 }
 
-function Rows({ items, idx, offset, rows, width, wide }) {
+/**
+ * Size label plus signal badges for one row, fitted to `width` (least important dropped first, as "+N").
+ * The CI badge is left out where the CI column is drawn.
+ */
+function BadgeCell({ item, width, withCi }) {
+  const tones = useTones()
+  const badges = badgesFor(item, { collisions: cachedCollisions(item) }).filter(b => withCi || b.id !== 'ci')
+  const size = sizeOf(item).label
+  const { shown, dropped } = fitBadges(size, badges, width, displayWidth)
+  const used = displayWidth([size, ...shown.map(b => b.text), ...(dropped ? [`+${dropped}`] : [])].join(' '))
+  return (
+    <Text>
+      <Text color={tones.muted}>{size}</Text>
+      {shown.map(b => <Text key={b.id} color={tones[b.tone]}>{` ${sanitize(b.text)}`}</Text>)}
+      {dropped > 0 && <Text color={tones.muted}>{` +${dropped}`}</Text>}
+      {' '.repeat(Math.max(0, width - used))}
+    </Text>
+  )
+}
+
+/** Title columns kept before the badge cell shrinks to the size label. */
+const MIN_TITLE = 14
+
+function Rows({ lines, cursor, offset, rows, width, wide }) {
   const { t } = useTheme()
   const tones = useTones()
-  // marker(2) + ref + gap + title + gap + [ci(7) + gap] + why + gap + age(4)
-  const refWidth = Math.min(wide ? 26 : 18, Math.max(10, ...items.map(i => `${sanitizePath(i.identity.repo)}#${i.identity.number}`.length)))
-  const whyWidth = wide ? Math.min(40, Math.floor(width * 0.34)) : Math.min(30, Math.floor(width * 0.4))
+  const items = lines.filter(l => l.kind === 'item').map(l => l.item)
+  // marker(2) + ref + gap + title + gap + [ci(7) + gap] + badges + gap + why + gap + age(4)
+  const refOf = item => (wide ? sanitizePath(item.identity.repo) : sanitizePath(item.identity.repo).split('/').pop()) + `#${item.identity.number}`
+  const refWidth = Math.min(wide ? 26 : 18, Math.max(10, ...items.map(i => refOf(i).length)))
+  const whyWidth = wide ? Math.min(40, Math.floor(width * 0.26)) : Math.min(26, Math.floor(width * 0.34))
   const ciWidth = wide ? 8 : 0
-  const titleWidth = Math.max(8, width - (2 + refWidth + 1 + 1 + ciWidth + whyWidth + 1 + 4))
+  // Size plus one badge and a "+N" fit; the strip's sig line lists them all. The title outranks the
+  // badges (secondary metadata goes first, DESIGN_REFERENCES): when it would get too narrow the
+  // cell keeps only the size.
+  const fixed = 2 + refWidth + 1 + 1 + ciWidth + 1 + whyWidth + 1 + 4
+  const badgeWidth = width - fixed - (wide ? 9 : 8) >= MIN_TITLE ? (wide ? 9 : 8) : 2
+  const titleWidth = Math.max(8, width - fixed - badgeWidth)
   return (
     <Box flexDirection="column">
-      {items.slice(offset, offset + rows).map((item, i) => {
-        const selected = offset + i === idx
+      {lines.slice(offset, offset + rows).map((line, i) => {
+        if (line.kind === 'header') {
+          return (
+            <Box key={`h:${line.id}`} height={1} overflow="hidden">
+              <Text color={t.ui.dim} bold wrap="truncate">{`  ${line.label.toUpperCase()} ${line.count}${line.note ? `  ${line.note}` : ''}`}</Text>
+            </Box>
+          )
+        }
+        const item = line.item
+        const selected = offset + i === cursor
         const ci = ciCell(item)
-        const ref = `${wide ? sanitizePath(item.identity.repo) : sanitizePath(item.identity.repo).split('/').pop()}#${item.identity.number}`
         return (
           <Box key={keyOf(item)} height={1} overflow="hidden">
             <Text wrap="truncate">
               <Text color={t.ui.selected} bold>{selected ? '▶ ' : '  '}</Text>
-              <Text color={t.ui.dim}>{fitCell(ref, refWidth)} </Text>
+              <Text color={t.ui.dim}>{fitCell(refOf(item), refWidth)} </Text>
               <Text color={selected ? t.ui.selected : undefined} bold={selected}>{fitCell(sanitize(item.untrusted?.title || ''), titleWidth)} </Text>
               {wide && <Text color={tones[ci.tone]}>{fitCell(ci.text, ciWidth)}</Text>}
+              <BadgeCell item={item} width={badgeWidth} withCi={!wide} />
+              <Text> </Text>
               <Text color={t.ui.muted}>{fitCell(sanitize(rowWhy(item)), whyWidth)} </Text>
               <Text color={t.ui.dim}>{fitCell(shortAge(item.facts?.updated_at?.value === 'unknown' ? null : item.facts?.updated_at?.value), 4)}</Text>
             </Text>
@@ -126,9 +195,11 @@ function Rows({ items, idx, offset, rows, width, wide }) {
  * @param {number} [props.listHeight] rows available to the pane
  * @param {object} [props.queueOptions] passed to useReviewQueue (tests)
  * @param {import('./scope.js').QueueScope[]} [props.scopes] replaces the scopes built from the launch repo and config (tests)
+ * @param {number} [props.staleDays] replaces `[queue].stale_days` (tests)
  */
-export function ReviewQueue({ scopes: given, ...rest }) {
+export function ReviewQueue({ scopes: given, staleDays: givenStale, ...rest }) {
   const scopes = useMemo(() => given || loadScopes(), [given])
+  const staleDays = useMemo(() => givenStale || configuredStaleDays(), [givenStale])
   const [scopeId, setScopeId] = useState(() => currentScope(scopes).id)
   const scope = scopes.find(s => s.id === scopeId) || currentScope(scopes)
   const cycle = () => {
@@ -136,7 +207,7 @@ export function ReviewQueue({ scopes: given, ...rest }) {
     chooseScope(next)
     setScopeId(next.id)
   }
-  return <QueueScreen key={scope.id} {...rest} scope={scope} scopes={scopes} onCycleScope={cycle} />
+  return <QueueScreen key={scope.id} {...rest} scope={scope} scopes={scopes} staleDays={staleDays} onCycleScope={cycle} />
 }
 
 /**
@@ -158,7 +229,29 @@ export function scopeLine(scope, scopes, width = Infinity) {
   return `${truncateEllipsis(sanitize(name), Math.max(8, width - displayWidth(' · read-only')))} · read-only`
 }
 
-function QueueScreen({ onOpen, innerWidth, listHeight, queueOptions, scope, scopes, onCycleScope }) {
+/** Every signal of a row in words, size first; the row shows the short forms. */
+export function signalLine(item) {
+  const badges = badgesFor(item, { collisions: cachedCollisions(item) })
+  return [sizeOf(item).words, ...badges.map(b => b.words)].join(' · ')
+}
+
+/**
+ * The list lines of one group: the Start here group gets a heading per section (with its count);
+ * other groups are their rows. Returns the lines and, per row key, the line it is on.
+ */
+function groupLines(group, ranked, staleDays) {
+  if (group.id !== START_GROUP.id) return group.items.map(item => ({ kind: 'item', item }))
+  const lines = []
+  for (const section of SECTIONS) {
+    const inSection = ranked.filter(r => r.section === section.id)
+    if (inSection.length === 0) continue
+    lines.push({ kind: 'header', id: section.id, label: section.label, count: inSection.length, note: section.id === 'stale' ? `no update in more than ${staleDays}d` : '' })
+    for (const r of inSection) lines.push({ kind: 'item', item: r.item })
+  }
+  return lines
+}
+
+function QueueScreen({ onOpen, innerWidth, listHeight, queueOptions, scope, scopes, staleDays = STALE_DAYS_DEFAULT, onCycleScope }) {
   const { t } = useTheme()
   const { stdout } = useStdout()
   useKeyScope('pane')
@@ -167,7 +260,11 @@ function QueueScreen({ onOpen, innerWidth, listHeight, queueOptions, scope, scop
   const queue = useReviewQueue({ ...queueOptions, scope })
   const resolve = useActionResolver('queue-list')
 
-  const groups = useMemo(() => groupQueue(queue.items), [queue.items])
+  // Ages are counted from when the rows were read, so the order holds still between refreshes.
+  const rankedAt = queue.fetchedAtMs || 0
+  const ranked = useMemo(() => rankQueue(queue.items, { now: rankedAt || Date.now(), staleDays }), [queue.items, rankedAt, staleDays])
+  const rankByKey = useMemo(() => new Map(ranked.map(r => [keyOf(r.item), r])), [ranked])
+  const groups = useMemo(() => [{ ...START_GROUP, items: ranked.map(r => r.item) }, ...groupQueue(queue.items)], [ranked, queue.items])
   const [selection, setSelection] = useState(() => selectionMemory)
   const remember = next => { selectionMemory = next; setSelection(next) }
 
@@ -178,6 +275,15 @@ function QueueScreen({ onOpen, innerWidth, listHeight, queueOptions, scope, scop
   const found = selection.key ? items.findIndex(i => keyOf(i) === selection.key) : -1
   const idx = items.length === 0 ? 0 : Math.max(0, found)
   const focused = items[idx] || null
+  const lines = useMemo(() => groupLines(group, ranked, staleDays), [group, ranked, staleDays])
+  const cursor = focused ? lines.findIndex(l => l.kind === 'item' && l.item === focused) : 0
+
+  // Pin the row under the cursor by identity once it is drawn, so a page or refresh that ranks rows
+  // above it does not move the cursor to another PR.
+  const focusedKey = focused ? keyOf(focused) : null
+  useEffect(() => {
+    if (focusedKey && selection.key !== focusedKey && found < 0) remember({ group: group.id, key: focusedKey })
+  }, [focusedKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const move = delta => {
     if (items.length === 0) return
@@ -208,10 +314,10 @@ function QueueScreen({ onOpen, innerWidth, listHeight, queueOptions, scope, scop
     }
   })
 
-  // Chrome: title(1) + scope(1) + [chips(1)] + notes(1) + why strip (rule + 2 lines)
-  const chrome = 6 + (wide ? 0 : 1)
+  // Chrome: title(1) + scope(1) + [chips(1)] + notes(1) + strip (rule + rank + signals + 2 why lines)
+  const chrome = 8 + (wide ? 0 : 1)
   const rows = Math.max(3, (listHeight || 20) - chrome)
-  const offset = Math.max(0, Math.min(idx - Math.floor(rows / 2), items.length - rows))
+  const offset = Math.max(0, Math.min(cursor - Math.floor(rows / 2), lines.length - rows))
   const failure = queue.error ? classifyGhFailure(queue.error, { cached: queue.items.length > 0 }) : null
   const now = Date.now()
   const updated = queue.fetchedAtMs ? ageWords(now - queue.fetchedAtMs) : null
@@ -235,7 +341,7 @@ function QueueScreen({ onOpen, innerWidth, listHeight, queueOptions, scope, scop
   } else if (items.length === 0) {
     body = <Text color={t.ui.muted}>{`Nothing in "${group.label}" among the ${queue.items.length} loaded. ] and [ switch group.`}</Text>
   } else {
-    body = <Rows items={items} idx={idx} offset={offset} rows={rows} width={wide ? cols - SIDEBAR_WIDTH - 1 : cols} wide={wide} />
+    body = <Rows lines={lines} cursor={cursor} offset={offset} rows={rows} width={wide ? cols - SIDEBAR_WIDTH - 1 : cols} wide={wide} />
   }
 
   return (
@@ -266,10 +372,22 @@ function QueueScreen({ onOpen, innerWidth, listHeight, queueOptions, scope, scop
                 : items.length > 0 ? `${idx + 1} of ${items.length} in ${group.label}` : ''}
         </Text>
       </Box>
-      <Box height={3} overflow="hidden" borderStyle="single" borderColor={t.ui.border} borderLeft={false} borderRight={false} borderBottom={false}>
-        <Text color={t.ui.muted} wrap="wrap">
-          <Text color={t.ui.dim}>why  </Text>{focused ? sanitize(whyLine(focused, now, 2 * (cols - 2) - WHY_PREFIX - 4)) : 'select a row to see why it is here'}
-        </Text>
+      <Box height={5} flexDirection="column" overflow="hidden" borderStyle="single" borderColor={t.ui.border} borderLeft={false} borderRight={false} borderBottom={false}>
+        <Box height={1} overflow="hidden">
+          <Text color={t.ui.muted} wrap="truncate">
+            <Text color={t.ui.dim}>rank </Text>{focused && rankByKey.get(focusedKey) ? sanitize(rankLine(rankByKey.get(focusedKey), ranked.length, cols - 2 - WHY_PREFIX, displayWidth)) : rankOrderText(staleDays)}
+          </Text>
+        </Box>
+        <Box height={1} overflow="hidden">
+          <Text color={t.ui.muted} wrap="truncate">
+            <Text color={t.ui.dim}>sig  </Text>{focused ? sanitize(signalLine(focused)) : ''}
+          </Text>
+        </Box>
+        <Box height={2} overflow="hidden">
+          <Text color={t.ui.muted} wrap="wrap">
+            <Text color={t.ui.dim}>why  </Text>{focused ? sanitize(whyLine(focused, now, 2 * (cols - 2) - WHY_PREFIX - 4)) : 'select a row to see why it is here'}
+          </Text>
+        </Box>
       </Box>
     </Box>
   )

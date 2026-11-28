@@ -116,7 +116,10 @@ icons         = "auto"      # auto | unicode | ascii (auto: ASCII on TERM=linux/
 # ── Review queue scopes (#177) ───────────────────────────────────────────
 # `s` in the queue cycles: this repo (when launched inside one), account, each org below,
 # each set below. Example:  orgs = ["acme"]   and   [queue.sets]  work = ["acme/api", "acme/web"]
+# stale_days: "Start here" lists a PR under Stale once it has had no update for more days than this
+# (a review requested of you always stays under Needs you).
 [queue]
+stale_days = 14
 orgs = []
 
 [queue.sets]

@@ -30,7 +30,7 @@ beforeEach(() => { vi.clearAllMocks(); resetQueueMemory(); resetQueueSelection()
 afterEach(cleanup)
 
 describe('ReviewQueue rows explain why', () => {
-  it('opens on the first group with rows and every row carries its reason', async () => {
+  it('opens on Start here, every loaded row ranked under its section, and every row carries its reason', async () => {
     const { view } = mount()
     await waitForExpectation(() => expect(frame(view)).toContain('Retry in webhook sender'))
     await flush(20)
@@ -38,12 +38,18 @@ describe('ReviewQueue rows explain why', () => {
     expect(f).toContain('Review queue')
     expect(f).toContain('account @octocat')
     expect(f).toContain('read-only')
-    expect(f).toContain('[◔ Review 2]')
+    expect(f).toContain('[◆ Start 7]')
+    expect(f).toContain('◔ Review 2')
     expect(f).toContain('✗ CI 1')
     expect(line(view, 'Retry in webhook sender')).toContain('review requested of you')
     expect(line(view, 'New form lib')).toContain('via team @acme/core')
-    // only the focused group is listed
-    expect(f).not.toContain('Shard the worker queue')
+    // every loaded row is ranked, under its section heading, in rank order
+    const order = ['NEEDS YOU', 'Retry in webhook sender', 'New form lib', 'WAITING ON OTHERS'].map(text => f.indexOf(text))
+    expect(order.every(i => i >= 0)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+    expect(f).toContain('Shard the worker queue')
+    // 80 columns: every rank key is still named, in its short words
+    expect(f).toMatch(/rank\s+1 of 7: Needs you > review of you > clear > <1d old > XS/)
   })
 
   it('the why strip names the reasons, head and CI of the focused row, and follows j/k', async () => {
@@ -62,10 +68,14 @@ describe('ReviewQueue rows explain why', () => {
     await waitForExpectation(() => expect(frame(view)).toContain('Retry in webhook sender'))
     await flush(20)
     await press(']')
+    expect(frame(view)).toContain('[◔ Review 2]')
+    expect(frame(view)).not.toContain('Shard the worker queue')
+    await press(']')
     expect(frame(view)).toContain('[✗ CI 1]')
     expect(line(view, 'Shard the worker queue')).toContain('1 of 2 checks failing')
     expect(frame(view)).not.toContain('Retry in webhook sender')
     await press('[')
+    expect(frame(view)).toContain('[◔ Review 2]')
     expect(frame(view)).toContain('Retry in webhook sender')
   })
 
@@ -75,7 +85,11 @@ describe('ReviewQueue rows explain why', () => {
     await flush(20)
     const f = frame(view)
     expect(f).toContain('STATUS')
+    expect(f).toMatch(/Start here\s+7/)
     expect(f).toMatch(/Needs my review\s+2/)
+    // wider strip: the leading keys keep their full words
+    expect(f).toMatch(/rank\s+1 of 7: Needs you > review requested of you \(@alice is waiting\) > /)
+    expect(f).toMatch(/sig\s+size XS \(\+3\/-1 in 2 files\)/)
     expect(f).toMatch(/CI failing\s+1/)
     expect(f).toContain('total 7 loaded')
     expect(line(view, 'Retry in webhook sender')).toContain('✓ 2/2')
@@ -111,11 +125,11 @@ describe('ReviewQueue keys', () => {
     await press('o')
     expect(openUrl).toHaveBeenCalledWith('https://github.com/acme/web/pull/1')
     openUrl.mockClear()
-    await press(']'); await press(']'); await press(']') // waiting
+    await press(']'); await press(']'); await press(']'); await press(']') // waiting
     await press(']') // ready
     await press(']') // unknown
-    await press(']') // wraps to review
-    expect(frame(view)).toContain('[◔ Review 2]')
+    await press(']') // wraps to Start here
+    expect(frame(view)).toContain('[◆ Start 7]')
   })
 
   it('r refetches the first page', async () => {
@@ -132,7 +146,7 @@ describe('ReviewQueue keys', () => {
     const first = mount({ now: () => NOW })
     await waitForExpectation(() => expect(frame(first.view)).toContain('Retry in webhook sender'))
     await flush(20)
-    await press(']')
+    await press(']'); await press(']')
     await press('', { return: true })
     cleanup()
     const second = mount({ now: () => NOW })
@@ -148,12 +162,15 @@ describe('ReviewQueue keys', () => {
     const { view, fetch } = mount({ result: queueResult([older, newer]) })
     await waitForExpectation(() => expect(frame(view)).toContain('Newer'))
     await flush(20)
+    // Start here: both wait on others; the one with no update for longer is first
+    expect(frame(view).indexOf('Older')).toBeLessThan(frame(view).indexOf('Newer'))
     await press('j')
-    expect(line(view, 'Older')).toContain('▶')
+    expect(line(view, 'Newer')).toContain('▶')
     const bumped = evidence({ number: 1, title: 'Older', updatedAt: '2026-11-08T00:00:00Z' })
     fetch.mockResolvedValue(queueResult([bumped, newer]))
     await press('r')
-    expect(line(view, 'Older')).toContain('▶')
+    await waitForExpectation(() => expect(frame(view).indexOf('Newer')).toBeLessThan(frame(view).indexOf('Older')))
+    expect(line(view, 'Newer')).toContain('▶')
   })
 })
 
@@ -210,8 +227,8 @@ describe('ReviewQueue empty and failed states', () => {
     const { view } = mount({ result: queueResult([evidence({ number: 3, title: 'Only waiting' })]) })
     await waitForExpectation(() => expect(frame(view)).toContain('Only waiting'))
     await flush(20)
-    await press('[')
-    expect(frame(view)).toContain('Nothing in "Changes requested" among the 1 loaded')
+    await press(']')
+    expect(frame(view)).toContain('Nothing in "Needs my review" among the 1 loaded')
   })
 
   it('shows the cause and the fix when the first load fails', async () => {
