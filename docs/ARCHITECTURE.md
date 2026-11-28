@@ -10,7 +10,7 @@ lazyhub is a pure-ESM Node program: an Ink (React) terminal UI over the official
 
 | Layer | Where | Owns |
 |---|---|---|
-| Entry | `bin/lazyhub.js` | argument fast paths (`--version`, `--debug-state`, `perf report`, `--mcp`, `doctor`, `feedback`, `watch-only`, `serve`), crash handlers, config load, the editor socket, `renderApp()` |
+| Entry | `bin/lazyhub.js` | argument fast paths (`--version`, `--debug-state`, `perf report`, `--mcp`, `doctor`, `feedback`, `watch-only`, `serve`, the `--json` review commands `queue`, `evidence`, `why-red`, `claims`, `collisions`, `story`), crash handlers, config load, the editor socket, `renderApp()` |
 | Bootstrap | `src/bootstrap.js` | before any UI: is `gh` installed and signed in, which repository, onboarding |
 | Shell | `src/app.jsx`, `app-views.jsx`, `app-panels.jsx`, `app-keys.js` | the root component, the view tree (list, detail, diff, comments, conflict, settings, logs, overlays), global keys, footer and help text |
 | Features | `src/features/{prs,issues,branches,actions,notifications,tabs,settings,logs,onboarding}/` | one pane each: list, detail and dialogs; controllers hold state, `*-view.jsx` / `render.jsx` files draw |
@@ -19,7 +19,7 @@ lazyhub is a pure-ESM Node program: an Ink (React) terminal UI over the official
 | Config and theme | `src/config/`, `src/theme/`, `src/themes/` | TOML config, the action and keymap registry, theme tokens (`useTheme()`) |
 | Services | `src/services/` | the only way UI code reaches the OS: `platform.js` (browser, clipboard, configured pane commands), `editor.js`, `git.js` (local git, always given the checkout directory) |
 | Executor | `src/executor.js` (barrel), `src/executor/` | `runGh()` and `runGit()`: classification, audit of writes, timeouts, concurrency, error typing; the typed GitHub calls (`prs.js`, `issues.js`, ...); `classify.js` turns a failure into a plain-language message |
-| Background | `src/daemon/`, `src/ipc.js`, `src/cli/`, `src/watch-only/`, `src/mcp.js` | the optional helper process and its protocol, the editor socket, the non-TUI commands |
+| Background | `src/daemon/`, `src/ipc.js`, `src/cli/`, `src/watch-only/`, `src/mcp.js`, `src/review-tools/` | the optional helper process and its protocol, the editor socket, the non-TUI commands; `src/review-tools/` is the UI-free, read-only review core shared by the MCP server and the `--json` review commands |
 | AI | `src/ai/` | provider abstraction; `providers/anthropic-api.js` is the only Anthropic HTTP caller |
 
 The intended direction is `components/features -> hooks -> services -> executor -> gh/git`. What is enforced today: UI directories cannot import `execa` or `child_process` (lint and a source scan), spawn sites exist only in `services/`, `executor/`, `bootstrap.js`, `daemon/` and `ai/providers/` (test), and `useTheme()` is required over a static theme import. What is only convention: features and components import `executor.js` directly, and hooks do not go through services.

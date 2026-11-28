@@ -36,6 +36,8 @@ export const ERROR_CODES = Object.freeze({
   INVALID_CURSOR: 'INVALID_CURSOR',
   UNKNOWN_TOOL: 'UNKNOWN_TOOL',
   GITHUB_ERROR: 'GITHUB_ERROR',
+  /** CLI only: gh is missing or not signed in (the MCP server refuses to start instead). */
+  SETUP: 'SETUP',
 })
 
 /** A review-tool failure with a stable `code` (ERROR_CODES) and optional GitHub details. */

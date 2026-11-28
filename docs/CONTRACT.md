@@ -205,6 +205,15 @@ Schema of every shape below). The MCP server and the `--json` CLI commands both 
 | `collisions` | `lazyhub collisions [<pr>]` | `features/prs/collisions/` (#360) |
 | `review_story` | `lazyhub story <pr>` | `features/prs/story/build.js` (#362) |
 
+CLI (#627): `lazyhub <command> [<pr>] [--repo owner/name] --json`, plus `--org`, `--limit`,
+`--after-review-requested`, `--after-authored` (queue) and `--base-runs` (why-red); `<pr>` is
+`123`, `#123`, `owner/name#123` or a pull request URL. `--json` is required (no human format
+yet). Headless: the TUI never loads and nothing prompts. stdout carries exactly one compact
+JSON line, the envelope below or `{"schema_version":1,"tool":"pr_evidence","error":{"code","message","kind"?,"fix"?,"hint"?}}`;
+stderr gets one plain line on failure. Exit codes: `0` success, `1` a GitHub read failed
+(`GITHUB_ERROR`), `2` invalid usage or arguments (checked before any `gh` call), `3` `gh`
+missing or not signed in (`SETUP`).
+
 Envelope (every successful result):
 
 ```json

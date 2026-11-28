@@ -61,6 +61,9 @@ describe('USAGE agent section (#626)', () => {
     expect(section).toMatch(/^ {2}--mcp {2,}MCP server on stdio/m)
     expect(section).toContain('{"command": "lazyhub", "args": ["--mcp"]}')
     expect(section).toContain('doctor --json')
+    for (const cmd of ['queue --json', 'evidence <pr> --json', 'why-red <pr> --json', 'claims <pr> --json', 'collisions [<pr>] --json', 'story <pr> --json']) {
+      expect(section).toContain(cmd)
+    }
   })
 
   it('keeps the agent section within 100 columns', () => {

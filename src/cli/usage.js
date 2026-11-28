@@ -33,6 +33,13 @@ Commands:
 For agents and scripts (non-interactive, read-only, never prompts):
   --mcp                           MCP server on stdio (JSON-RPC); same as \`lazyhub mcp-server\`.
                                   Client config: {"command": "lazyhub", "args": ["--mcp"]}
+  queue --json                    PRs needing your attention, grouped, with reasons
+  evidence <pr> --json            review evidence: reasons, checks, files, head
+  why-red <pr> --json             why CI is red: step, log excerpt, changed lines
+  claims <pr> --json              description claims checked against the diff
+  collisions [<pr>] --json        open PRs touching the same files, merge order
+  story <pr> --json               the diff as an ordered walkthrough
+                                  (all take --repo owner/name; details: lazyhub queue --help)
   doctor --json                   setup and coverage report as JSON
   status --format json            cached review/CI/notification counts as JSON
 

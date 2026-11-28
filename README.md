@@ -82,6 +82,7 @@ Other ways in: `lazyhub owner/repo#123` (also `'#123'`, `123` or a PR/issue URL)
 - **MCP server:** `lazyhub --mcp` serves GitHub reads over stdio to MCP clients. It is read-only: every model- or agent-originated write is disabled. Besides PR, issue and check reads it offers the review tools `review_queue`, `pr_evidence`, `why_ci_red`, `claims_check`, `collisions` and `review_story`, with versioned JSON (see `docs/CONTRACT.md`). GitHub text comes back cleaned and marked as untrusted data.
   - Claude Code: `claude mcp add lazyhub -- lazyhub --mcp`
   - VS Code (`.vscode/mcp.json`): `{"servers": {"lazyhub": {"type": "stdio", "command": "lazyhub", "args": ["--mcp"]}}}`
+- **Same tools from a shell:** `lazyhub queue --json`, `lazyhub evidence 123 --json`, `lazyhub why-red 123 --json`, `lazyhub claims 123 --json`, `lazyhub collisions [123] --json` and `lazyhub story 123 --json` print the same JSON, never prompt, and exit non-zero with a structured error (`lazyhub queue --help`).
 
 ## Keys
 
