@@ -1,5 +1,6 @@
 import { getRepo, repoPath, runGh } from './core.js'
 import { encodeRefPath } from './branches.js'
+import { pendingPRHead } from './prs.js'
 
 /**
  * List workflow runs.
@@ -80,15 +81,20 @@ const CHECK_MAX_PAGES = 20
  */
 export async function getPRChecks(/** @type {any} */ repo, /** @type {any} */ number) {
   const r = getRepo(repo)
-  // Use the PR view to get the head SHA first, then fetch checks
-  let pr
-  try {
-    pr = await runGh(['pr', 'view', String(number), '--repo', r, '--json', 'headRefOid'])
-  } catch {
-    return []
+  // The head SHA first, then the checks. The detail opens getPR() beside this call, and that read
+  // carries headRefOid, so use it when one is in flight instead of a second `pr view` (#622).
+  let headRefOid = await pendingPRHead(r, number)
+  if (!headRefOid) {
+    let pr
+    try {
+      pr = await runGh(['pr', 'view', String(number), '--repo', r, '--json', 'headRefOid'])
+    } catch {
+      return []
+    }
+    headRefOid = pr?.headRefOid
   }
-  if (!pr?.headRefOid) return []
-  const base = `repos/${repoPath(r)}/commits/${encodeURIComponent(pr.headRefOid)}/check-runs`
+  if (!headRefOid) return []
+  const base = `repos/${repoPath(r)}/commits/${encodeURIComponent(headRefOid)}/check-runs`
   const jq = '[.check_runs[] | {id: .id, name: .name, status: .status, conclusion: .conclusion, appName: .app.name, url: .html_url, startedAt: .started_at, completedAt: .completed_at}]'
   const checks = []
   let truncated = false

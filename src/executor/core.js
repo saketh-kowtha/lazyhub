@@ -16,6 +16,7 @@ import { requestDaemon } from '../daemon/lifecycle.js'
 import { classifyGh, toTypedRead } from '../daemon/protocol.js'
 import { hashArgs, writeAuditEntry } from '../daemon/audit.js'
 import { randomUUID } from 'crypto'
+import { availableParallelism } from 'os'
 
 // Re-exported so `import { GhError } from './executor.js'` keeps working.
 export { GhError }
@@ -132,7 +133,7 @@ export async function runGh(args, opts = {}) {
       noteDaemonFallback('read-failed', { retryAfterMs: DAEMON_RETRY_AFTER_MS })
     }
   }
-  if (kind === 'read') return spawnGh(args, opts)
+  if (kind === 'read') return sharedRead(args, opts)
 
   const reqId = randomUUID()
   const repo = repoFromArgs(args)
@@ -149,6 +150,8 @@ export async function runGh(args, opts = {}) {
   } finally {
     // The remote outcome may be ambiguous on error, so drop cached reads either way.
     try { invalidateRepoCache(repo) } catch { /* cache is best-effort */ }
+    // A read that started before this write must not answer the revalidation that follows it.
+    sharedReads.clear()
     await invalidateDaemonCache(repo)
     // After the daemon cache is dropped, so the revalidation this triggers reads fresh data (#481).
     notifyWrite(repo)
@@ -173,10 +176,75 @@ async function invalidateDaemonCache(repo) {
   }
 }
 
+// ─── In-flight read sharing (#622) ────────────────────────────────────────────
+
+/**
+ * Identical reads in flight at the same time share one gh child. Keyed by the exact argv and
+ * the options that change the result; reads with stdin or a terminal are never shared. Every
+ * caller after the first gets its own copy of the parsed result, so no caller can change what
+ * another one sees. A write clears the table (see runGh), so the revalidation after a write
+ * always spawns a fresh read.
+ * @type {Map<string, {low: boolean, joiners: {resolve: (v: any) => void, reject: (e: any) => void}[]}>}
+ */
+const sharedReads = new Map()
+
+/** @param {any} value */
+function copyResult(value) {
+  return value !== null && typeof value === 'object' ? structuredClone(value) : value
+}
+
+/**
+ * @param {string[]} args
+ * @param {{json?: boolean, stdin?: string, interactive?: boolean, combine?: boolean, maxBuffer?: number, priority?: 'low', timeout?: number}} opts
+ */
+function sharedRead(args, opts) {
+  if (opts.stdin !== undefined || opts.interactive) return spawnGh(args, opts)
+  const key = JSON.stringify([args, opts.json ?? null, Boolean(opts.combine), opts.maxBuffer ?? null])
+  const low = opts.priority === 'low'
+  const existing = sharedReads.get(key)
+  // A user read never waits behind a queued speculative one; a speculative read may join anything.
+  if (existing && (low || !existing.low)) {
+    return new Promise((resolve, reject) => existing.joiners.push({ resolve, reject }))
+  }
+  /** @type {{low: boolean, joiners: {resolve: (v: any) => void, reject: (e: any) => void}[]}} */
+  const entry = { low, joiners: [] }
+  sharedReads.set(key, entry)
+  const drop = () => { if (sharedReads.get(key) === entry) sharedReads.delete(key) }
+  // The copies are made before the first caller resumes, so nothing it does to its result reaches them.
+  return spawnGh(args, opts).then(value => {
+    drop()
+    for (const j of entry.joiners) {
+      try { j.resolve(copyResult(value)) } catch (err) { j.reject(err) }
+    }
+    return value
+  }, err => {
+    drop()
+    for (const j of entry.joiners) j.reject(err)
+    throw err
+  })
+}
+
+/** Number of distinct reads currently shared (tests). */
+export function sharedReadCount() {
+  return sharedReads.size
+}
+
 // ─── Bounded gh concurrency ───────────────────────────────────────────────────
 
-/** Default cap on simultaneous gh child processes; override with LAZYHUB_GH_CONCURRENCY. */
-const GH_CONCURRENCY_DEFAULT = 4
+/** Bounds of the CPU-derived default cap on simultaneous gh child processes. */
+export const GH_CONCURRENCY_MIN = 2
+export const GH_CONCURRENCY_MAX = 8
+
+/**
+ * Default cap on simultaneous gh child processes: the machine's CPU count, clamped to
+ * GH_CONCURRENCY_MIN..GH_CONCURRENCY_MAX, so a 2-core machine is not flooded with children
+ * and a large one is not held to a fixed 4. LAZYHUB_GH_CONCURRENCY always wins.
+ * @param {number} [cpus]
+ */
+export function defaultGhConcurrency(cpus = availableParallelism()) {
+  const n = Number.isFinite(cpus) ? Math.floor(cpus) : GH_CONCURRENCY_MIN
+  return Math.min(GH_CONCURRENCY_MAX, Math.max(GH_CONCURRENCY_MIN, n))
+}
 /** @type {any[]} */
 const ghWaiters = []
 /** Speculative reads (prefetch, #482): served only after every normal waiter, and never take the last slot. */
@@ -187,7 +255,7 @@ let ghInFlight = 0
 function ghConcurrencyLimit() {
   const raw = (process.env.LAZYHUB_GH_CONCURRENCY ?? '').trim()
   const n = /^\d+$/.test(raw) ? Number(raw) : 0
-  return Number.isSafeInteger(n) && n > 0 ? n : GH_CONCURRENCY_DEFAULT
+  return Number.isSafeInteger(n) && n > 0 ? n : defaultGhConcurrency()
 }
 
 /** @param {boolean} [low] a speculative read that must never delay a user-initiated one */

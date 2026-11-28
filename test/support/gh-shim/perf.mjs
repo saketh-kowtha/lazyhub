@@ -93,6 +93,12 @@ function connection(total, after, size, make) {
   return { totalCount: total, pageInfo: { hasNextPage: end < total, endCursor: end < total ? String(end) : null }, nodes }
 }
 
+const repoNode = args => ({
+  id: 'R_perf', name: arg(args, 'name') || 'r', owner: { id: 'O_perf', login: arg(args, 'owner') || 'o' },
+  defaultBranchRef: { name: 'main' }, squashMergeAllowed: true, mergeCommitAllowed: true, rebaseMergeAllowed: true,
+  deleteBranchOnMerge: false, viewerPermission: 'WRITE',
+})
+
 function graphql(args, out) {
   const query = arg(args, 'query') || ''
   if (/files\(first/.test(query)) {
@@ -118,7 +124,12 @@ function graphql(args, out) {
     out({ data: { node: { id, isResolved: false, comments: { totalCount: total, pageInfo: { hasNextPage: end < total, endCursor: end < total ? String(end) : null }, nodes } } } })
   }
   const search = arg(args, 'searchQuery') || ''
-  if (/\bis:pr\b/.test(search)) out(searchPage(args, /\bis:(closed|merged)\b/.test(search) ? SIZES.closedPrs : SIZES.openPrs, prNode))
+  if (/\bis:pr\b/.test(search)) {
+    const page = searchPage(args, /\bis:(closed|merged)\b/.test(search) ? SIZES.closedPrs : SIZES.openPrs, prNode)
+    // A query that also selects the repository gets it, as GitHub answers both in one response.
+    if (/repository\(owner/.test(query)) page.data.repository = repoNode(args)
+    out(page)
+  }
   if (/search\(/.test(query)) out(searchPage(args, SIZES.openIssues, issueNode))
 }
 
