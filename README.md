@@ -22,6 +22,20 @@ When coding agents open PRs faster than you can read them, the hard part is not 
 
 The core review journey needs no AI provider, GitHub App or agent. What it shows comes from `gh`, and it writes to GitHub only when you press a write key yourself.
 
+## Review Alpha: what it is and isn't
+
+lazyhub is in its Review Alpha stage ([roadmap](docs/ROADMAP.md)).
+
+**It is** the read-only review journey described on this page, over your existing `gh` login: the review queue, evidence, why CI is red, claims check, collision radar and review story, installed from npm or Homebrew. Feedback comes from issues, `lazyhub feedback` and a small pilot with maintainers who agreed to take part.
+
+**It isn't:**
+
+- **An approval or enforcement system.** No GitHub App or required check enforces anything, and `doctor` reports coverage as advisory. Approval enforcement is a separate, optional stage that is not built.
+- **A verdict.** lazyhub shows facts, their sources and what is unknown. It never says a change is safe, and the claims check is a fixed set of rules, not a proof.
+- **An agent that writes.** The MCP server and the AI assistant are read-only. Review tools over MCP, a Claude Code plugin, hand-off to a coding agent and a GitHub Action that comments on PRs are not shipped.
+- **A stable 1.0.** Keys, views and config may still change between releases. Check `lazyhub --version` against the [changelog](CHANGELOG.md).
+- **Watching you.** There is no telemetry. The project only learns what you choose to send.
+
 ## Install
 
 Requirements: Node.js 20 or later and the [`gh` CLI](https://cli.github.com/), authenticated with `gh auth login` (check with `gh auth status`). If no session is found, an interactive start opens the GitHub CLI login flow.
@@ -44,8 +58,8 @@ lazyhub
 ```
 
 1. First run only: pick a repository in the short setup (rerun any time with `lazyhub --onboarding`). The `Focus` pane opens with your review requests, your open PRs and your assigned issues.
-2. `g q` opens the review queue. `j`/`k` move, `Enter` opens a PR.
-3. In the PR, press `e` for evidence, `f` if CI is red, `V` to check the description's claims, `d` for the diff.
+2. `g q` opens the review queue. Launched inside a clone, it starts on that repository; `s` switches to your whole account, an organisation or a repository set. `j`/`k` move, `Enter` opens the PR's evidence.
+3. In the evidence view, `d` opens the diff and `Enter` the full PR. In the PR, `f` shows why CI is red, `V` checks the description's claims and `e` opens the evidence. From the evidence view, `Esc` returns to the queue on the same row.
 4. `?` shows the keys for the current view. `:` opens the command palette. `q` goes back.
 
 Other ways in: `lazyhub owner/repo#123` (also `'#123'`, `123` or a PR/issue URL) opens an item directly and read-only; `lazyhub --repo owner/name` opens another repository for that launch without saving it; `:` then "Switch repository" changes it without restarting.
@@ -54,7 +68,7 @@ Other ways in: `lazyhub owner/repo#123` (also `'#123'`, `123` or a PR/issue URL)
 
 ### Triage: find work that needs you
 
-- **Review queue** (`g q`): open PRs that request your review or that you opened, each with the reason it needs attention. `]`/`[` change status group, `Enter` opens the PR, `o` opens it in the browser, `+` loads more.
+- **Review queue** (`g q`): open PRs that request your review or that you opened, each with the reason it needs attention. It starts on the repository you launched in (from the current directory or `--repo`); `s` cycles to the whole account, the organisations in `[queue].orgs` and the repository sets in `[queue.sets]`. `]`/`[` change status group, `Enter` opens the PR's evidence, `o` opens it in the browser, `+` loads more.
 - **Focus, PRs, Issues, Branches, Actions and Notifications** panes (`g h`, `g p`, `g i`, `g b`, `g a`, `g n`, or `1`-`9`). Lists page through what GitHub returns and say so when GitHub's own search cap applies, for example `1000 of 5000`.
 - **Fewer key presses.** Row actions work without opening the PR (`a` approve, `x` request changes, `c` comment, `m` merge, `l` labels, `b` checkout; destructive ones still confirm). The PR state filter is remembered per repository, and the PR scope (mine, reviewing, all) is remembered across launches.
 - **Smart Enter** is opt-in: set `[state] smartEnter = true` and `Enter` on an open PR row jumps to the failed check log, the diff (when your review is requested) or the conflict summary. By default `Enter` opens the plain PR detail.
@@ -62,7 +76,7 @@ Other ways in: `lazyhub owner/repo#123` (also `'#123'`, `123` or a PR/issue URL)
 
 ### Review: understand the change
 
-- **Review evidence** (`e`): read-only facts, their sources, how fresh they are, and the head commit that was inspected. Opening a PR from the queue lets you return to the queue.
+- **Review evidence** (`e` in a PR, or `Enter` in the queue): read-only facts, their sources, how fresh they are, and the head commit that was inspected. `r` reads again, `d` opens the diff, `Enter` the full PR, and `Esc` returns to the queue where you left it.
 - **Review story** (`s`): a guided step-by-step walkthrough of the diff (`n`/`p` step, `Enter` opens the diff at the file, `Space` expands the noise step).
 - **Claims check** (`V`): finds claims such as "adds tests" in the description and marks each verified, contradicted or unverifiable against the changed files and patches, with evidence. It is deterministic and uses no AI. Prose that is not a recognised claim is ignored.
 - **Diff** (`d`): files load per file, unified or split (`w`), file tree (`T`), file jump (`t`), comment threads (`{`/`}`), inline comment, edit and delete (`c`, `e`, `Ctrl+X`), open in `$EDITOR` (`E`).
@@ -90,7 +104,8 @@ Press `?` in any view for the authoritative list. `Space` is the leader key; `:`
 | Everywhere | `?` help, `:` palette, `,` settings, `Tab`/`Shift+Tab` next/previous pane, `1`-`9` jump to pane (list views), `g h/p/i/b/a/n/q` go to Focus/PRs/Issues/Branches/Actions/Notifications/queue, `q` back (quits at the root), `Esc` back (never quits), `Ctrl+A` AI assistant |
 | Lists | `j`/`k` move, `gg`/`G` top/bottom, `/` search, `r` refresh, `Enter` open |
 | PR list | `d` diff, `a` approve, `x` request changes, `c` comment, `m` merge, `X` close, `l` labels, `A` assignees, `R` reviewers, `b` checkout, `y` copy URL, `o` browser, `f` cycle state filter, `O`/`C`/`M` open/closed/merged, `s` cycle scope, `@` author, `p` preview, `n` new PR |
-| Review queue | `Enter` open, `o` browser, `]`/`[` group, `+` more |
+| Review queue | `Enter` evidence, `o` browser, `]`/`[` group, `s` scope, `+` more |
+| Evidence | `j`/`k` scroll, `r` refresh, `d` diff, `Enter` PR detail, `Esc` back |
 | PR detail | `e` evidence, `s` story, `V` claims, `K` collisions, `f` why red, `c` checks, `d` diff, `v` comments, `C` conflicts / CI, `D` draft/ready, `B` base branch, `E` editor, plus `a` `x` `m` `X` `l` `A` `R` `o` |
 | Review story | `n`/`p` next/previous step, `Enter` open diff, `Space` expand |
 | Checks | `Enter` log, `o` browser, `Ctrl+R` re-run, `Esc` back |
@@ -116,6 +131,12 @@ repo = "owner/name"
 
 [state]
 smartEnter = true   # opt in: Enter jumps to the failed log, diff or conflicts
+
+[queue]
+orgs = ["acme"]     # extra review queue scopes, cycled with s
+
+[queue.sets]
+work = ["acme/api", "acme/web"]
 ```
 
 See [docs/CONFIG_REFERENCE.md](docs/CONFIG_REFERENCE.md) for every key and default. Custom panes and tabs are declared in TOML, and their filters are translated to `gh` arguments by lazyhub. `[state]` is written by lazyhub itself, so keep hand-written notes elsewhere in the file.
@@ -132,15 +153,15 @@ See [SECURITY.md](SECURITY.md), [the threat model](docs/THREAT_MODEL.md) and [th
 
 ## Performance
 
-The screen is not fully cleared and redrawn, and lists and diffs page instead of loading everything at once. The numbers below come from `npm run test:perf` and `npm run vitals`: a PTY drives the built binary at 80x24 against a fake `gh` with a fixed 300 ms per call, on a fixture of 5,000 PRs, 2,000 issues and a 3,000-file diff (macOS, Node 22). Method and budgets are in [docs/PERF_BUDGETS.md](docs/PERF_BUDGETS.md).
+The screen is not fully cleared and redrawn, and lists and diffs page instead of loading everything at once. The numbers below come from `npm run test:perf` and `npm run vitals`: a PTY drives the built binary at 80x24 against a fake `gh` with a fixed 300 ms per call, on a fixture of 5,000 PRs, 2,000 issues and a 3,000-file diff (macOS, Node 22). Ranges are the spread across several local runs. Method and budgets are in [docs/PERF_BUDGETS.md](docs/PERF_BUDGETS.md).
 
 | Metric | Measured | Budget |
 |---|---|---|
-| Cold PR list, key to first rows (one `gh` round trip) | about 410 ms | 1,200 ms |
+| Cold PR list, key to first rows (one `gh` round trip) | 400 to 460 ms | 1,200 ms |
 | Key to first frame (skeleton) | about 1 ms | 400 ms |
-| Key press to next frame, p95 | 8 ms | 100 ms |
-| Warm re-open of a visited list | 22 ms | 100 ms |
-| Frames that cleared the screen | 0 of 66 | 0 |
+| Key press to next frame, p95 | 7 to 11 ms | 100 ms |
+| Warm re-open of a visited list | 13 to 22 ms | 100 ms |
+| Frames that cleared the screen | 0 (of about 66) | 0 |
 | Peak memory over the whole run | 150 to 225 MB | 512 MB |
 
 These are fixture numbers, not a promise about your network. One known gap: re-opening a PR detail you just left still makes one `gh` call (an expected-fail baseline in the vitals harness).

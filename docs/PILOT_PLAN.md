@@ -58,7 +58,7 @@ npm view lazyhub dist-tags
 npm view lazyhub@26.6.3 version
 ```
 
-Install instructions for participants. `26.6.3` is the Alpha candidate. Releases go to the `next` tag and stay there until the maintainer promotes them, so `latest` will not deliver it. Always use the explicit version:
+Install instructions for participants. `26.6.3` is the Alpha candidate. Releases go to the `next` tag and stay there until the maintainer promotes them (on 2026-11-27 `npm view lazyhub dist-tags` showed `26.6.3` on both `latest` and `next`). Tags move, so always use the explicit version:
 
 ```
 npm install -g lazyhub@26.6.3
@@ -67,7 +67,7 @@ lazyhub --version        # should print 26.6.3
 
 If the maintainer cuts a different candidate, replace `26.6.3` everywhere in the invitation and the sheet, and record the change. Do not mix versions within one session. Homebrew may lag npm, so do not offer it for the pilot unless the formula is confirmed to match the pinned version.
 
-Tell participants the requirements: Node.js `>= 22.14` and the GitHub CLI logged in (`gh auth status`). Lazyhub uses their existing `gh` login and is read-only in this release. To limit exposure they may run with a fine-grained read-only `GH_TOKEN` as described in SECURITY.md. To remove it afterwards: `npm uninstall -g lazyhub`.
+Tell participants the requirements: Node.js 20 or later (the package's `engines` floor; Node 22.14 is only needed to publish) and the GitHub CLI logged in (`gh auth status`). Lazyhub uses their existing `gh` login and is read-only in this release. To limit exposure they may run with a fine-grained read-only `GH_TOKEN` as described in SECURITY.md. To remove it afterwards: `npm uninstall -g lazyhub`.
 
 ## Recruiting message template
 
