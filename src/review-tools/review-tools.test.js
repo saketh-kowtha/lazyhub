@@ -260,7 +260,7 @@ describe('review tools over the MCP handler (#603)', () => {
 
 describe('cleanDeep', () => {
   it('cleans every string and key, drops undefined and functions, nulls non-finite numbers', () => {
-    expect(cleanDeep({ 'k\u001b[1m': ['a‮b', undefined, () => 1], n: NaN, u: undefined, ok: true, z: null }))
+    expect(cleanDeep({ 'k\u001b[1m': ['a\u202Eb', undefined, () => 1], n: NaN, u: undefined, ok: true, z: null }))
       .toEqual({ k: ['ab', null, null], n: null, ok: true, z: null })
     expect(cleanDeep(HOSTILE_BODY)).not.toMatch(FORBIDDEN)
   })

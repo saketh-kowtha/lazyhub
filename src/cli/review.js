@@ -89,21 +89,31 @@ export function parseReviewArgs(command, argv, { hosts = [] } = {}) {
     if (ref !== null) return { json, error: 'expected at most one PR reference' }
     ref = a
   }
+  const error = applyReference(command, ref, args, hosts)
+  return error ? { json, error } : { json, args }
+}
+
+/**
+ * Put the PR reference (if any) into `args` as `number` and, from a long form, `repo`.
+ * @param {string} command
+ * @param {string|null} ref
+ * @param {Record<string, any>} args
+ * @param {string[]} hosts
+ * @returns {string|null} the problem, or null
+ */
+function applyReference(command, ref, args, hosts) {
   const need = PR_ARG[command]
-  if (ref !== null) {
-    if (!need) return { json, error: `${command} takes no PR reference` }
-    const parsed = parseItemReference(ref, { hosts })
-    if (!parsed.ok || !parsed.ref) return { json, error: `${parsed.error}: ${JSON.stringify(ref.slice(0, 80))}` }
-    if (parsed.ref.kind === 'issue') return { json, error: `${command} needs a pull request, not an issue URL` }
-    if (parsed.ref.repo) {
-      if (args.repo && args.repo.toLowerCase() !== parsed.ref.repo.toLowerCase()) return { json, error: `--repo ${args.repo} conflicts with the reference's repository ${parsed.ref.repo}` }
-      args.repo = args.repo || parsed.ref.repo
-    }
-    args.number = parsed.ref.number
-  } else if (need === 'required') {
-    return { json, error: `${command} needs a PR number, e.g. lazyhub ${command} 123 --json` }
+  if (ref === null) return need === 'required' ? `${command} needs a PR number, e.g. lazyhub ${command} 123 --json` : null
+  if (!need) return `${command} takes no PR reference`
+  const parsed = parseItemReference(ref, { hosts })
+  if (!parsed.ok || !parsed.ref) return `${parsed.error}: ${JSON.stringify(ref.slice(0, 80))}`
+  if (parsed.ref.kind === 'issue') return `${command} needs a pull request, not an issue URL`
+  if (parsed.ref.repo) {
+    if (args.repo && args.repo.toLowerCase() !== parsed.ref.repo.toLowerCase()) return `--repo ${args.repo} conflicts with the reference's repository ${parsed.ref.repo}`
+    args.repo = args.repo || parsed.ref.repo
   }
-  return { json, args }
+  args.number = parsed.ref.number
+  return null
 }
 
 /** @typedef {{write: (s: string, cb?: () => void) => any}} Out */
