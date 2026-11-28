@@ -204,7 +204,7 @@ export function DiffView({ prNumber, state }) {
     aiReview, setAiReview, aiReviewLoading, aiReviewError, setAiReviewError,
     aiPostStatus, setAiPostStatus, files, rows, langCache, fileStartIndices,
     treeRows, commentsByLine, jumpTo, handleAiJumpTo, handleAiPost,
-    repo, submitMerge, confirmMerge, submitApproval, submitChanges
+    repo, submitMerge, confirmMerge, submitApproval, submitChanges, readOnly
   } = state
 
   if (dialog === 'merge' && repoInfo) {
@@ -273,7 +273,7 @@ export function DiffView({ prNumber, state }) {
   return (
     <Box flexDirection="column" flexGrow={1}>
       <Box paddingX={1} justifyContent="space-between">
-        <Text color={t.ui.selected} bold>PR #{prNumber} Diff</Text>
+        <Text color={t.ui.selected} bold>PR #{prNumber} Diff{readOnly ? <Text color={t.ui.muted} bold={false}>  read-only</Text> : null}</Text>
         {diffRefreshError && <Text color={t.ci.pending}>⚠ showing cached diff, refresh failed [{firstActionKey('list.refresh', 'r')}] retry</Text>}
         {commentsTruncated && <Text color={t.ci.pending}>⚠ inline comments incomplete: open comments ({firstActionKey('pr.comments', 'v')}) for all</Text>}
         {commentStatus && <Text color={t.ci.pass}>{commentStatus}</Text>}

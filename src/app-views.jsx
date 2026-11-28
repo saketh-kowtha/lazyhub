@@ -233,7 +233,7 @@ function buildBaseLayer(ctx, onPaneState) {
             pr={{ number: selectedItem.number, title: selectedItem.title }}
             repo={evRepo}
             onClose={() => returnFromEvidence(selectedItem._fromQueue ? { view: 'queue' } : undefined)}
-            onOpenDiff={goToDiff}
+            onOpenDiff={() => goToDiff(selectedItem)}
             onOpenDetail={goToEvidenceDetail}
             returnTo={selectedItem._fromQueue ? returnTarget({ view: 'queue', key: `${evRepo}#${selectedItem.number}` }) : undefined}
             onReturn={returnFromEvidence}
@@ -271,6 +271,7 @@ function buildBaseLayer(ctx, onPaneState) {
             repo={itemRepo}
             onBack={goBack}
             onViewComments={goToComments}
+            readOnly={Boolean(selectedItem._fromEvidence)}
             initialFile={storyNav?.active ? storyNav.file : undefined}
           />
         </ErrorBoundary>

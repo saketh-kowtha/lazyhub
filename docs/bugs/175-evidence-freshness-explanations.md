@@ -1,0 +1,8 @@
+# Evidence age froze, a failed refresh blanked the view, and signals had no explanation (#175)
+
+- **Area:** prs
+- **Symptom:** the evidence view's `read Ns ago` was computed once per reading, so it never moved and the one-minute staleness never showed while the view stayed open; a refresh that failed replaced every row with an error screen; attention and file signals were shown as bare codes (`ci_failing`, `lockfile_without_manifest`) with nothing saying what they mean or do not mean. A row with a long value also squeezed the cursor marker and label to nothing.
+- **Root cause:** `evidenceRows` was memoised on the detail only, with no clock; the load `.catch` always set `phase: 'error'`; rows carried no explanation field; the marker and label `Text` could shrink.
+- **Fix:** `src/executor/evidence-explain.js` (fixed plain sentence per row, `explain` on every row, never a verdict, unknown rows say unknown is not passing); `ageText()` in `evidence-detail.js`; `EvidenceView.jsx` ticks the clock every 5 s while on screen (`useCoveredInterval`), shows a stale banner past a minute, keeps the rows during and after a failed refresh with their age, shows `reading…` while refreshing, a two-line `why:` for the selected row and the age of its source. A refresh never moves the inspected head. Mockup: `docs/mockups/review-evidence.md` (follow-up section).
+- **Regression test:** `src/executor/evidence-detail.test.js` > ageText, row explanations; `src/features/prs/EvidenceView.test.jsx` > explains the selected row, stale reading, failed refresh keeps the reading, refresh never clears a moved-head warning.
+- **Sibling sweep:** the queue (#177) has its own freshness line and reason wording (`features/queue/model.js`), not changed here.

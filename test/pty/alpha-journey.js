@@ -209,6 +209,18 @@ async function runJourney({ cols, rows, label, ascii = false, firstRun = false }
     await s.scrollTo(/Not read/, `${label}: the evidence lists what it could not read`)
     assert.match(s.text(), /files\s+\S{0,2}unknown \(gh: Something went wrong/, `${label}: the unreadable file list is labelled unknown, with the cause`)
     assert.doesNotMatch(s.text(), /no_test_files_changed/, `${label}: no file observation is invented when the list failed`)
+    // The selected row is explained in plain words (#175).
+    await s.waitFor(/why: /, `${label}: the selected row has a plain explanation`)
+
+    // 4b. Evidence -> read-only diff -> back: the same row is still selected (#127).
+    const selectedRow = () => (s.text().split('\n').find(l => /^\s*>\s/.test(l)) || '').trim()
+    const pickedEvidence = selectedRow()
+    assert.ok(pickedEvidence, `${label}: a row is selected in the evidence view`)
+    s.write('d')
+    await s.gone(/Evidence\s+acme\/ledger#88/, `${label}: d opens the diff`)
+    s.write('\x1b')
+    await s.waitFor(/Evidence\s+acme\/ledger#88/, `${label}: Esc leaves the diff for the evidence view`)
+    await waitUntil(() => (selectedRow() === pickedEvidence ? true : `${selectedRow()}\n!= ${pickedEvidence}`), `${label}: the same evidence row is selected after the diff`)
 
     s.write('\x1b')
     await s.waitFor(/Review queue/, `${label}: Esc returns to the queue`)
@@ -268,6 +280,10 @@ async function runBoundary() {
     await s.keys(KEYS)
     s.write('d')
     await s.gone(/Evidence\s+acme\/platform#412/, 'd opens the read-only diff, which proves the earlier keys were consumed')
+    // Inside that diff the write, comment and AI keys do nothing (#127). Esc then reaching the evidence view
+    // proves no dialog or composer took the keyboard (it would have consumed the Esc).
+    await s.keys('amxcAv')
+    assert.doesNotMatch(s.text(), DIALOG, 'no confirm or review dialog in the read-only diff')
     s.write('\x1b')
     await s.waitFor(/Evidence\s+acme\/platform#412/, 'Esc leaves the diff for the evidence view')
     assert.doesNotMatch(s.text(), DIALOG, 'no confirm dialog is on screen in the evidence view')

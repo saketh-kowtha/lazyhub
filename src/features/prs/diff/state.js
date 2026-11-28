@@ -28,14 +28,23 @@ const _cfg = loadConfig()
 const _diffCfg = _cfg.diff
 const _editorCfg = _cfg.editor
 
+/** Actions a read-only (review context) diff never runs: writes, the AI review, and the comments view that can write. */
+export const READ_ONLY_BLOCKED = new Set([
+  'pr.merge', 'pr.approve', 'pr.request-changes',
+  'diff.comment', 'diff.edit-comment', 'diff.delete-comment',
+  'diff.ai-review', 'pr.comments',
+])
+
 /** Own the diff session, keyboard routing, and mutation lifecycle.
  * @param {object} props
  * @param {number} props.prNumber
  * @param {string} props.repo
  * @param {Function} props.onBack
  * @param {Function} props.onViewComments
+ * @param {boolean} [props.readOnly] opened from the review evidence (#127): no write, no AI and no
+ *   route to a writing view is reachable; the footer offers only what works
  */
-export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
+export function useDiffState({ prNumber, repo, onBack, onViewComments, readOnly = false }) {
   useKeyScope('view')
   const { stdout } = useStdout()
   const visibleHeight = Math.max(5, (stdout?.rows || 24) - 6)
@@ -93,8 +102,10 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
   const [splitView, setSplitView] = useState(_diffCfg.defaultView === 'split')
   const resolveAction = useActionResolver(['global', 'diff'])
   const footerKeys = useMemo(
-    () => contextFooterHints('prs', 'diff').map(h => (h.label === 'split' && splitView ? { ...h, label: 'unified' } : h)),
-    [splitView],
+    () => contextFooterHints('prs', 'diff')
+      .filter(h => !(readOnly && READ_ONLY_BLOCKED.has(h.id)))
+      .map(h => (h.label === 'split' && splitView ? { ...h, label: 'unified' } : h)),
+    [splitView, readOnly],
   )
   const resolveConfirm = useActionResolver(['dialog'])
 
@@ -423,6 +434,13 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
 
     if (dialog) return
 
+    // Review context (#127): a write, an AI call or the conversation view (which can reply) is
+    // not reachable from here; the key is consumed and says where management lives.
+    if (readOnly && READ_ONLY_BLOCKED.has(id)) {
+      flash('Read-only review diff: Esc back to the evidence, Enter there opens the PR detail to act', 3000)
+      return
+    }
+
     if (id === 'pr.merge' && prMeta?.state === 'OPEN') {
       // The picker is built from repoInfo (allowed methods, admin rights): never open it before that loads.
       if (!repoInfo) { flash('Loading repository settings… try again in a moment', 3000); return }
@@ -645,6 +663,6 @@ export function useDiffState({ prNumber, repo, onBack, onViewComments }) {
     aiReview, setAiReview, aiReviewLoading, aiReviewError, setAiReviewError,
     aiPostStatus, setAiPostStatus, files, rows, langCache, fileStartIndices,
     treeRows, commentsByLine, jumpTo, handleAiJumpTo, handleAiPost,
-    repo, submitMerge, confirmMerge, submitApproval, submitChanges
+    repo, submitMerge, confirmMerge, submitApproval, submitChanges, readOnly
   }
 }
