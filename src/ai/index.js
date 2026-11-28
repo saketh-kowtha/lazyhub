@@ -15,6 +15,8 @@ export { AIError } from './error.js'
 import { selectProvider, listProviderStatus } from './detect.js'
 import { SYSTEM_PROMPT, MAX_TOKENS, DEFAULT_MODEL, buildUserPrompt } from './prompt.js'
 import { parseReviewResponse } from './parse.js'
+import { CLAIMS_SYSTEM_PROMPT, CLAIMS_MAX_TOKENS, buildClaimsUserPrompt, parseClaimsResponse } from './claims.js'
+import { randomBytes } from 'node:crypto'
 import { logAiUsage } from './usage.js'
 import * as anthropicApi from './providers/anthropic-api.js'
 import * as openaiCompatible from './providers/openai-compatible.js'
@@ -70,6 +72,43 @@ export async function getAICodeReview({ diff, prTitle, prBody, apiKey: _apiKey, 
 
   const parsed = parseReviewResponse(result.text)
   return { ...parsed, secondOpinion: secondOpinion || undefined }
+}
+
+// ── getAIClaims ───────────────────────────────────────────────────────────────
+
+/**
+ * Optional AI pass of the claims check (#361): ask the selected provider which claims a PR
+ * title and description make. The result is only proposals; the caller anchors each one to
+ * the description and checks it deterministically (src/features/prs/claims.js). Nothing the
+ * model says can mark a claim verified. Usage is logged here.
+ *
+ * @param {object} opts
+ * @param {string} opts.text        - Visible title and description lines (claimsPromptText())
+ * @param {string} [opts.model]     - Model override
+ * @param {number} [opts.timeoutMs] - Timeout override for CLI providers
+ * @param {object|string} [opts.authorHint] - PR author hint for second-opinion routing
+ * @returns {Promise<Array<{kind: string, quote: string, issue: number|null, scope: string|null, version: string|null}>>}
+ */
+export async function getAIClaims({ text, model, timeoutMs, authorHint }) {
+  const { provider } = await selectProvider({ authorHint })
+  const user = buildClaimsUserPrompt({ text, nonce: randomBytes(8).toString('hex') })
+
+  const startMs = Date.now()
+  let result, success = false
+  try {
+    result = await provider.complete({ system: CLAIMS_SYSTEM_PROMPT, user, maxTokens: CLAIMS_MAX_TOKENS, model, timeoutMs })
+    success = true
+  } finally {
+    logAiUsage({
+      provider:  provider.id,
+      model:     result?.modelUsed || model || DEFAULT_MODEL,
+      tokensIn:  result?.tokensIn ?? null,
+      tokensOut: result?.tokensOut ?? null,
+      latencyMs: Date.now() - startMs,
+      success,
+    })
+  }
+  return parseClaimsResponse(result.text)
 }
 
 // ── runAIChat ─────────────────────────────────────────────────────────────────

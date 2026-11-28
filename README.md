@@ -64,7 +64,7 @@ Other ways in: `lazyhub owner/repo#123` (also `'#123'`, `123` or a PR/issue URL)
 
 - **Review evidence** (`e`): read-only facts, their sources, how fresh they are, and the head commit that was inspected. Opening a PR from the queue lets you return to the queue.
 - **Review story** (`s`): a guided step-by-step walkthrough of the diff (`n`/`p` step, `Enter` opens the diff at the file, `Space` expands the noise step).
-- **Claims check** (`V`): finds claims such as "adds tests" in the description and marks each verified, contradicted or unverifiable against the changed files and patches, with evidence. It is deterministic and uses no AI. Prose that is not a recognised claim is ignored.
+- **Claims check** (`V`): finds claims such as "adds tests" in the description and marks each verified, contradicted or unverifiable against the changed files and patches, with evidence. It is deterministic and uses no AI unless you press `A`: then a configured AI provider may propose free-form claims, which are marked AI and checked against the diff like the rest. The AI never sets a status. Prose that is not a recognised claim is ignored.
 - **Diff** (`d`): files load per file, unified or split (`w`), file tree (`T`), file jump (`t`), comment threads (`{`/`}`), inline comment, edit and delete (`c`, `e`, `Ctrl+X`), open in `$EDITOR` (`E`).
 - **Comments** (`v`): reply, edit, resolve (`z`), filter, jump to the line in the diff (`J`).
 - **HTML in PR and issue bodies** (details, tables, lists, links, images as alt text) renders as formatted text through a strict allowlist. Scripts, styles, iframes and forms are dropped with a visible marker, and nothing is fetched. Issue comments still render as plain text.

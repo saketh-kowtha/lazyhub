@@ -288,6 +288,7 @@ describe('diff view', () => {
 
 vi.mock('../executor.js', async () => ({
   ...await vi.importActual('../executor.js'),
+  getClaimsContext: vi.fn(),
   getPRFilePatch: vi.fn(),
   loadEvidenceDetail: vi.fn(),
 }))
@@ -478,5 +479,27 @@ describe('AI review pane', () => {
     await waitForExpectation(() => expect(frameOf(view)).toContain('1/1'))
     expect(frameOf(view)).toContain('CANARY')
     expectClean(frameOf(view))
+  })
+})
+
+describe('claims check view (#361)', () => {
+  it('claim text, reasons, paths and patch lines', async () => {
+    const { getClaimsContext } = await import('../executor.js')
+    const { ClaimsView } = await import('../features/prs/ClaimsView.jsx')
+    const files = poison([
+      { path: 'src/a.js', patch: '@@ -1,1 +1,1 @@\n-export function f(a) {\n+export function f(a, b) {' },
+      { path: 'src/a.test.js', patch: "@@ -1,0 +1,1 @@\n+it('works', () => {" },
+      { path: 'c.toml', patch: '@@ -1,1 +0,0 @@\n-[section]' },
+    ]).map(f => ({ ...f, patchTruncated: false }))
+    getClaimsContext.mockResolvedValue({ files, filesTruncated: false, closing: [3], issues: poison({ 3: { body: 'src/a.js' } }) })
+    const pr = poison({ number: 1, title: 'Fixes #3 title', body: 'No breaking changes body\nAdds tests\nOnly touches src' })
+    const view = renderWithProviders(<ClaimsView pr={{ ...pr, number: 1 }} repo="o/r" onClose={() => {}} />)
+    await waitForExpectation(() => expect(frameOf(view)).toContain('claims verified'))
+    for (let i = 0; i < 4; i++) {
+      expect(frameOf(view)).toContain('CANARY')
+      expectClean(frameOf(view))
+      await sendInput('j')
+      await flush(10)
+    }
   })
 })
