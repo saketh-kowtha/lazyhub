@@ -78,6 +78,14 @@ if (process.argv[2] === 'status') {
   process.exit(await runStatus(process.argv.slice(3)))
 }
 
+// Read-only review commands for shell agents (#627): `lazyhub evidence 123 --json`, ...
+if (['queue', 'evidence', 'why-red', 'claims', 'collisions', 'story'].includes(process.argv[2])) {
+  const { runReviewCli } = await import('../src/cli/review.js')
+  const { loadConfig: loadTomlConfig } = await import('../src/config/loader.js')
+  const hosts = [loadTomlConfig().defaults?.repo_host].filter(Boolean)
+  process.exit(await runReviewCli(process.argv[2], process.argv.slice(3), { hosts }))
+}
+
 if (process.argv[2] === 'mcp-server') {
   const { runMcpServer } = await import('../src/cli/mcp-server.js')
   process.exit(await runMcpServer())

@@ -19,6 +19,7 @@ const COVERED = {
   'src/bootstrap.js': [1, 'repo picker preview (20 most recent); the full list is the repo switcher, which pages'],
   'src/features/onboarding/flow.js': [1, 'repo list for onboarding, one page of 100 sorted by push date, search covers the rest'],
   'src/cli/watch-only.js': [3, 'user-chosen --limit with --max-pages; truncation reported as *_truncated in the report'],
+  'src/cli/review.js': [2, 'not a gh call: the queue command\'s user-chosen --limit (1-50 per search) for fetchReviewQueueEvidence, whose truncation and next_cursor are returned and named in notices'],
   'src/cli/doctor/coverage.js': [1, 'ruleset names for the coverage report; count is shown, not a list that can hide rows'],
   'src/daemon/protocol.js': [3, 'daemon passes the caller\'s own limit through to gh'],
   'src/executor/pr-comments.js': [2, 'first: 50 with after: cursors; hasNextPage drives load-more'],

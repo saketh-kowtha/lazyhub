@@ -73,6 +73,8 @@ describe('code-split bundle', () => {
     [['doctor', '--json']],
     [['watch-only', '--json', '--repo', 'o/r']],
     [['--mcp']],
+    [['queue', '--json']],
+    [['evidence', '7', '--repo', 'o/r', '--json']],
     [['serve', '--status']],
     [['status']],
     [['feedback', '--print']],

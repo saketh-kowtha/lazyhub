@@ -54,6 +54,24 @@ describe('parseCliArgs', () => {
   })
 })
 
+describe('USAGE agent section (#626)', () => {
+  it('lists --mcp and the JSON commands under a non-interactive heading', () => {
+    const section = USAGE.slice(USAGE.indexOf('For agents and scripts'), USAGE.indexOf('Options:'))
+    expect(section).toMatch(/^For agents and scripts \(non-interactive, read-only/)
+    expect(section).toMatch(/^ {2}--mcp {2,}MCP server on stdio/m)
+    expect(section).toContain('{"command": "lazyhub", "args": ["--mcp"]}')
+    expect(section).toContain('doctor --json')
+    for (const cmd of ['queue --json', 'evidence <pr> --json', 'why-red <pr> --json', 'claims <pr> --json', 'collisions [<pr>] --json', 'story <pr> --json']) {
+      expect(section).toContain(cmd)
+    }
+  })
+
+  it('keeps the agent section within 100 columns', () => {
+    const section = USAGE.slice(USAGE.indexOf('For agents and scripts'), USAGE.indexOf('Options:'))
+    for (const line of section.split('\n')) expect(line.length, line).toBeLessThanOrEqual(100)
+  })
+})
+
 describe('nonInteractiveMessage (E3: no TUI without a terminal)', () => {
   it('is null when both stdin and stdout are terminals', () => {
     expect(nonInteractiveMessage({ stdin: { isTTY: true }, stdout: { isTTY: true } })).toBeNull()

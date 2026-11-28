@@ -11,6 +11,7 @@ import {
   listPRs,
 } from '../executor.js'
 import { isRepoSlug, isPositiveId } from '../input-validation.js'
+import { REVIEW_TOOLS, ReviewToolError, inputSchema as reviewInputSchema, reviewToolByName, runReviewTool } from '../review-tools/index.js'
 
 const TOOL_ALIASES = {
   lazyhub_pr_list: 'list_prs',
@@ -91,14 +92,14 @@ function validateArgs(canonical, args) {
 }
 
 const PROP = {
-  repo: { type: 'string', description: 'owner/name; defaults to the repository lazyhub was started in' },
-  number: { type: 'integer', minimum: 1, description: 'PR or issue number' },
-  limit: { type: 'integer', minimum: 1, maximum: 100 },
-  prState: { type: 'string', enum: STATES.list_prs },
-  issueState: { type: 'string', enum: STATES.list_issues },
+  repo: { type: 'string', description: 'Repository as owner/name. Optional: defaults to the repository lazyhub --mcp was started in, then the saved default.' },
+  number: { type: 'integer', minimum: 1, description: 'Pull request or issue number, a positive integer (123 for #123).' },
+  limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Most rows to return, 1 to 100 (default 30).' },
+  prState: { type: 'string', enum: STATES.list_prs, description: 'Which pull requests to list (default open).' },
+  issueState: { type: 'string', enum: STATES.list_issues, description: 'Which issues to list (default open).' },
 }
 const schema = (properties, required = []) => ({ type: 'object', properties, ...(required.length ? { required } : {}) })
-const RT = (tool) => ({ type: 'string', enum: [RESOURCE_TYPES[tool]] })
+const RT = (tool) => ({ type: 'string', enum: [RESOURCE_TYPES[tool]], description: 'Optional guard naming the resource kind this tool reads; a mismatch is refused with MCP_RESOURCE_MISMATCH.' })
 const SCHEMAS = {
   list_prs: schema({ resource_type: RT('list_prs'), repo: PROP.repo, state: PROP.prState, limit: PROP.limit }),
   get_pr: schema({ resource_type: RT('get_pr'), repo: PROP.repo, number: PROP.number }, ['number']),
@@ -110,22 +111,37 @@ const SCHEMAS = {
   list_branches: schema({ repo: PROP.repo }),
 }
 
+// What an agent reads to pick a tool (#626): what comes back, how the output is bounded,
+// and why it beats parsing raw `gh` output. An alias shares its canonical tool's text.
+const DESCRIPTIONS = {
+  list_prs: 'List pull requests as compact JSON rows (read-only). Prefer this over `gh pr list`: PR bodies are dropped, each row keeps at most 10 checks (failing first, then pending, then passing) and always carries checksSummary {failing, pending, passing, total}, so CI state costs a few tokens per PR and nothing is hidden. Filter with state, bound with limit (default 30, max 100).',
+  get_pr: 'One pull request as JSON (read-only): title, state, author, body, labels, review requests and reviews, check rollup, head and base branch and SHA, changed files, size, mergeability and URL in one call, instead of several `gh pr view` calls. For review triage prefer pr_evidence, which is smaller and says what needs attention.',
+  get_pr_diff: 'The unified diff of a pull request as plain text (read-only, same as `gh pr diff`). Large PRs give large output: call review_story or pr_evidence first to see which files matter.',
+  get_checks: 'Every check run on the pull request head commit as JSON (read-only): name, status, conclusion, app, URL and timing, paged to the end; a cut-off list ends with an explicit "checks incomplete" row. To learn why a check failed, prefer why_ci_red.',
+  list_issues: 'List issues as JSON rows (read-only). Filter with state (default open), bound with limit (default 30, max 100).',
+  get_issue: 'One issue as JSON (read-only): title, state, author, body, labels, assignees, milestone, comments and URL in one call, instead of `gh issue view`.',
+  list_notifications: "The signed-in account's unread GitHub notifications as JSON (read-only): repository, subject, reason and update time.",
+  list_branches: "The repository's branches as JSON (read-only): name, protected flag and head commit SHA.",
+}
+
 const TOOLS = [
-  ['lazyhub_pr_list', 'List pull requests'],
-  ['lazyhub_pr_view', 'View a pull request'],
-  ['lazyhub_pr_diff', 'Get a pull request diff'],
-  ['lazyhub_issue_list', 'List issues'],
-  ['lazyhub_issue_view', 'View an issue'],
-  ['lazyhub_watch_ci', 'Get CI status for a PR'],
-  ['list_prs', 'List pull requests'],
-  ['get_pr', 'View a pull request'],
-  ['get_pr_diff', 'Get a pull request diff'],
-  ['get_checks', 'Get CI checks'],
-  ['list_issues', 'List issues'],
-  ['get_issue', 'View an issue'],
-  ['list_notifications', 'List notifications'],
-  ['list_branches', 'List branches'],
-].map(([name, description]) => ({ name, description, inputSchema: SCHEMAS[TOOL_ALIASES[name] || name] }))
+  ['lazyhub_pr_list', 'list_prs'],
+  ['lazyhub_pr_view', 'get_pr'],
+  ['lazyhub_pr_diff', 'get_pr_diff'],
+  ['lazyhub_issue_list', 'list_issues'],
+  ['lazyhub_issue_view', 'get_issue'],
+  ['lazyhub_watch_ci', 'get_checks'],
+  ['list_prs', 'list_prs'],
+  ['get_pr', 'get_pr'],
+  ['get_pr_diff', 'get_pr_diff'],
+  ['get_checks', 'get_checks'],
+  ['list_issues', 'list_issues'],
+  ['get_issue', 'get_issue'],
+  ['list_notifications', 'list_notifications'],
+  ['list_branches', 'list_branches'],
+].map(([name, canonical]) => ({ name, description: DESCRIPTIONS[canonical], inputSchema: SCHEMAS[canonical] }))
+  // Review tools (#603): one shared, read-only core with the `--json` CLI (src/review-tools/).
+  .concat(REVIEW_TOOLS.map(tool => ({ name: tool.name, description: tool.description, inputSchema: reviewInputSchema(tool) })))
 
 const FAILING = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE'])
 const PASSING = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED'])
@@ -161,6 +177,21 @@ function slimPR(pr) {
 const repo = () => process.env.GHUI_REPO || null
 
 /**
+ * Run a review tool (#603) through the shared core; its error codes gain the MCP_ prefix.
+ * @param {string} name
+ * @param {object} args
+ */
+async function callReviewTool(name, args) {
+  try {
+    return await runReviewTool(name, args, { defaultRepo: repo() })
+  } catch (err) {
+    if (!(err instanceof ReviewToolError)) throw err
+    const extra = [err.extra?.kind && `kind: ${err.extra.kind}`, err.extra?.fix && `fix: ${err.extra.fix}`].filter(Boolean).join('; ')
+    throw fail(`MCP_${err.code}`, extra ? `${err.message} (${extra})` : err.message)
+  }
+}
+
+/**
  * Execute one MCP tool by name.
  *
  * @param {string} name
@@ -170,6 +201,7 @@ async function callTool(name, args = {}) {
   if (typeof name !== 'string' || !name) throw fail('MCP_INVALID_TOOL', 'Tool name must be a non-empty string')
   const canonical = TOOL_ALIASES[name] || name
   if (MUTATING_TOOLS.has(canonical)) throw fail('MCP_MUTATIONS_DISABLED', MCP_MUTATIONS_DISABLED)
+  if (reviewToolByName(canonical)) return callReviewTool(canonical, args)
   validateArgs(canonical, args)
 
   const r = args.repo || repo()

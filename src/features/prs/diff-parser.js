@@ -5,7 +5,7 @@
  * Ink/chalk/hljs stack.
  */
 
-import { sanitizeCode } from '../../utils.js'
+import { sanitizeCode } from '../../utils-core.js'
 
 /**
  * Parse a unified diff text (as returned by `gh pr diff`) into a tree of
